@@ -1,7 +1,7 @@
 package server
 
 import (
-	"crm-prospect-prototype/internal/handler"
+	"crm-prospect-prototype/handler"
 	"os"
 
 	"github.com/gofiber/fiber/v2"

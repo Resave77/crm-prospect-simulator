@@ -3,7 +3,7 @@ package handler
 import (
 	"encoding/json"
 
-	"crm-prospect-prototype/internal/service"
+	"crm-prospect-prototype/service"
 
 	"github.com/gofiber/fiber/v2"
 )

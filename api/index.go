@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"crm-prospect-prototype/config"
-	"crm-prospect-prototype/internal/server"
+	"crm-prospect-prototype/server"
 
 	"github.com/gofiber/fiber/v2"
 )

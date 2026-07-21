@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"crm-prospect-prototype/config"
-	"crm-prospect-prototype/internal/server"
+	"crm-prospect-prototype/server"
 )
 
 func main() {

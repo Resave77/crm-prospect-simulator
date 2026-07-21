@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"crm-prospect-prototype/internal/service"
+	"crm-prospect-prototype/service"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
 )
 
 func TestNearbyProspectFinderRendersSearchForm(t *testing.T) {
-	app := fiber.New(fiber.Config{Views: html.New("../../views", ".html")})
+	app := fiber.New(fiber.Config{Views: html.New("../views", ".html")})
 	app.Get("/prospects/nearby", NearbyProspectFinder)
 	response, err := app.Test(httptest.NewRequest("GET", "/prospects/nearby", nil))
 	if err != nil {
