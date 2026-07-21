@@ -2,7 +2,7 @@ package server
 
 import (
 	"crm-prospect-prototype/handler"
-	"os"
+	"crm-prospect-prototype/views"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
@@ -10,14 +10,7 @@ import (
 
 // New creates the CRM application for both local development and Vercel.
 func New() *fiber.App {
-	templateDirectory := "./views"
-	for _, candidate := range []string{"./views", "../views", "../../views"} {
-		if _, err := os.Stat(candidate); err == nil {
-			templateDirectory = candidate
-			break
-		}
-	}
-	engine := html.New(templateDirectory, ".html")
+	engine := html.NewFileSystem(views.FileSystem(), ".html")
 	engine.Reload(true)
 	app := fiber.New(fiber.Config{Views: engine, AppName: "Atlas CRM"})
 
