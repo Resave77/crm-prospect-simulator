@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"google-places-playground/config"
+	"crm-prospect-prototype/config"
 )
 
 type PlaceSummary struct {

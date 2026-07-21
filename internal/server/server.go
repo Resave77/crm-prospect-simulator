@@ -1,7 +1,7 @@
 package server
 
 import (
-	"google-places-playground/internal/handler"
+	"crm-prospect-prototype/internal/handler"
 	"os"
 
 	"github.com/gofiber/fiber/v2"

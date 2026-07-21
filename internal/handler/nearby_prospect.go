@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"google-places-playground/config"
-	"google-places-playground/internal/service"
+	"crm-prospect-prototype/config"
+	"crm-prospect-prototype/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 )

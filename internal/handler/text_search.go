@@ -3,7 +3,7 @@ package handler
 import (
 	"encoding/json"
 
-	"google-places-playground/internal/service"
+	"crm-prospect-prototype/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 )

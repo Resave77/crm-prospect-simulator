@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"google-places-playground/internal/service"
+	"crm-prospect-prototype/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"

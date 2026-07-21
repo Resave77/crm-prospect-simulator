@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"google-places-playground/config"
+	"crm-prospect-prototype/config"
 )
 
 func TextSearch(body []byte) ([]byte, error) {

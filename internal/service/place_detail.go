@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"google-places-playground/config"
+	"crm-prospect-prototype/config"
 )
 
 // CRMPlaceDetail is the presentation-safe subset of Google Places data used by

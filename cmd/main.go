@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"google-places-playground/config"
-	"google-places-playground/internal/server"
+	"crm-prospect-prototype/config"
+	"crm-prospect-prototype/internal/server"
 )
 
 func main() {

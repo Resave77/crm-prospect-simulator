@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"sync"
 
-	"google-places-playground/config"
-	"google-places-playground/internal/server"
+	"crm-prospect-prototype/config"
+	"crm-prospect-prototype/internal/server"
 
 	"github.com/gofiber/fiber/v2"
 )
