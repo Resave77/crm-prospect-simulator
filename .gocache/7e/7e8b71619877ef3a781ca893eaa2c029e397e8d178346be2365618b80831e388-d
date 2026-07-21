@@ -1,0 +1,15 @@
+# test log
+stat ./views
+stat ../views
+stat ../../views
+stat ../../views
+open ../../views
+stat ..\..\views\nearby_prospects.html
+open ..\..\views\nearby_prospects.html
+stat ./views
+stat ../views
+stat ../../views
+stat ../../views
+open ../../views
+stat ..\..\views\nearby_prospects.html
+open ..\..\views\nearby_prospects.html
