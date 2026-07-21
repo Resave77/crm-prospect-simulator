@@ -22,13 +22,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config.LoadEnv()
 		app = server.New()
 	})
-	// Vercel rewrites all public routes to this single function via
-	// /:path* which captures segments WITHOUT the leading slash.
-	// Restore the original path so Fiber routing works correctly.
+	// Vercel rewrites all public routes to /api?__path=/:path*.
+	// The destination template preserves the leading slash, so __path
+	// already contains the original path (e.g. "/" or "/foo/bar").
+	// Strip the query parameter and restore the path for Fiber routing.
 	query := r.URL.Query()
 	originalPath := query.Get("__path")
 	if originalPath != "" {
-		r.URL.Path = "/" + originalPath
+		r.URL.Path = originalPath
 	} else {
 		r.URL.Path = "/"
 	}
