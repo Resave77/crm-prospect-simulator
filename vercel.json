@@ -1,7 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/index.go": { "maxDuration": 30 }
+    "api/index.go": {
+      "includeFiles": "views/**",
+      "maxDuration": 30
+    }
   },
   "rewrites": [
     { "source": "/:path*", "destination": "/api?__path=/:path*" }

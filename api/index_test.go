@@ -13,7 +13,7 @@ func TestHandlerRestoresRewrittenCRMPath(t *testing.T) {
 	if response.Code != 200 {
 		t.Fatalf("status=%d, want=200", response.Code)
 	}
-	if !strings.Contains(response.Body.String(), "Atlas CRM") {
+	if !strings.Contains(response.Body.String(), "CRM Prospect Maps") {
 		t.Fatal("Vercel handler did not render the CRM workspace")
 	}
 }

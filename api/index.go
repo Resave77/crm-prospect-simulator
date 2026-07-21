@@ -22,15 +22,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config.LoadEnv()
 		app = server.New()
 	})
-	// Vercel rewrites all public routes to this single function. Restore the
-	// original path so Fiber can keep owning the application's routing table.
+	// Vercel rewrites all public routes to this single function via
+	// /:path* which captures segments WITHOUT the leading slash.
+	// Restore the original path so Fiber routing works correctly.
 	query := r.URL.Query()
-	if originalPath := query.Get("__path"); originalPath != "" {
-		r.URL.Path = originalPath
-		query.Del("__path")
-		r.URL.RawQuery = query.Encode()
-		r.RequestURI = r.URL.RequestURI()
+	originalPath := query.Get("__path")
+	if originalPath != "" {
+		r.URL.Path = "/" + originalPath
+	} else {
+		r.URL.Path = "/"
 	}
+	query.Del("__path")
+	r.URL.RawQuery = query.Encode()
+	r.RequestURI = r.URL.RequestURI()
 	response, err := app.Test(r, -1)
 	if err != nil {
 		http.Error(w, "CRM service is temporarily unavailable", http.StatusServiceUnavailable)
