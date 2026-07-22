@@ -2,18 +2,28 @@ package handler
 
 import (
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-func TestHandlerRestoresRewrittenCRMPath(t *testing.T) {
-	request := httptest.NewRequest("GET", "http://example.test/api?__path=/", nil)
-	response := httptest.NewRecorder()
-	Handler(response, request)
-	if response.Code != 200 {
-		t.Fatalf("status=%d, want=200", response.Code)
+func TestRestoreRewrittenAPIPath(t *testing.T) {
+	request := httptest.NewRequest("GET", "https://crm.test/api?__api_path=v1%2Fauth%2Fme&filter=active", nil)
+	restoreRewrittenAPIPath(request)
+
+	if request.URL.Path != "/api/v1/auth/me" {
+		t.Fatalf("path=%q, want /api/v1/auth/me", request.URL.Path)
 	}
-	if !strings.Contains(response.Body.String(), "CRM Prospect Maps") {
-		t.Fatal("Vercel handler did not render the CRM workspace")
+	if request.URL.Query().Get("filter") != "active" {
+		t.Fatal("public query parameter was not preserved")
+	}
+	if request.URL.Query().Has("__api_path") {
+		t.Fatal("internal rewrite parameter reached Fiber")
+	}
+}
+
+func TestRestoreRewrittenAPIPathRejectsTraversal(t *testing.T) {
+	request := httptest.NewRequest("GET", "https://crm.test/api?__api_path=..%2Fadmin", nil)
+	restoreRewrittenAPIPath(request)
+	if request.URL.Path != "/api" {
+		t.Fatalf("unsafe route changed path to %q", request.URL.Path)
 	}
 }

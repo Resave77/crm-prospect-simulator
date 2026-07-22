@@ -4,6 +4,8 @@
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
 # ==========================
 # Go
@@ -19,6 +21,7 @@ coverage.out
 
 bin/
 dist/
+coverage/
 
 # ==========================
 # Cache
@@ -26,6 +29,18 @@ dist/
 .gocache/
 .runtime/
 tmp/
+node_modules/
+.vite/
+
+# ==========================
+# Vercel
+# ==========================
+.vercel/
+
+# ==========================
+# Prisma
+# ==========================
+backend/prisma/dev.db
 
 # ==========================
 # IDE

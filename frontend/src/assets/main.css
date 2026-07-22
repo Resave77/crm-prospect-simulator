@@ -1,0 +1,58 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17201e;
+  background: #f5f7f6;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+.muted { color: #66736f; line-height: 1.65; }
+.eyebrow { margin: 0 0 .65rem; color: #0b7766; font-size: .76rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+
+.login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(420px, .85fr); }
+.login-brand { position: relative; overflow: hidden; padding: clamp(3rem, 8vw, 8rem); display: flex; flex-direction: column; justify-content: space-between; color: #fff; background: radial-gradient(circle at 80% 10%, #29a98f 0, transparent 35%), linear-gradient(145deg, #073f38, #0b6b5c 62%, #075044); }
+.login-brand::after { content: ""; position: absolute; width: 26rem; height: 26rem; right: -11rem; bottom: -12rem; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; box-shadow: 0 0 0 4rem rgba(255,255,255,.04), 0 0 0 8rem rgba(255,255,255,.03); }
+.login-brand .eyebrow { color: #a6f4df; }
+.brand-mark, .shell-logo span { width: 2.6rem; height: 2.6rem; display: inline-grid; place-items: center; border-radius: .8rem; font-weight: 900; background: #f4c95d; color: #173f37; }
+.login-brand h1 { max-width: 780px; margin: 0; font-size: clamp(2.5rem, 5vw, 5rem); line-height: 1.02; letter-spacing: -.055em; }
+.brand-copy { max-width: 620px; color: #d9eee9; font-size: 1.1rem; line-height: 1.7; }
+.security-note { display: flex; gap: .65rem; align-items: center; color: #d9eee9; font-size: .9rem; }
+.login-panel { padding: 2rem; display: grid; place-items: center; background: #fbfcfb; }
+.login-card { width: min(100%, 430px); display: grid; gap: 1.35rem; }
+.login-card h2 { margin: 0; font-size: 2.15rem; letter-spacing: -.04em; }
+.field { display: grid; gap: .5rem; font-size: .9rem; font-weight: 700; }
+.privacy-copy { color: #7b8783; text-align: center; font-size: .78rem; line-height: 1.5; }
+
+.shell-logo { display: flex; align-items: center; gap: .75rem; font-weight: 850; letter-spacing: -.02em; }
+.admin-shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+.admin-sidebar { padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; color: #eaf5f2; background: #0b443b; }
+.admin-sidebar nav { display: grid; gap: .5rem; flex: 1; }
+.admin-sidebar nav a, .nav-placeholder { display: flex; gap: .8rem; align-items: center; padding: .85rem 1rem; border-radius: .7rem; color: #d6e9e5; text-decoration: none; }
+.admin-sidebar nav a.router-link-active { color: #153c35; background: #f4c95d; font-weight: 750; }
+.nav-placeholder { opacity: .55; }
+.admin-content { padding: clamp(2rem, 5vw, 5rem); }
+.dashboard-page { max-width: 900px; }
+.dashboard-page h1 { margin: 0; font-size: clamp(2rem, 4vw, 3.6rem); letter-spacing: -.05em; }
+.foundation-card { margin-top: 2.5rem; padding: 1.3rem; display: flex; gap: 1rem; border: 1px solid #d9e5e1; border-radius: 1rem; background: #fff; box-shadow: 0 12px 35px rgba(24, 56, 49, .07); }
+.foundation-card > i { color: #0b7766; font-size: 1.45rem; }
+.foundation-card p { margin: .35rem 0 0; color: #66736f; }
+
+.sales-shell { max-width: 520px; min-height: 100vh; margin: auto; padding-bottom: 5rem; background: #f7f9f8; box-shadow: 0 0 45px rgba(20, 55, 47, .1); }
+.sales-header { height: 72px; padding: 0 1rem; display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #e5ebe9; }
+.sales-content { padding: 2rem 1.25rem; }
+.sales-dashboard h1 { font-size: 2.3rem; }
+.sales-nav { position: fixed; z-index: 10; left: 50%; bottom: 0; width: min(100%, 520px); height: 72px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(4, 1fr); background: #fff; border-top: 1px solid #dfe7e4; }
+.sales-nav a, .sales-nav > span { display: grid; place-content: center; gap: .25rem; color: #7a8783; text-align: center; text-decoration: none; font-size: .68rem; }
+.sales-nav a.router-link-active { color: #0b6b5c; font-weight: 800; }
+.sales-nav i { font-size: 1.15rem; }
+.not-found { min-height: 100vh; display: grid; place-content: center; text-align: center; }
+
+@media (max-width: 900px) {
+  .login-page { grid-template-columns: 1fr; }
+  .login-brand { min-height: 260px; padding: 2rem; gap: 2rem; }
+  .login-brand h1 { font-size: 2.3rem; }
+  .brand-copy, .security-note { display: none; }
+  .login-panel { padding: 2rem 1.25rem 3rem; }
+}
