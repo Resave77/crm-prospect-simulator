@@ -204,3 +204,357 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
     </div>
   </section>
 </template>
+
+<style scoped>
+.finder-page {
+  height: calc(100vh - 92px);
+  min-height: 650px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.finder-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.finder-heading h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+}
+
+.finder-heading p:not(.eyebrow) {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.finder-heading .eyebrow { margin-bottom: 0.2rem; }
+
+.finder-desktop-shell {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 350px minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.finder-left-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--surface-card);
+  border-right: 1px solid var(--border-light);
+}
+
+.finder-filter-scroll {
+  max-height: 325px;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.finder-filter-scroll fieldset {
+  margin: 0.7rem 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  border: 0;
+}
+
+.finder-filter-scroll legend {
+  grid-column: 1 / -1;
+  margin-bottom: 0.3rem;
+  color: var(--text-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.finder-filter-scroll fieldset label {
+  min-width: 0;
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  color: #5f6d83;
+  font-size: 0.55rem;
+}
+
+.finder-filter-scroll fieldset label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finder-filter-actions {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 0.45rem;
+}
+
+.finder-filter-actions :deep(.p-button) {
+  padding: 0.5rem;
+  font-size: 0.62rem;
+}
+
+.finder-left-panel .finder-results-header {
+  background: var(--surface-subtle);
+}
+
+.finder-results-header {
+  padding: 0.6rem 0.85rem;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.finder-results-header div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+}
+
+.finder-results-header span { color: var(--text-muted); }
+
+.finder-left-panel .finder-results {
+  min-height: 0;
+  padding: 0.6rem;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.finder-result-state { min-height: 150px; }
+
+.finder-results {
+  padding: 0.6rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.result-card {
+  width: 100%;
+  padding: 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: start;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast),
+              background var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+
+.result-card:hover {
+  border-color: var(--border-default);
+  background: var(--surface-subtle);
+}
+
+.result-card.selected {
+  border-color: var(--brand-blue);
+  background: #f5f8ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.08);
+}
+
+.result-marker {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}
+
+.result-card div { display: grid; }
+.result-card strong { font-size: 0.65rem; }
+.result-card span { color: var(--text-muted); font-size: 0.52rem; }
+.result-card small { color: #7f8c9b; font-size: 0.5rem; }
+
+.finder-map-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #e8eef5;
+}
+
+.leaflet-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.leaflet-map :deep(.leaflet-control-zoom) {
+  border: 0;
+  box-shadow: 0 4px 12px rgba(30, 54, 84, 0.15);
+  border-radius: var(--radius-sm) !important;
+}
+
+.leaflet-map :deep(.leaflet-control-zoom a) { color: #26344b; }
+
+.leaflet-map :deep(.leaflet-control-attribution) {
+  color: #617087;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 9px;
+}
+
+.map-source-badge {
+  position: absolute;
+  z-index: 500;
+  left: 0.75rem;
+  bottom: 1.5rem;
+  max-width: 280px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(221, 229, 239, 0.9);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+}
+
+.map-source-badge > i { color: #16a34a; }
+.map-source-badge div { display: grid; gap: 0.1rem; }
+.map-source-badge strong { font-size: 0.6rem; }
+.map-source-badge span { color: #718096; font-size: 0.5rem; line-height: 1.4; }
+
+.place-detail-overlay {
+  position: absolute;
+  z-index: 600;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: min(310px, calc(100% - 1.5rem));
+  max-height: calc(100% - 1.5rem);
+  padding: 0.9rem;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(8px);
+}
+
+.place-detail-overlay .detail-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  width: 1.8rem;
+  height: 1.8rem;
+  display: grid;
+  place-items: center;
+  color: #65738a;
+  background: var(--surface-subtle);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.place-detail-overlay .detail-close:hover { background: var(--surface-hover); }
+
+.detail-hero {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+}
+
+.place-detail-overlay h2 {
+  margin: 0.2rem 2rem 0.4rem 0;
+  font-size: 1.1rem;
+}
+
+.place-detail-overlay .detail-list { margin: 0.7rem 0; }
+.place-detail-overlay .field { margin-top: 0.7rem; }
+.place-detail-overlay > :deep(.p-button) { margin-top: 0.8rem; }
+
+.radius-row {
+  margin: 0.8rem 0 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+}
+
+.coordinate-grid {
+  margin: 0.8rem 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.coordinate-grid input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 1100px) {
+  .finder-desktop-shell { grid-template-columns: 310px minmax(0, 1fr); }
+  .finder-filter-scroll fieldset { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 900px) {
+  .finder-desktop-shell { min-height: 900px; grid-template-columns: 1fr; grid-template-rows: 480px 520px; overflow: visible; }
+  .finder-left-panel { border-right: 0; border-bottom: 1px solid var(--border-light); }
+  .finder-filter-scroll { max-height: 285px; }
+}
+
+@media (max-width: 760px) {
+  .finder-page { height: auto; min-height: 0; }
+  .finder-heading { align-items: flex-start; }
+  .map-source-badge { right: 0.65rem; max-width: none; }
+}
+</style>
+
+<style>
+.finder-leaflet-icon-host { border: 0; background: transparent; }
+
+.finder-leaflet-marker {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--marker-color);
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 4px 14px rgba(22, 41, 67, 0.3);
+  transform: rotate(-45deg);
+  transition: width var(--transition-fast),
+              height var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+
+.finder-leaflet-marker i { transform: rotate(45deg); font-size: 0.8rem; }
+
+.finder-leaflet-marker.is-selected {
+  width: 44px;
+  height: 44px;
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18),
+              0 6px 18px rgba(22, 41, 67, 0.35);
+}
+
+.finder-leaflet-marker.is-selected i { font-size: 1rem; }
+</style>
