@@ -170,7 +170,7 @@ export const useCustomerListStore = defineStore('customerList', () => {
   }
 
   return {
-    items, total, page, limit, pages, loading, filterOptions, params, selectedIds,
+    items, allCustomers, total, page, limit, pages, loading, filterOptions, params, selectedIds,
     fetchCustomers, fetchFilterOptions, setParam, setPage, resetFilters,
     toggleSelect, toggleSelectAll, isAllSelected, errorMessage
   }

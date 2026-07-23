@@ -2799,7 +2799,39 @@ td span {
   gap: 0.35rem;
 }
 
-/* Table additions */
+/* Summary cards */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.summary-card {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-xs);
+}
+
+.summary-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.45rem;
+}
+
+.summary-card strong {
+  display: block;
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.table additions */
 .col-check { width: 40px; text-align: center; }
 .col-action { width: 120px; text-align: center; }
 
