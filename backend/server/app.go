@@ -9,6 +9,10 @@ import (
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	"crm-prospect-simulator/backend/internal/auth/model"
 	"crm-prospect-simulator/backend/internal/auth/service"
+	customerhandler "crm-prospect-simulator/backend/internal/customer/handler"
+	customerservice "crm-prospect-simulator/backend/internal/customer/service"
+	prospecthandler "crm-prospect-simulator/backend/internal/prospect/handler"
+	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -16,7 +20,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
-func New(cfg config.Config, authService *service.AuthService) *fiber.App {
+func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "Yummy CRM API",
 		ReadTimeout:  15 * time.Second,
@@ -38,6 +42,8 @@ func New(cfg config.Config, authService *service.AuthService) *fiber.App {
 
 	authHandler := authhandler.New(authService, cfg.CookieSecure)
 	authMiddleware := authmiddleware.New(authService)
+	prospectHandler := prospecthandler.New(prospectService)
+	customerHandler := customerhandler.New(customerService)
 
 	health := func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"status": "ok"})
@@ -61,6 +67,29 @@ func New(cfg config.Config, authService *service.AuthService) *fiber.App {
 	dashboard.Get("/sales", authMiddleware.RequireRole(model.RoleSalesExecutive), func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "sales-executive"})
 	})
+
+	sales := api.Group("/sales", authMiddleware.Authenticate, authMiddleware.RequireRole(model.RoleSalesExecutive))
+	sales.Get("/prospects", prospectHandler.MyProspects)
+	sales.Get("/prospects/:id", prospectHandler.MyProspect)
+	sales.Patch("/prospects/:id/transition", prospectHandler.Decide)
+	sales.Patch("/prospects/:id/decision", prospectHandler.Decide)
+	sales.Post("/prospects/:id/visits/check-in", prospectHandler.CheckIn)
+	sales.Patch("/prospects/:id/visits/:visitId/check-out", prospectHandler.CheckOut)
+	sales.Get("/customers", customerHandler.MyCustomers)
+	sales.Get("/customers/:id", customerHandler.MyCustomer)
+
+	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequireRole(model.RoleAdministrator))
+	admin.Get("/prospects/won", prospectHandler.WonQueue)
+	admin.Get("/prospects/pipeline", prospectHandler.Pipeline)
+	admin.Get("/sales-executives", prospectHandler.SalesExecutives)
+	admin.Get("/prospect-finder/search", prospectHandler.SearchPlaces)
+	admin.Get("/prospect-finder/places/:placeId", prospectHandler.PlaceDetail)
+	admin.Post("/prospects", prospectHandler.Save)
+	admin.Get("/prospects/:id", prospectHandler.Review)
+	admin.Get("/prospects/:id/conversion-form", customerHandler.ConversionForm)
+	admin.Post("/prospects/:id/convert", customerHandler.Convert)
+	admin.Get("/parent-companies", customerHandler.SearchParentCompanies)
+	admin.Get("/customers", customerHandler.AdminCustomers)
 
 	app.Use(func(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "The requested API route does not exist.")

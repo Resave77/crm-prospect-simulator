@@ -1,7 +1,5 @@
 # Coding and Engineering Standard
 
-Status: `APPROVED`
-
 ## 1. General Principles
 
 - Optimize for clarity, correctness, and maintainability over cleverness.
@@ -74,17 +72,17 @@ Status: `APPROVED`
 
 ## 5. Naming
 
-| Area | Convention | Example |
-|---|---|---|
-| Go package/file | lowercase/snake case file | `pipeline_history.go` |
-| Go exported type | PascalCase | `ProspectService` |
-| JSON | camelCase | `googlePlaceId` |
-| Database | snake_case | `google_place_id` |
-| Vue component | PascalCase | `ProspectSearchMap.vue` |
-| Composable | `use` prefix | `useGeolocation.ts` |
-| Pinia store | domain + `Store` | `useProspectStore` |
-| Route name | scoped PascalCase | `AdminProspectDetail` |
-| Status constants | uppercase stable codes | `FOLLOW_UP` |
+| Area             | Convention                | Example                 |
+| ---------------- | ------------------------- | ----------------------- |
+| Go package/file  | lowercase/snake case file | `pipeline_history.go`   |
+| Go exported type | PascalCase                | `ProspectService`       |
+| JSON             | camelCase                 | `googlePlaceId`         |
+| Database         | snake_case                | `google_place_id`       |
+| Vue component    | PascalCase                | `ProspectSearchMap.vue` |
+| Composable       | `use` prefix              | `useGeolocation.ts`     |
+| Pinia store      | domain + `Store`          | `useProspectStore`      |
+| Route name       | scoped PascalCase         | `AdminProspectDetail`   |
+| Status constants | uppercase stable codes    | `FOLLOW_UP`             |
 
 ## 6. API and Validation
 

@@ -12,16 +12,17 @@ import (
 )
 
 type Config struct {
-	Environment     string
-	Port            string
-	DatabaseURL     string
-	JWTSecret       string
-	JWTIssuer       string
-	JWTAudience     string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
-	AllowedOrigins  string
-	CookieSecure    bool
+	Environment      string
+	Port             string
+	DatabaseURL      string
+	JWTSecret        string
+	JWTIssuer        string
+	JWTAudience      string
+	AccessTokenTTL   time.Duration
+	RefreshTokenTTL  time.Duration
+	AllowedOrigins   string
+	CookieSecure     bool
+	GoogleMapsAPIKey string
 }
 
 func Load() (Config, error) {
@@ -41,16 +42,17 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Environment:     value("APP_ENV", "development"),
-		Port:            value("PORT", "8080"),
-		DatabaseURL:     strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		JWTIssuer:       value("JWT_ISSUER", "yummy-crm"),
-		JWTAudience:     value("JWT_AUDIENCE", "yummy-crm-api"),
-		AccessTokenTTL:  accessTTL,
-		RefreshTokenTTL: refreshTTL,
-		AllowedOrigins:  value("ALLOWED_ORIGINS", "http://localhost:5173"),
-		CookieSecure:    secure,
+		Environment:      value("APP_ENV", "development"),
+		Port:             value("PORT", "8080"),
+		DatabaseURL:      strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		JWTSecret:        os.Getenv("JWT_SECRET"),
+		JWTIssuer:        value("JWT_ISSUER", "yummy-crm"),
+		JWTAudience:      value("JWT_AUDIENCE", "yummy-crm-api"),
+		AccessTokenTTL:   accessTTL,
+		RefreshTokenTTL:  refreshTTL,
+		AllowedOrigins:   value("ALLOWED_ORIGINS", "http://localhost:5173"),
+		CookieSecure:     secure,
+		GoogleMapsAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import Message from 'primevue/message'
+import Tag from 'primevue/tag'
 import { useAuthStore } from '../../../stores/auth'
-const auth = useAuthStore()
+import { useCrmStore } from '../../../stores/crm'
+const auth=useAuthStore(); const crm=useCrmStore(); const error=ref('')
+const active=computed(()=>crm.pipeline.filter(v=>!['LOST','CONVERTED'].includes(v.status)).length)
+const won=computed(()=>crm.pipeline.filter(v=>v.status==='WON').length)
+const assignedToday=computed(()=>crm.pipeline.slice(0,3))
+const stageCounts=computed(()=>['NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION','WON'].map(status=>({status,count:crm.pipeline.filter(v=>v.status===status).length})))
+onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCustomers()])}catch(e){error.value=crm.errorMessage(e)}})
 </script>
-
-<template>
-  <section class="dashboard-page">
-    <p class="eyebrow">Administrator workspace</p>
-    <h1>Good to see you, {{ auth.user?.fullName }}.</h1>
-    <p class="muted">Authentication is active. CRM modules will be introduced in approved implementation phases.</p>
-    <div class="foundation-card"><i class="pi pi-check-circle" /><div><strong>Secure foundation ready</strong><p>PostgreSQL sessions, JWT access, and Administrator authorization are connected.</p></div></div>
-  </section>
-</template>
+<template><section class="admin-dashboard"><Message v-if="error" severity="error">{{ error }}</Message><div class="dashboard-header"><div><h1>Admin Dashboard</h1><p>A clear view of field sales momentum, {{ auth.user?.fullName }}.</p></div><RouterLink class="date-control" to="/admin/prospects/pipeline"><i class="pi pi-calendar" /> {{ new Date().toLocaleDateString() }}</RouterLink></div><div class="metric-grid"><RouterLink to="/admin/customers" class="metric-card"><span>Total Customers<i class="pi pi-users" /></span><strong>{{ crm.adminCustomers.length }}</strong><small>Converted existing customers</small></RouterLink><RouterLink to="/admin/visit-monitoring" class="metric-card"><span>Today's Visits<i class="pi pi-map-marker" /></span><strong>{{ assignedToday.length }}</strong><small>Simulation assignments</small></RouterLink><RouterLink to="/admin/prospects/pipeline" class="metric-card"><span>Total Prospects<i class="pi pi-briefcase" /></span><strong>{{ crm.pipeline.length }}</strong><small>{{ active }} active pipeline</small></RouterLink><RouterLink to="/admin/prospects/won" class="metric-card"><span>Won Prospect<i class="pi pi-star" /></span><strong>{{ won }}</strong><small>Ready for review</small></RouterLink></div><div class="dashboard-grid"><article class="dashboard-panel trend-panel"><header><div><strong>Pipeline Trend</strong><span>Current distribution by stage</span></div></header><div class="bar-chart"><div v-for="entry in stageCounts" :key="entry.status"><span>{{ entry.count }}</span><i :style="{height:`${Math.max(12,entry.count*28)}px`}" /><small>{{ entry.status.split('_').map(v=>v[0]).join('') }}</small></div></div></article><article class="dashboard-panel pipeline-summary"><header><div><strong>Prospect Pipeline</strong><span>Current stage distribution</span></div><RouterLink to="/admin/prospects/pipeline">•••</RouterLink></header><div class="open-total"><span>Open prospects</span><strong>{{ active }}</strong></div><div v-for="entry in stageCounts.slice(-4)" :key="entry.status" class="pipeline-line"><span>{{ entry.status.replaceAll('_',' ') }}</span><i><b :style="{width:`${Math.max(5,(entry.count/Math.max(1,crm.pipeline.length))*100)}%`}" /></i><strong>{{ entry.count }}</strong></div></article><article class="dashboard-panel recent-panel"><header><div><strong>Recent Pipeline Activity</strong><span>Latest records updated by the sales team</span></div><RouterLink to="/admin/prospects/pipeline">View all</RouterLink></header><table><thead><tr><th>Sales Executive</th><th>Prospect</th><th>Industry</th><th>Status</th></tr></thead><tbody><tr v-for="item in crm.pipeline.slice(0,5)" :key="item.id"><td>{{ item.assignedSalesExecutive }}</td><td>{{ item.placeName }}</td><td>{{ item.industryGroup }}</td><td><Tag :value="item.status.replaceAll('_',' ')" :severity="item.status==='WON'?'success':'info'" /></td></tr></tbody></table></article><article class="dashboard-panel assignments"><header><div><strong>Today's Assignment</strong><span>{{ assignedToday.length }} active records</span></div></header><RouterLink v-for="item in assignedToday" :key="item.id" :to="`/admin/prospects/pipeline?search=${encodeURIComponent(item.placeName)}`"><span>{{ new Date(item.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) }}</span><div><strong>{{ item.placeName }}</strong><small>{{ item.assignedSalesExecutive }}</small></div><i class="pi pi-arrow-right" /></RouterLink></article></div></section></template>
