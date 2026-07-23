@@ -26,7 +26,7 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	_ = godotenv.Load()
+	_ = godotenv.Overload()
 
 	accessTTL, err := duration("ACCESS_TOKEN_TTL", 15*time.Minute)
 	if err != nil {

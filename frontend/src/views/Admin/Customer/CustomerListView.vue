@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
@@ -18,6 +17,10 @@ const tabs = [
   { key: 'company', label: 'Company' },
   { key: 'master', label: 'Master Data' }
 ]
+
+function selectTab(tabKey: string) {
+  activeTab.value = tabKey
+}
 
 const sortOptions = [
   { label: 'Newest First', value: '' },
@@ -66,6 +69,110 @@ const selectedSales = computed({
   get: () => store.params.sales,
   set: (val) => { store.setParam('sales', val); store.setParam('page', 1) }
 })
+
+const companyKeyword = ref('')
+const companySelectedRegion = ref('')
+const companySelectedSort = ref('name')
+
+const companySortOptions = [
+  { label: 'Company name', value: 'name' },
+  { label: 'Company code', value: 'code' },
+  { label: 'Sites', value: 'sites' },
+  { label: 'Registered location', value: 'location' }
+]
+
+const companyRegionOptions = computed(() => {
+  const regions = [...new Set(store.allCustomers.map((c) => c.region).filter(Boolean))].sort()
+  return [{ label: 'All Regions', value: '' }, ...regions.map((region) => ({ label: region, value: region }))]
+})
+
+const companies = computed(() => {
+  const groups = new Map<string, {
+    id: string
+    companyCode: string
+    name: string
+    tier: string
+    registeredLocation: string
+    npwp: string
+    kam: string
+    sites: number
+    status: string
+    badge: string
+  }>()
+
+  for (const customer of store.allCustomers) {
+    const code = customer.parentCode || 'UNKNOWN'
+    const company = groups.get(code)
+    const location = customer.region || 'Unknown'
+    const name = customer.parentCompanyName || 'Unknown Company'
+    const kam = customer.salesExecutiveName || 'Unassigned'
+
+    if (!company) {
+      groups.set(code, {
+        id: code,
+        companyCode: code,
+        name,
+        tier: tierFor(code),
+        registeredLocation: location,
+        npwp: npwpFor(code),
+        kam,
+        sites: 1,
+        status: statusFor(code),
+        badge: badgeFor(code)
+      })
+      continue
+    }
+
+    company.sites += 1
+    if (company.registeredLocation === 'Unknown' && location !== 'Unknown') company.registeredLocation = location
+    if (company.kam === 'Unassigned' && kam !== 'Unassigned') company.kam = kam
+  }
+
+  let items = Array.from(groups.values())
+
+  if (companyKeyword.value.trim()) {
+    const kw = companyKeyword.value.trim().toLowerCase()
+    items = items.filter((company) =>
+      company.name.toLowerCase().includes(kw) ||
+      company.companyCode.toLowerCase().includes(kw) ||
+      company.registeredLocation.toLowerCase().includes(kw) ||
+      company.kam.toLowerCase().includes(kw)
+    )
+  }
+
+  if (companySelectedRegion.value) {
+    items = items.filter((company) => company.registeredLocation === companySelectedRegion.value)
+  }
+
+  items.sort((a, b) => {
+    switch (companySelectedSort.value) {
+      case 'code':
+        return a.companyCode.localeCompare(b.companyCode)
+      case 'sites':
+        return b.sites - a.sites
+      case 'location':
+        return a.registeredLocation.localeCompare(b.registeredLocation)
+      default:
+        return a.name.localeCompare(b.name)
+    }
+  })
+
+  return items
+})
+
+function goToCompany(id: string) {
+  router.push(`/admin/companies/${id}`)
+}
+
+const companyCount = computed(() => new Set(store.allCustomers.map((c) => c.parentCode || 'UNKNOWN')).size)
+const assignedCount = computed(() => store.allCustomers.filter((c) => c.salesExecutiveName).length)
+const erpPendingCount = computed(() => companies.value.filter((c) => c.status !== 'Active').length)
+
+function resetCompanyFilters() {
+  companyKeyword.value = ''
+  companySelectedRegion.value = ''
+  companySelectedSort.value = 'name'
+}
 
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
 function onKeywordSearch(value: string) {
@@ -128,7 +235,30 @@ onMounted(async () => {
         <h1>Customer Existing</h1>
         <p class="muted">Customer Site &amp; Parent Company Management</p>
       </div>
-      <Tag :value="`${store.total} customers`" severity="success" />
+      <div class="page-heading-actions">
+        <Button label="Export" icon="pi pi-download" text />
+        <Button label="Add Company" icon="pi pi-plus" class="add-button" @click="router.push('/admin/companies')" v-if="activeTab === 'company'" />
+        <Button label="Add Customer" icon="pi pi-plus" class="add-button" @click="router.push('/admin/customers')" v-else />
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>Companies</span>
+        <strong>{{ companyCount }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Customer Sites</span>
+        <strong>{{ store.allCustomers.length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Assigned</span>
+        <strong>{{ assignedCount }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>ERP Pending</span>
+        <strong>{{ erpPendingCount }}</strong>
+      </div>
     </div>
 
     <!-- TAB NAVIGATION -->
@@ -137,11 +267,9 @@ onMounted(async () => {
         v-for="tab in tabs"
         :key="tab.key"
         :class="['ct-tab', { active: activeTab === tab.key }]"
-        @click="activeTab = tab.key"
+        @click="selectTab(tab.key)"
       >{{ tab.label }}</button>
     </div>
-
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
 
     <!-- CUSTOMER SITE TAB -->
     <template v-if="activeTab === 'site'">
@@ -275,11 +403,85 @@ onMounted(async () => {
       </div>
     </template>
 
-    <!-- COMPANY TAB (placeholder) -->
-    <div v-if="activeTab === 'company'" class="ct-placeholder">
-      <i class="pi pi-building" />
-      <strong>Company Management</strong>
-      <span>Parent company list and management will be available here.</span>
+    <!-- COMPANY TAB -->
+    <div v-if="activeTab === 'company'">
+      <div class="ct-search-bar">
+        <div class="ct-search-field">
+          <i class="pi pi-search" />
+          <input type="text" placeholder="Search Company..." v-model="companyKeyword" />
+        </div>
+      </div>
+
+      <div class="ct-filter-row">
+        <div class="ct-filters">
+          <label>
+            <span>Region</span>
+            <Select v-model="companySelectedRegion" :options="companyRegionOptions" optionLabel="label" optionValue="value" class="ct-filter-select" />
+          </label>
+          <label>
+            <span>Sort By</span>
+            <Select v-model="companySelectedSort" :options="companySortOptions" optionLabel="label" optionValue="value" class="ct-filter-select" />
+          </label>
+        </div>
+        <div class="ct-filter-actions">
+          <Button label="Reset" icon="pi pi-replay" text size="small" @click="resetCompanyFilters" />
+        </div>
+      </div>
+
+      <div class="ct-action-row">
+        <div class="ct-action-right">
+          <Button icon="pi pi-trash" text size="small" disabled title="Trash" />
+          <Button icon="pi pi-download" text size="small" disabled title="Export" />
+          <Button icon="pi pi-refresh" text size="small" @click="load" title="Refresh" />
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div v-if="store.loading" class="empty-state">Loading companies...</div>
+        <div v-else-if="!companies.length" class="empty-state">
+          <i class="pi pi-building" />
+          <strong>No companies found</strong>
+          <span>Adjust your search or filters to see results.</span>
+        </div>
+        <div v-else class="responsive-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Company Code</th>
+                <th>Company Name</th>
+                <th>Tier</th>
+                <th>Region</th>
+                <th>NPWP</th>
+                <th>KAM</th>
+                <th>Sites / Status</th>
+                <th class="col-action">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="company in companies" :key="company.id">
+                <td><span class="mono">{{ company.companyCode }}</span></td>
+                <td><strong>{{ company.name }}</strong></td>
+                <td><Tag :value="company.tier" severity="info" /></td>
+                <td><span>{{ company.registeredLocation }}</span></td>
+                <td><span>{{ company.npwp }}</span></td>
+                <td><span>{{ company.kam }}</span></td>
+                <td>
+                  <div class="company-status-cell">
+                    <strong>{{ company.badge }}</strong>
+                    <Tag :value="company.status" :severity="company.status === 'Active' ? 'success' : 'warning'" />
+                  </div>
+                </td>
+                <td class="col-action">
+                  <div class="ct-row-actions">
+                    <Button icon="pi pi-eye" text rounded size="small" title="View company" @click="goToCompany(company.id)" />
+                    <Button icon="pi pi-pencil" text rounded size="small" title="Edit company" @click="router.push(`/admin/companies/${company.id}/edit`)" />
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- MASTER DATA TAB (placeholder) -->
