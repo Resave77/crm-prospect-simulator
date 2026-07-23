@@ -47,40 +47,8 @@ const RefinedAura = definePreset(Aura, {
         }
       }
     },
-    form: {
-      border: {
-        radius: '8px'
-      }
-    },
-    list: {
-      border: {
-        radius: '8px'
-      }
-    },
-    menu: {
-      border: {
-        radius: '8px'
-      }
-    },
-    button: {
-      border: {
-        radius: '8px'
-      }
-    },
-    tag: {
-      border: {
-        radius: '8px'
-      }
-    },
-    badge: {
-      border: {
-        radius: '8px'
-      }
-    },
-    input: {
-      border: {
-        radius: '8px'
-      }
+    formField: {
+      borderRadius: '8px'
     }
   }
 })
