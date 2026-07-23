@@ -168,37 +168,142 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 <template>
   <section class="finder-page">
-    <div class="finder-heading"><div><p class="eyebrow">Google Places discovery</p><h1>Prospect Finder</h1><p>Google Places results on a keyless OpenStreetMap canvas.</p></div><Tag value="Leaflet + OpenStreetMap" severity="success" /></div>
+    <div class="finder-heading">
+      <div>
+        <h1>Prospect Finder</h1>
+        <p class="finder-subtitle">Search nearby businesses on OpenStreetMap and save qualified prospects.</p>
+      </div>
+    </div>
+
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
+
     <div class="finder-desktop-shell">
       <aside class="finder-left-panel">
         <div class="finder-filter-scroll">
-          <label class="field"><span>Keyword</span><InputText v-model="keyword" placeholder="Cafe, hotel, pharmacy..." @keyup.enter="search" /></label>
-          <fieldset><legend>Categories</legend><label v-for="option in categoryOptions" :key="option[0]"><Checkbox v-model="categories" :input-id="option[0]" :value="option[0]" /><span>{{ option[1] }}</span></label></fieldset>
-          <div class="radius-row"><strong>Search radius</strong><span>{{ (radius / 1000).toFixed(1) }} km</span></div><Slider v-model="radius" :min="500" :max="50000" :step="500" />
-          <div class="coordinate-grid"><label class="field"><span>Latitude</span><input v-model.number="latitude" type="number" step="0.000001" /></label><label class="field"><span>Longitude</span><input v-model.number="longitude" type="number" step="0.000001" /></label></div>
-          <div class="finder-filter-actions"><Button label="Use GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" /><Button label="Search area" icon="pi pi-search" :loading="loading" :disabled="!categories.length" @click="search" /></div>
+          <div class="filter-section">
+            <label class="field finder-keyword-field">
+              <span>Keyword</span>
+              <div class="keyword-input-wrap">
+                <i class="pi pi-search keyword-icon" />
+                <InputText v-model="keyword" placeholder="Cafe, hotel, pharmacy..." @keyup.enter="search" />
+              </div>
+            </label>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-title">Categories</p>
+            <div class="category-grid">
+              <label v-for="option in categoryOptions" :key="option[0]" class="category-chip" :class="{ active: categories.includes(option[0]) }">
+                <Checkbox v-model="categories" :input-id="option[0]" :value="option[0]" />
+                <span>{{ option[1] }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <div class="radius-header">
+              <span class="filter-section-title">Search Radius</span>
+              <span class="radius-value">{{ (radius / 1000).toFixed(1) }} km</span>
+            </div>
+            <Slider v-model="radius" :min="500" :max="50000" :step="500" class="finder-slider" />
+            <div class="radius-range-labels">
+              <span>0.5 km</span>
+              <span>50 km</span>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-title">Coordinates</p>
+            <div class="coordinate-grid">
+              <label class="field"><span>Lat</span><input v-model.number="latitude" type="number" step="0.000001" /></label>
+              <label class="field"><span>Lng</span><input v-model.number="longitude" type="number" step="0.000001" /></label>
+            </div>
+          </div>
+
+          <div class="filter-actions">
+            <Button label="Use GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" />
+            <Button label="Search Area" icon="pi pi-search" :loading="loading" :disabled="!categories.length" @click="search" />
+          </div>
+
+          <p v-if="!results.length && !loading" class="filter-hint"><i class="pi pi-info-circle" /> Select categories and click Search Area to discover nearby businesses.</p>
         </div>
-        <div class="finder-results-header"><div><strong>{{ results.length }} results</strong><span>within {{ (radius / 1000).toFixed(1) }} km</span></div></div>
-        <div v-if="loading" class="empty-state finder-result-state"><i class="pi pi-spin pi-spinner" /><strong>Searching Google Places</strong></div>
-        <div v-else-if="!results.length" class="empty-state finder-result-state"><i class="pi pi-map-marker" /><strong>Choose filters and search</strong><span>Places results will appear here.</span></div>
+
+        <div class="finder-results-header">
+          <div>
+            <strong>{{ results.length }} results</strong>
+            <span>within {{ (radius / 1000).toFixed(1) }} km</span>
+          </div>
+        </div>
+
+        <div v-if="loading" class="empty-state finder-result-state">
+          <div class="loading-pulse" />
+          <strong>Searching Google Places</strong>
+          <span>Scanning nearby businesses...</span>
+        </div>
+        <div v-else-if="!results.length" class="empty-state finder-result-state">
+          <i class="pi pi-map-marker" />
+          <strong>Choose filters and search</strong>
+          <span>Places results will appear here.</span>
+        </div>
         <div v-else class="finder-results">
-          <button v-for="item in results" :key="item.googlePlaceId" class="result-card" :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }" @click="selectResult(item)"><span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span><div><strong>{{ item.name }}</strong><span>{{ item.category }} · {{ Math.round(item.distance) }} m</span><small>{{ item.address }}</small></div><Tag :value="item.rating ? `★ ${item.rating}` : 'New'" severity="secondary" /></button>
+          <button
+            v-for="item in results"
+            :key="item.googlePlaceId"
+            class="result-card"
+            :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }"
+            @click="selectResult(item)"
+          >
+            <span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span>
+            <div class="result-info">
+              <strong>{{ item.name }}</strong>
+              <span class="result-meta">{{ item.category }} &middot; {{ Math.round(item.distance) }} m</span>
+              <small>{{ item.address }}</small>
+            </div>
+            <Tag :value="item.rating ? `\u2605 ${item.rating}` : 'New'" severity="secondary" class="result-tag" />
+          </button>
         </div>
       </aside>
+
       <div class="finder-map-stage">
         <div ref="mapElement" class="leaflet-map" role="region" aria-label="OpenStreetMap with Google Places prospect markers" />
-        <div class="map-source-badge"><i class="pi pi-shield" /><div><strong>Private Places search</strong><span>Google Places stays server-side. Map tiles use OpenStreetMap.</span></div></div>
+
+        <div class="map-source-badge">
+          <i class="pi pi-shield" />
+          <div>
+            <strong>Private Places search</strong>
+            <span>Google Places stays server-side. Map tiles use OpenStreetMap.</span>
+          </div>
+        </div>
+
         <aside v-if="selected" class="place-detail-overlay">
-          <button class="detail-close" aria-label="Close selected Place details" @click="selected = null"><i class="pi pi-times" /></button>
-          <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
-          <p class="eyebrow">Selected business</p><h2>{{ selected.name }}</h2>
-          <Tag :value="selected.businessStatus || 'BUSINESS STATUS UNKNOWN'" severity="info" />
-          <div class="detail-list"><p><i class="pi pi-map-marker" />{{ selected.address }}</p><p v-if="selected.phone"><i class="pi pi-phone" />{{ selected.phone }}</p><a v-if="selected.website" :href="selected.website" target="_blank" rel="noreferrer"><i class="pi pi-globe" />Open website</a><a v-if="selected.googleMapsUrl" :href="selected.googleMapsUrl" target="_blank" rel="noreferrer"><i class="pi pi-external-link" />Open Place listing</a></div>
-          <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
-          <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
-          <Button label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId" fluid @click="save" />
+          <button class="detail-close" aria-label="Close selected Place details" @click="selected = null">
+            <i class="pi pi-times" />
+          </button>
+
+          <div class="detail-header">
+            <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
+            <div>
+              <p class="eyebrow">Selected business</p>
+              <h2>{{ selected.name }}</h2>
+              <Tag :value="selected.businessStatus || 'BUSINESS STATUS UNKNOWN'" severity="info" />
+            </div>
+          </div>
+
+          <div class="detail-body">
+            <div class="detail-list">
+              <p><i class="pi pi-map-marker" />{{ selected.address }}</p>
+              <p v-if="selected.phone"><i class="pi pi-phone" />{{ selected.phone }}</p>
+              <a v-if="selected.website" :href="selected.website" target="_blank" rel="noreferrer"><i class="pi pi-globe" />Open website</a>
+              <a v-if="selected.googleMapsUrl" :href="selected.googleMapsUrl" target="_blank" rel="noreferrer"><i class="pi pi-external-link" />Open Place listing</a>
+            </div>
+          </div>
+
+          <div class="detail-actions">
+            <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
+            <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
+            <Button label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId" fluid @click="save" />
+          </div>
         </aside>
       </div>
     </div>
@@ -206,14 +311,19 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 </template>
 
 <style scoped>
+/* ════════════════════════════════════════════════════════════════
+   PROSPECT FINDER — Modern Redesign v2
+   ════════════════════════════════════════════════════════════════ */
+
 .finder-page {
   height: calc(100vh - 92px);
   min-height: 650px;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.85rem;
 }
 
+/* ── Heading ─────────────────────────────────────────────────── */
 .finder-heading {
   display: flex;
   align-items: center;
@@ -223,107 +333,289 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .finder-heading h1 {
   margin: 0;
-  font-size: 1.5rem;
-  letter-spacing: -0.035em;
+  font-size: 1.75rem;
+  letter-spacing: -0.04em;
   font-weight: 800;
+  background: linear-gradient(135deg, var(--text-primary) 0%, #334155 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.finder-heading p:not(.eyebrow) {
-  margin: 0.2rem 0 0;
+.finder-heading .finder-subtitle {
+  margin: 0.3rem 0 0;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
-.finder-heading .eyebrow { margin-bottom: 0.2rem; }
+.finder-heading .eyebrow { margin-bottom: 0.25rem; }
 
+/* ── Desktop Shell ───────────────────────────────────────────── */
 .finder-desktop-shell {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: 350px minmax(0, 1fr);
+  grid-template-columns: 380px minmax(0, 1fr);
   overflow: hidden;
   background: var(--surface-card);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg),
+              0 0 0 1px rgba(255, 255, 255, 0.8) inset;
 }
 
+/* ── Left Panel ──────────────────────────────────────────────── */
 .finder-left-panel {
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  background: var(--surface-card);
+  background: linear-gradient(180deg, #fafbfc 0%, var(--surface-card) 100%);
   border-right: 1px solid var(--border-light);
 }
 
 .finder-filter-scroll {
-  max-height: 325px;
+  max-height: 400px;
   padding: 1rem;
   overflow-y: auto;
-}
-
-.finder-filter-scroll fieldset {
-  margin: 0.7rem 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.35rem;
-  border: 0;
-}
-
-.finder-filter-scroll legend {
-  grid-column: 1 / -1;
-  margin-bottom: 0.3rem;
-  color: var(--text-primary);
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.finder-filter-scroll fieldset label {
-  min-width: 0;
   display: flex;
-  gap: 0.25rem;
-  align-items: center;
-  color: #5f6d83;
-  font-size: 0.55rem;
+  flex-direction: column;
+  gap: 0;
 }
 
-.finder-filter-scroll fieldset label span {
+.finder-filter-scroll::-webkit-scrollbar { width: 4px; }
+.finder-filter-scroll::-webkit-scrollbar-track { background: transparent; }
+.finder-filter-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+/* ── Filter Sections ─────────────────────────────────────────── */
+.filter-section {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.filter-section:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0.25rem;
+}
+
+.filter-section-title {
+  margin: 0 0 0.55rem;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Keyword */
+.finder-keyword-field {
+  gap: 0.4rem;
+}
+
+.finder-keyword-field > span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.keyword-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.keyword-icon {
+  position: absolute;
+  left: 0.7rem;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.keyword-input-wrap :deep(.p-inputtext) {
+  padding-left: 2rem;
+  border-radius: var(--radius-md);
+  border-color: var(--border-default);
+  font-size: 0.8rem;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.keyword-input-wrap :deep(.p-inputtext:focus) {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Categories */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+}
+
+.category-chip {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0.35rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.category-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+
+.category-chip.active {
+  background: var(--brand-blue-50);
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.category-chip span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 550;
+  transition: color var(--transition-fast);
 }
 
-.finder-filter-actions {
-  margin-top: 0.7rem;
+.category-chip.active span {
+  color: var(--brand-blue);
+  font-weight: 700;
+}
+
+/* Radius */
+.radius-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.radius-value {
+  padding: 0.2rem 0.65rem;
+  color: var(--brand-blue);
+  background: var(--brand-blue-50);
+  border: 1px solid var(--brand-blue-100);
+  border-radius: 1rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.radius-range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  color: var(--text-faint);
+  font-size: 0.58rem;
+}
+
+/* Coordinates */
+.coordinate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.coordinate-grid .field {
+  gap: 0.3rem;
+}
+
+.coordinate-grid .field > span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.coordinate-grid input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  background: var(--surface-card);
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+
+.coordinate-grid input:focus {
+  outline: none;
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Filter Actions */
+.filter-actions {
+  margin-top: 0.75rem;
   display: grid;
   grid-template-columns: 0.85fr 1.15fr;
+  gap: 0.5rem;
+}
+
+.filter-actions :deep(.p-button) {
+  padding: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+}
+
+/* Hint */
+.filter-hint {
+  margin: 0.65rem 0 0;
+  display: flex;
+  align-items: center;
   gap: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-muted);
+  background: var(--brand-blue-50);
+  border: 1px solid var(--brand-blue-100);
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  line-height: 1.5;
 }
 
-.finder-filter-actions :deep(.p-button) {
-  padding: 0.5rem;
-  font-size: 0.62rem;
+.filter-hint i {
+  color: var(--brand-blue);
+  font-size: 0.7rem;
+  flex-shrink: 0;
 }
 
-.finder-left-panel .finder-results-header {
-  background: var(--surface-subtle);
-}
-
+/* ── Results Header ──────────────────────────────────────────── */
 .finder-results-header {
-  padding: 0.6rem 0.85rem;
-  border-top: 1px solid var(--border-light);
-  border-bottom: 1px solid var(--border-light);
+  padding: 0.65rem 1rem;
+  border-top: 1px solid #eef1f5;
+  border-bottom: 1px solid #eef1f5;
+  background: linear-gradient(135deg, var(--surface-subtle) 0%, #f0f3f7 100%);
 }
 
 .finder-results-header div {
   display: flex;
   justify-content: space-between;
-  font-size: 0.68rem;
+  align-items: center;
 }
 
-.finder-results-header span { color: var(--text-muted); }
+.finder-results-header strong {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
 
+.finder-results-header span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+/* ── Results List ────────────────────────────────────────────── */
 .finder-left-panel .finder-results {
   min-height: 0;
   padding: 0.6rem;
@@ -331,65 +623,117 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   align-content: start;
 }
 
-.finder-result-state { min-height: 150px; }
+.finder-left-panel .finder-results::-webkit-scrollbar { width: 4px; }
+.finder-left-panel .finder-results::-webkit-scrollbar-track { background: transparent; }
+.finder-left-panel .finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+.finder-result-state {
+  min-height: 180px;
+  gap: 0.6rem;
+}
+
+.finder-result-state span {
+  font-size: 0.78rem;
+}
 
 .finder-results {
   padding: 0.6rem;
   overflow-y: auto;
   display: grid;
-  gap: 0.4rem;
+  gap: 0.45rem;
+}
+
+.loading-pulse {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--brand-blue-100);
+  border-top-color: var(--brand-blue);
+  border-radius: 50%;
+  animation: finder-spin 0.75s linear infinite;
+}
+
+@keyframes finder-spin {
+  to { transform: rotate(360deg); }
 }
 
 .result-card {
   width: 100%;
-  padding: 0.6rem;
+  padding: 0.75rem;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.6rem;
-  align-items: start;
+  gap: 0.7rem;
+  align-items: center;
   text-align: left;
   color: var(--text-primary);
   background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border: 1px solid #eef1f5;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: border-color var(--transition-fast),
-              background var(--transition-fast),
-              box-shadow var(--transition-fast);
+  transition: all var(--transition-base);
 }
 
 .result-card:hover {
-  border-color: var(--border-default);
-  background: var(--surface-subtle);
+  border-color: var(--brand-blue-100);
+  background: #f8faff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06),
+              0 0 0 1px rgba(37, 99, 235, 0.04);
+  transform: translateY(-1px);
 }
 
 .result-card.selected {
   border-color: var(--brand-blue);
-  background: #f5f8ff;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.08);
+  background: linear-gradient(135deg, #f5f8ff 0%, #eef3ff 100%);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1),
+              0 4px 12px rgba(37, 99, 235, 0.08);
 }
 
 .result-marker {
-  width: 2rem;
-  height: 2rem;
+  width: 2.15rem;
+  height: 2.15rem;
   display: grid;
   place-items: center;
   color: #fff;
   border-radius: 50%;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-.result-card div { display: grid; }
-.result-card strong { font-size: 0.65rem; }
-.result-card span { color: var(--text-muted); font-size: 0.52rem; }
-.result-card small { color: #7f8c9b; font-size: 0.5rem; }
+.result-info {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
 
+.result-info strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.result-meta {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.result-info small {
+  color: var(--text-faint);
+  font-size: 0.6rem;
+  line-height: 1.4;
+}
+
+.result-tag {
+  flex-shrink: 0;
+}
+
+/* ── Map Stage ───────────────────────────────────────────────── */
 .finder-map-stage {
   position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #e8eef5;
+  background: linear-gradient(135deg, #e8eef5 0%, #dfe6ef 100%);
 }
 
 .leaflet-map {
@@ -402,128 +746,210 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .leaflet-map :deep(.leaflet-control-zoom) {
   border: 0;
-  box-shadow: 0 4px 12px rgba(30, 54, 84, 0.15);
-  border-radius: var(--radius-sm) !important;
+  box-shadow: 0 4px 16px rgba(30, 54, 84, 0.18);
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
 }
 
 .leaflet-map :deep(.leaflet-control-zoom a) { color: #26344b; }
 
 .leaflet-map :deep(.leaflet-control-attribution) {
   color: #617087;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius-sm) 0 0 0;
   font-size: 9px;
 }
 
+/* ── Map Source Badge ────────────────────────────────────────── */
 .map-source-badge {
   position: absolute;
   z-index: 500;
-  left: 0.75rem;
+  left: 0.85rem;
   bottom: 1.5rem;
-  max-width: 280px;
-  padding: 0.6rem 0.75rem;
+  max-width: 290px;
+  padding: 0.6rem 0.8rem;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  align-items: flex-start;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(221, 229, 239, 0.9);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(221, 229, 239, 0.95);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(30, 54, 84, 0.12);
+  backdrop-filter: blur(12px);
 }
 
-.map-source-badge > i { color: #16a34a; }
-.map-source-badge div { display: grid; gap: 0.1rem; }
-.map-source-badge strong { font-size: 0.6rem; }
-.map-source-badge span { color: #718096; font-size: 0.5rem; line-height: 1.4; }
+.map-source-badge > i {
+  margin-top: 0.05rem;
+  color: #16a34a;
+  font-size: 0.85rem;
+}
 
+.map-source-badge div { display: grid; gap: 0.15rem; }
+.map-source-badge strong { font-size: 0.65rem; font-weight: 700; }
+.map-source-badge span { color: #718096; font-size: 0.58rem; line-height: 1.5; }
+
+/* ── Place Detail Overlay ────────────────────────────────────── */
 .place-detail-overlay {
   position: absolute;
   z-index: 600;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: min(310px, calc(100% - 1.5rem));
-  max-height: calc(100% - 1.5rem);
-  padding: 0.9rem;
+  top: 0.85rem;
+  right: 0.85rem;
+  width: min(330px, calc(100% - 1.7rem));
+  max-height: calc(100% - 1.7rem);
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(229, 234, 243, 0.95);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12),
+              0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
 }
 
 .place-detail-overlay .detail-close {
   position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
-  width: 1.8rem;
-  height: 1.8rem;
+  top: 0.7rem;
+  right: 0.7rem;
+  width: 1.85rem;
+  height: 1.85rem;
   display: grid;
   place-items: center;
-  color: #65738a;
-  background: var(--surface-subtle);
-  border: 0;
+  color: var(--text-muted);
+  background: rgba(245, 247, 250, 0.9);
+  border: 1px solid var(--border-light);
   border-radius: 50%;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
+  z-index: 1;
 }
 
-.place-detail-overlay .detail-close:hover { background: var(--surface-hover); }
+.place-detail-overlay .detail-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  transform: scale(1.05);
+}
+
+.detail-header {
+  padding: 1rem 1rem 0.85rem;
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  background: linear-gradient(135deg, #f8faff 0%, #f5f8ff 100%);
+  border-bottom: 1px solid #eef1f5;
+}
 
 .detail-hero {
   width: 2.75rem;
   height: 2.75rem;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   color: #fff;
   border-radius: var(--radius-md);
   font-size: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.detail-header .eyebrow {
+  margin-bottom: 0.15rem;
+  font-size: 0.6rem;
 }
 
 .place-detail-overlay h2 {
-  margin: 0.2rem 2rem 0.4rem 0;
+  margin: 0 2.5rem 0.3rem 0;
   font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+  color: var(--text-primary);
 }
 
-.place-detail-overlay .detail-list { margin: 0.7rem 0; }
-.place-detail-overlay .field { margin-top: 0.7rem; }
-.place-detail-overlay > :deep(.p-button) { margin-top: 0.8rem; }
-
-.radius-row {
-  margin: 0.8rem 0 0.6rem;
+.detail-body {
+  padding: 0.85rem 1rem;
   display: flex;
-  justify-content: space-between;
-  font-size: 0.68rem;
+  flex-direction: column;
+  gap: 0;
 }
 
-.coordinate-grid {
-  margin: 0.8rem 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.detail-list {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.coordinate-grid input {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+.detail-list p,
+.detail-list a {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.5;
 }
 
+.detail-list p i,
+.detail-list a i {
+  margin-top: 0.12rem;
+  color: var(--brand-blue);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.detail-list a {
+  color: var(--brand-blue);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.detail-list a:hover { opacity: 0.75; transform: translateX(2px); }
+
+.detail-actions {
+  padding: 0.85rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  border-top: 1px solid #eef1f5;
+}
+
+.place-detail-overlay .field > span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.place-detail-overlay > .detail-actions > :deep(.p-button) {
+  margin-top: 0.2rem;
+  padding: 0.65rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .finder-desktop-shell { grid-template-columns: 310px minmax(0, 1fr); }
-  .finder-filter-scroll fieldset { grid-template-columns: 1fr 1fr; }
+  .finder-desktop-shell { grid-template-columns: 340px minmax(0, 1fr); }
+  .category-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 900px) {
-  .finder-desktop-shell { min-height: 900px; grid-template-columns: 1fr; grid-template-rows: 480px 520px; overflow: visible; }
+  .finder-desktop-shell {
+    min-height: 940px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 520px 520px;
+    overflow: visible;
+  }
   .finder-left-panel { border-right: 0; border-bottom: 1px solid var(--border-light); }
-  .finder-filter-scroll { max-height: 285px; }
+  .finder-filter-scroll { max-height: 360px; }
 }
 
 @media (max-width: 760px) {
   .finder-page { height: auto; min-height: 0; }
   .finder-heading { align-items: flex-start; }
+  .finder-heading h1 { font-size: 1.45rem; }
   .map-source-badge { right: 0.65rem; max-width: none; }
 }
 </style>

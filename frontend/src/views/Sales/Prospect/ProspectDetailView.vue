@@ -291,3 +291,84 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
     </template>
   </section>
 </template>
+
+<style scoped>
+.pv-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: 2rem; }
+.pv-summary-card {
+  position: sticky; top: 0; z-index: 10; padding: 1.25rem; border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl); background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); box-shadow: var(--shadow-sm);
+}
+.pv-summary-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.85rem; }
+.pv-summary-header h1 { margin: 0; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); }
+.pv-summary-details { display: grid; gap: 0.45rem; }
+.pv-detail-row { display: flex; align-items: center; gap: 0.6rem; color: var(--text-secondary); font-size: 0.82rem; }
+.pv-detail-row i { color: var(--brand-blue); font-size: 0.78rem; width: 1rem; text-align: center; flex-shrink: 0; }
+.pv-detail-row a { color: var(--brand-blue); text-decoration: none; }
+.pv-detail-row a:hover { text-decoration: underline; }
+.pv-stepper { display: flex; align-items: flex-start; gap: 0; padding: 0.85rem 0.65rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow-x: auto; }
+.pv-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.3rem; position: relative; min-width: 48px; }
+.pv-step:not(:last-child)::after { content: ''; position: absolute; top: 13px; left: calc(50% + 15px); right: calc(-50% + 15px); height: 2px; background: var(--border-light); transition: background var(--transition-base); }
+.pv-step.done:not(:last-child)::after { background: #22c55e; }
+.pv-step-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-subtle); border: 2px solid var(--border-light); color: var(--text-muted); font-size: 0.6rem; font-weight: 700; position: relative; z-index: 1; transition: all var(--transition-fast); }
+.pv-step.done .pv-step-dot { background: #22c55e; border-color: #22c55e; color: #fff; }
+.pv-step.active .pv-step-dot { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15); }
+.pv-step-label { font-size: 0.55rem; font-weight: 600; color: var(--text-muted); text-align: center; white-space: nowrap; }
+.pv-step.done .pv-step-label { color: #22c55e; }
+.pv-step.active .pv-step-label { color: var(--brand-blue); }
+.pv-card { padding: 1.25rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl); background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem; }
+.pv-card h2 { margin: 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.pv-hint { margin: -0.35rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
+.pv-map { height: 260px; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-light); }
+.pv-location-info { display: grid; gap: 0.35rem; }
+.pv-selfie-option {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--surface-subtle);
+  color: var(--text-secondary); font-size: 0.82rem; cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.pv-selfie-option:hover { background: var(--surface-hover); border-color: var(--border-default); }
+.pv-selfie-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-blue); }
+.pv-selfie-option i { color: var(--text-muted); font-size: 0.85rem; }
+.pv-active-header { display: flex; align-items: center; justify-content: space-between; }
+.pv-active-header h2 { margin: 0; }
+.pv-visit-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.pv-stat { padding: 0.75rem; border-radius: var(--radius-md); background: var(--surface-subtle); }
+.pv-stat span { display: block; color: var(--text-muted); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
+.pv-stat strong { font-size: 0.85rem; color: var(--text-primary); }
+.pv-note-box { padding: 0.75rem; border-radius: var(--radius-md); background: var(--surface-subtle); color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
+.pv-note-box span { display: block; margin-bottom: 0.2rem; color: var(--text-muted); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.pv-card-highlight { border-color: var(--brand-blue-light); background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); }
+.pv-pipeline-flow { display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem; border-radius: var(--radius-md); background: var(--surface-card); border: 1px solid var(--border-light); justify-content: center; }
+.pv-pipeline-flow i { color: var(--brand-blue); font-size: 0.85rem; }
+.pv-card-success { border-color: #bbf7d0; background: #f0fdf4; }
+.pv-success-row { display: flex; align-items: center; gap: 0.5rem; color: #166534; font-size: 0.82rem; }
+.pv-success-row i { font-size: 1rem; }
+.pv-visit-cards { display: grid; gap: 0.65rem; }
+.pv-visit-card { border: 1px solid var(--border-light); border-radius: var(--radius-lg); overflow: hidden; }
+.pv-visit-card-header { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 0.85rem; background: var(--surface-subtle); border-bottom: 1px solid var(--border-light); }
+.pv-visit-card-header span { color: var(--text-muted); font-size: 0.72rem; }
+.pv-visit-card-body { padding: 0.65rem 0.85rem; display: grid; gap: 0.35rem; }
+.pv-visit-detail { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
+.pv-visit-detail i { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.18rem; flex-shrink: 0; }
+.pv-visit-exec { margin-top: 0.25rem; padding-top: 0.35rem; border-top: 1px solid var(--border-light); }
+.pv-status-timeline { display: grid; }
+.pv-status-entry { display: grid; grid-template-columns: 16px 1fr; gap: 0.75rem; padding-bottom: 1rem; position: relative; }
+.pv-status-entry:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 18px; bottom: 0; width: 2px; background: var(--border-light); }
+.pv-status-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--brand-blue); border: 3px solid var(--brand-blue-bg); flex-shrink: 0; }
+.pv-status-content { display: grid; gap: 0.1rem; }
+.pv-status-content strong { font-size: 0.78rem; color: var(--text-primary); text-transform: capitalize; }
+.pv-status-content span { color: var(--text-muted); font-size: 0.68rem; }
+.pv-status-content p { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
+.pv-empty { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
+@media (max-width: 480px) {
+  .pv-page { gap: 0.7rem; }
+  .pv-card, .pv-summary-card { padding: 1rem; }
+  .pv-summary-header h1 { font-size: 1.15rem; }
+  .pv-stepper { padding: 0.7rem 0.35rem; }
+  .pv-step { min-width: 40px; }
+  .pv-step-label { font-size: 0.48rem; }
+  .pv-step-dot { width: 24px; height: 24px; font-size: 0.52rem; }
+  .pv-step:not(:last-child)::after { top: 11px; left: calc(50% + 13px); right: calc(-50% + 13px); }
+  .pv-map { height: 220px; }
+}
+</style>

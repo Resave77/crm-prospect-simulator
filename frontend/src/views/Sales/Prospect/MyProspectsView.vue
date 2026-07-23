@@ -76,3 +76,24 @@ onMounted(async () => { try { await crm.loadMyProspects() } catch (caught) { err
     </Dialog>
   </section>
 </template>
+
+<style scoped>
+.pipeline-board { width: 100%; padding: 0.2rem 0 1rem; display: flex; gap: 0.8rem; overflow-x: auto; scroll-snap-type: x proximity; }
+.pipeline-column { width: 285px; min-width: 285px; min-height: 360px; overflow: hidden; background: #eef3f9; border: 1px solid var(--border-light); border-radius: var(--radius-lg); scroll-snap-align: start; }
+.pipeline-column > header { padding: 0.7rem 0.8rem; display: flex; align-items: center; justify-content: space-between; color: #26344b; background: var(--surface-card); border-bottom: 1px solid var(--border-light); font-size: 0.68rem; }
+.pipeline-column > header strong { font-weight: 700; }
+.pipeline-column > header span { min-width: 1.4rem; padding: 0.15rem 0.4rem; color: var(--brand-blue); background: var(--brand-blue-bg); border-radius: 1rem; text-align: center; font-size: 0.62rem; font-weight: 700; }
+.pipeline-column-body { padding: 0.6rem; display: grid; align-content: start; gap: 0.5rem; }
+.kanban-card { padding: 0.7rem; background: var(--surface-card); border: 1px solid var(--border-light); border-radius: var(--radius-md); box-shadow: var(--shadow-xs); transition: box-shadow var(--transition-fast), border-color var(--transition-fast); }
+.kanban-card:hover { box-shadow: var(--shadow-sm); border-color: var(--border-default); }
+.kanban-card > a { color: inherit; text-decoration: none; }
+.kanban-card h2 { margin: 0.35rem 0 0.2rem; font-size: 0.75rem; line-height: 1.35; font-weight: 700; }
+.kanban-card p { margin: 0.25rem 0; color: #68758a; font-size: 0.58rem; line-height: 1.45; }
+.kanban-card small { color: var(--text-muted); font-size: 0.52rem; }
+.kanban-controls { margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #edf1f5; padding-top: 0.4rem; }
+.kanban-controls :deep(.p-button) { padding: 0.3rem; font-size: 0.54rem; }
+.pipeline-empty { margin: 0.75rem 0; color: #8a96a8; text-align: center; font-size: 0.6rem; }
+.mobile-hint { margin: 0; color: #758297; font-size: 0.58rem; line-height: 1.5; }
+.sales-pipeline-board { margin-right: -0.8rem; width: calc(100% + 0.8rem); }
+.industry-pill { display: inline-block; padding: 0.1rem 0.4rem; color: var(--brand-blue); background: var(--brand-blue-bg); border-radius: 0.3rem; font-size: 0.48rem; font-weight: 600; letter-spacing: 0.02em; }
+</style>
