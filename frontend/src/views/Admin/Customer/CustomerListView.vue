@@ -13,7 +13,7 @@ onMounted(async () => {
 
 <template>
   <section class="admin-page">
-    <div class="page-heading"><div><p class="eyebrow">Point 14</p><h1>Customer Existing</h1><p class="muted">Converted Customer Sites and their Parent Companies.</p></div><Tag :value="`${crm.adminCustomers.length} customers`" /></div>
+    <div class="page-heading"><div><p class="eyebrow"></p><h1>Customer Existing</h1><p class="muted">Converted Customer Sites and their Parent Companies.</p></div><Tag :value="`${crm.adminCustomers.length} customers`" /></div>
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     <div class="table-card responsive-table">
       <div v-if="crm.loading" class="empty-state">Loading Customer Existing…</div>

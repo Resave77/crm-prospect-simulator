@@ -2266,4 +2266,405 @@ td span {
   .page-heading { align-items: flex-start; }
   .dashboard-actions { grid-template-columns: 1fr; }
   .profile-menu { display: none; }
+  .snapshot-card { grid-template-columns: 1fr; }
+  .review-grid { grid-template-columns: 1fr; }
+  .conversion-layout { grid-template-columns: 1fr; }
+}
+
+/* ================================================================
+   FIELD SOURCE BADGES
+   ================================================================ */
+.source-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.3rem;
+  border-radius: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+.source-google {
+  color: #1a56db;
+  background: #e8effc;
+}
+
+.source-crm {
+  color: #0b6b5c;
+  background: #e8f5f1;
+}
+
+.source-parsed {
+  color: #0e7490;
+  background: #e0f5fa;
+}
+
+.source-suggestion {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.source-manual {
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+.source-system {
+  color: #7c3aed;
+  background: #f0ebfe;
+}
+
+/* ================================================================
+   GOOGLE SNAPSHOT CARD
+   ================================================================ */
+.snapshot-card {
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #f8faff 0%, #f0f5ff 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.snapshot-header {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.snapshot-header h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.snapshot-grid > div {
+  padding: 0.7rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.snapshot-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.snapshot-grid span {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.snapshot-grid strong {
+  display: block;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
+.snapshot-grid strong.mono {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.7rem;
+}
+
+.snapshot-grid a {
+  color: var(--brand-blue);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.snapshot-grid a:hover { text-decoration: underline; }
+
+/* ================================================================
+   COMPANY SUGGESTIONS
+   ================================================================ */
+.company-suggestions {
+  margin-top: 0.4rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.suggestion-label {
+  margin: 0 0 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #b45309;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.suggestion-label i { font-size: 0.75rem; }
+
+.suggestion-item {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  margin-top: 0.3rem;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.suggestion-item:hover {
+  background: var(--brand-blue-50);
+  border-color: var(--brand-blue-light);
+}
+
+.suggestion-item strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.suggestion-item span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  margin-top: 0.1rem;
+}
+
+/* ================================================================
+   REVIEW PAGE — MAP, VISITS, CONVERT BAR, SIDEBAR
+   ================================================================ */
+.review-main {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.review-map {
+  height: 280px;
+  margin-top: 0.5rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #e8eef5;
+}
+
+.visit-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.visit-item {
+  padding: 0.75rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.visit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.visit-header strong {
+  font-size: 0.78rem;
+}
+
+.visit-header span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.visit-item p {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.review-convert-bar {
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border: 2px solid #d1fae5;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+}
+
+.review-convert-bar .eyebrow {
+  margin-bottom: 0.15rem;
+  color: #059669;
+}
+
+.review-convert-bar .muted {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.review-sidebar {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+
+/* ================================================================
+   CONFIRMATION DIALOG
+   ================================================================ */
+.confirm-body p {
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.confirm-body strong {
+  font-weight: 700;
+}
+
+.confirm-summary {
+  margin: 0.75rem 0;
+  padding: 0.85rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.confirm-summary div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.confirm-summary div:last-child { border-bottom: 0; }
+
+.confirm-summary span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.confirm-summary strong {
+  font-size: 0.82rem;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* ================================================================
+   PROGRESS RAIL
+   ================================================================ */
+.progress-rail {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-xs);
+}
+
+.progress-track {
+  height: 4px;
+  margin-bottom: 0.65rem;
+  border-radius: 10px;
+  background: #edf1f5;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--brand-blue), #22c55e);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-labels {
+  display: flex;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.progress-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.progress-label:hover { background: var(--surface-hover); }
+
+.progress-label.done {
+  color: #059669;
+}
+
+.progress-label.done i { color: #22c55e; }
+
+.progress-label:not(.done) i { color: #f59e0b; }
+
+/* ================================================================
+   FIELD INVALID HIGHLIGHT
+   ================================================================ */
+.field-invalid {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+:deep(.p-invalid) {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12) !important;
+}
+
+/* ================================================================
+   SCOPE PANEL — LIVE STATUS
+   ================================================================ */
+.scope-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-size: 0.78rem;
+}
+
+.scope-status-row i {
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.scope-ok { color: #22c55e; }
+.scope-warn { color: #f59e0b; }
+.scope-muted { color: var(--text-faint); }
+.scope-done-text { color: var(--text-muted); text-decoration: line-through; }
+
+/* ================================================================
+   RESPONSIVE ADDITIONS
+   ================================================================ */
+@media (max-width: 900px) {
+  .snapshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-convert-bar { flex-direction: column; align-items: flex-start; }
+  .progress-labels { gap: 0; }
+  .progress-label span { display: none; }
 }

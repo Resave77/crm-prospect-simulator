@@ -14,7 +14,7 @@ onMounted(async () => {
 
 <template>
   <section class="mobile-page">
-    <div class="page-heading compact-heading"><div><p class="eyebrow">Point 14</p><h1>My Customer</h1></div><Tag :value="`${crm.myCustomers.length} active`" severity="success" /></div>
+    <div class="page-heading compact-heading"><div><p class="eyebrow"></p><h1>My Customer</h1></div><Tag :value="`${crm.myCustomers.length} active`" severity="success" /></div>
     <p class="muted">Customer Existing records assigned to you after conversion.</p>
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     <div v-if="crm.loading" class="empty-state">Loading customers…</div>
