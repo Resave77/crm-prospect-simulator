@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope } from '../types/auth'
-import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerSite, ParentCompany, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption } from '../types/crm'
+import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -52,4 +52,16 @@ export async function getMyCustomers() {
 
 export async function getMyCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/sales/customers/${id}`)).data.data
+}
+
+export async function getAdminCustomersList(params: CustomerListParams) {
+  return (await api.get<ApiEnvelope<CustomerListResult>>('/admin/customers/list', { params })).data.data
+}
+
+export async function getCustomerFilterOptions() {
+  return (await api.get<ApiEnvelope<ListFilterOptions>>('/admin/customers/filter-options')).data.data
+}
+
+export async function getAdminCustomer(id: string) {
+  return (await api.get<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`)).data.data
 }

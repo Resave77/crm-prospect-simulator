@@ -39,7 +39,7 @@ const customerSelect = `
 	       cs.bank_account, cs.bill_to_source, cs.ship_to_source,
 	       cs.billing_address_preview, cs.shipping_address_preview,
 	       cs.sales_executive_id, u.full_name, cs.sales_assignments,
-	       cs.converted_at, cs.converted_by_admin_id
+	       cs.converted_at, cs.updated_at, cs.converted_by_admin_id
 	FROM customer_sites cs
 	JOIN parent_companies pc ON pc.id = cs.parent_company_id
 	JOIN users u ON u.id = cs.sales_executive_id`
@@ -282,6 +282,22 @@ func (r *PostgresRepository) FindCustomerForSales(ctx context.Context, id, sales
 	return model.CustomerDetail{Customer: customer, ParentCompany: parent, SourceProspectName: sourceName}, nil
 }
 
+func (r *PostgresRepository) FindCustomer(ctx context.Context, id uuid.UUID) (model.CustomerDetail, error) {
+	customer, err := scanCustomer(r.pool.QueryRow(ctx, customerSelect+` WHERE cs.id=$1`, id))
+	if err != nil {
+		return model.CustomerDetail{}, err
+	}
+	parent, err := scanParent(r.pool.QueryRow(ctx, parentSelect+` WHERE pc.id=$1`, customer.ParentCompanyID))
+	if err != nil {
+		return model.CustomerDetail{}, err
+	}
+	var sourceName string
+	if err := r.pool.QueryRow(ctx, `SELECT place_name FROM prospects WHERE id=$1`, customer.SourceProspectID).Scan(&sourceName); err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("read source prospect: %w", err)
+	}
+	return model.CustomerDetail{Customer: customer, ParentCompany: parent, SourceProspectName: sourceName}, nil
+}
+
 func (r *PostgresRepository) listCustomers(ctx context.Context, query string, args ...any) ([]model.CustomerSite, error) {
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -297,6 +313,185 @@ func (r *PostgresRepository) listCustomers(ctx context.Context, query string, ar
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+const customerListBase = `
+	FROM customer_sites cs
+	JOIN parent_companies pc ON pc.id = cs.parent_company_id
+	JOIN users u ON u.id = cs.sales_executive_id`
+
+const customerListSelect = `
+	SELECT cs.id, cs.customer_code, cs.parent_company_id, pc.parent_code, pc.name,
+	       cs.source_prospect_id, cs.source_google_place_id, cs.name, cs.segment,
+	       cs.category, cs.address_mode, cs.province, cs.district, cs.sub_district,
+	       cs.village, cs.latitude, cs.longitude, cs.preview_address, cs.site_contacts,
+	       cs.ppn, cs.id_tku_number, cs.nik, cs.shipment_cost, cs.invoice_type,
+	       cs.bank_account, cs.bill_to_source, cs.ship_to_source,
+	       cs.billing_address_preview, cs.shipping_address_preview,
+	       cs.sales_executive_id, u.full_name, cs.sales_assignments,
+	       cs.converted_at, cs.updated_at, cs.converted_by_admin_id
+` + customerListBase
+
+func (r *PostgresRepository) ListCustomersPaged(ctx context.Context, params model.CustomerListParams) (model.CustomerListResult, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.Limit < 1 || params.Limit > 100 {
+		params.Limit = 20
+	}
+
+	where, args := buildCustomerWhere(params)
+	sortClause := buildCustomerSort(params.Sort)
+
+	countQuery := `SELECT COUNT(*) ` + customerListBase + where
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return model.CustomerListResult{}, fmt.Errorf("count customer sites: %w", err)
+	}
+
+	pages := total / params.Limit
+	if total%params.Limit > 0 {
+		pages++
+	}
+
+	offset := (params.Page - 1) * params.Limit
+	dataQuery := customerListSelect + where + sortClause + ` LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
+	dataArgs := append(args, params.Limit, offset)
+
+	rows, err := r.pool.Query(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return model.CustomerListResult{}, fmt.Errorf("query customer sites: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]model.CustomerSite, 0)
+	for rows.Next() {
+		item, err := scanCustomer(rows)
+		if err != nil {
+			return model.CustomerListResult{}, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return model.CustomerListResult{}, err
+	}
+
+	return model.CustomerListResult{
+		Items: items,
+		Total: total,
+		Page:  params.Page,
+		Limit: params.Limit,
+		Pages: pages,
+	}, nil
+}
+
+func (r *PostgresRepository) ListFilterOptions(ctx context.Context) (model.ListFilterOptions, error) {
+	segments, err := r.distinctColumn(ctx, `SELECT DISTINCT segment FROM customer_sites WHERE segment != '' ORDER BY segment`)
+	if err != nil {
+		return model.ListFilterOptions{}, err
+	}
+	categories, err := r.distinctColumn(ctx, `SELECT DISTINCT category FROM customer_sites WHERE category != '' ORDER BY category`)
+	if err != nil {
+		return model.ListFilterOptions{}, err
+	}
+	regions, err := r.distinctColumn(ctx, `SELECT DISTINCT province FROM customer_sites WHERE province != '' ORDER BY province`)
+	if err != nil {
+		return model.ListFilterOptions{}, err
+	}
+	sales, err := r.ListActiveSalesExecutives(ctx)
+	if err != nil {
+		return model.ListFilterOptions{}, err
+	}
+	return model.ListFilterOptions{
+		Segments:   segments,
+		Categories: categories,
+		Regions:    regions,
+		SalesExec:  sales,
+	}, nil
+}
+
+func (r *PostgresRepository) distinctColumn(ctx context.Context, query string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query distinct column: %w", err)
+	}
+	defer rows.Close()
+	items := make([]string, 0)
+	for rows.Next() {
+		var val string
+		if err := rows.Scan(&val); err != nil {
+			return nil, err
+		}
+		items = append(items, val)
+	}
+	return items, rows.Err()
+}
+
+func buildCustomerWhere(params model.CustomerListParams) (string, []any) {
+	conditions := make([]string, 0)
+	args := make([]any, 0)
+	idx := 1
+
+	if params.Keyword != "" {
+		pattern := "%" + strings.TrimSpace(params.Keyword) + "%"
+		conditions = append(conditions, `(
+			cs.name ILIKE $`+itoa(idx)+` OR
+			cs.customer_code ILIKE $`+itoa(idx)+` OR
+			pc.name ILIKE $`+itoa(idx)+` OR
+			pc.parent_code ILIKE $`+itoa(idx)+` OR
+			cs.site_contacts::text ILIKE $`+itoa(idx)+` OR
+			cs.preview_address ILIKE $`+itoa(idx)+`
+		)`)
+		args = append(args, pattern)
+		idx++
+	}
+	if params.Segment != "" {
+		conditions = append(conditions, `cs.segment = $`+itoa(idx))
+		args = append(args, params.Segment)
+		idx++
+	}
+	if params.Category != "" {
+		conditions = append(conditions, `cs.category = $`+itoa(idx))
+		args = append(args, params.Category)
+		idx++
+	}
+	if params.Sales != "" {
+		conditions = append(conditions, `u.full_name ILIKE $`+itoa(idx))
+		args = append(args, "%"+params.Sales+"%")
+		idx++
+	}
+	if params.Region != "" {
+		conditions = append(conditions, `cs.province = $`+itoa(idx))
+		args = append(args, params.Region)
+		idx++
+	}
+
+	if len(conditions) == 0 {
+		return "", args
+	}
+	where := " WHERE " + strings.Join(conditions, " AND ")
+	return where, args
+}
+
+func buildCustomerSort(sort string) string {
+	switch sort {
+	case "oldest":
+		return ` ORDER BY cs.converted_at ASC`
+	case "name":
+		return ` ORDER BY cs.name ASC`
+	case "code":
+		return ` ORDER BY cs.customer_code ASC`
+	case "converted":
+		return ` ORDER BY cs.converted_at DESC`
+	case "updated":
+		return ` ORDER BY cs.updated_at DESC`
+	default:
+		return ` ORDER BY cs.converted_at DESC`
+	}
+}
+
+func itoa(i int) string {
+	return fmt.Sprintf("%d", i)
 }
 
 type rowScanner interface {
@@ -338,13 +533,14 @@ func scanCustomer(row rowScanner) (model.CustomerSite, error) {
 		&item.NIK, &item.ShipmentCost, &item.InvoiceType, &item.BankAccount,
 		&item.BillToSource, &item.ShipToSource, &item.BillingAddressPreview,
 		&item.ShippingAddressPreview, &item.SalesExecutiveID, &item.SalesExecutiveName,
-		&assignments, &item.ConvertedAt, &item.ConvertedByAdminID)
+		&assignments, &item.ConvertedAt, &item.UpdatedAt, &item.ConvertedByAdminID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.CustomerSite{}, ErrNotFound
 	}
 	if err != nil {
 		return model.CustomerSite{}, fmt.Errorf("scan customer site: %w", err)
 	}
+	item.Region = item.Address.Province
 	if err := decodeJSON(contacts, &item.Contacts); err != nil {
 		return model.CustomerSite{}, err
 	}

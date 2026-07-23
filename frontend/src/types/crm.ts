@@ -128,11 +128,13 @@ export interface CustomerSite {
   name: string
   segment: string
   category: string
+  region: string
   address: Address
   contacts: Contact[]
   salesExecutiveId: string
   salesExecutiveName: string
   convertedAt: string
+  updatedAt: string
 }
 
 export interface CustomerDetail {
@@ -195,4 +197,30 @@ export interface ConversionInput {
   salesExecutiveId: string
   salesAssignments: PeriodAssignment[]
   kamAssignments: PeriodAssignment[]
+}
+
+export interface CustomerListParams {
+  page: number
+  limit: number
+  keyword: string
+  segment: string
+  category: string
+  sales: string
+  region: string
+  sort: string
+}
+
+export interface CustomerListResult {
+  items: CustomerSite[]
+  total: number
+  page: number
+  limit: number
+  pages: number
+}
+
+export interface ListFilterOptions {
+  segments: string[]
+  categories: string[]
+  regions: string[]
+  salesExecutives: SalesExecutiveOption[]
 }

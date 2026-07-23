@@ -99,6 +99,20 @@ func (s *Service) AdminCustomers(ctx context.Context, actor Actor) ([]customermo
 	return s.repository.ListCustomers(ctx)
 }
 
+func (s *Service) AdminCustomersList(ctx context.Context, actor Actor, params customermodel.CustomerListParams) (customermodel.CustomerListResult, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return customermodel.CustomerListResult{}, ErrForbidden
+	}
+	return s.repository.ListCustomersPaged(ctx, params)
+}
+
+func (s *Service) CustomerFilterOptions(ctx context.Context, actor Actor) (customermodel.ListFilterOptions, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return customermodel.ListFilterOptions{}, ErrForbidden
+	}
+	return s.repository.ListFilterOptions(ctx)
+}
+
 func (s *Service) MyCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
 	if actor.Role != authmodel.RoleSalesExecutive {
 		return nil, ErrForbidden
@@ -111,6 +125,13 @@ func (s *Service) MyCustomer(ctx context.Context, actor Actor, id uuid.UUID) (cu
 		return customermodel.CustomerDetail{}, ErrForbidden
 	}
 	return s.repository.FindCustomerForSales(ctx, id, actor.UserID)
+}
+
+func (s *Service) AdminCustomer(ctx context.Context, actor Actor, id uuid.UUID) (customermodel.CustomerDetail, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return customermodel.CustomerDetail{}, ErrForbidden
+	}
+	return s.repository.FindCustomer(ctx, id)
 }
 
 func normalize(input *customermodel.ConversionInput) {

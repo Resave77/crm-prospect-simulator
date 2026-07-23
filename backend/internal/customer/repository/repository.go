@@ -23,6 +23,9 @@ type Repository interface {
 	ListActiveSalesExecutives(context.Context) ([]model.UserOption, error)
 	Convert(context.Context, uuid.UUID, uuid.UUID, model.ConversionInput) (model.CustomerSite, error)
 	ListCustomers(context.Context) ([]model.CustomerSite, error)
+	ListCustomersPaged(context.Context, model.CustomerListParams) (model.CustomerListResult, error)
+	ListFilterOptions(context.Context) (model.ListFilterOptions, error)
 	ListCustomersForSales(context.Context, uuid.UUID) ([]model.CustomerSite, error)
 	FindCustomerForSales(context.Context, uuid.UUID, uuid.UUID) (model.CustomerDetail, error)
+	FindCustomer(context.Context, uuid.UUID) (model.CustomerDetail, error)
 }

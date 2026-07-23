@@ -2668,3 +2668,230 @@ td span {
   .progress-labels { gap: 0; }
   .progress-label span { display: none; }
 }
+
+/* ================================================================
+   CUSTOMER LIST — ENTERPRISE LAYOUT
+   ================================================================ */
+
+/* Tabs */
+.ct-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.25rem;
+  border-bottom: 2px solid var(--border-light);
+}
+
+.ct-tab {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.ct-tab:hover {
+  color: var(--text-primary);
+}
+
+.ct-tab.active {
+  color: var(--brand-blue);
+  border-bottom-color: var(--brand-blue);
+}
+
+/* Search Bar */
+.ct-search-bar {
+  margin-bottom: 1rem;
+}
+
+.ct-search-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ct-search-field:focus-within {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.ct-search-field i {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+
+.ct-search-field input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.ct-search-field input::placeholder {
+  color: var(--text-faint);
+}
+
+/* Filter Row */
+.ct-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.ct-filters {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ct-filters label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 140px;
+}
+
+.ct-filters label > span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ct-filter-select {
+  width: 100%;
+}
+
+.ct-filter-actions {
+  flex-shrink: 0;
+}
+
+/* Action Row */
+.ct-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.ct-action-left,
+.ct-action-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Table additions */
+.col-check { width: 40px; text-align: center; }
+.col-action { width: 120px; text-align: center; }
+
+.ct-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.ct-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.ct-link strong {
+  color: var(--brand-blue);
+  transition: color var(--transition-fast);
+}
+
+.ct-link:hover strong {
+  color: var(--brand-blue-light);
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Pagination */
+.ct-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 0;
+}
+
+.ct-page-info {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ct-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.ct-page-controls .p-highlight {
+  background: var(--brand-blue);
+  color: #fff;
+}
+
+/* Placeholder tabs */
+.ct-placeholder {
+  min-height: 300px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+}
+
+.ct-placeholder i {
+  font-size: 2rem;
+  color: var(--brand-blue);
+}
+
+.ct-placeholder strong {
+  color: var(--text-primary);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .ct-filter-row { flex-direction: column; align-items: stretch; }
+  .ct-filters { flex-direction: column; }
+  .ct-filters label { min-width: 100%; }
+  .ct-action-row { flex-wrap: wrap; gap: 0.5rem; }
+}
+
+@media (max-width: 760px) {
+  .ct-tabs { overflow-x: auto; }
+  .ct-tab { white-space: nowrap; padding: 0.5rem 0.85rem; font-size: 0.78rem; }
+  .ct-pagination { flex-direction: column; gap: 0.5rem; }
+}

@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 import * as crmApi from '../api/crm'
 import type { ApiErrorEnvelope } from '../types/auth'
-import type { CustomerSite, Prospect, ProspectStatus } from '../types/crm'
+import type { CustomerSite, CustomerDetail, Prospect, ProspectStatus } from '../types/crm'
 
 export const useCrmStore = defineStore('crm', () => {
   const myProspects = ref<Prospect[]>([])
@@ -54,6 +54,10 @@ export const useCrmStore = defineStore('crm', () => {
     myCustomers.value = await run(crmApi.getMyCustomers)
   }
 
+  async function loadAdminCustomer(id: string) {
+    return await run(() => crmApi.getAdminCustomer(id))
+  }
+
   function errorMessage(error: unknown) {
     if (axios.isAxiosError<ApiErrorEnvelope>(error)) {
       return error.response?.data?.error?.message ?? 'CRM service is unavailable.'
@@ -61,5 +65,5 @@ export const useCrmStore = defineStore('crm', () => {
     return error instanceof Error ? error.message : 'An unexpected CRM error occurred.'
   }
 
-  return { myProspects, wonProspects, adminCustomers, myCustomers, pipeline, loading, loadMyProspects, transition, loadPipeline, loadWonProspects, loadAdminCustomers, loadMyCustomers, errorMessage }
+  return { myProspects, wonProspects, adminCustomers, myCustomers, pipeline, loading, loadMyProspects, transition, loadPipeline, loadWonProspects, loadAdminCustomers, loadMyCustomers, loadAdminCustomer, errorMessage }
 })

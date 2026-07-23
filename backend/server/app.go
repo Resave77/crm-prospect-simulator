@@ -90,6 +90,9 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Post("/prospects/:id/convert", customerHandler.Convert)
 	admin.Get("/parent-companies", customerHandler.SearchParentCompanies)
 	admin.Get("/customers", customerHandler.AdminCustomers)
+	admin.Get("/customers/list", customerHandler.AdminCustomersList)
+	admin.Get("/customers/filter-options", customerHandler.CustomerFilterOptions)
+	admin.Get("/customers/:id", customerHandler.AdminCustomerDetail)
 
 	app.Use(func(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "The requested API route does not exist.")

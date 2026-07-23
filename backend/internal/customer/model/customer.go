@@ -62,6 +62,7 @@ type CustomerSite struct {
 	Name                   string             `json:"name"`
 	Segment                string             `json:"segment"`
 	Category               string             `json:"category"`
+	Region                 string             `json:"region"`
 	Address                Address            `json:"address"`
 	Contacts               []Contact          `json:"contacts"`
 	PPN                    string             `json:"ppn"`
@@ -78,6 +79,7 @@ type CustomerSite struct {
 	SalesExecutiveName     string             `json:"salesExecutiveName"`
 	SalesAssignments       []PeriodAssignment `json:"salesAssignments"`
 	ConvertedAt            time.Time          `json:"convertedAt"`
+	UpdatedAt              time.Time          `json:"updatedAt"`
 	ConvertedByAdminID     uuid.UUID          `json:"convertedByAdminId"`
 }
 
@@ -121,6 +123,32 @@ type ConversionInput struct {
 	SalesExecutiveID        uuid.UUID          `json:"salesExecutiveId"`
 	SalesAssignments        []PeriodAssignment `json:"salesAssignments"`
 	KAMAssignments          []PeriodAssignment `json:"kamAssignments"`
+}
+
+type CustomerListParams struct {
+	Page    int    `json:"page"`
+	Limit   int    `json:"limit"`
+	Keyword string `json:"keyword"`
+	Segment string `json:"segment"`
+	Category string `json:"category"`
+	Sales   string `json:"sales"`
+	Region  string `json:"region"`
+	Sort    string `json:"sort"`
+}
+
+type CustomerListResult struct {
+	Items []CustomerSite `json:"items"`
+	Total int            `json:"total"`
+	Page  int            `json:"page"`
+	Limit int            `json:"limit"`
+	Pages int            `json:"pages"`
+}
+
+type ListFilterOptions struct {
+	Segments  []string       `json:"segments"`
+	Categories []string      `json:"categories"`
+	Regions   []string       `json:"regions"`
+	SalesExec []UserOption   `json:"salesExecutives"`
 }
 
 type MasterOptions struct {

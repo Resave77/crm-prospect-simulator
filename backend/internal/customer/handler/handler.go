@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"strconv"
 
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	customermodel "crm-prospect-simulator/backend/internal/customer/model"
@@ -66,6 +67,32 @@ func (h *Handler) AdminCustomers(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) AdminCustomersList(c *fiber.Ctx) error {
+	params := customermodel.CustomerListParams{
+		Page:     queryInt(c, "page", 1),
+		Limit:    queryInt(c, "limit", 20),
+		Keyword:  c.Query("keyword", ""),
+		Segment:  c.Query("segment", ""),
+		Category: c.Query("category", ""),
+		Sales:    c.Query("sales", ""),
+		Region:   c.Query("region", ""),
+		Sort:     c.Query("sort", ""),
+	}
+	result, err := h.service.AdminCustomersList(c.UserContext(), actor(c), params)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, result)
+}
+
+func (h *Handler) CustomerFilterOptions(c *fiber.Ctx) error {
+	opts, err := h.service.CustomerFilterOptions(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, opts)
+}
+
 func (h *Handler) MyCustomers(c *fiber.Ctx) error {
 	items, err := h.service.MyCustomers(c.UserContext(), actor(c))
 	if err != nil {
@@ -86,12 +113,36 @@ func (h *Handler) MyCustomer(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, item)
 }
 
+func (h *Handler) AdminCustomerDetail(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "CUSTOMER_ID_INVALID", "Customer ID is invalid.")
+	}
+	item, err := h.service.AdminCustomer(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
+}
+
 func parseID(c *fiber.Ctx) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return uuid.Nil, response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
 	return id, nil
+}
+
+func queryInt(c *fiber.Ctx, key string, fallback int) int {
+	val := c.Query(key, "")
+	if val == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil || n < 1 {
+		return fallback
+	}
+	return n
 }
 
 func actor(c *fiber.Ctx) service.Actor {
