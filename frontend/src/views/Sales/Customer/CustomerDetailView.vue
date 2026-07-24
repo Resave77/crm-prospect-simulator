@@ -241,7 +241,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 /* ── Card ────────────────────────────────────────────────── */
 .dcard {
   padding: 1.15rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl);
-  background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem;
+  background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem; min-width: 0;
 }
 .dcard h2 { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 

@@ -3,8 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { getMyProspect, transitionProspect } from '../../../api/crm'
-import { nextStage } from '../../../domain/pipeline'
+import { getMyProspect } from '../../../api/crm'
 import type { ProspectReview } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
@@ -19,16 +18,7 @@ const loading = ref(true)
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
 
-const pipelineNotes = ref('')
-const transitionBusy = ref(false)
-const transitionDone = ref(false)
-
 const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
-
-const nextPipelineStage = computed(() => {
-  if (!review.value) return null
-  return nextStage(review.value.prospect.status)
-})
 
 const statusSeverity = computed(() => {
   const s = review.value?.prospect.status
@@ -85,18 +75,6 @@ function calcDuration(checkIn: string, checkOut: string) {
   const hrs = Math.floor(mins / 60)
   const remMins = mins % 60
   return hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`
-}
-
-async function doTransition() {
-  if (!review.value || !nextPipelineStage.value) return
-  error.value = ''; success.value = ''; transitionBusy.value = true
-  try {
-    await transitionProspect(String(route.params.id), nextPipelineStage.value, pipelineNotes.value)
-    transitionDone.value = true
-    success.value = `Pipeline updated to ${nextPipelineStage.value.replaceAll('_', ' ')}.`
-    pipelineNotes.value = ''
-    review.value = await getMyProspect(String(route.params.id))
-  } catch (caught) { error.value = message(caught) } finally { transitionBusy.value = false }
 }
 
 function handleCopy(text: string) {
@@ -163,7 +141,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <i class="pi pi-sign-in" />
           <span>You have an <strong>active visit</strong> in progress.</span>
           <RouterLink class="dcard-active-visit-link" :to="`/sales/my-prospects/${review.prospect.id}/check-out`">
-            Check out <i class="pi pi-arrow-right" />
+            Continue visit <i class="pi pi-arrow-right" />
           </RouterLink>
         </div>
       </div>
@@ -222,24 +200,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
             <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(review.prospect.googlePlaceId)"><i class="pi pi-copy" /></button>
           </div>
         </div>
-      </div>
-
-      <!-- Pipeline Update (only when visit active) -->
-      <div v-if="openVisit && nextPipelineStage && !transitionDone" class="dcard dcard-highlight">
-        <h2>Pipeline Update</h2>
-        <p class="dcard-hint">Move this prospect to the next pipeline stage.</p>
-        <div class="dcard-pipeline-flow">
-          <Tag :value="review.prospect.status.replaceAll('_', ' ')" severity="secondary" />
-          <i class="pi pi-arrow-right" />
-          <Tag :value="nextPipelineStage.replaceAll('_', ' ')" severity="info" />
-        </div>
-        <label class="dcard-field"><span>Pipeline Notes</span><textarea v-model="pipelineNotes" rows="2" class="dcard-textarea" placeholder="Optional notes for this transition..." /></label>
-        <button class="dcard-btn dcard-btn-primary" :disabled="transitionBusy" @click="doTransition">
-          <i class="pi pi-arrow-right" /> {{ transitionBusy ? 'Updating...' : 'Update Pipeline' }}
-        </button>
-      </div>
-      <div v-else-if="transitionDone && openVisit" class="dcard dcard-success">
-        <div class="dcard-success-row"><i class="pi pi-check-circle" /><span>Pipeline updated for this visit.</span></div>
       </div>
 
       <!-- Visit History -->
@@ -324,7 +284,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 .dcard {
   padding: 1.15rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl);
-  background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem;
+  background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem; min-width: 0;
 }
 .dcard h2 { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 
@@ -382,31 +342,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   color: var(--text-muted); cursor: pointer; font-size: 0.65rem; flex-shrink: 0; transition: all 0.15s ease;
 }
 .dcard-copy-btn:hover { color: var(--brand-blue); border-color: #bfdbfe; background: #eff6ff; }
-
-.dcard-highlight { border-color: var(--brand-blue-light); background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); }
-.dcard-pipeline-flow { display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--border-light); justify-content: center; }
-.dcard-pipeline-flow i { color: var(--brand-blue); font-size: 0.85rem; }
-.dcard-success { border-color: #bbf7d0; background: #f0fdf4; }
-.dcard-success-row { display: flex; align-items: center; gap: 0.5rem; color: #166534; font-size: 0.82rem; }
-.dcard-success-row i { font-size: 1rem; }
-
-.dcard-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.dcard-field span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.dcard-hint { margin: -0.35rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
-.dcard-textarea {
-  padding: 0.65rem 0.85rem; border: 1px solid var(--border-light); border-radius: 12px;
-  background: #f8fafc; color: var(--text-primary); font-size: 0.82rem; font-family: inherit;
-  resize: vertical; width: 100%; box-sizing: border-box;
-}
-.dcard-textarea:focus { outline: 0; border-color: var(--brand-blue); }
-.dcard-btn {
-  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-  padding: 0.7rem 1rem; border-radius: 12px; border: none;
-  font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
-}
-.dcard-btn-primary { background: var(--brand-blue); color: #fff; }
-.dcard-btn-primary:hover { background: #1d4ed8; }
-.dcard-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .dcard-visit-list { display: grid; gap: 0.65rem; }
 .dcard-visit { border: 1px solid var(--border-light); border-radius: 14px; overflow: hidden; }

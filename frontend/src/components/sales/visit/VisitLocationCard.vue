@@ -155,10 +155,13 @@ onBeforeUnmount(() => cleanup())
 .vlm-marker i { transform: rotate(45deg); font-size: 0.7rem; }
 .vlm-marker-target { background: #2563eb; }
 .vlm-marker-sales { background: #dc2626; }
+.vlm-wrapper .leaflet-popup { max-width: min(200px, 75vw) !important; }
+.vlm-wrapper .leaflet-popup-content-wrapper { font-size: 0.75rem; border-radius: 10px; }
+.vlm-wrapper .leaflet-popup-tip { display: none; }
 </style>
 
 <style scoped>
-.vlm-wrapper { width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light, #e2e8f0); position: relative; isolation: isolate; z-index: 0; touch-action: pan-x pan-y; }
+.vlm-wrapper { width: 100%; min-width: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light, #e2e8f0); position: relative; isolation: isolate; z-index: 0; touch-action: pan-x pan-y; }
 .vlm-container { width: 100%; height: 100%; }
 .vlm-empty { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; background: #f1f5f9; color: #94a3b8; font-size: 0.78rem; }
 .vlm-empty i { font-size: 1.4rem; }

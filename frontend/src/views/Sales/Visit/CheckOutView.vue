@@ -11,6 +11,7 @@ import {
   isValidEntityType,
   normalizeRouteId,
   fetchProspectVisitData,
+  fetchCustomerVisitData,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
 import { formatDistance } from '../../../utils/maps'
@@ -72,8 +73,8 @@ const outcomeOptions = computed(() =>
 )
 
 const needsFollowUp = computed(() => {
-  const v = visitOutcome.value.toLowerCase()
-  return v.includes('follow-up') || v.includes('reschedule')
+  const v = visitOutcome.value
+  return v === 'Needs follow-up' || v === 'Follow-up required'
 })
 
 const followUpDateValid = computed(() => {
@@ -83,16 +84,37 @@ const followUpDateValid = computed(() => {
   return new Date(followUpDate.value) >= today
 })
 
-const canSubmit = computed(() => {
-  return (
-    pageState.value === 'ready' &&
-    entity.value !== null &&
-    activeVisit.value !== null &&
+const hasValidGps = computed(() =>
+  Boolean(
+    location.state.value.coords &&
+    Number.isFinite(location.state.value.coords.latitude) &&
+    Number.isFinite(location.state.value.coords.longitude)
+  )
+)
+
+const canCheckOut = computed(() =>
+  Boolean(
+    activeVisit.value &&
     visitResult.value !== '' &&
     visitOutcome.value !== '' &&
     followUpDateValid.value &&
+    hasValidGps.value &&
     !submitBusy.value
   )
+)
+
+const checkoutButtonLabel = computed(() => {
+  if (submitBusy.value) return 'Saving visit\u2026'
+  return 'Save & Check Out'
+})
+
+const checkoutHelper = computed(() => {
+  if (!activeVisit.value) return 'No active visit found'
+  if (!visitResult.value) return 'Visit result is required'
+  if (!visitOutcome.value) return 'Visit outcome is required'
+  if (!followUpDateValid.value) return 'Valid follow-up date is required'
+  if (!hasValidGps.value) return 'Current location is required'
+  return 'Visit details are ready to save'
 })
 
 const insideRadius = computed(() => {
@@ -175,8 +197,15 @@ async function initialize() {
       pageState.value = 'ready'
       location.startWatching()
     } else {
-      pageState.value = 'error'
-      pageError.value = 'Customer visit check-out is not yet supported by the backend.'
+      const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
+      entity.value = ctx
+
+      if (!entity.value) {
+        pageState.value = 'not-found'
+        return
+      }
+
+      pageState.value = 'no-active-visit'
     }
   } catch (caught) {
     const status = (caught as { response?: { status?: number } })?.response?.status
@@ -190,7 +219,7 @@ async function initialize() {
 }
 
 async function handleSubmit() {
-  if (!entity.value || !activeVisit.value || !canSubmit.value) return
+  if (!entity.value || !activeVisit.value || !canCheckOut.value) return
   submitBusy.value = true
   pageError.value = ''
 
@@ -260,8 +289,8 @@ onBeforeUnmount(() => {
     <!-- No active visit -->
     <div v-else-if="pageState === 'no-active-visit'" class="checkout-empty">
       <div class="checkout-empty-icon"><i class="pi pi-sign-in" /></div>
-      <strong>No active visit</strong>
-      <p>You need to check in before you can check out.</p>
+      <strong>{{ resolvedEntityType === 'customer' ? 'Customer checkout not available' : 'No active visit' }}</strong>
+      <p>{{ resolvedEntityType === 'customer' ? 'Customer visit check-out is not yet supported by the backend.' : 'You need to check in before you can check out.' }}</p>
       <button class="checkout-empty-btn" @click="goBack()"><i class="pi pi-arrow-left" /> Back to detail</button>
     </div>
 
@@ -366,21 +395,21 @@ onBeforeUnmount(() => {
       <!-- Bottom Submit -->
       <div class="checkout-bottom">
         <Button
-          label="Save & Check Out"
+          :label="checkoutButtonLabel"
           icon="pi pi-check-circle"
           :loading="submitBusy"
-          :disabled="!canSubmit"
+          :disabled="!canCheckOut"
           class="checkout-submit-btn"
           @click="handleSubmit"
         />
-        <p class="checkout-bottom-hint">Visit details can be edited later</p>
+        <p class="checkout-bottom-hint">{{ checkoutHelper }}</p>
       </div>
     </template>
   </section>
 </template>
 
 <style scoped>
-.checkout-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: 6rem; }
+.checkout-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: calc(68px + 92px + env(safe-area-inset-bottom) + 1rem); }
 
 .back-link {
   display: inline-flex; align-items: center; gap: 0.35rem; padding: 0;
@@ -453,11 +482,12 @@ onBeforeUnmount(() => {
 .cocard-select:focus, .cocard-input:focus { outline: 0; border-color: var(--brand-blue); }
 
 .checkout-bottom {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: min(100%, 440px); z-index: 40;
+  position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
+  width: min(100%, 440px); z-index: 50;
   display: flex; flex-direction: column; gap: 0.3rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  background: var(--surface-card); border-top: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.98); border-top: 1px solid #e2e8f0;
+  backdrop-filter: blur(12px);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
 }
 .checkout-submit-btn { width: 100%; }

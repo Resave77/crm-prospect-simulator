@@ -97,11 +97,14 @@ onBeforeUnmount(() => cleanup())
   transform: rotate(-45deg);
 }
 .entity-map-marker i { transform: rotate(45deg); font-size: 0.8rem; }
+.entity-map-wrapper .leaflet-popup { max-width: min(220px, 80vw) !important; }
+.entity-map-wrapper .leaflet-popup-content-wrapper { font-size: 0.78rem; border-radius: 10px; }
+.entity-map-wrapper .leaflet-popup-tip { display: none; }
 </style>
 
 <style scoped>
 .entity-map-wrapper {
-  width: 100%; border-radius: 12px; overflow: hidden;
+  width: 100%; min-width: 0; border-radius: 12px; overflow: hidden;
   border: 1px solid var(--border-light, #e2e8f0);
   position: relative;
 }
