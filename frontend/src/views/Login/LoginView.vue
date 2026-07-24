@@ -32,59 +32,68 @@ async function submit() {
 
 <template>
   <main class="login-page">
-    <!-- Glowing Accent Circles for Ambient Glass Effect -->
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-
-    <!-- Centered Glass Card -->
     <div class="login-center">
       <form class="login-card" @submit.prevent="submit">
         <div class="header-group">
-          <div class="brand-mark-glass">Y</div>
-          <h2>Welcome back</h2>
-          <p class="muted">Sign in to access your workspace</p>
+          <div class="brand-mark">Y</div>
+
+          <div>
+            <h2>Welcome back</h2>
+            <p class="muted">Sign in to access your workspace</p>
+          </div>
         </div>
 
-        <Message v-if="error" severity="error" :closable="false" class="error-msg">{{ error }}</Message>
+        <Message
+          v-if="error"
+          severity="error"
+          :closable="false"
+          class="error-msg"
+        >
+          {{ error }}
+        </Message>
 
         <div class="field-group">
           <label class="field">
-            <span>Email Address</span>
-            <InputText 
-              v-model="email" 
-              type="email" 
-              placeholder="name@company.com" 
-              required 
+            <span>Email address</span>
+
+            <InputText
+              v-model="email"
+              type="email"
+              placeholder="name@company.com"
+              autocomplete="email"
+              required
               fluid
             />
           </label>
 
           <label class="field">
             <span>Password</span>
-            <Password 
-              v-model="password" 
-              :feedback="false" 
-              toggle-mask 
-              required 
-              placeholder="••••••••" 
+
+            <Password
+              v-model="password"
+              :feedback="false"
+              toggle-mask
+              autocomplete="current-password"
+              required
+              placeholder="Enter your password"
               fluid
             />
           </label>
         </div>
 
-        <Button 
-          type="submit" 
-          label="Sign in" 
-          icon="pi pi-arrow-right" 
-          icon-pos="right" 
-          :loading="auth.loading" 
-          size="large" 
-          fluid 
+        <Button
+          type="submit"
+          label="Sign in"
+          icon="pi pi-arrow-right"
+          icon-pos="right"
+          :loading="auth.loading"
+          size="large"
+          fluid
           class="submit-btn"
         />
 
         <p class="privacy-copy">
-          Restricted access for authorized Administrators &amp; Sales Executives only.
+          Restricted access for authorized Administrators and Sales Executives.
         </p>
       </form>
     </div>
@@ -92,173 +101,175 @@ async function submit() {
 </template>
 
 <style scoped>
-/* Base Page & Ambient Lighting */
 .login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  background: #092621;
-}
-
-/* Glowing Background Blobs (Memberikan efek warna tembus pandang) */
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.6;
-}
-
-.blob-1 {
-  width: 350px;
-  height: 350px;
-  background: #2563eb;
-  top: 15%;
-  left: 20%;
-}
-
-.blob-2 {
-  width: 400px;
-  height: 400px;
-  background: #10b981;
-  bottom: 15%;
-  right: 20%;
-}
-
-/* Container */
-.login-center {
-  position: relative;
-  z-index: 10;
-  width: 100%;
-  max-width: 440px;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
   padding: 1.5rem;
+  background: #f1f5f9;
 }
 
-/* Glassmorphism Card Utama */
+.login-center {
+  width: 100%;
+  max-width: 420px;
+}
+
 .login-card {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 28px;
-  padding: 2.5rem 2.25rem;
-  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.35),
-              inset 0 1px 0 rgba(255, 255, 255, 0.2);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  color: #ffffff;
+  padding: 2.25rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow:
+    0 20px 45px rgba(15, 23, 42, 0.08),
+    0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-/* Brand Icon & Typography */
 .header-group {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
-.brand-mark-glass {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 1.25rem;
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  font-size: 1.8rem;
-  font-weight: 900;
+  border-radius: 14px;
+  background: #2563eb;
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 16px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  font-size: 1.45rem;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
 }
 
 .header-group h2 {
   margin: 0;
-  font-size: 1.85rem;
+  color: #0f172a;
+  font-size: 1.55rem;
   font-weight: 800;
   letter-spacing: -0.025em;
-  color: #ffffff;
 }
 
 .muted {
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0.4rem 0 0;
-  font-size: 0.9rem;
+  margin: 0.3rem 0 0;
+  color: #64748b;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
-/* Form Fields */
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.15rem;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
-.field span {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  letter-spacing: 0.02em;
+.field > span {
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
-/* Deep Style untuk Override Komponen PrimeVue ke Tampilan Glass */
 :deep(.p-inputtext),
 :deep(.p-password-input) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
-  border-radius: 12px !important;
-  padding: 0.75rem 1rem !important;
-  transition: all 0.2s ease;
+  width: 100%;
+  padding: 0.78rem 0.9rem;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #0f172a;
+  font-size: 0.9rem;
+  box-shadow: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 :deep(.p-inputtext::placeholder),
 :deep(.p-password-input::placeholder) {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: #94a3b8;
+}
+
+:deep(.p-inputtext:hover),
+:deep(.p-password-input:hover) {
+  border-color: #94a3b8;
 }
 
 :deep(.p-inputtext:focus),
 :deep(.p-password-input:focus) {
-  background: rgba(255, 255, 255, 0.15) !important;
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+:deep(.p-password) {
+  width: 100%;
+}
+
+:deep(.p-password-toggle-mask-icon),
 :deep(.p-password-toggle-icon) {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: #64748b;
 }
 
-/* Submit Button Override */
 .submit-btn {
-  margin-top: 0.5rem;
-  border-radius: 12px !important;
-  font-weight: 700 !important;
+  margin-top: 0.25rem;
+  border-radius: 10px !important;
   background: #2563eb !important;
-  border: none !important;
-  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.5) !important;
+  border-color: #2563eb !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18) !important;
+}
+
+.submit-btn:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
 }
 
 .privacy-copy {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.75rem;
-  line-height: 1.5;
   margin: 0;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .error-msg {
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 @media (max-width: 480px) {
+  .login-page {
+    align-items: center;
+    padding: 1rem;
+  }
+
   .login-card {
-    padding: 2rem 1.5rem;
-    border-radius: 20px;
+    padding: 1.6rem;
+    border-radius: 16px;
+  }
+
+  .header-group {
+    align-items: flex-start;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    font-size: 1.25rem;
+  }
+
+  .header-group h2 {
+    font-size: 1.35rem;
   }
 }
 </style>
