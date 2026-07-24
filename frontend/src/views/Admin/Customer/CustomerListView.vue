@@ -291,6 +291,7 @@ onMounted(async () => {
           :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'"
           icon="pi pi-plus"
           size="small"
+          @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')"
         />
       </div>
     </header>

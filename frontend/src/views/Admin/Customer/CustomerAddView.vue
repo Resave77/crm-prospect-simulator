@@ -1,24 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import { useCrmStore } from '../../../stores/crm'
 import { useCustomerListStore } from '../../../stores/customerList'
-import type { CustomerDetail, Contact } from '../../../types/crm'
+import type { Contact } from '../../../types/crm'
 
-const route = useRoute()
 const router = useRouter()
-const crm = useCrmStore()
-const listStore = useCustomerListStore()
+const store = useCustomerListStore()
 const error = ref('')
-const detail = ref<CustomerDetail | null>(null)
-const loading = ref(true)
-const saving = ref(false)
 const saved = ref(false)
+const saving = ref(false)
 
 const segmentOptions = [
   { label: 'Select segment', value: '' },
@@ -35,13 +30,15 @@ const categoryOptions = [
   { label: 'Distributor', value: 'Distributor' },
 ]
 const regionOptions = computed(() => {
-  const regs = listStore.filterOptions?.regions ?? []
+  const regs = store.filterOptions?.regions ?? []
   return [{ label: 'Select region', value: '' }, ...regs.map((r) => ({ label: r, value: r }))]
 })
 const salesOptions = computed(() => {
-  const sales = listStore.filterOptions?.salesExecutives ?? []
+  const sales = store.filterOptions?.salesExecutives ?? []
   return [{ label: 'Select sales executive', value: '' }, ...sales.map((s) => ({ label: s.fullName, value: s.id }))]
 })
+
+const blankContact = (): Contact => ({ name: '', position: '', phone: '', email: '' })
 
 const form = reactive({
   name: '',
@@ -50,12 +47,18 @@ const form = reactive({
   region: '',
   salesExecutiveId: '',
   parentCompanyName: '',
+  parentCode: '',
+  address: '',
+  province: '',
+  district: '',
+  subDistrict: '',
+  village: '',
   notes: '',
-  contacts: [] as Contact[],
+  contacts: [blankContact()] as Contact[],
 })
 
 function addContact() {
-  form.contacts.push({ name: '', position: '', phone: '', email: '' })
+  form.contacts.push(blankContact())
 }
 function removeContact(index: number) {
   if (form.contacts.length > 1) form.contacts.splice(index, 1)
@@ -68,111 +71,65 @@ const isFormValid = computed(() =>
   form.region !== ''
 )
 
-const hasChanges = computed(() => {
-  if (!detail.value) return false
-  const c = detail.value.customer
-  return (
-    form.name !== c.name ||
-    form.customerSegment !== c.segment ||
-    form.customerCategory !== c.category ||
-    form.region !== c.region ||
-    form.salesExecutiveId !== c.salesExecutiveId ||
-    form.parentCompanyName !== c.parentCompanyName ||
-    JSON.stringify(form.contacts) !== JSON.stringify(c.contacts)
-  )
-})
-
-async function handleSave() {
+async function handleSubmit() {
   if (!isFormValid.value) return
   saving.value = true
   try {
-    await new Promise((r) => setTimeout(r, 1000))
+    await new Promise((r) => setTimeout(r, 1200))
     saved.value = true
-  } catch {
-    error.value = 'Failed to update customer. Please try again.'
+  } catch (e) {
+    error.value = 'Failed to save customer. Please try again.'
   } finally {
     saving.value = false
   }
 }
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
 onMounted(async () => {
   try {
-    const [custDetail] = await Promise.all([
-      crm.loadAdminCustomer(String(route.params.id)),
-      listStore.fetchFilterOptions().catch(() => {}),
-    ])
-    detail.value = custDetail
-    const c = custDetail.customer
-    form.name = c.name
-    form.customerSegment = c.segment
-    form.customerCategory = c.category
-    form.region = c.region
-    form.salesExecutiveId = c.salesExecutiveId
-    form.parentCompanyName = custDetail.parentCompany.name
-    form.contacts = c.contacts?.length ? JSON.parse(JSON.stringify(c.contacts)) : []
-  } catch (e) {
-    error.value = crm.errorMessage(e)
-  } finally {
-    loading.value = false
-  }
+    await store.fetchFilterOptions()
+  } catch { /* optional */ }
 })
 </script>
 
 <template>
   <section class="admin-page">
-    <!-- LOADING -->
-    <div v-if="loading" class="state-box">
-      <i class="pi pi-spin pi-spinner state-icon" />
-      <span>Loading customer data...</span>
-    </div>
-
-    <!-- ERROR -->
-    <Message v-if="error && !detail" severity="error" :closable="false">{{ error }}</Message>
-
-    <!-- SAVED SUCCESS -->
+    <!-- SUCCESS STATE -->
     <template v-if="saved">
       <div class="success-panel">
         <div class="success-icon">
           <i class="pi pi-check-circle" />
         </div>
-        <h2>Customer Updated Successfully</h2>
-        <p class="muted">Changes to <strong>{{ form.name }}</strong> have been saved.</p>
+        <h2>Customer Created Successfully</h2>
+        <p class="muted">The new customer site <strong>{{ form.name }}</strong> has been added to the system.</p>
         <div class="success-actions">
-          <Button label="Back to Customer List" icon="pi pi-list" @click="router.push('/admin/customers')" />
-          <Button label="View Detail" icon="pi pi-eye" severity="secondary" outlined @click="router.push(`/admin/customers/${route.params.id}`)" />
+          <Button label="View Customer List" icon="pi pi-list" @click="router.push('/admin/customers')" />
+          <Button label="Add Another" icon="pi pi-plus" severity="secondary" outlined @click="saved = false; form.name = ''; form.customerSegment = ''; form.customerCategory = ''; form.region = ''; form.salesExecutiveId = ''; form.parentCompanyName = ''; form.parentCode = ''; form.address = ''; form.province = ''; form.district = ''; form.subDistrict = ''; form.village = ''; form.notes = ''; form.contacts = [blankContact()]" />
         </div>
       </div>
     </template>
 
-    <!-- EDIT FORM -->
-    <template v-else-if="detail">
-      <Message v-if="error" severity="error">{{ error }}</Message>
-
+    <!-- FORM -->
+    <template v-else>
       <!-- PAGE HEADER -->
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push(`/admin/customers/${route.params.id}`)">
-            <i class="pi pi-arrow-left" /> Back to Detail
+          <button class="back-link" @click="router.push('/admin/customers')">
+            <i class="pi pi-arrow-left" /> Back to Customer List
           </button>
-          <span class="eyebrow">Edit Customer</span>
-          <h1>{{ detail.customer.name }}</h1>
-          <div class="subtitle-row">
-            <code class="code-tag code-blue">{{ detail.customer.customerCode }}</code>
-            <span class="muted">&mdash; Last updated {{ formatDate(detail.customer.updatedAt) }}</span>
-          </div>
+          <span class="eyebrow">New Customer</span>
+          <h1>Add Customer Site</h1>
+          <p class="muted">Register a new customer site into the CRM system.</p>
         </div>
         <div class="page-heading-actions">
-          <Button label="Cancel" severity="secondary" text size="small" @click="router.push(`/admin/customers/${route.params.id}`)" />
-          <Button label="Save Changes" icon="pi pi-check" size="small" :loading="saving" :disabled="!isFormValid || saving || !hasChanges" @click="handleSave" />
+          <Button label="Cancel" severity="secondary" text size="small" @click="router.push('/admin/customers')" />
+          <Button label="Save Customer" icon="pi pi-check" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
         </div>
       </header>
 
+      <Message v-if="error" severity="error">{{ error }}</Message>
+
       <div class="form-layout">
+        <!-- LEFT COLUMN: FORM -->
         <div class="form-stack">
           <!-- CUSTOMER SITE INFO -->
           <div class="form-card">
@@ -186,7 +143,7 @@ onMounted(async () => {
             <div class="form-grid">
               <div class="form-field full">
                 <label>Customer Site Name <span class="required">*</span></label>
-                <InputText v-model="form.name" placeholder="Customer site name" />
+                <InputText v-model="form.name" placeholder="e.g. Yummy Cabang Jakarta Selatan" />
               </div>
               <div class="form-field">
                 <label>Segment <span class="required">*</span></label>
@@ -219,7 +176,44 @@ onMounted(async () => {
             <div class="form-grid">
               <div class="form-field full">
                 <label>Company Name</label>
-                <InputText v-model="form.parentCompanyName" placeholder="Parent company name" />
+                <InputText v-model="form.parentCompanyName" placeholder="e.g. PT Yummy Food Indonesia" />
+              </div>
+              <div class="form-field">
+                <label>Company Code</label>
+                <InputText v-model="form.parentCode" placeholder="Auto-generated if empty" />
+              </div>
+            </div>
+          </div>
+
+          <!-- ADDRESS -->
+          <div class="form-card">
+            <div class="form-card-header">
+              <div class="form-card-icon si-emerald"><i class="pi pi-map" /></div>
+              <div>
+                <h3>Site Address</h3>
+                <p>Physical location of the customer site.</p>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-field full">
+                <label>Street Address</label>
+                <Textarea v-model="form.address" :autoResize="true" rows="2" placeholder="Full street address" />
+              </div>
+              <div class="form-field">
+                <label>Province</label>
+                <InputText v-model="form.province" placeholder="Province" />
+              </div>
+              <div class="form-field">
+                <label>District</label>
+                <InputText v-model="form.district" placeholder="District" />
+              </div>
+              <div class="form-field">
+                <label>Sub-District</label>
+                <InputText v-model="form.subDistrict" placeholder="Sub-district" />
+              </div>
+              <div class="form-field">
+                <label>Village</label>
+                <InputText v-model="form.village" placeholder="Village" />
               </div>
             </div>
           </div>
@@ -233,11 +227,11 @@ onMounted(async () => {
                 <p>People to contact at this customer site.</p>
               </div>
             </div>
-            <div v-if="form.contacts.length" class="contacts-list">
+            <div class="contacts-list">
               <div v-for="(contact, idx) in form.contacts" :key="idx" class="contact-row">
                 <div class="contact-row-header">
                   <span class="contact-label">Contact {{ idx + 1 }}</span>
-                  <Button icon="pi pi-times" text rounded size="small" class="act-delete" @click="removeContact(idx)" />
+                  <Button v-if="form.contacts.length > 1" icon="pi pi-times" text rounded size="small" class="act-delete" @click="removeContact(idx)" />
                 </div>
                 <div class="form-grid">
                   <div class="form-field">
@@ -259,10 +253,6 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
-            <div v-else class="empty-contacts">
-              <i class="pi pi-users" />
-              <span>No contacts registered for this site.</span>
-            </div>
             <Button label="Add Contact" icon="pi pi-plus" severity="secondary" text size="small" class="add-contact-btn" @click="addContact" />
           </div>
 
@@ -272,22 +262,22 @@ onMounted(async () => {
               <div class="form-card-icon si-slate"><i class="pi pi-file-edit" /></div>
               <div>
                 <h3>Additional Notes</h3>
-                <p>Internal notes about this customer site.</p>
+                <p>Any extra information about this customer site.</p>
               </div>
             </div>
             <div class="form-grid">
               <div class="form-field full">
                 <label>Notes</label>
-                <Textarea v-model="form.notes" :autoResize="true" rows="3" placeholder="Internal notes..." />
+                <Textarea v-model="form.notes" :autoResize="true" rows="3" placeholder="Internal notes, special instructions, etc." />
               </div>
             </div>
           </div>
         </div>
 
-        <!-- SIDEBAR -->
+        <!-- RIGHT COLUMN: SIDEBAR -->
         <aside class="form-sidebar">
           <div class="sidebar-card">
-            <h4>Change Summary</h4>
+            <h4>Submission Summary</h4>
             <div class="summary-list">
               <div class="summary-row">
                 <span>Customer Name</span>
@@ -315,14 +305,13 @@ onMounted(async () => {
               </div>
             </div>
           </div>
-          <div class="sidebar-card" :class="hasChanges ? 'changes-card' : 'no-changes-card'">
-            <i :class="hasChanges ? 'pi pi-exclamation-circle' : 'pi pi-check-circle'" />
-            <p v-if="hasChanges">You have unsaved changes. Click "Save Changes" to apply.</p>
-            <p v-else>No changes detected. Edit the form to make updates.</p>
+          <div class="sidebar-card tip-card">
+            <i class="pi pi-info-circle" />
+            <p>Customer codes will be automatically generated upon save in the format <code>PC-XXXXXX-SXXX</code>.</p>
           </div>
           <div class="sidebar-actions">
-            <Button label="Save Changes" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving || !hasChanges" @click="handleSave" />
-            <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push(`/admin/customers/${route.params.id}`)" />
+            <Button label="Save Customer" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
+            <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push('/admin/customers')" />
           </div>
         </aside>
       </div>
@@ -367,11 +356,9 @@ onMounted(async () => {
   margin: 0.2rem 0 0.15rem;
   letter-spacing: -0.03em;
 }
-.subtitle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.1rem;
+.page-title-wrapper .muted {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 .page-heading-actions {
   display: flex;
@@ -386,6 +373,7 @@ onMounted(async () => {
   color: var(--brand-blue);
   font-size: 0.8rem;
   font-weight: 600;
+  text-decoration: none;
   cursor: pointer;
   background: none;
   border: none;
@@ -394,17 +382,6 @@ onMounted(async () => {
   transition: opacity 0.15s;
 }
 .back-link:hover { opacity: 0.8; }
-.code-tag {
-  display: inline-block;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-  background: #f1f5f9;
-  color: var(--text-secondary);
-}
-.code-blue { background: #eff6ff; color: #2563eb; }
 
 /* ── FORM LAYOUT ──────────────────────────────────────────────────── */
 .form-layout {
@@ -473,7 +450,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.3rem;
 }
-.form-field.full { grid-column: 1 / -1; }
+.form-field.full {
+  grid-column: 1 / -1;
+}
 .form-field label {
   font-size: 0.72rem;
   font-weight: 700;
@@ -481,7 +460,9 @@ onMounted(async () => {
   letter-spacing: 0.05em;
   color: var(--text-muted);
 }
-.required { color: #dc2626; }
+.required {
+  color: #dc2626;
+}
 
 /* ── CONTACTS ──────────────────────────────────────────────────────── */
 .contacts-list {
@@ -508,20 +489,9 @@ onMounted(async () => {
   letter-spacing: 0.04em;
   color: var(--brand-blue);
 }
-.add-contact-btn { margin-top: 0.5rem; }
-.empty-contacts {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.add-contact-btn {
+  margin-top: 0.5rem;
 }
-.empty-contacts i { color: var(--text-faint); }
-.act-delete { color: #dc2626 !important; }
-.act-delete:hover { background: #fef2f2 !important; }
 
 /* ── SIDEBAR ───────────────────────────────────────────────────────── */
 .form-sidebar {
@@ -567,50 +537,40 @@ onMounted(async () => {
   color: var(--text-primary);
   text-align: right;
 }
-.changes-card {
+.tip-card {
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
-  background: #fffbeb;
-  border-color: #fde68a;
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
-.changes-card i {
-  color: #d97706;
+.tip-card i {
+  color: #2563eb;
   margin-top: 0.1rem;
   font-size: 0.95rem;
   flex-shrink: 0;
 }
-.changes-card p {
+.tip-card p {
   margin: 0;
   font-size: 0.78rem;
-  color: #92400e;
+  color: #1e40af;
   line-height: 1.5;
 }
-.no-changes-card {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-}
-.no-changes-card i {
-  color: #059669;
-  margin-top: 0.1rem;
-  font-size: 0.95rem;
-  flex-shrink: 0;
-}
-.no-changes-card p {
-  margin: 0;
-  font-size: 0.78rem;
-  color: #065f46;
-  line-height: 1.5;
+.tip-card code {
+  background: rgba(37, 99, 235, 0.1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 .sidebar-actions {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-.full-width { width: 100%; }
+.full-width {
+  width: 100%;
+}
 
 /* ── SUCCESS PANEL ─────────────────────────────────────────────────── */
 .success-panel {
@@ -645,19 +605,11 @@ onMounted(async () => {
   margin-top: 1rem;
 }
 
-/* ── STATE BOX ─────────────────────────────────────────────────────── */
-.state-box {
-  min-height: 300px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  color: var(--text-muted);
+.act-delete {
+  color: #dc2626 !important;
 }
-.state-icon {
-  font-size: 1.75rem;
-  color: var(--brand-blue);
+.act-delete:hover {
+  background: #fef2f2 !important;
 }
 
 /* ── RESPONSIVE ────────────────────────────────────────────────────── */
