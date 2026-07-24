@@ -1,59 +1,64 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { getMyCustomer } from '../../../api/crm'
 import type { CustomerDetail } from '../../../types/crm'
+import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
+import { copyToClipboard } from '../../../utils/placeDetails'
 
 const route = useRoute()
 const detail = ref<CustomerDetail | null>(null)
 const error = ref('')
 const loading = ref(true)
-const mapElement = ref<HTMLElement | null>(null)
-let map: L.Map | null = null
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
+
+const customer = computed(() => detail.value?.customer)
+const parentCompany = computed(() => detail.value?.parentCompany)
+
+const displayPhone = computed(() => {
+  return customer.value?.contacts?.[0]?.phone ?? ''
+})
+
+const displayEmail = computed(() => {
+  return customer.value?.contacts?.[0]?.email ?? ''
+})
+
+const displayContactName = computed(() => {
+  return customer.value?.contacts?.[0]?.name ?? ''
+})
+
+const displayContactPosition = computed(() => {
+  return customer.value?.contacts?.[0]?.position ?? ''
+})
+
+const hasCoords = computed(() => {
+  return customer.value?.address?.latitude != null && customer.value?.address?.longitude != null
+})
+
+const distance = computed(() => {
+  if (!hasCoords.value || !userCoords.value) return null
+  return getDistanceTo(
+    customer.value!.address.latitude!,
+    customer.value!.address.longitude!,
+    userCoords.value.lat,
+    userCoords.value.lng,
+  )
+})
 
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
 }
 
-function customerPhone(): string {
-  return detail.value?.customer.contacts?.[0]?.phone ?? ''
-}
-
-function customerEmail(): string {
-  return detail.value?.customer.contacts?.[0]?.email ?? ''
-}
-
-function customerContactName(): string {
-  return detail.value?.customer.contacts?.[0]?.name ?? ''
-}
-
-function customerContactPosition(): string {
-  return detail.value?.customer.contacts?.[0]?.position ?? ''
-}
-
-function renderMap() {
-  const item = detail.value?.customer
-  if (!mapElement.value || item?.address.latitude == null || item.address.longitude == null) return
-  map?.remove()
-  map = L.map(mapElement.value, { zoomControl: true }).setView([item.address.latitude, item.address.longitude], 16)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map)
-  L.marker([item.address.latitude, item.address.longitude]).addTo(map).bindPopup(item.name).openPopup()
-}
-
 function navigate() {
-  const c = detail.value?.customer
-  if (!c) return
+  if (!customer.value) return
   openGoogleMapsNavigation({
-    latitude: c.address?.latitude,
-    longitude: c.address?.longitude,
-    address: c.address?.previewAddress,
+    latitude: customer.value.address?.latitude,
+    longitude: customer.value.address?.longitude,
+    address: customer.value.address?.previewAddress,
   })
 }
 
@@ -66,20 +71,23 @@ function acquireGPS() {
   )
 }
 
+const copied = ref(false)
+function handleCopy(text: string) {
+  copyToClipboard(text)
+  copied.value = true
+  setTimeout(() => { copied.value = false }, 2000)
+}
+
 onMounted(async () => {
   acquireGPS()
   try {
     detail.value = await getMyCustomer(String(route.params.id))
-    await nextTick()
-    renderMap()
   } catch (caught) {
     error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Unable to load customer.'
-  } finally {
-    loading.value = false
-  }
+  } finally { loading.value = false }
 })
 
-onBeforeUnmount(() => { map?.remove(); if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
+onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
 </script>
 
 <template>
@@ -110,55 +118,67 @@ onBeforeUnmount(() => { map?.remove(); if (geoWatchId != null) navigator.geoloca
       <!-- Summary Card -->
       <div class="dcard dcard-summary">
         <div class="dcard-summary-top">
-          <div class="dcard-avatar">{{ initials(detail.customer.name || 'Customer') }}</div>
+          <div class="dcard-avatar">{{ initials(customer?.name || 'Customer') }}</div>
           <div class="dcard-identity">
             <p class="eyebrow">Customer Existing</p>
-            <h1>{{ detail.customer.name }}</h1>
-            <small v-if="detail.customer.parentCompanyName">{{ detail.customer.parentCompanyName }}</small>
+            <h1>{{ customer?.name }}</h1>
+            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }}</small>
           </div>
         </div>
         <div class="dcard-codes">
-          <div class="dcard-code-item"><span>Customer code</span><strong>{{ detail.customer.customerCode }}</strong></div>
-          <div class="dcard-code-item"><span>Parent code</span><strong>{{ detail.customer.parentCode }}</strong></div>
+          <div class="dcard-code-item"><span>Customer code</span><strong>{{ customer?.customerCode }}</strong></div>
+          <div class="dcard-code-item"><span>Parent code</span><strong>{{ customer?.parentCode }}</strong></div>
         </div>
         <div class="dcard-tags">
           <Tag value="ACTIVE" severity="success" />
-          <Tag v-if="detail.customer.segment" :value="detail.customer.segment" />
-          <Tag v-if="detail.customer.category" :value="detail.customer.category" severity="secondary" />
+          <Tag v-if="customer?.segment" :value="customer.segment" />
+          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" />
         </div>
       </div>
 
       <!-- Location Card -->
       <div class="dcard">
-        <h2>Location</h2>
-        <div v-if="detail.customer.address.latitude != null && detail.customer.address.longitude != null" ref="mapElement" class="dcard-map" role="region" aria-label="Customer location map" />
-        <Message v-else severity="warn" :closable="false">No saved coordinates for this customer.</Message>
+        <div class="dcard-header-row">
+          <h2>Location</h2>
+          <span v-if="distance != null" class="dcard-distance-pill">
+            <i class="pi pi-compass" /> {{ formatDistance(distance) }} away
+          </span>
+        </div>
+        <EntityLocationMap
+          :latitude="customer?.address?.latitude ?? null"
+          :longitude="customer?.address?.longitude ?? null"
+          :label="customer?.name"
+          :interactive="true"
+          height="200px"
+        />
         <div class="dcard-location-rows">
-          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ detail.customer.address.previewAddress || 'No address' }}</span></div>
-          <div v-if="detail.customer.region" class="dcard-row"><i class="pi pi-globe" /><span>Region: {{ detail.customer.region }}</span></div>
-          <div v-if="detail.customer.address.latitude != null && detail.customer.address.longitude != null && userCoords" class="dcard-row dcard-distance">
-            <i class="pi pi-compass" />
-            <span>{{ formatDistance(getDistanceTo(detail.customer.address.latitude, detail.customer.address.longitude, userCoords.lat, userCoords.lng)!) }} away</span>
+          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ customer?.address?.previewAddress || 'No address' }}</span></div>
+          <div v-if="customer?.region" class="dcard-row"><i class="pi pi-globe" /><span>Region: {{ customer.region }}</span></div>
+          <div v-if="hasCoords" class="dcard-row dcard-row-coords">
+            <i class="pi pi-compass" /><span>GPS: {{ customer?.address?.latitude?.toFixed(6) }}, {{ customer?.address?.longitude?.toFixed(6) }}</span>
           </div>
         </div>
       </div>
 
       <!-- Contact Card -->
       <div class="dcard">
-        <h2>Contact</h2>
-        <div v-if="detail.customer.contacts.length" class="dcard-contact-list">
-          <div v-for="contact in detail.customer.contacts" :key="`${contact.name}-${contact.phone}`" class="dcard-contact">
-            <div class="dcard-contact-info">
-              <strong>{{ contact.name }}</strong>
-              <span v-if="contact.position">{{ contact.position }}</span>
-            </div>
-            <div class="dcard-contact-actions">
-              <a v-if="contact.phone" :href="`tel:${contact.phone}`" class="dcard-action-sm dcard-action-call"><i class="pi pi-phone" /> {{ contact.phone }}</a>
-              <a v-if="contact.email" :href="`mailto:${contact.email}`" class="dcard-action-sm dcard-action-email"><i class="pi pi-envelope" /> {{ contact.email }}</a>
-            </div>
-          </div>
+        <h2>Contact & Address</h2>
+        <div v-if="displayContactName || displayPhone || displayEmail" class="dcard-contact-section">
+          <div v-if="displayContactName" class="dcard-row"><i class="pi pi-user" /><span><strong>{{ displayContactName }}</strong><template v-if="displayContactPosition"> · {{ displayContactPosition }}</template></span></div>
+          <div v-if="displayPhone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${displayPhone}`">{{ displayPhone }}</a></div>
+          <div v-if="displayEmail" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${displayEmail}`">{{ displayEmail }}</a></div>
         </div>
         <p v-else class="dcard-empty-text">No contacts on file.</p>
+        <div v-if="customer?.address?.previewAddress" class="dcard-address-block">
+          <div class="dcard-address-label">Full Address</div>
+          <p>{{ customer.address.previewAddress }}</p>
+          <div v-if="customer.address.province || customer.address.district" class="dcard-address-detail">
+            <span v-if="customer.address.village">{{ customer.address.village }}, </span>
+            <span v-if="customer.address.subDistrict">{{ customer.address.subDistrict }}, </span>
+            <span v-if="customer.address.district">{{ customer.address.district }}, </span>
+            <span v-if="customer.address.province">{{ customer.address.province }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- Conversion Source -->
@@ -166,22 +186,27 @@ onBeforeUnmount(() => { map?.remove(); if (geoWatchId != null) navigator.geoloca
         <h2>Conversion Source</h2>
         <div class="dcard-rows">
           <div class="dcard-row"><i class="pi pi-user" /><span><strong>Prospect:</strong> {{ detail.sourceProspectName }}</span></div>
-          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Source ID:</strong> {{ detail.customer.sourceProspectId || '—' }}</span></div>
-          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ new Date(detail.customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) }}</span></div>
-          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ detail.customer.salesExecutiveName }}</span></div>
+          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Source ID:</strong> {{ customer?.sourceProspectId || '—' }}</span></div>
+          <div v-if="customer?.sourceGooglePlaceId" class="dcard-row">
+            <i class="pi pi-info-circle" />
+            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ customer.sourceGooglePlaceId }}</code></span>
+            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
+          </div>
+          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }}</span></div>
+          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }}</span></div>
         </div>
       </div>
 
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">
-        <button class="dbar-btn dbar-navigate" :disabled="detail.customer.address?.latitude == null && detail.customer.address?.longitude == null && !detail.customer.address?.previewAddress" @click="navigate">
+        <button class="dbar-btn dbar-navigate" :disabled="!hasCoords && !customer?.address?.previewAddress" @click="navigate">
           <i class="pi pi-directions" /> Navigate
         </button>
-        <a v-if="customerPhone()" :href="`tel:${customerPhone()}`" class="dbar-btn dbar-call">
+        <a v-if="displayPhone" :href="`tel:${displayPhone}`" class="dbar-btn dbar-call">
           <i class="pi pi-phone" /> Call
         </a>
         <span v-else class="dbar-btn dbar-call dbar-disabled"><i class="pi pi-phone" /> Call</span>
-        <RouterLink class="dbar-btn dbar-checkin" :to="`/sales/my-customers/${detail.customer.id}`">
+        <RouterLink class="dbar-btn dbar-checkin" :to="`/sales/my-customers/${customer?.id}/check-in`">
           <i class="pi pi-sign-in" /> Check in
         </RouterLink>
       </div>
@@ -238,35 +263,40 @@ onBeforeUnmount(() => { map?.remove(); if (geoWatchId != null) navigator.geoloca
 .dcard-code-item strong { font-size: 0.78rem; color: var(--text-primary); font-weight: 700; }
 .dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
-/* Map */
-.dcard-map { height: 220px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light); }
+/* Header row */
+.dcard-header-row { display: flex; align-items: center; justify-content: space-between; }
+.dcard-header-row h2 { margin: 0; }
+.dcard-distance-pill {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem;
+  border-radius: 9999px; background: #eff6ff; color: var(--brand-blue);
+  font-size: 0.62rem; font-weight: 700; white-space: nowrap;
+}
 
 /* Rows */
 .dcard-location-rows, .dcard-rows { display: grid; gap: 0.45rem; }
 .dcard-row { display: flex; align-items: flex-start; gap: 0.55rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
 .dcard-row i { color: var(--text-muted); font-size: 0.72rem; width: 1rem; text-align: center; flex-shrink: 0; margin-top: 0.1rem; }
+.dcard-row a { color: var(--brand-blue); text-decoration: none; }
+.dcard-row a:hover { text-decoration: underline; }
 .dcard-distance { color: var(--brand-blue); font-weight: 600; }
+.dcard-row-coords { color: var(--text-muted); font-size: 0.75rem; }
 
 /* Contact */
-.dcard-contact-list { display: grid; gap: 0.5rem; }
-.dcard-contact { padding: 0.7rem; background: #f8fafc; border-radius: 12px; display: flex; flex-direction: column; gap: 0.45rem; }
-.dcard-contact-info { display: flex; flex-direction: column; gap: 0.05rem; }
-.dcard-contact-info strong { font-size: 0.82rem; color: var(--text-primary); }
-.dcard-contact-info span { font-size: 0.72rem; color: var(--text-muted); }
-.dcard-contact-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.dcard-action-sm {
-  display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.6rem;
-  border-radius: 8px; border: 1px solid var(--border-light); background: #fff;
-  color: var(--brand-blue); font-size: 0.72rem; font-weight: 600; text-decoration: none;
-  transition: background 0.15s ease;
+.dcard-contact-section { display: grid; gap: 0.45rem; }
+.dcard-address-block {
+  padding: 0.75rem; background: #f8fafc; border-radius: 12px;
+  border: 1px solid var(--border-light); margin-top: 0.25rem;
 }
-.dcard-action-sm:hover { background: var(--brand-blue-50); }
-.dcard-action-sm i { font-size: 0.6rem; }
+.dcard-address-label { color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem; }
+.dcard-address-block p { margin: 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
+.dcard-address-detail { margin-top: 0.2rem; color: var(--text-muted); font-size: 0.75rem; }
+
 .dcard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1rem 0; }
 
 /* ── Bottom Action Bar ───────────────────────────────────── */
 .detail-bottom-bar {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: min(100%, 440px); z-index: 40;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -292,6 +322,5 @@ onBeforeUnmount(() => { map?.remove(); if (geoWatchId != null) navigator.geoloca
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }
-  .dcard-map { height: 180px; }
 }
 </style>

@@ -307,7 +307,7 @@ onMounted(async () => {
             <RouterLink class="mp-action-btn mp-action-detail" :to="`/sales/my-prospects/${prospect.id}`">
               <i class="pi pi-eye" /> Detail
             </RouterLink>
-            <RouterLink class="mp-action-btn mp-action-visit" :to="`/sales/my-prospects/${prospect.id}`">
+            <RouterLink class="mp-action-btn mp-action-visit" :to="`/sales/my-prospects/${prospect.id}/check-in`">
               <i class="pi pi-sign-in" /> Visit
             </RouterLink>
           </div>

@@ -1,42 +1,29 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import Textarea from 'primevue/textarea'
-import { checkInProspect, checkOutProspect, getMyProspect, transitionProspect } from '../../../api/crm'
+import { getMyProspect, transitionProspect } from '../../../api/crm'
 import { nextStage } from '../../../domain/pipeline'
 import type { ProspectReview } from '../../../types/crm'
+import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
+import { formatPlaceType, businessStatusLabel, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
 
 const route = useRoute()
 const review = ref<ProspectReview | null>(null)
-const error = ref(''); const success = ref(''); const loading = ref(true); const visitBusy = ref(false)
-const visitNotes = ref(''); const followUpNotes = ref(''); const selfiePlaceholder = ref(false)
-const mapElement = ref<HTMLElement | null>(null); let map: L.Map | null = null
-const openVisit = computed(() => review.value?.visits.find((visit) => !visit.checkOutAt) ?? null)
+const error = ref('')
+const success = ref('')
+const loading = ref(true)
 
-const deviceCoords = ref<{ latitude: number; longitude: number } | null>(null)
-const gpsReady = ref(false)
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
-const elapsed = ref('—')
-let elapsedTimer: ReturnType<typeof setInterval> | null = null
+let geoWatchId: number | null = null
 
 const pipelineNotes = ref('')
 const transitionBusy = ref(false)
 const transitionDone = ref(false)
 
-const stepperSteps = ['Prospect', 'Check In', 'Visit', 'Pipeline', 'Check Out', 'Done']
-
-const currentStep = computed(() => {
-  if (!review.value) return 0
-  if (openVisit.value) return 2
-  if (review.value.visits.length > 0) return 5
-  return 0
-})
+const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
 
 const nextPipelineStage = computed(() => {
   if (!review.value) return null
@@ -52,31 +39,20 @@ const statusSeverity = computed(() => {
   return 'warn' as const
 })
 
+const displayTypes = computed(() => {
+  const types = review.value?.prospect.placeTypes
+  if (!Array.isArray(types) || !types.length) return []
+  const skip = new Set(['establishment', 'point_of_interest', 'food', 'store'])
+  return types.filter((t) => !skip.has(t)).slice(0, 5)
+})
+
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
 }
 
-function message(error: unknown) { return (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? (error instanceof Error ? error.message : 'Unable to complete the request.') }
-
-function coordinates() {
-  return new Promise<GeolocationCoordinates>((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('GPS is unavailable in this browser.'))
-    navigator.geolocation.getCurrentPosition((position) => resolve(position.coords), () => reject(new Error('Allow location access to record this visit.')), { enableHighAccuracy: true, timeout: 12000 })
-  })
-}
-
-async function load() {
-  review.value = await getMyProspect(String(route.params.id))
-  await nextTick(); renderMap()
-}
-
-function renderMap() {
-  const prospect = review.value?.prospect
-  if (!mapElement.value || prospect?.latitude == null || prospect.longitude == null) return
-  map?.remove()
-  map = L.map(mapElement.value, { zoomControl: true }).setView([prospect.latitude, prospect.longitude], 16)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map)
-  L.marker([prospect.latitude, prospect.longitude]).addTo(map).bindPopup(prospect.placeName).openPopup()
+function message(err: unknown) {
+  return (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+    ?? (err instanceof Error ? err.message : 'Unable to complete the request.')
 }
 
 function navigate() {
@@ -90,32 +66,13 @@ function navigate() {
   })
 }
 
-function acquireDeviceCoords() {
+function acquireGPS() {
   if (!navigator.geolocation) return
-  navigator.geolocation.getCurrentPosition(
-    (pos) => { deviceCoords.value = { latitude: pos.coords.latitude, longitude: pos.coords.longitude }; gpsReady.value = true },
-    () => { gpsReady.value = false },
-    { enableHighAccuracy: true, timeout: 10000 },
-  )
-  navigator.geolocation.watchPosition(
+  geoWatchId = navigator.geolocation.watchPosition(
     (pos) => { userCoords.value = { lat: pos.coords.latitude, lng: pos.coords.longitude } },
     () => {},
     { enableHighAccuracy: true, timeout: 10000 },
   )
-}
-
-function startElapsedTimer() {
-  updateElapsed()
-  elapsedTimer = setInterval(updateElapsed, 30000)
-}
-
-function updateElapsed() {
-  if (!openVisit.value) { elapsed.value = '—'; return }
-  const diff = Date.now() - new Date(openVisit.value.checkInAt).getTime()
-  const mins = Math.floor(diff / 60000)
-  const hrs = Math.floor(mins / 60)
-  const remMins = mins % 60
-  elapsed.value = hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`
 }
 
 function formatVisitDate(iso: string) {
@@ -130,35 +87,6 @@ function calcDuration(checkIn: string, checkOut: string) {
   return hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`
 }
 
-async function checkIn() {
-  error.value = ''; success.value = ''; visitBusy.value = true
-  try {
-    const gps = await coordinates()
-    deviceCoords.value = { latitude: gps.latitude, longitude: gps.longitude }
-    gpsReady.value = true
-    await checkInProspect(String(route.params.id), { latitude: gps.latitude, longitude: gps.longitude, visitNotes: visitNotes.value, selfiePlaceholder: selfiePlaceholder.value })
-    success.value = 'Check-in recorded successfully.'
-    visitNotes.value = ''; selfiePlaceholder.value = false
-    await load()
-    startElapsedTimer()
-  } catch (caught) { error.value = message(caught) } finally { visitBusy.value = false }
-}
-
-async function checkOut() {
-  if (!openVisit.value) return
-  error.value = ''; success.value = ''; visitBusy.value = true
-  try {
-    const gps = await coordinates()
-    deviceCoords.value = { latitude: gps.latitude, longitude: gps.longitude }
-    await checkOutProspect(String(route.params.id), openVisit.value.id, { latitude: gps.latitude, longitude: gps.longitude, followUpNotes: followUpNotes.value })
-    success.value = 'Check-out recorded successfully.'
-    followUpNotes.value = ''; transitionDone.value = false
-    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
-    elapsed.value = '—'
-    await load()
-  } catch (caught) { error.value = message(caught) } finally { visitBusy.value = false }
-}
-
 async function doTransition() {
   if (!review.value || !nextPipelineStage.value) return
   error.value = ''; success.value = ''; transitionBusy.value = true
@@ -167,30 +95,33 @@ async function doTransition() {
     transitionDone.value = true
     success.value = `Pipeline updated to ${nextPipelineStage.value.replaceAll('_', ' ')}.`
     pipelineNotes.value = ''
-    await load()
+    review.value = await getMyProspect(String(route.params.id))
   } catch (caught) { error.value = message(caught) } finally { transitionBusy.value = false }
 }
 
+function handleCopy(text: string) {
+  copyToClipboard(text)
+  success.value = 'Copied to clipboard.'
+  setTimeout(() => { if (success.value === 'Copied to clipboard.') success.value = '' }, 2000)
+}
+
 onMounted(async () => {
+  acquireGPS()
   try {
-    await load()
-    acquireDeviceCoords()
-    if (openVisit.value) startElapsedTimer()
+    review.value = await getMyProspect(String(route.params.id))
   } catch (caught) { error.value = message(caught) } finally { loading.value = false }
 })
 
-onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterval(elapsedTimer) })
+onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
 </script>
 
 <template>
   <section class="detail-page">
     <RouterLink class="back-link" to="/sales/my-prospects"><i class="pi pi-arrow-left" /> My Prospects</RouterLink>
 
-    <!-- Messages -->
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
 
-    <!-- Loading skeleton -->
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>
       <div class="sk-card"><div class="sk-line w60" /><div class="sk-line w80" /><div class="sk-line w50" /></div>
@@ -198,7 +129,6 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
       <div class="sk-card"><div class="sk-line w40" /><div class="sk-line w80" /></div>
     </div>
 
-    <!-- Not found -->
     <div v-else-if="!review" class="detail-empty">
       <div class="detail-empty-icon"><i class="pi pi-inbox" /></div>
       <strong>Prospect not found</strong>
@@ -218,68 +148,83 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
           <Tag :value="review.prospect.status.replaceAll('_', ' ')" :severity="statusSeverity" />
         </div>
         <div class="dcard-rows">
-          <div v-if="review.prospect.industryGroup" class="dcard-row"><i class="pi pi-tag" /><span>{{ review.prospect.industryGroup }}</span></div>
           <div v-if="review.prospect.placeCategory" class="dcard-row"><i class="pi pi-bookmark" /><span>{{ review.prospect.placeCategory }}</span></div>
+          <div v-if="review.prospect.industryGroup" class="dcard-row"><i class="pi pi-tag" /><span>{{ review.prospect.industryGroup }}</span></div>
           <div class="dcard-row"><i class="pi pi-user" /><span>{{ review.prospect.assignedSalesExecutive }}</span></div>
-          <div v-if="review.prospect.phoneNumber" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a></div>
-          <div v-if="review.prospect.websiteUrl" class="dcard-row"><i class="pi pi-globe" /><a :href="review.prospect.websiteUrl" target="_blank" rel="noopener">Website</a></div>
+        </div>
+        <div v-if="displayTypes.length" class="dcard-type-badges">
+          <span v-for="t in displayTypes" :key="t" class="dcard-type-badge">{{ formatPlaceType(t) }}</span>
         </div>
       </div>
 
-      <!-- Visit Progress Stepper -->
-      <div class="dcard dcard-stepper">
-        <div v-for="(step, i) in stepperSteps" :key="i" class="pv-step" :class="{ done: i < currentStep, active: i === currentStep }">
-          <div class="pv-step-dot"><i v-if="i < currentStep" class="pi pi-check" /><span v-else>{{ i + 1 }}</span></div>
-          <span class="pv-step-label">{{ step }}</span>
+      <!-- Active Visit Alert -->
+      <div v-if="openVisit" class="dcard dcard-active-visit">
+        <div class="dcard-active-visit-row">
+          <i class="pi pi-sign-in" />
+          <span>You have an <strong>active visit</strong> in progress.</span>
+          <RouterLink class="dcard-active-visit-link" :to="`/sales/my-prospects/${review.prospect.id}/check-out`">
+            Check out <i class="pi pi-arrow-right" />
+          </RouterLink>
+        </div>
+      </div>
+
+      <!-- Contact Card -->
+      <div v-if="review.prospect.phoneNumber || review.prospect.websiteUrl" class="dcard">
+        <h2>Contact</h2>
+        <div class="dcard-rows">
+          <div v-if="review.prospect.phoneNumber && isValidPhone(review.prospect.phoneNumber)" class="dcard-row">
+            <i class="pi pi-phone" /><a :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a>
+          </div>
+          <div v-if="review.prospect.websiteUrl && isValidWebsite(review.prospect.websiteUrl)" class="dcard-row">
+            <i class="pi pi-globe" /><a :href="review.prospect.websiteUrl.startsWith('http') ? review.prospect.websiteUrl : `https://${review.prospect.websiteUrl}`" target="_blank" rel="noopener noreferrer">{{ websiteDisplayUrl(review.prospect.websiteUrl) }}</a>
+          </div>
         </div>
       </div>
 
       <!-- Location Card -->
       <div class="dcard">
-        <h2>Location</h2>
-        <div v-if="review.prospect.latitude != null && review.prospect.longitude != null" ref="mapElement" class="dcard-map" role="region" aria-label="Prospect location map" />
-        <Message v-else severity="warn" :closable="false">No coordinates available for this prospect.</Message>
+        <div class="dcard-header-row">
+          <h2>Location</h2>
+          <span v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords" class="dcard-distance-pill">
+            <i class="pi pi-compass" /> {{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away
+          </span>
+        </div>
+        <EntityLocationMap
+          :latitude="review.prospect.latitude"
+          :longitude="review.prospect.longitude"
+          :label="review.prospect.placeName"
+          :interactive="false"
+          height="200px"
+        />
         <div class="dcard-location-rows">
           <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ review.prospect.formattedAddress || 'No address' }}</span></div>
-          <div class="dcard-row"><i class="pi pi-compass" /><span>Prospect: {{ review.prospect.latitude ?? '—' }}, {{ review.prospect.longitude ?? '—' }}</span></div>
-          <div v-if="deviceCoords" class="dcard-row"><i class="pi pi-map-marker" /><span>Device: {{ deviceCoords.latitude.toFixed(6) }}, {{ deviceCoords.longitude.toFixed(6) }}</span></div>
-          <div v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords" class="dcard-row dcard-distance">
+          <div v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="dcard-row dcard-row-coords">
             <i class="pi pi-compass" />
-            <span>{{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away</span>
+            <span>GPS: {{ review.prospect.latitude?.toFixed(6) }}, {{ review.prospect.longitude?.toFixed(6) }}</span>
+            <button class="dcard-copy-btn" title="Copy coordinates" @click="handleCopy(`${review.prospect.latitude}, ${review.prospect.longitude}`)"><i class="pi pi-copy" /></button>
           </div>
-          <div class="dcard-row"><i class="pi" :class="gpsReady ? 'pi-check-circle' : 'pi-info-circle'" :style="{ color: gpsReady ? '#22c55e' : undefined }" /><span>{{ gpsReady ? 'GPS ready' : 'GPS will be captured on check-in' }}</span></div>
+          <a v-if="review.prospect.googleMapsUrl" :href="review.prospect.googleMapsUrl" target="_blank" rel="noopener noreferrer" class="dcard-row dcard-row-link">
+            <i class="pi pi-external-link" /><span>Open in Google Maps</span>
+          </a>
         </div>
       </div>
 
-      <!-- Check In / Active Visit Card -->
-      <div class="dcard">
-        <template v-if="!openVisit">
-          <h2>Check In</h2>
-          <p class="dcard-hint">Record your visit with GPS and optional notes.</p>
-          <label class="dcard-field"><span>Visit Notes</span><Textarea v-model="visitNotes" rows="3" fluid placeholder="What do you plan to discuss?" /></label>
-          <label class="dcard-checkbox" @click.prevent="selfiePlaceholder = !selfiePlaceholder">
-            <input v-model="selfiePlaceholder" type="checkbox" @click.stop />
-            <i class="pi pi-camera" />
-            <span>Include selfie placeholder</span>
-          </label>
-          <Button label="GPS Check In" icon="pi pi-map-marker" :loading="visitBusy" fluid @click="checkIn" />
-        </template>
-        <template v-else>
-          <div class="dcard-section-header">
-            <h2>Active Visit</h2>
-            <Tag value="Checked In" severity="success" />
+      <!-- Google Place Info -->
+      <div v-if="review.prospect.googlePlaceId" class="dcard">
+        <h2>Google Place</h2>
+        <div class="dcard-rows">
+          <div class="dcard-row">
+            <i class="pi pi-info-circle" />
+            <span class="dcard-place-id">
+              <span>Place ID</span>
+              <code>{{ review.prospect.googlePlaceId }}</code>
+            </span>
+            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(review.prospect.googlePlaceId)"><i class="pi pi-copy" /></button>
           </div>
-          <div class="dcard-stats">
-            <div class="dcard-stat"><span>Check-in Time</span><strong>{{ new Date(openVisit.checkInAt).toLocaleString() }}</strong></div>
-            <div class="dcard-stat"><span>Duration</span><strong>{{ elapsed }}</strong></div>
-          </div>
-          <div v-if="openVisit.visitNotes" class="dcard-note"><span>Visit Notes</span>{{ openVisit.visitNotes }}</div>
-          <label class="dcard-field"><span>Follow-up Notes</span><Textarea v-model="followUpNotes" rows="3" fluid placeholder="Notes for after the visit..." /></label>
-          <Button label="GPS Check Out" icon="pi pi-check-circle" :loading="visitBusy" fluid @click="checkOut" />
-        </template>
+        </div>
       </div>
 
-      <!-- Pipeline Update Card -->
+      <!-- Pipeline Update (only when visit active) -->
       <div v-if="openVisit && nextPipelineStage && !transitionDone" class="dcard dcard-highlight">
         <h2>Pipeline Update</h2>
         <p class="dcard-hint">Move this prospect to the next pipeline stage.</p>
@@ -288,14 +233,16 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
           <i class="pi pi-arrow-right" />
           <Tag :value="nextPipelineStage.replaceAll('_', ' ')" severity="info" />
         </div>
-        <label class="dcard-field"><span>Pipeline Notes</span><Textarea v-model="pipelineNotes" rows="2" fluid placeholder="Optional notes for this transition..." /></label>
-        <Button label="Update Pipeline" icon="pi pi-arrow-right" :loading="transitionBusy" outlined fluid @click="doTransition" />
+        <label class="dcard-field"><span>Pipeline Notes</span><textarea v-model="pipelineNotes" rows="2" class="dcard-textarea" placeholder="Optional notes for this transition..." /></label>
+        <button class="dcard-btn dcard-btn-primary" :disabled="transitionBusy" @click="doTransition">
+          <i class="pi pi-arrow-right" /> {{ transitionBusy ? 'Updating...' : 'Update Pipeline' }}
+        </button>
       </div>
       <div v-else-if="transitionDone && openVisit" class="dcard dcard-success">
         <div class="dcard-success-row"><i class="pi pi-check-circle" /><span>Pipeline updated for this visit.</span></div>
       </div>
 
-      <!-- Visit History Card -->
+      <!-- Visit History -->
       <div class="dcard">
         <h2>Visit History</h2>
         <div v-if="review.visits.length" class="dcard-visit-list">
@@ -317,7 +264,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
         <p v-else class="dcard-empty-text">No visits recorded yet.</p>
       </div>
 
-      <!-- Status History Card -->
+      <!-- Status History -->
       <div class="dcard">
         <h2>Status History</h2>
         <div v-if="review.history.length" class="dcard-timeline">
@@ -338,10 +285,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
         <button class="dbar-btn dbar-navigate" :disabled="review.prospect.latitude == null && review.prospect.longitude == null && !review.prospect.formattedAddress" @click="navigate">
           <i class="pi pi-directions" /> Navigate
         </button>
-        <button class="dbar-btn dbar-update" :disabled="!nextPipelineStage || !openVisit" @click="doTransition" :title="!openVisit ? 'Start a visit to update pipeline' : !nextPipelineStage ? 'No next stage available' : 'Update pipeline'">
-          <i class="pi pi-arrow-right" /> Update
-        </button>
-        <RouterLink class="dbar-btn dbar-checkin" :to="`/sales/my-prospects/${review.prospect.id}`">
+        <a v-if="review.prospect.phoneNumber && isValidPhone(review.prospect.phoneNumber)" :href="`tel:${review.prospect.phoneNumber}`" class="dbar-btn dbar-call">
+          <i class="pi pi-phone" /> Call
+        </a>
+        <span v-else class="dbar-btn dbar-call dbar-disabled"><i class="pi pi-phone" /> Call</span>
+        <RouterLink v-if="openVisit" class="dbar-btn dbar-checkout" :to="`/sales/my-prospects/${review.prospect.id}/check-out`">
+          <i class="pi pi-sign-out" /> Check out
+        </RouterLink>
+        <RouterLink v-else class="dbar-btn dbar-checkin" :to="`/sales/my-prospects/${review.prospect.id}/check-in`">
           <i class="pi pi-sign-in" /> Check in
         </RouterLink>
       </div>
@@ -352,7 +303,6 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 <style scoped>
 .detail-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: 5.5rem; }
 
-/* ── Skeleton ────────────────────────────────────────────── */
 .detail-skeleton { display: grid; gap: 0.85rem; }
 .sk-header { display: flex; align-items: center; gap: 0.7rem; }
 .sk-circle { width: 48px; height: 48px; border-radius: 50%; background: #e2e8f0; flex-shrink: 0; }
@@ -366,81 +316,73 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 .sk-line.w80 { width: 80%; }
 .sk-map { height: 180px; border-radius: 12px; background: #e2e8f0; }
 
-/* ── Empty ───────────────────────────────────────────────── */
 .detail-empty { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2.5rem 1rem; text-align: center; }
 .detail-empty-icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: #f1f5f9; color: #94a3b8; font-size: 1.4rem; }
 .detail-empty strong { color: var(--text-primary); font-size: 0.95rem; }
 .detail-empty span { color: var(--text-muted); font-size: 0.8rem; max-width: 260px; }
 .detail-empty-btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.5rem 1rem; border-radius: 12px; background: var(--brand-blue); color: #fff; text-decoration: none; font-size: 0.8rem; font-weight: 600; margin-top: 0.5rem; }
 
-/* ── Card ────────────────────────────────────────────────── */
 .dcard {
   padding: 1.15rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl);
   background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem;
 }
 .dcard h2 { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 
-/* Summary */
 .dcard-summary { background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); }
 .dcard-summary-top { display: flex; align-items: flex-start; gap: 0.85rem; }
-.dcard-avatar {
-  width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px;
-  color: #fff; font-weight: 800; font-size: 1rem; flex-shrink: 0;
-}
+.dcard-avatar { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #fff; font-weight: 800; font-size: 1rem; flex-shrink: 0; }
 .dcard-avatar-prospect { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25); }
 .dcard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .dcard-identity .eyebrow { margin: 0; }
 .dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; }
 
-/* Rows */
+.dcard-type-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.dcard-type-badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px;
+  background: #eff6ff; color: #1d4ed8; font-size: 0.58rem; font-weight: 600; line-height: 1.5;
+}
+
+.dcard-active-visit { border-color: #fbbf24; background: #fffbeb; }
+.dcard-active-visit-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #92400e; flex-wrap: wrap; }
+.dcard-active-visit-row > i { font-size: 1rem; color: #f59e0b; }
+.dcard-active-visit-link {
+  display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto;
+  padding: 0.35rem 0.75rem; border-radius: 10px; background: #f59e0b; color: #fff;
+  font-size: 0.7rem; font-weight: 700; text-decoration: none; white-space: nowrap;
+}
+.dcard-active-visit-link:hover { background: #d97706; }
+
+.dcard-header-row { display: flex; align-items: center; justify-content: space-between; }
+.dcard-header-row h2 { margin: 0; }
+.dcard-distance-pill {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem;
+  border-radius: 9999px; background: #eff6ff; color: var(--brand-blue);
+  font-size: 0.62rem; font-weight: 700; white-space: nowrap;
+}
+
 .dcard-location-rows, .dcard-rows { display: grid; gap: 0.45rem; }
 .dcard-row { display: flex; align-items: flex-start; gap: 0.55rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
 .dcard-row i { color: var(--text-muted); font-size: 0.72rem; width: 1rem; text-align: center; flex-shrink: 0; margin-top: 0.1rem; }
 .dcard-row a { color: var(--brand-blue); text-decoration: none; }
 .dcard-row a:hover { text-decoration: underline; }
+.dcard-row-link { cursor: pointer; }
 .dcard-distance { color: var(--brand-blue); font-weight: 600; }
+.dcard-row-coords { color: var(--text-muted); font-size: 0.75rem; }
+.dcard-row-coords code { font-size: 0.7rem; color: var(--text-muted); background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 4px; }
 
-/* Map */
-.dcard-map { height: 220px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light); }
-
-/* Stepper */
-.dcard-stepper {
-  padding: 0.85rem 0.65rem; display: flex; gap: 0; overflow-x: auto;
+.dcard-place-id { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
+.dcard-place-id span { color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.dcard-place-id code {
+  font-size: 0.7rem; color: var(--text-secondary); background: #f1f5f9;
+  padding: 0.2rem 0.4rem; border-radius: 6px; word-break: break-all; line-height: 1.4;
 }
-.pv-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.3rem; position: relative; min-width: 48px; }
-.pv-step:not(:last-child)::after { content: ''; position: absolute; top: 13px; left: calc(50% + 15px); right: calc(-50% + 15px); height: 2px; background: var(--border-light); transition: background 0.2s ease; }
-.pv-step.done:not(:last-child)::after { background: #22c55e; }
-.pv-step-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #f1f5f9; border: 2px solid var(--border-light); color: var(--text-muted); font-size: 0.6rem; font-weight: 700; position: relative; z-index: 1; transition: all 0.2s ease; }
-.pv-step.done .pv-step-dot { background: #22c55e; border-color: #22c55e; color: #fff; }
-.pv-step.active .pv-step-dot { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15); }
-.pv-step-label { font-size: 0.55rem; font-weight: 600; color: var(--text-muted); text-align: center; white-space: nowrap; }
-.pv-step.done .pv-step-label { color: #22c55e; }
-.pv-step.active .pv-step-label { color: var(--brand-blue); }
-
-/* Field */
-.dcard-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.dcard-field span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.dcard-hint { margin: -0.35rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
-.dcard-checkbox {
-  display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 0.85rem;
-  border: 1px solid var(--border-light); border-radius: 12px; background: #f8fafc;
-  color: var(--text-secondary); font-size: 0.82rem; cursor: pointer;
+.dcard-copy-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: 8px; border: 1px solid var(--border-light); background: #fff;
+  color: var(--text-muted); cursor: pointer; font-size: 0.65rem; flex-shrink: 0; transition: all 0.15s ease;
 }
-.dcard-checkbox:hover { background: #f1f5f9; }
-.dcard-checkbox input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-blue); }
-.dcard-checkbox i { color: var(--text-muted); font-size: 0.85rem; }
+.dcard-copy-btn:hover { color: var(--brand-blue); border-color: #bfdbfe; background: #eff6ff; }
 
-/* Stats */
-.dcard-section-header { display: flex; align-items: center; justify-content: space-between; }
-.dcard-section-header h2 { margin: 0; }
-.dcard-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-.dcard-stat { padding: 0.75rem; border-radius: 12px; background: #f8fafc; }
-.dcard-stat span { display: block; color: var(--text-muted); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
-.dcard-stat strong { font-size: 0.82rem; color: var(--text-primary); }
-.dcard-note { padding: 0.75rem; border-radius: 12px; background: #f8fafc; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
-.dcard-note span { display: block; margin-bottom: 0.2rem; color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-
-/* Pipeline highlight */
 .dcard-highlight { border-color: var(--brand-blue-light); background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); }
 .dcard-pipeline-flow { display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--border-light); justify-content: center; }
 .dcard-pipeline-flow i { color: var(--brand-blue); font-size: 0.85rem; }
@@ -448,7 +390,24 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 .dcard-success-row { display: flex; align-items: center; gap: 0.5rem; color: #166534; font-size: 0.82rem; }
 .dcard-success-row i { font-size: 1rem; }
 
-/* Visit history */
+.dcard-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.dcard-field span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.dcard-hint { margin: -0.35rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
+.dcard-textarea {
+  padding: 0.65rem 0.85rem; border: 1px solid var(--border-light); border-radius: 12px;
+  background: #f8fafc; color: var(--text-primary); font-size: 0.82rem; font-family: inherit;
+  resize: vertical; width: 100%; box-sizing: border-box;
+}
+.dcard-textarea:focus { outline: 0; border-color: var(--brand-blue); }
+.dcard-btn {
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.7rem 1rem; border-radius: 12px; border: none;
+  font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+}
+.dcard-btn-primary { background: var(--brand-blue); color: #fff; }
+.dcard-btn-primary:hover { background: #1d4ed8; }
+.dcard-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .dcard-visit-list { display: grid; gap: 0.65rem; }
 .dcard-visit { border: 1px solid var(--border-light); border-radius: 14px; overflow: hidden; }
 .dcard-visit-header { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 0.85rem; background: #f8fafc; border-bottom: 1px solid var(--border-light); }
@@ -458,7 +417,6 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 .dcard-visit-detail i { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.18rem; flex-shrink: 0; }
 .dcard-visit-exec { margin-top: 0.25rem; padding-top: 0.35rem; border-top: 1px solid var(--border-light); }
 
-/* Timeline */
 .dcard-timeline { display: grid; }
 .dcard-timeline-entry { display: grid; grid-template-columns: 16px 1fr; gap: 0.75rem; padding-bottom: 1rem; position: relative; }
 .dcard-timeline-entry:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 18px; bottom: 0; width: 2px; background: var(--border-light); }
@@ -470,9 +428,9 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 
 .dcard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
 
-/* ── Bottom Action Bar ───────────────────────────────────── */
 .detail-bottom-bar {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: min(100%, 440px); z-index: 40;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -487,21 +445,17 @@ onBeforeUnmount(() => { map?.remove(); map = null; if (elapsedTimer) clearInterv
 .dbar-navigate { background: var(--brand-blue); color: #fff; }
 .dbar-navigate:hover { background: #1d4ed8; }
 .dbar-navigate:disabled { background: #cbd5e1; cursor: not-allowed; }
-.dbar-update { background: #f0fdf4; color: #059669; border: 1px solid #a7f3d0; }
-.dbar-update:hover { background: #dcfce7; }
-.dbar-update:disabled { opacity: 0.45; cursor: not-allowed; }
+.dbar-call { background: #f0fdf4; color: #059669; border: 1px solid #a7f3d0; }
+.dbar-call:hover { background: #dcfce7; }
+.dbar-disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 .dbar-checkin { background: #eff6ff; color: var(--brand-blue); border: 1px solid #bfdbfe; }
 .dbar-checkin:hover { background: #dbeafe; }
+.dbar-checkout { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.dbar-checkout:hover { background: #ffedd5; }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 480px) {
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }
-  .dcard-map { height: 180px; }
-  .pv-step { min-width: 40px; }
-  .pv-step-label { font-size: 0.48rem; }
-  .pv-step-dot { width: 24px; height: 24px; font-size: 0.52rem; }
-  .pv-step:not(:last-child)::after { top: 11px; left: calc(50% + 13px); right: calc(-50% + 13px); }
 }
 </style>

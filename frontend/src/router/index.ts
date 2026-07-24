@@ -7,6 +7,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     public?: boolean
     role?: UserRole
+    entityType?: 'prospect' | 'customer'
   }
 }
 
@@ -48,9 +49,13 @@ const router = createRouter({
         { path: 'dashboard', name: 'SalesDashboard', component: () => import('../views/Sales/Dashboard/SalesDashboardView.vue') },
         { path: 'my-prospects', name: 'SalesMyProspects', component: () => import('../views/Sales/Prospect/MyProspectsView.vue') },
         { path: 'my-prospects/:id', name: 'SalesProspectDetail', component: () => import('../views/Sales/Prospect/ProspectDetailView.vue') },
+        { path: 'my-prospects/:id/check-in', name: 'SalesProspectCheckIn', component: () => import('../views/Sales/Visit/CheckInView.vue'), meta: { entityType: 'prospect' } },
+        { path: 'my-prospects/:id/check-out', name: 'SalesProspectCheckOut', component: () => import('../views/Sales/Visit/CheckOutView.vue'), meta: { entityType: 'prospect' } },
         { path: 'pipeline', name: 'SalesPipeline', component: () => import('../views/Sales/Prospect/SalesPipelineView.vue') },
         { path: 'my-customers', name: 'SalesMyCustomers', component: () => import('../views/Sales/Customer/MyCustomersView.vue') },
         { path: 'my-customers/:id', name: 'SalesCustomerDetail', component: () => import('../views/Sales/Customer/CustomerDetailView.vue') },
+        { path: 'my-customers/:id/check-in', name: 'SalesCustomerCheckIn', component: () => import('../views/Sales/Visit/CheckInView.vue'), meta: { entityType: 'customer' } },
+        { path: 'my-customers/:id/check-out', name: 'SalesCustomerCheckOut', component: () => import('../views/Sales/Visit/CheckOutView.vue'), meta: { entityType: 'customer' } },
         { path: 'history', name: 'SalesHistory', component: () => import('../views/Sales/HistoryView.vue') },
         { path: 'profile', name: 'SalesProfile', component: () => import('../views/Sales/ProfileView.vue') },
       ],

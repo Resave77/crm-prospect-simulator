@@ -278,7 +278,7 @@ onMounted(async () => {
             <RouterLink class="mc-action-btn mc-action-detail" :to="`/sales/my-customers/${customer.id}`">
               <i class="pi pi-eye" /> View detail
             </RouterLink>
-            <RouterLink class="mc-action-btn mc-action-checkin" :to="`/sales/my-customers/${customer.id}`">
+            <RouterLink class="mc-action-btn mc-action-checkin" :to="`/sales/my-customers/${customer.id}/check-in`">
               <i class="pi pi-sign-in" /> Check in
             </RouterLink>
           </div>
@@ -500,14 +500,14 @@ onMounted(async () => {
 @keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .mc-fab {
-  position: fixed; bottom: 88px; right: calc(50% - 190px);
+  position: fixed; bottom: 88px; left: 50%; transform: translateX(calc(220px - 24px));
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #059669, #047857); color: #fff;
   font-size: 1.1rem; cursor: pointer; z-index: 50;
   box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35);
   display: grid; place-items: center; transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.mc-fab:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45); }
+.mc-fab:hover { transform: translateX(calc(220px - 24px)) scale(1.08); box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45); }
 .mc-fab-badge {
   position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px;
   display: grid; place-items: center; border-radius: 9999px; background: #dc2626;
@@ -526,6 +526,7 @@ onMounted(async () => {
 .mc-filter-field select:focus { outline: 0; border-color: #059669; }
 
 @media (max-width: 480px) {
-  .mc-fab { right: 1rem; }
+  .mc-fab { left: auto; right: 1rem; transform: none; }
+  .mc-fab:hover { transform: scale(1.08); }
 }
 </style>
