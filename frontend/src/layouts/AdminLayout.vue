@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -38,7 +37,20 @@ async function logout() {
       <header class="admin-topbar">
         <form class="global-search" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="submit">Enter</button></form>
         <RouterLink class="icon-control" to="/admin/prospects/won" aria-label="Won prospect notifications"><i class="pi pi-bell" /></RouterLink>
-        <details class="profile-menu"><summary><span>{{ auth.user?.fullName?.slice(0, 1) }}</span><div><strong>{{ auth.user?.fullName }}</strong><small>Administrator</small></div></summary><Button label="Sign out" icon="pi pi-sign-out" severity="secondary" text @click="logout" /></details>
+        <div class="topbar-spacer" />
+        <details class="profile-menu">
+          <summary>
+            <span class="avatar-initials">{{ auth.user?.fullName?.slice(0, 1) }}</span>
+            <div class="profile-info"><strong>{{ auth.user?.fullName }}</strong><small>Administrator</small></div>
+            <i class="pi pi-chevron-down" />
+          </summary>
+          <div class="profile-dropdown">
+            <button class="signout-btn" @click="logout">
+              <i class="pi pi-sign-out" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </details>
       </header>
       <main class="admin-content"><RouterView /></main>
     </div>
@@ -176,9 +188,16 @@ async function logout() {
 }
 
 /* ── Topbar ──────────────────────────────────────────────────── */
-.admin-workspace { min-width: 0; }
+.admin-workspace {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
 
 .admin-topbar {
+  flex-shrink: 0;
   height: 56px;
   padding: 0 1.5rem;
   display: flex;
@@ -186,6 +205,7 @@ async function logout() {
   gap: 0.65rem;
   background: var(--surface-card);
   border-bottom: 1px solid var(--border-light);
+  z-index: 10;
 }
 
 .global-search {
@@ -231,6 +251,8 @@ async function logout() {
 
 .global-search button:hover { background: var(--surface-subtle); }
 
+.topbar-spacer { flex: 1; }
+
 .profile-menu { position: relative; }
 
 .profile-menu summary {
@@ -241,34 +263,73 @@ async function logout() {
   cursor: pointer;
 }
 
-.profile-menu summary > span {
-  width: 1.9rem;
-  height: 1.9rem;
+.profile-menu summary > .avatar-initials {
+  width: 2rem;
+  height: 2rem;
   display: grid;
   place-items: center;
-  color: var(--brand-blue);
-  background: var(--brand-blue-bg);
+  color: #fff;
+  background: var(--brand-blue);
   border-radius: 50%;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
-.profile-menu summary div { display: grid; }
-.profile-menu summary strong { font-size: 0.65rem; }
-.profile-menu summary small { color: var(--text-muted); font-size: 0.52rem; }
+.profile-menu summary .profile-info { display: grid; text-align: left; }
+.profile-menu summary .profile-info strong { font-size: 0.68rem; color: var(--text-primary); }
+.profile-menu summary .profile-info small { color: var(--text-muted); font-size: 0.55rem; }
 
-.profile-menu :deep(.p-button) {
+.profile-menu summary > i {
+  font-size: 0.55rem;
+  color: var(--text-faint);
+  transition: transform var(--transition-fast);
+}
+
+.profile-menu[open] summary > i { transform: rotate(180deg); }
+
+.profile-dropdown {
   position: absolute;
-  z-index: 20;
-  top: 2.7rem;
+  z-index: 50;
+  top: calc(100% + 6px);
   right: 0;
-  width: 150px;
+  min-width: 180px;
+  padding: 0.35rem;
   background: var(--surface-card);
-  box-shadow: 0 10px 30px rgba(23, 32, 51, 0.14);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
 
-.admin-content { padding: 1.5rem; }
+.signout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast),
+              color var(--transition-fast);
+}
+
+.signout-btn i { font-size: 0.8rem; }
+
+.signout-btn:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {

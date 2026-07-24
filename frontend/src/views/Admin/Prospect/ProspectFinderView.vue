@@ -4,11 +4,13 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
+import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import Tag from 'primevue/tag'
+import Textarea from 'primevue/textarea'
 import * as crmApi from '../../../api/crm'
 import type { PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
@@ -23,6 +25,7 @@ const radius = ref(3000)
 const latitude = ref(-6.229561)
 const longitude = ref(106.848651)
 const results = ref<PlaceResult[]>([])
+const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
 const sales = ref<SalesExecutiveOption[]>([])
 const salesExecutiveId = ref('')
@@ -31,10 +34,24 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const success = ref('')
+const detailOpen = ref(false)
 const mapElement = ref<HTMLElement | null>(null)
+const resultsScroll = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let searchCircle: L.Circle | null = null
 const markers = new Map<string, L.Marker>()
+
+const filteredResults = ref<PlaceResult[]>([])
+
+watch([results, resultSearch], () => {
+  const q = resultSearch.value.toLowerCase().trim()
+  if (!q) { filteredResults.value = results.value; return }
+  filteredResults.value = results.value.filter(r =>
+    r.name.toLowerCase().includes(q) ||
+    r.category.toLowerCase().includes(q) ||
+    r.address.toLowerCase().includes(q)
+  )
+}, { immediate: true })
 
 function markerIcon(item: PlaceResult, active = false) {
   const safeIcon = /^pi pi-[a-z-]+$/.test(item.markerIcon) ? item.markerIcon : 'pi pi-map-marker'
@@ -80,7 +97,7 @@ function renderMarkers() {
     const position: L.LatLngExpression = [item.latitude, item.longitude]
     const marker = L.marker(position, { icon: markerIcon(item, selected.value?.googlePlaceId === item.googlePlaceId), keyboard: true, title: item.name })
       .bindTooltip(item.name, { direction: 'top', offset: [0, -34] })
-      .on('click', () => selectResult(item, false))
+      .on('click', () => selectResult(item, true))
       .addTo(map)
     markers.set(item.googlePlaceId, marker)
     bounds.push(position)
@@ -90,12 +107,17 @@ function renderMarkers() {
   else map.setView([latitude.value, longitude.value], 14)
 }
 
-function selectResult(item: PlaceResult, focus = true) {
+function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
-  if (focus && map && item.latitude !== null && item.longitude !== null) {
+  detailOpen.value = true
+  if (focusMap && map && item.latitude !== null && item.longitude !== null) {
     map.flyTo([item.latitude, item.longitude], Math.max(map.getZoom(), 16), { duration: 0.55 })
     markers.get(item.googlePlaceId)?.openTooltip()
   }
+  nextTick(() => {
+    const el = resultsScroll.value?.querySelector(`[data-place-id="${item.googlePlaceId}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  })
 }
 
 watch(selected, (current, previous) => {
@@ -112,6 +134,7 @@ async function search() {
   try {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: categories.value.join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
     selected.value = results.value[0] ?? null
+    detailOpen.value = !!selected.value
     await nextTick()
     renderMarkers()
   } catch (caught) {
@@ -140,6 +163,7 @@ async function save() {
   try {
     const item = await crmApi.saveProspect(selected.value, industryGroup.value, salesExecutiveId.value)
     success.value = `${item.placeName} saved as NEW_LEAD and assigned successfully.`
+    detailOpen.value = false
   } catch (caught) {
     error.value = crmError(caught)
   } finally {
@@ -147,8 +171,8 @@ async function save() {
   }
 }
 
-function crmError(error: unknown) {
-  const candidate = error as { response?: { data?: { error?: { message?: string } } }; message?: string }
+function crmError(err: unknown) {
+  const candidate = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
   return candidate.response?.data?.error?.message ?? candidate.message ?? 'Prospect Finder request failed.'
 }
 
@@ -168,18 +192,18 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 <template>
   <section class="finder-page">
-    <div class="finder-heading">
-      <div>
-        <h1>Prospect Finder</h1>
-        <p class="finder-subtitle">Search nearby businesses on OpenStreetMap and save qualified prospects.</p>
-      </div>
-    </div>
-
-    <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
-    <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
-
     <div class="finder-desktop-shell">
       <aside class="finder-left-panel">
+        <div class="finder-panel-header">
+          <div class="finder-panel-title">
+            <i class="pi pi-compass" />
+            <div>
+              <h1>Prospect Finder</h1>
+              <span>Discover &amp; save qualified prospects</span>
+            </div>
+          </div>
+        </div>
+
         <div class="finder-filter-scroll">
           <div class="filter-section">
             <label class="field finder-keyword-field">
@@ -192,7 +216,10 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
           </div>
 
           <div class="filter-section">
-            <p class="filter-section-title">Categories</p>
+            <div class="filter-section-header">
+              <span class="filter-section-title">Categories</span>
+              <span class="category-count">{{ categories.length }} selected</span>
+            </div>
             <div class="category-grid">
               <label v-for="option in categoryOptions" :key="option[0]" class="category-chip" :class="{ active: categories.includes(option[0]) }">
                 <Checkbox v-model="categories" :input-id="option[0]" :value="option[0]" />
@@ -222,45 +249,60 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
           </div>
 
           <div class="filter-actions">
-            <Button label="Use GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" />
+            <Button label="GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" />
             <Button label="Search Area" icon="pi pi-search" :loading="loading" :disabled="!categories.length" @click="search" />
           </div>
-
-          <p v-if="!results.length && !loading" class="filter-hint"><i class="pi pi-info-circle" /> Select categories and click Search Area to discover nearby businesses.</p>
         </div>
 
         <div class="finder-results-header">
-          <div>
-            <strong>{{ results.length }} results</strong>
-            <span>within {{ (radius / 1000).toFixed(1) }} km</span>
+          <div class="results-header-row">
+            <strong>{{ filteredResults.length }} result{{ filteredResults.length !== 1 ? 's' : '' }}</strong>
+            <span v-if="results.length && resultSearch" class="results-filter-note">of {{ results.length }}</span>
+          </div>
+          <div v-if="results.length" class="result-search-wrap">
+            <i class="pi pi-search" />
+            <input v-model="resultSearch" placeholder="Filter results..." />
           </div>
         </div>
 
         <div v-if="loading" class="empty-state finder-result-state">
           <div class="loading-pulse" />
-          <strong>Searching Google Places</strong>
+          <strong>Searching Places</strong>
           <span>Scanning nearby businesses...</span>
         </div>
         <div v-else-if="!results.length" class="empty-state finder-result-state">
           <i class="pi pi-map-marker" />
-          <strong>Choose filters and search</strong>
-          <span>Places results will appear here.</span>
+          <strong>Select categories and search</strong>
+          <span>Business results will appear here.</span>
         </div>
-        <div v-else class="finder-results">
+        <div v-else-if="!filteredResults.length" class="empty-state finder-result-state">
+          <i class="pi pi-filter" />
+          <strong>No matching results</strong>
+          <span>Try a different filter.</span>
+        </div>
+        <div v-else ref="resultsScroll" class="finder-results">
           <button
-            v-for="item in results"
+            v-for="item in filteredResults"
             :key="item.googlePlaceId"
+            :data-place-id="item.googlePlaceId"
             class="result-card"
             :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }"
-            @click="selectResult(item)"
+            @click="selectResult(item, true)"
           >
             <span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span>
             <div class="result-info">
-              <strong>{{ item.name }}</strong>
-              <span class="result-meta">{{ item.category }} &middot; {{ Math.round(item.distance) }} m</span>
-              <small>{{ item.address }}</small>
+              <div class="result-name-row">
+                <strong>{{ item.name }}</strong>
+                <Tag v-if="item.rating" :value="`★ ${item.rating}`" severity="info" class="result-rating-tag" />
+              </div>
+              <span class="result-category">{{ item.category }}</span>
+              <span class="result-address">{{ item.address }}</span>
+              <div class="result-meta-row">
+                <span v-if="item.distance" class="result-distance"><i class="pi pi-map-marker" /> {{ Math.round(item.distance) }} m</span>
+                <Tag v-if="item.businessStatus" :value="item.businessStatus === 'OPERATIONAL' ? 'Open' : item.businessStatus" :severity="item.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" class="result-status-tag" />
+              </div>
             </div>
-            <Tag :value="item.rating ? `\u2605 ${item.rating}` : 'New'" severity="secondary" class="result-tag" />
+            <i class="pi pi-chevron-right result-chevron" />
           </button>
         </div>
       </aside>
@@ -275,148 +317,219 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
             <span>Google Places stays server-side. Map tiles use OpenStreetMap.</span>
           </div>
         </div>
-
-        <aside v-if="selected" class="place-detail-overlay">
-          <button class="detail-close" aria-label="Close selected Place details" @click="selected = null">
-            <i class="pi pi-times" />
-          </button>
-
-          <div class="detail-header">
-            <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
-            <div>
-              <p class="eyebrow">Selected business</p>
-              <h2>{{ selected.name }}</h2>
-              <Tag :value="selected.businessStatus || 'BUSINESS STATUS UNKNOWN'" severity="info" />
-            </div>
-          </div>
-
-          <div class="detail-body">
-            <div class="detail-list">
-              <p><i class="pi pi-map-marker" />{{ selected.address }}</p>
-              <p v-if="selected.phone"><i class="pi pi-phone" />{{ selected.phone }}</p>
-              <a v-if="selected.website" :href="selected.website" target="_blank" rel="noreferrer"><i class="pi pi-globe" />Open website</a>
-              <a v-if="selected.googleMapsUrl" :href="selected.googleMapsUrl" target="_blank" rel="noreferrer"><i class="pi pi-external-link" />Open Place listing</a>
-            </div>
-          </div>
-
-          <div class="detail-actions">
-            <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
-            <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
-            <Button label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId" fluid @click="save" />
-          </div>
-        </aside>
       </div>
     </div>
+
+    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '420px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
+      <div v-if="selected" class="detail-dialog">
+        <div class="detail-hero-bar">
+          <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
+          <div class="detail-hero-info">
+            <h2>{{ selected.name }}</h2>
+            <div class="detail-hero-meta">
+              <span>{{ selected.category }}</span>
+              <Tag v-if="selected.rating" :value="`★ ${selected.rating}`" severity="info" />
+              <Tag v-if="selected.userRatingCount" :value="`${selected.userRatingCount} reviews`" severity="secondary" />
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-info-grid">
+          <div class="detail-info-item">
+            <i class="pi pi-map-marker" />
+            <div>
+              <span class="detail-info-label">Address</span>
+              <span class="detail-info-value">{{ selected.address }}</span>
+            </div>
+          </div>
+          <div v-if="selected.phone" class="detail-info-item">
+            <i class="pi pi-phone" />
+            <div>
+              <span class="detail-info-label">Phone</span>
+              <span class="detail-info-value">{{ selected.phone }}</span>
+            </div>
+          </div>
+          <div v-if="selected.website" class="detail-info-item">
+            <i class="pi pi-globe" />
+            <div>
+              <span class="detail-info-label">Website</span>
+              <a :href="selected.website" target="_blank" rel="noreferrer" class="detail-info-link">Open website →</a>
+            </div>
+          </div>
+          <div v-if="selected.googleMapsUrl" class="detail-info-item">
+            <i class="pi pi-external-link" />
+            <div>
+              <span class="detail-info-label">Google Maps</span>
+              <a :href="selected.googleMapsUrl" target="_blank" rel="noreferrer" class="detail-info-link">View listing →</a>
+            </div>
+          </div>
+          <div class="detail-info-item">
+            <i class="pi pi-info-circle" />
+            <div>
+              <span class="detail-info-label">Status</span>
+              <Tag :value="selected.businessStatus || 'UNKNOWN'" :severity="selected.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" />
+            </div>
+          </div>
+          <div class="detail-info-item">
+            <i class="pi pi-tag" />
+            <div>
+              <span class="detail-info-label">Place Types</span>
+              <span class="detail-info-value detail-types">{{ selected.placeTypes?.join(', ') || selected.markerCategory }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-assignment">
+          <h3>Assignment</h3>
+          <div class="detail-assignment-fields">
+            <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
+            <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="detail-dialog-footer">
+          <Button label="Cancel" severity="secondary" text @click="detailOpen = false" />
+          <Button label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !industryGroup" @click="save" />
+        </div>
+      </template>
+    </Dialog>
+
+    <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
+    <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
   </section>
 </template>
 
 <style scoped>
 /* ════════════════════════════════════════════════════════════════
-   PROSPECT FINDER — Modern Redesign v2
+   PROSPECT FINDER — Workspace Layout
    ════════════════════════════════════════════════════════════════ */
 
 .finder-page {
-  height: calc(100vh - 92px);
-  min-height: 650px;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0;
+  margin: -1.5rem;
+  margin-top: 0;
+  min-height: 0;
 }
-
-/* ── Heading ─────────────────────────────────────────────────── */
-.finder-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.finder-heading h1 {
-  margin: 0;
-  font-size: 1.75rem;
-  letter-spacing: -0.04em;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--text-primary) 0%, #334155 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.finder-heading .finder-subtitle {
-  margin: 0.3rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  line-height: 1.55;
-}
-
-.finder-heading .eyebrow { margin-bottom: 0.25rem; }
 
 /* ── Desktop Shell ───────────────────────────────────────────── */
 .finder-desktop-shell {
-  min-height: 0;
   flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: 370px minmax(0, 1fr);
   overflow: hidden;
   background: var(--surface-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg),
-              0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+  box-shadow: var(--shadow-lg);
 }
 
 /* ── Left Panel ──────────────────────────────────────────────── */
 .finder-left-panel {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  background: linear-gradient(180deg, #fafbfc 0%, var(--surface-card) 100%);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  background: var(--surface-card);
   border-right: 1px solid var(--border-light);
 }
 
+.finder-panel-header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff 100%);
+}
+
+.finder-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.finder-panel-title > i {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--brand-blue);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.finder-panel-title h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.finder-panel-title span {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
 .finder-filter-scroll {
-  max-height: 400px;
-  padding: 1rem;
+  max-height: 380px;
+  padding: 0.5rem 0.85rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-.finder-filter-scroll::-webkit-scrollbar { width: 4px; }
+.finder-filter-scroll::-webkit-scrollbar { width: 3px; }
 .finder-filter-scroll::-webkit-scrollbar-track { background: transparent; }
 .finder-filter-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
 
 /* ── Filter Sections ─────────────────────────────────────────── */
 .filter-section {
-  padding: 0.75rem 0;
+  padding: 0.55rem 0;
   border-bottom: 1px solid #eef1f5;
 }
 
-.filter-section:last-of-type {
-  border-bottom: 0;
-  padding-bottom: 0.25rem;
+.filter-section:last-of-type { border-bottom: 0; }
+
+.filter-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
 }
 
 .filter-section-title {
-  margin: 0 0 0.55rem;
+  margin: 0 0 0.45rem;
   color: var(--text-primary);
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
-/* Keyword */
-.finder-keyword-field {
-  gap: 0.4rem;
-}
+.filter-section-header .filter-section-title { margin-bottom: 0; }
 
-.finder-keyword-field > span {
-  color: var(--text-muted);
-  font-size: 0.7rem;
+.category-count {
+  padding: 0.1rem 0.45rem;
+  color: var(--brand-blue);
+  background: var(--brand-blue-50);
+  border: 1px solid var(--brand-blue-100);
+  border-radius: 1rem;
+  font-size: 0.55rem;
   font-weight: 700;
 }
+
+/* Keyword */
+.finder-keyword-field { gap: 0.3rem; }
+.finder-keyword-field > span { color: var(--text-muted); font-size: 0.65rem; font-weight: 700; }
 
 .keyword-input-wrap {
   position: relative;
@@ -426,19 +539,19 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .keyword-icon {
   position: absolute;
-  left: 0.7rem;
+  left: 0.65rem;
   color: var(--text-faint);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   pointer-events: none;
 }
 
 .keyword-input-wrap :deep(.p-inputtext) {
-  padding-left: 2rem;
-  border-radius: var(--radius-md);
+  padding-left: 1.85rem;
+  border-radius: var(--radius-sm);
   border-color: var(--border-default);
-  font-size: 0.8rem;
-  padding-top: 0.6rem;
-  padding-bottom: 0.6rem;
+  font-size: 0.78rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
 .keyword-input-wrap :deep(.p-inputtext:focus) {
@@ -450,14 +563,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .category-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
 .category-chip {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.25rem;
   align-items: center;
-  padding: 0.35rem 0.45rem;
+  padding: 0.25rem 0.35rem;
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
   border: 1px solid transparent;
@@ -465,10 +578,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   transition: all var(--transition-fast);
 }
 
-.category-chip:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-default);
-}
+.category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
 
 .category-chip.active {
   background: var(--brand-blue-50);
@@ -481,70 +591,58 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 550;
   transition: color var(--transition-fast);
 }
 
-.category-chip.active span {
-  color: var(--brand-blue);
-  font-weight: 700;
-}
+.category-chip.active span { color: var(--brand-blue); font-weight: 700; }
 
 /* Radius */
 .radius-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .radius-value {
-  padding: 0.2rem 0.65rem;
+  padding: 0.15rem 0.5rem;
   color: var(--brand-blue);
   background: var(--brand-blue-50);
   border: 1px solid var(--brand-blue-100);
   border-radius: 1rem;
-  font-size: 0.72rem;
+  font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
 }
 
 .radius-range-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   color: var(--text-faint);
-  font-size: 0.58rem;
+  font-size: 0.52rem;
 }
 
 /* Coordinates */
 .coordinate-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
-.coordinate-grid .field {
-  gap: 0.3rem;
-}
-
-.coordinate-grid .field > span {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-}
+.coordinate-grid .field { gap: 0.2rem; }
+.coordinate-grid .field > span { color: var(--text-muted); font-size: 0.58rem; font-weight: 700; }
 
 .coordinate-grid input {
   width: 100%;
-  padding: 0.5rem 0.65rem;
+  padding: 0.4rem 0.55rem;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-primary);
   background: var(--surface-card);
-  transition: border-color var(--transition-fast),
-              box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .coordinate-grid input:focus {
@@ -555,113 +653,118 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 /* Filter Actions */
 .filter-actions {
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
-  gap: 0.5rem;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 0.4rem;
 }
 
 .filter-actions :deep(.p-button) {
-  padding: 0.6rem;
-  font-size: 0.72rem;
+  padding: 0.5rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  border-radius: var(--radius-md);
-}
-
-/* Hint */
-.filter-hint {
-  margin: 0.65rem 0 0;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.65rem;
-  color: var(--text-muted);
-  background: var(--brand-blue-50);
-  border: 1px solid var(--brand-blue-100);
   border-radius: var(--radius-sm);
-  font-size: 0.65rem;
-  line-height: 1.5;
-}
-
-.filter-hint i {
-  color: var(--brand-blue);
-  font-size: 0.7rem;
-  flex-shrink: 0;
 }
 
 /* ── Results Header ──────────────────────────────────────────── */
 .finder-results-header {
-  padding: 0.65rem 1rem;
-  border-top: 1px solid #eef1f5;
-  border-bottom: 1px solid #eef1f5;
-  background: linear-gradient(135deg, var(--surface-subtle) 0%, #f0f3f7 100%);
+  padding: 0.5rem 0.85rem;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface-subtle);
 }
 
-.finder-results-header div {
+.results-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 0.35rem;
 }
 
 .finder-results-header strong {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: var(--text-primary);
 }
 
-.finder-results-header span {
+.results-filter-note {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.6rem;
   font-weight: 500;
 }
 
+.result-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.result-search-wrap i {
+  position: absolute;
+  left: 0.55rem;
+  color: var(--text-faint);
+  font-size: 0.65rem;
+  pointer-events: none;
+}
+
+.result-search-wrap input {
+  width: 100%;
+  padding: 0.35rem 0.55rem 0.35rem 1.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  font-size: 0.68rem;
+  color: var(--text-primary);
+  transition: border-color var(--transition-fast);
+}
+
+.result-search-wrap input:focus {
+  outline: none;
+  border-color: var(--brand-blue);
+}
+
+.result-search-wrap input::placeholder { color: var(--text-faint); }
+
 /* ── Results List ────────────────────────────────────────────── */
-.finder-left-panel .finder-results {
-  min-height: 0;
-  padding: 0.6rem;
-  overflow-y: auto;
-  align-content: start;
-}
-
-.finder-left-panel .finder-results::-webkit-scrollbar { width: 4px; }
-.finder-left-panel .finder-results::-webkit-scrollbar-track { background: transparent; }
-.finder-left-panel .finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
-
 .finder-result-state {
-  min-height: 180px;
-  gap: 0.6rem;
+  min-height: 140px;
+  gap: 0.5rem;
+  padding: 1rem;
 }
 
-.finder-result-state span {
-  font-size: 0.78rem;
-}
-
-.finder-results {
-  padding: 0.6rem;
-  overflow-y: auto;
-  display: grid;
-  gap: 0.45rem;
-}
+.finder-result-state span { font-size: 0.72rem; }
+.finder-result-state i { font-size: 1.5rem; }
 
 .loading-pulse {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: 3px solid var(--brand-blue-100);
   border-top-color: var(--brand-blue);
   border-radius: 50%;
   animation: finder-spin 0.75s linear infinite;
 }
 
-@keyframes finder-spin {
-  to { transform: rotate(360deg); }
+@keyframes finder-spin { to { transform: rotate(360deg); } }
+
+.finder-results {
+  min-height: 0;
+  padding: 0.45rem;
+  overflow-y: auto;
+  align-content: start;
+  display: grid;
+  gap: 0.3rem;
 }
+
+.finder-results::-webkit-scrollbar { width: 3px; }
+.finder-results::-webkit-scrollbar-track { background: transparent; }
+.finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
 
 .result-card {
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.6rem;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.7rem;
+  gap: 0.55rem;
   align-items: center;
   text-align: left;
   color: var(--text-primary);
@@ -675,26 +778,23 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .result-card:hover {
   border-color: var(--brand-blue-100);
   background: #f8faff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06),
-              0 0 0 1px rgba(37, 99, 235, 0.04);
-  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
 }
 
 .result-card.selected {
   border-color: var(--brand-blue);
   background: linear-gradient(135deg, #f5f8ff 0%, #eef3ff 100%);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1),
-              0 4px 12px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1), 0 2px 8px rgba(37, 99, 235, 0.08);
 }
 
 .result-marker {
-  width: 2.15rem;
-  height: 2.15rem;
+  width: 1.85rem;
+  height: 1.85rem;
   display: grid;
   place-items: center;
   color: #fff;
   border-radius: 50%;
-  font-size: 0.72rem;
+  font-size: 0.6rem;
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
@@ -702,30 +802,72 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .result-info {
   min-width: 0;
   display: grid;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 
-.result-info strong {
-  font-size: 0.78rem;
+.result-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.result-name-row strong {
+  font-size: 0.72rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.result-meta {
+.result-rating-tag { transform: scale(0.85); transform-origin: left; }
+
+.result-category {
+  color: var(--brand-blue);
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.result-address {
+  color: var(--text-faint);
+  font-size: 0.58rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.1rem;
+}
+
+.result-distance {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: 0.55rem;
   font-weight: 500;
 }
 
-.result-info small {
+.result-distance i { font-size: 0.5rem; }
+
+.result-status-tag { transform: scale(0.8); transform-origin: left; }
+
+.result-chevron {
   color: var(--text-faint);
   font-size: 0.6rem;
-  line-height: 1.4;
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
 }
 
-.result-tag {
-  flex-shrink: 0;
-}
+.result-card:hover .result-chevron,
+.result-card.selected .result-chevron { color: var(--brand-blue); }
 
 /* ── Map Stage ───────────────────────────────────────────────── */
 .finder-map-stage {
@@ -733,7 +875,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: linear-gradient(135deg, #e8eef5 0%, #dfe6ef 100%);
+  background: #e8eef5;
 }
 
 .leaflet-map {
@@ -764,81 +906,36 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .map-source-badge {
   position: absolute;
   z-index: 500;
-  left: 0.85rem;
-  bottom: 1.5rem;
-  max-width: 290px;
-  padding: 0.6rem 0.8rem;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  max-width: 260px;
+  padding: 0.5rem 0.7rem;
   display: flex;
-  gap: 0.55rem;
+  gap: 0.45rem;
   align-items: flex-start;
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(221, 229, 239, 0.95);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px rgba(30, 54, 84, 0.12);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 10px rgba(30, 54, 84, 0.1);
   backdrop-filter: blur(12px);
 }
 
-.map-source-badge > i {
-  margin-top: 0.05rem;
-  color: #16a34a;
-  font-size: 0.85rem;
-}
+.map-source-badge > i { margin-top: 0.02rem; color: #16a34a; font-size: 0.75rem; }
+.map-source-badge div { display: grid; gap: 0.1rem; }
+.map-source-badge strong { font-size: 0.58rem; font-weight: 700; }
+.map-source-badge span { color: #718096; font-size: 0.52rem; line-height: 1.45; }
 
-.map-source-badge div { display: grid; gap: 0.15rem; }
-.map-source-badge strong { font-size: 0.65rem; font-weight: 700; }
-.map-source-badge span { color: #718096; font-size: 0.58rem; line-height: 1.5; }
-
-/* ── Place Detail Overlay ────────────────────────────────────── */
-.place-detail-overlay {
-  position: absolute;
-  z-index: 600;
-  top: 0.85rem;
-  right: 0.85rem;
-  width: min(330px, calc(100% - 1.7rem));
-  max-height: calc(100% - 1.7rem);
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(229, 234, 243, 0.95);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12),
-              0 0 0 1px rgba(255, 255, 255, 0.8) inset;
-  backdrop-filter: blur(16px);
-  display: flex;
-  flex-direction: column;
-}
-
-.place-detail-overlay .detail-close {
-  position: absolute;
-  top: 0.7rem;
-  right: 0.7rem;
-  width: 1.85rem;
-  height: 1.85rem;
+/* ── Detail Dialog ───────────────────────────────────────────── */
+.detail-dialog {
   display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  background: rgba(245, 247, 250, 0.9);
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  z-index: 1;
+  gap: 1rem;
 }
 
-.place-detail-overlay .detail-close:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-default);
-  transform: scale(1.05);
-}
-
-.detail-header {
-  padding: 1rem 1rem 0.85rem;
+.detail-hero-bar {
   display: flex;
-  gap: 0.8rem;
+  gap: 0.75rem;
   align-items: flex-start;
-  background: linear-gradient(135deg, #f8faff 0%, #f5f8ff 100%);
-  border-bottom: 1px solid #eef1f5;
 }
 
 .detail-hero {
@@ -853,80 +950,117 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.detail-header .eyebrow {
-  margin-bottom: 0.15rem;
-  font-size: 0.6rem;
-}
-
-.place-detail-overlay h2 {
-  margin: 0 2.5rem 0.3rem 0;
+.detail-hero-info h2 {
+  margin: 0;
   font-size: 1.1rem;
   font-weight: 800;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1.3;
   color: var(--text-primary);
 }
 
-.detail-body {
-  padding: 0.85rem 1rem;
+.detail-hero-meta {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  flex-wrap: wrap;
 }
 
-.detail-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.detail-hero-meta > span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
-.detail-list p,
-.detail-list a {
+.detail-info-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-info-item {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.65rem;
   align-items: flex-start;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.5;
 }
 
-.detail-list p i,
-.detail-list a i {
-  margin-top: 0.12rem;
+.detail-info-item > i {
+  margin-top: 0.1rem;
   color: var(--brand-blue);
   font-size: 0.72rem;
+  width: 1rem;
+  text-align: center;
   flex-shrink: 0;
 }
 
-.detail-list a {
-  color: var(--brand-blue);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--transition-fast);
+.detail-info-item > div {
+  display: grid;
+  gap: 0.1rem;
 }
 
-.detail-list a:hover { opacity: 0.75; transform: translateX(2px); }
-
-.detail-actions {
-  padding: 0.85rem 1rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  border-top: 1px solid #eef1f5;
-}
-
-.place-detail-overlay .field > span {
+.detail-info-label {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-info-value {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.detail-info-value.detail-types {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.detail-info-link {
+  color: var(--brand-blue);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity var(--transition-fast);
+}
+
+.detail-info-link:hover { opacity: 0.75; }
+
+.detail-assignment {
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.detail-assignment h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.detail-assignment-fields {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-assignment-fields .field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.detail-assignment-fields .field > span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
   font-weight: 700;
 }
 
-.place-detail-overlay > .detail-actions > :deep(.p-button) {
-  margin-top: 0.2rem;
-  padding: 0.65rem;
-  font-weight: 700;
-  border-radius: var(--radius-md);
+.detail-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
@@ -936,21 +1070,20 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 @media (max-width: 900px) {
+  .finder-page { margin: -0.8rem; }
   .finder-desktop-shell {
-    min-height: 940px;
     grid-template-columns: 1fr;
-    grid-template-rows: 520px 520px;
-    overflow: visible;
+    grid-template-rows: auto minmax(400px, 1fr);
   }
   .finder-left-panel { border-right: 0; border-bottom: 1px solid var(--border-light); }
-  .finder-filter-scroll { max-height: 360px; }
+  .finder-filter-scroll { max-height: 300px; }
 }
 
 @media (max-width: 760px) {
-  .finder-page { height: auto; min-height: 0; }
-  .finder-heading { align-items: flex-start; }
-  .finder-heading h1 { font-size: 1.45rem; }
-  .map-source-badge { right: 0.65rem; max-width: none; }
+  .finder-page { margin: -0.8rem; }
+  .finder-panel-title h1 { font-size: 0.9rem; }
+  .map-source-badge { max-width: none; }
+  .category-grid { grid-template-columns: repeat(3, 1fr); }
 }
 </style>
 
@@ -968,9 +1101,9 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   border-radius: 50% 50% 50% 0;
   box-shadow: 0 4px 14px rgba(22, 41, 67, 0.3);
   transform: rotate(-45deg);
-  transition: width var(--transition-fast),
-              height var(--transition-fast),
-              box-shadow var(--transition-fast);
+  transition: width 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              height 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .finder-leaflet-marker i { transform: rotate(45deg); font-size: 0.8rem; }

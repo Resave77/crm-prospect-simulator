@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/auth'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
 const email = ref('')
 const password = ref('')
 const error = ref('')
@@ -31,145 +32,233 @@ async function submit() {
 
 <template>
   <main class="login-page">
-    <section class="login-brand" aria-label="Product introduction">
-      <div class="brand-mark">Y</div>
-      <div>
-        <p class="eyebrow">Enterprise field sales</p>
-        <h1>Turn every qualified place into a lasting customer relationship.</h1>
-        <p class="brand-copy">Prospect discovery, accountable field visits, and customer attendance in one controlled workflow.</p>
-      </div>
-      <div class="security-note"><i class="pi pi-shield" aria-hidden="true" /> Secure role-based workspace</div>
-    </section>
+    <!-- Glowing Accent Circles for Ambient Glass Effect -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
 
-    <section class="login-panel">
+    <!-- Centered Glass Card -->
+    <div class="login-center">
       <form class="login-card" @submit.prevent="submit">
-        <div>
-          <p class="eyebrow">Yummy CRM</p>
+        <div class="header-group">
+          <div class="brand-mark-glass">Y</div>
           <h2>Welcome back</h2>
-          <p class="muted">Sign in with your assigned company account.</p>
+          <p class="muted">Sign in to access your workspace</p>
         </div>
 
-        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <Message v-if="error" severity="error" :closable="false" class="error-msg">{{ error }}</Message>
 
-        <label class="field">
-          <span>Email address</span>
-          <InputText v-model="email" type="email" autocomplete="username" placeholder="name@yummy.test" required fluid />
-        </label>
-        <label class="field">
-          <span>Password</span>
-          <Password v-model="password" autocomplete="current-password" :feedback="false" toggle-mask required fluid />
-        </label>
+        <div class="field-group">
+          <label class="field">
+            <span>Email Address</span>
+            <InputText 
+              v-model="email" 
+              type="email" 
+              placeholder="name@company.com" 
+              required 
+              fluid
+            />
+          </label>
 
-        <Button type="submit" label="Sign in" icon="pi pi-arrow-right" icon-pos="right" :loading="auth.loading" fluid />
-        <p class="privacy-copy">Access is restricted to authorized Administrators and Sales Executives.</p>
+          <label class="field">
+            <span>Password</span>
+            <Password 
+              v-model="password" 
+              :feedback="false" 
+              toggle-mask 
+              required 
+              placeholder="••••••••" 
+              fluid
+            />
+          </label>
+        </div>
+
+        <Button 
+          type="submit" 
+          label="Sign in" 
+          icon="pi pi-arrow-right" 
+          icon-pos="right" 
+          :loading="auth.loading" 
+          size="large" 
+          fluid 
+          class="submit-btn"
+        />
+
+        <p class="privacy-copy">
+          Restricted access for authorized Administrators &amp; Sales Executives only.
+        </p>
       </form>
-    </section>
+    </div>
   </main>
 </template>
 
 <style scoped>
+/* Base Page & Ambient Lighting */
 .login-page {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
-}
-
-.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   overflow: hidden;
-  padding: clamp(3rem, 8vw, 8rem);
+  background: #092621;
+}
+
+/* Glowing Background Blobs (Memberikan efek warna tembus pandang) */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.6;
+}
+
+.blob-1 {
+  width: 350px;
+  height: 350px;
+  background: #2563eb;
+  top: 15%;
+  left: 20%;
+}
+
+.blob-2 {
+  width: 400px;
+  height: 400px;
+  background: #10b981;
+  bottom: 15%;
+  right: 20%;
+}
+
+/* Container */
+.login-center {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 440px;
+  padding: 1.5rem;
+}
+
+/* Glassmorphism Card Utama */
+.login-card {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 28px;
+  padding: 2.5rem 2.25rem;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  color: #fff;
-  background: radial-gradient(circle at 80% 10%, #29a98f 0, transparent 35%),
-              linear-gradient(145deg, #073f38, #0b6b5c 62%, #075044);
+  gap: 1.5rem;
+  color: #ffffff;
 }
 
-.login-brand::after {
-  content: "";
-  position: absolute;
-  width: 26rem;
-  height: 26rem;
-  right: -11rem;
-  bottom: -12rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 4rem rgba(255, 255, 255, 0.03),
-    0 0 0 8rem rgba(255, 255, 255, 0.02);
+/* Brand Icon & Typography */
+.header-group {
+  text-align: center;
 }
 
-.login-brand :deep(.eyebrow) { color: #a6f4df; }
-
-.login-brand h1 {
-  max-width: 780px;
-  margin: 0;
-  font-size: clamp(2.5rem, 5vw, 5rem);
-  line-height: 1.02;
-  letter-spacing: -0.055em;
-  font-weight: 800;
-}
-
-.brand-copy {
-  max-width: 620px;
-  color: #d9eee9;
-  font-size: 1.1rem;
-  line-height: 1.7;
-}
-
-.security-note {
-  display: flex;
-  gap: 0.65rem;
-  align-items: center;
-  color: #d9eee9;
-  font-size: 0.88rem;
-}
-
-.brand-mark {
-  width: 2.6rem;
-  height: 2.6rem;
-  display: inline-grid;
+.brand-mark-glass {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1.25rem;
+  display: grid;
   place-items: center;
-  border-radius: var(--radius-md);
+  font-size: 1.8rem;
   font-weight: 900;
-  background: #f4c95d;
-  color: #173f37;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
-.login-panel {
-  padding: 2rem;
-  display: grid;
-  place-items: center;
-  background: #fcfcfd;
+.header-group h2 {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
 }
 
-.login-card {
-  width: min(100%, 430px);
-  display: grid;
+.muted {
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* Form Fields */
+.field-group {
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
 }
 
-.login-card h2 {
-  margin: 0;
-  font-size: 2.1rem;
-  letter-spacing: -0.04em;
-  font-weight: 800;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.02em;
+}
+
+/* Deep Style untuk Override Komponen PrimeVue ke Tampilan Glass */
+:deep(.p-inputtext),
+:deep(.p-password-input) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+  padding: 0.75rem 1rem !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.p-inputtext::placeholder),
+:deep(.p-password-input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+:deep(.p-inputtext:focus),
+:deep(.p-password-input:focus) {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+}
+
+:deep(.p-password-toggle-icon) {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Submit Button Override */
+.submit-btn {
+  margin-top: 0.5rem;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  background: #2563eb !important;
+  border: none !important;
+  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.5) !important;
 }
 
 .privacy-copy {
-  color: #8490a3;
   text-align: center;
-  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
   line-height: 1.5;
   margin: 0;
 }
 
-@media (max-width: 900px) {
-  .login-page { grid-template-columns: 1fr; }
-  .login-brand { min-height: 260px; padding: 2rem; gap: 2rem; }
-  .login-brand h1 { font-size: 2.3rem; }
-  .brand-copy, .security-note { display: none; }
-  .login-panel { padding: 2rem 1.25rem 3rem; }
+.error-msg {
+  border-radius: 12px;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 2rem 1.5rem;
+    border-radius: 20px;
+  }
 }
 </style>

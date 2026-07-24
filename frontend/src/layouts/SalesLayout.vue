@@ -56,7 +56,7 @@ const auth = useAuthStore()
 .sales-page-wrapper {
   width: 100%;
   min-height: 100vh;
-  background: #edf2f7;
+  background: linear-gradient(180deg, #eef2f7 0%, #e2e8f0 100%);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -68,10 +68,10 @@ const auth = useAuthStore()
   max-width: 440px;
   min-height: 100vh;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #eef1f6;
   border-radius: 28px;
   position: relative;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08), 0 4px 16px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   padding-bottom: 80px;
@@ -102,16 +102,17 @@ const auth = useAuthStore()
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #2563eb;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #ffffff;
   font-weight: 800;
   font-size: 1.05rem;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
 .sales-identity div { display: flex; flex-direction: column; }
-.sales-identity strong { font-size: 0.95rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
+.sales-identity strong { font-size: 0.92rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
 .sales-identity small {
   color: #64748b;
   font-size: 0.72rem;
@@ -124,10 +125,10 @@ const auth = useAuthStore()
   height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 12px;
   color: #64748b;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border: 1px solid #eef1f6;
   text-decoration: none;
   font-size: 0.95rem;
   transition: all 0.2s ease;
@@ -135,7 +136,8 @@ const auth = useAuthStore()
 
 .sales-header :deep(.icon-control:hover) {
   color: #2563eb;
-  border-color: #cbd5e1;
+  border-color: #dbeafe;
+  background: #eff6ff;
 }
 
 .sales-content {
@@ -151,12 +153,12 @@ const auth = useAuthStore()
   width: min(100%, 440px);
   height: 68px;
   background: #ffffff;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #f1f5f9;
   border-radius: 20px 20px 0 0;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   padding: 0.35rem 0.5rem;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.05);
   z-index: 100;
 }
 
@@ -166,9 +168,9 @@ const auth = useAuthStore()
   align-items: center;
   justify-content: center;
   gap: 0.2rem;
-  color: #64748b;
+  color: #94a3b8;
   text-decoration: none;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
   border-radius: 14px;
   padding: 0.3rem 0;
@@ -176,11 +178,12 @@ const auth = useAuthStore()
 }
 
 .sales-nav a i {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
+  transition: color 0.2s ease;
 }
 
 .sales-nav a .nav-symbol {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 800;
   line-height: 1.15;
 }
@@ -189,6 +192,10 @@ const auth = useAuthStore()
   color: #2563eb;
   background: #eff6ff;
   font-weight: 800;
+}
+
+.sales-nav a:not(.router-link-active):hover {
+  color: #64748b;
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */

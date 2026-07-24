@@ -86,6 +86,11 @@ const companyRegionOptions = computed(() => {
   return [{ label: 'All Regions', value: '' }, ...regions.map((region) => ({ label: region, value: region }))]
 })
 
+function tierFor(_code: string) { return 'Standard' }
+function npwpFor(_code: string) { return '' }
+function statusFor(_code: string) { return 'ACTIVE' }
+function badgeFor(_code: string) { return '' }
+
 const companies = computed(() => {
   const groups = new Map<string, {
     id: string
