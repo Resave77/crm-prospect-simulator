@@ -294,8 +294,8 @@ async function submitCheckIn() {
 
     selfieFile.value = null
 
-    router.push({
-      name: resolvedEntityType.value === 'customer' ? 'SalesCustomerCheckOut' : 'SalesProspectCheckOut',
+    router.replace({
+      name: resolvedEntityType.value === 'customer' ? 'SalesCustomerCheckInSuccess' : 'SalesProspectCheckInSuccess',
       params: { id: entity.value.entityId },
     })
   } catch (caught) {

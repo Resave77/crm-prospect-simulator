@@ -26,23 +26,23 @@ const auth = useAuthStore()
       </main>
 
       <nav class="sales-nav" aria-label="Sales navigation">
-        <RouterLink to="/sales/dashboard">
+        <RouterLink to="/sales/dashboard" class="nav-item">
           <i class="pi pi-home" />
           <span>Home</span>
         </RouterLink>
-        <RouterLink to="/sales/my-customers">
-          <span class="nav-symbol">C</span>
+        <RouterLink to="/sales/my-customers" class="nav-item">
+          <i class="pi pi-users" />
           <span>Customer</span>
         </RouterLink>
-        <RouterLink to="/sales/my-prospects">
-          <span class="nav-symbol">P</span>
+        <RouterLink to="/sales/my-prospects" class="nav-item">
+          <i class="pi pi-briefcase" />
           <span>Prospect</span>
         </RouterLink>
-        <RouterLink to="/sales/history">
+        <RouterLink to="/sales/history" class="nav-item">
           <i class="pi pi-history" />
           <span>History</span>
         </RouterLink>
-        <RouterLink to="/sales/profile">
+        <RouterLink to="/sales/profile" class="nav-item">
           <i class="pi pi-user" />
           <span>Profile</span>
         </RouterLink>
@@ -151,18 +151,19 @@ const auth = useAuthStore()
   left: 50%;
   transform: translateX(-50%);
   width: min(100%, 440px);
-  height: 68px;
-  background: #ffffff;
-  border-top: 1px solid #f1f5f9;
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid #e2e8f0;
   border-radius: 20px 20px 0 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  padding: 0.35rem 0.5rem;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.05);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
   z-index: 100;
 }
 
-.sales-nav a {
+.sales-nav .nav-item {
+  min-width: 0;
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -170,31 +171,24 @@ const auth = useAuthStore()
   gap: 0.2rem;
   color: #94a3b8;
   text-decoration: none;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 600;
   border-radius: 14px;
-  padding: 0.3rem 0;
   transition: all 0.2s ease;
 }
 
-.sales-nav a i {
-  font-size: 1.1rem;
+.sales-nav .nav-item i {
+  font-size: 1.05rem;
   transition: color 0.2s ease;
 }
 
-.sales-nav a .nav-symbol {
-  font-size: 0.9rem;
-  font-weight: 800;
-  line-height: 1.15;
-}
-
-.sales-nav a.router-link-active {
+.sales-nav .nav-item.router-link-active {
   color: #2563eb;
   background: #eff6ff;
-  font-weight: 800;
+  font-weight: 700;
 }
 
-.sales-nav a:not(.router-link-active):hover {
+.sales-nav .nav-item:not(.router-link-active):hover {
   color: #64748b;
 }
 

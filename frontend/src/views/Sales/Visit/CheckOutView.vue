@@ -241,7 +241,15 @@ async function handleSubmit() {
         // Transition may fail if already CONTACTED or beyond
       }
 
-      router.push({ path: '/sales/pipeline', query: { highlight: entity.value.entityId } })
+      router.replace({
+        name: 'SalesProspectCheckOutSuccess',
+        params: { id: entity.value.entityId },
+      })
+    } else {
+      router.replace({
+        name: 'SalesCustomerCheckOutSuccess',
+        params: { id: entity.value.entityId },
+      })
     }
   } catch (caught) {
     pageError.value = extractError(caught)

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
@@ -9,6 +10,7 @@ import { BOARD_STATUSES, nextStage, previousStage } from '../../../domain/pipeli
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 
+const route = useRoute()
 const crm = useCrmStore()
 const selected = ref<Prospect | null>(null)
 const target = ref<ProspectStatus>('CONTACTED')
@@ -31,6 +33,8 @@ function finishTouch(item: Prospect, event: TouchEvent) {
   if (delta < -70) { const stage = nextStage(item.status); if (stage) openTransition(item, stage) }
   if (delta > 70) { const stage = previousStage(item.status); if (stage) openTransition(item, stage) }
 }
+const highlightId = ref<string | null>(null)
+
 async function submit() {
   if (!selected.value) return
   error.value = ''
@@ -40,7 +44,21 @@ async function submit() {
     selected.value = null
   } catch (caught) { error.value = crm.errorMessage(caught) }
 }
-onMounted(async () => { try { await crm.loadMyProspects() } catch (caught) { error.value = crm.errorMessage(caught) } })
+onMounted(async () => {
+  try {
+    await crm.loadMyProspects()
+    const qId = route.query.prospectId as string | undefined
+    const qAction = route.query.action as string | undefined
+    if (qId && qAction === 'update') {
+      highlightId.value = qId
+      await nextTick()
+      const el = document.getElementById(`prospect-card-${qId}`)
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }) }
+      success.value = `Prospect updated — review and move to the next stage if ready.`
+      setTimeout(() => { highlightId.value = null }, 4000)
+    }
+  } catch (caught) { error.value = crm.errorMessage(caught) }
+})
 </script>
 
 <template>
@@ -55,7 +73,7 @@ onMounted(async () => { try { await crm.loadMyProspects() } catch (caught) { err
       <section v-for="stage in BOARD_STATUSES" :key="stage" class="pipeline-column">
         <header><strong>{{ title(stage) }}</strong><span>{{ byStage(stage).length }}</span></header>
         <div class="pipeline-column-body">
-          <article v-for="item in byStage(stage)" :key="item.id" class="kanban-card" @touchstart="touchStart = $event.touches[0].clientX" @touchend="finishTouch(item, $event)">
+          <article v-for="item in byStage(stage)" :key="item.id" :id="`prospect-card-${item.id}`" class="kanban-card" :class="{ 'kanban-card--highlight': highlightId === item.id }" @touchstart="touchStart = $event.touches[0].clientX" @touchend="finishTouch(item, $event)">
             <RouterLink :to="`/sales/my-prospects/${item.id}`">
               <span class="industry-pill">{{ item.industryGroup }}</span><h2>{{ item.placeName }}</h2><p><i class="pi pi-map-marker" /> {{ item.formattedAddress }}</p><small>{{ item.assignedSalesExecutive }} · {{ title(item.status) }}</small>
             </RouterLink>
@@ -99,4 +117,5 @@ onMounted(async () => { try { await crm.loadMyProspects() } catch (caught) { err
 .mobile-hint { margin: 0; color: #758297; font-size: 0.58rem; line-height: 1.5; }
 .sales-pipeline-board { margin-right: -0.8rem; width: calc(100% + 0.8rem); }
 .industry-pill { display: inline-block; padding: 0.1rem 0.4rem; color: var(--brand-blue); background: var(--brand-blue-bg); border-radius: 0.3rem; font-size: 0.48rem; font-weight: 600; letter-spacing: 0.02em; }
+.kanban-card--highlight { border-color: #2563eb !important; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25), var(--shadow-sm) !important; transition: box-shadow 0.4s ease, border-color 0.4s ease; }
 </style>

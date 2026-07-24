@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Message from 'primevue/message'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
@@ -16,9 +14,12 @@ const sortBy = ref<'distance' | 'name-asc' | 'name-desc'>('distance')
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 const gpsDenied = ref(false)
 const showSortMenu = ref(false)
-const showFilterPanel = ref(false)
+
+const showFilterSheet = ref(false)
 const filterSegment = ref('')
 const filterCategory = ref('')
+const draftSegment = ref('')
+const draftCategory = ref('')
 
 type SortOption = { label: string; value: typeof sortBy.value }
 const sortOptions: SortOption[] = [
@@ -99,7 +100,54 @@ function activeFilterCount(): number {
 function resetFilters() {
   filterSegment.value = ''
   filterCategory.value = ''
+  draftSegment.value = ''
+  draftCategory.value = ''
 }
+
+function openFilterSheet() {
+  draftSegment.value = filterSegment.value
+  draftCategory.value = filterCategory.value
+  showFilterSheet.value = true
+}
+
+function applyDraftFilters() {
+  filterSegment.value = draftSegment.value
+  filterCategory.value = draftCategory.value
+  showFilterSheet.value = false
+}
+
+function clearDraft() {
+  draftSegment.value = ''
+  draftCategory.value = ''
+}
+
+function draftFilterCount(): number {
+  let n = 0
+  if (draftSegment.value) n++
+  if (draftCategory.value) n++
+  return n
+}
+
+function draftCountForSegment(seg: string): number {
+  let list = allCustomers.value
+  if (draftCategory.value) list = list.filter((c) => c.category === draftCategory.value)
+  if (seg) return list.filter((c) => c.segment === seg).length
+  return list.length
+}
+
+function draftCountForCategory(cat: string): number {
+  let list = allCustomers.value
+  if (draftSegment.value) list = list.filter((c) => c.segment === draftSegment.value)
+  if (cat) return list.filter((c) => c.category === cat).length
+  return list.length
+}
+
+const draftFilteredCount = computed(() => {
+  let list = allCustomers.value
+  if (draftSegment.value) list = list.filter((c) => c.segment === draftSegment.value)
+  if (draftCategory.value) list = list.filter((c) => c.category === draftCategory.value)
+  return list.length
+})
 
 const allCustomers = computed(() => crm.myCustomers)
 
@@ -160,6 +208,23 @@ const displayedCustomers = computed(() => {
   return list
 })
 
+function onSheetKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') showFilterSheet.value = false
+}
+
+watch(showFilterSheet, (open) => {
+  if (open) {
+    document.body.style.overflow = 'hidden'
+    nextTick(() => document.getElementById('filter-sheet-close')?.focus())
+    document.addEventListener('keydown', onSheetKeydown)
+  } else {
+    document.body.style.overflow = ''
+    document.removeEventListener('keydown', onSheetKeydown)
+  }
+})
+
+onUnmounted(() => { document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKeydown) })
+
 onMounted(async () => {
   acquireGPS()
   try { await crm.loadMyCustomers() } catch (e: unknown) { error.value = crm.errorMessage(e) }
@@ -176,7 +241,7 @@ onMounted(async () => {
           <small>{{ allCustomers.length }} customers &middot; {{ todayCustomers.length }} updated today</small>
         </div>
       </div>
-      <button class="mc-header-action" @click="showFilterPanel = true" aria-label="Open filters">
+      <button class="mc-header-action" @click="openFilterSheet" aria-label="Open filters">
         <i class="pi pi-sliders-h" />
         <span v-if="activeFilterCount()" class="mc-notif-dot">{{ activeFilterCount() }}</span>
       </button>
@@ -286,33 +351,68 @@ onMounted(async () => {
       </div>
     </template>
 
-    <button class="mc-fab" @click="showFilterPanel = true" aria-label="Open filter panel">
+    <button class="mc-fab" @click="openFilterSheet" aria-label="Open filter panel">
       <i class="pi pi-filter" />
       <span v-if="activeFilterCount()" class="mc-fab-badge">{{ activeFilterCount() }}</span>
     </button>
 
-    <Dialog v-model:visible="showFilterPanel" modal header="Filter customers" :style="{ width: 'min(92vw, 400px)' }" :dt="{ background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)' }">
-      <div class="mc-filter-body">
-        <label class="mc-filter-field">
-          <span>Segment</span>
-          <select v-model="filterSegment">
-            <option value="">All segments</option>
-            <option v-for="s in availableSegments" :key="s" :value="s">{{ s }}</option>
-          </select>
-        </label>
-        <label class="mc-filter-field">
-          <span>Category</span>
-          <select v-model="filterCategory">
-            <option value="">All categories</option>
-            <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
-          </select>
-        </label>
+    <!-- Filter Bottom Sheet -->
+    <Teleport to="body">
+      <div v-if="showFilterSheet" class="mc-sheet-overlay" @click.self="showFilterSheet = false" />
+      <div v-if="showFilterSheet" class="mc-sheet" role="dialog" aria-labelledby="filter-sheet-title">
+        <div class="mc-sheet-handle" />
+
+        <div class="mc-sheet-header">
+          <div class="mc-sheet-header-text">
+            <strong id="filter-sheet-title">Filter customers</strong>
+            <small>Refine customers by segment and category</small>
+          </div>
+          <div class="mc-sheet-header-actions">
+            <button class="mc-sheet-clear" @click="clearDraft">Clear all</button>
+            <button id="filter-sheet-close" class="mc-sheet-close" aria-label="Close filters" @click="showFilterSheet = false">
+              <i class="pi pi-times" />
+            </button>
+          </div>
+        </div>
+
+        <div class="mc-sheet-body">
+          <div v-if="availableSegments.length" class="mc-sheet-group">
+            <span class="mc-sheet-group-label">Segment</span>
+            <div class="mc-sheet-chips">
+              <button class="mc-chip" :class="{ active: !draftSegment }" aria-pressed="!draftSegment" @click="draftSegment = ''">
+                All
+              </button>
+              <button v-for="seg in availableSegments" :key="seg" class="mc-chip" :class="{ active: draftSegment === seg }" :aria-pressed="draftSegment === seg" @click="draftSegment = draftSegment === seg ? '' : seg">
+                {{ seg }} <span class="mc-chip-count">{{ draftCountForSegment(draftSegment === seg ? '' : seg) }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="availableCategories.length" class="mc-sheet-group">
+            <span class="mc-sheet-group-label">Category</span>
+            <div class="mc-sheet-chips">
+              <button class="mc-chip" :class="{ active: !draftCategory }" aria-pressed="!draftCategory" @click="draftCategory = ''">
+                All
+              </button>
+              <button v-for="cat in availableCategories" :key="cat" class="mc-chip" :class="{ active: draftCategory === cat }" :aria-pressed="draftCategory === cat" @click="draftCategory = draftCategory === cat ? '' : cat">
+                {{ cat }} <span class="mc-chip-count">{{ draftCountForCategory(draftCategory === cat ? '' : cat) }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!availableSegments.length && !availableCategories.length" class="mc-sheet-empty">
+            <span>No filter options available yet.</span>
+          </div>
+        </div>
+
+        <div class="mc-sheet-footer">
+          <button class="mc-sheet-reset" @click="clearDraft">Reset</button>
+          <button class="mc-sheet-apply" @click="applyDraftFilters">
+            Show {{ draftFilteredCount }} customer{{ draftFilteredCount !== 1 ? 's' : '' }}
+          </button>
+        </div>
       </div>
-      <template #footer>
-        <Button label="Reset" severity="secondary" text @click="resetFilters" />
-        <Button label="Apply filters" @click="showFilterPanel = false" />
-      </template>
-    </Dialog>
+    </Teleport>
   </section>
 </template>
 
@@ -500,14 +600,15 @@ onMounted(async () => {
 @keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .mc-fab {
-  position: fixed; bottom: 88px; left: 50%; transform: translateX(calc(220px - 24px));
+  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  right: max(1rem, calc((100vw - min(100%, 440px)) / 2 + 1rem));
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #059669, #047857); color: #fff;
   font-size: 1.1rem; cursor: pointer; z-index: 50;
   box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35);
   display: grid; place-items: center; transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.mc-fab:hover { transform: translateX(calc(220px - 24px)) scale(1.08); box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45); }
+.mc-fab:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45); }
 .mc-fab-badge {
   position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px;
   display: grid; place-items: center; border-radius: 9999px; background: #dc2626;
@@ -515,18 +616,96 @@ onMounted(async () => {
   border: 2px solid #fff;
 }
 
-.mc-filter-body { display: flex; flex-direction: column; gap: 0.85rem; }
-.mc-filter-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.mc-filter-field span { color: #64748b; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.mc-filter-field select {
-  padding: 0.55rem 0.7rem; border: 1px solid #e2e8f0; border-radius: 10px;
-  background: #f8fafc; color: #0f172a; font-size: 0.8rem; font-weight: 500;
-  cursor: pointer; transition: border-color 0.15s ease;
+/* ── Filter Bottom Sheet ──────────────────────────────────── */
+.mc-sheet-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+  z-index: 200; animation: mc-fade-in 0.2s ease;
 }
-.mc-filter-field select:focus { outline: 0; border-color: #059669; }
+.mc-sheet {
+  position: fixed; left: 50%; bottom: 0;
+  width: min(100%, 440px); max-height: 82dvh;
+  transform: translateX(-50%);
+  background: #fff; border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.12);
+  z-index: 201; display: flex; flex-direction: column;
+  animation: mc-sheet-up 0.25s ease;
+}
+.mc-sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: #d1d5db; margin: 0.65rem auto 0; flex-shrink: 0;
+}
+.mc-sheet-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 0.75rem 1.25rem 0.5rem; flex-shrink: 0;
+}
+.mc-sheet-header-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.mc-sheet-header-text strong { font-size: 0.95rem; font-weight: 800; color: #0f172a; }
+.mc-sheet-header-text small { font-size: 0.72rem; color: #64748b; }
+.mc-sheet-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.mc-sheet-clear {
+  padding: 0.3rem 0.6rem; border-radius: 8px; border: 0;
+  background: transparent; color: #2563eb; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.mc-sheet-clear:hover { background: #eff6ff; }
+.mc-sheet-close {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 50%; border: 0; background: #f1f5f9; color: #64748b;
+  cursor: pointer; font-size: 0.85rem; transition: all 0.15s ease;
+}
+.mc-sheet-close:hover { background: #e2e8f0; color: #0f172a; }
+.mc-sheet-body {
+  flex: 1; overflow-y: auto; padding: 0.25rem 1.25rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+.mc-sheet-group { margin-bottom: 1rem; }
+.mc-sheet-group-label {
+  display: block; margin-bottom: 0.5rem;
+  font-size: 0.7rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.mc-sheet-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.mc-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.4rem 0.75rem; border-radius: 9999px;
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  font-size: 0.72rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mc-chip:hover { border-color: #cbd5e1; background: #f8fafc; }
+.mc-chip.active {
+  background: #059669; border-color: #059669; color: #fff;
+}
+.mc-chip.active:hover { background: #047857; }
+.mc-chip-count {
+  font-size: 0.6rem; font-weight: 700; opacity: 0.7;
+}
+.mc-chip.active .mc-chip-count { opacity: 1; }
+.mc-sheet-empty {
+  padding: 1.5rem 0; text-align: center; color: #94a3b8; font-size: 0.8rem;
+}
+.mc-sheet-footer {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #f1f5f9; flex-shrink: 0;
+}
+.mc-sheet-reset {
+  padding: 0.65rem 1rem; border-radius: 12px; border: 1px solid #e2e8f0;
+  background: #fff; color: #475569; font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.mc-sheet-reset:hover { background: #f8fafc; border-color: #cbd5e1; }
+.mc-sheet-apply {
+  flex: 1; padding: 0.65rem 1rem; border-radius: 12px; border: 0;
+  background: #059669; color: #fff; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.mc-sheet-apply:hover { background: #047857; }
+
+@keyframes mc-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mc-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
 @media (max-width: 480px) {
-  .mc-fab { left: auto; right: 1rem; transform: none; }
-  .mc-fab:hover { transform: scale(1.08); }
+  .mc-fab { right: 1rem; }
 }
 </style>

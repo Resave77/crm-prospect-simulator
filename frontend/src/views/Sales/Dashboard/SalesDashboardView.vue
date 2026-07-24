@@ -20,7 +20,7 @@
       <RouterLink to="/sales/my-customers">
         <div class="quick-stats-info">
           <span class="stat-icon blue-dot">C</span>
-          <small>Today's customers</small>
+          <small>Total customers</small>
         </div>
         <strong>{{ crm.myCustomers.length }}</strong>
       </RouterLink>
