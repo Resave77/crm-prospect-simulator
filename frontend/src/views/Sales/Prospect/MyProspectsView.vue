@@ -7,12 +7,24 @@ import Tag from 'primevue/tag'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
+import {
+  TAB_STAGE_MAP,
+  TAB_LABELS,
+  TAB_ORDER,
+  type ProspectTab,
+  pipelineStatusLabel,
+  isActiveProspectStatus,
+  firstNonEmptyTab,
+  EMPTY_MESSAGES,
+  PIPELINE_ROUTE_NAME,
+} from '../../../utils/prospectPipeline'
 
 const auth = useAuthStore()
 const crm = useCrmStore()
 const error = ref('')
 const searchQuery = ref('')
-const activeTab = ref<'assigned' | 'visited' | 'followup' | 'won'>('assigned')
+const activeTab = ref<ProspectTab>('assigned')
+const hasUserSelectedTab = ref(false)
 const sortBy = ref<'distance' | 'name-asc' | 'name-desc' | 'recently-assigned' | 'last-updated'>('distance')
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 const gpsDenied = ref(false)
@@ -30,13 +42,6 @@ const sortOptions: SortOption[] = [
   { label: 'Recently assigned', value: 'recently-assigned' },
   { label: 'Last updated', value: 'last-updated' },
 ]
-
-const TAB_STATUSES: Record<typeof activeTab.value, ProspectStatus[]> = {
-  assigned: ['NEW_LEAD', 'INTERESTED', 'PROPOSAL_SENT'],
-  visited: ['CONTACTED'],
-  followup: ['QUALIFIED', 'NEGOTIATION'],
-  won: ['WON'],
-}
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371
@@ -74,16 +79,8 @@ function statusSeverity(status: ProspectStatus): 'info' | 'warn' | 'success' | '
   }
 }
 
-function statusLabel(status: ProspectStatus): string {
-  return status.replaceAll('_', ' ')
-}
-
-function tabForStatus(status: ProspectStatus): typeof activeTab.value {
-  if (TAB_STATUSES.assigned.includes(status)) return 'assigned'
-  if (TAB_STATUSES.visited.includes(status)) return 'visited'
-  if (TAB_STATUSES.followup.includes(status)) return 'followup'
-  if (TAB_STATUSES.won.includes(status)) return 'won'
-  return 'assigned'
+function tabLabel(tab: ProspectTab): string {
+  return TAB_LABELS[tab]
 }
 
 function hasCoordinates(p: Prospect): boolean {
@@ -129,33 +126,38 @@ function resetFilters() {
   filterHasCoords.value = false
 }
 
-const nonTerminal = computed(() =>
-  crm.myProspects.filter((p) => !['LOST', 'CONVERTED'].includes(p.status)),
+function selectTab(tab: ProspectTab) {
+  hasUserSelectedTab.value = true
+  activeTab.value = tab
+}
+
+const activeProspects = computed(() =>
+  crm.myProspects.filter((p) => isActiveProspectStatus(p.status)),
 )
 
-const tabCounts = computed(() => ({
-  assigned: nonTerminal.value.filter((p) => TAB_STATUSES.assigned.includes(p.status)).length,
-  visited: nonTerminal.value.filter((p) => TAB_STATUSES.visited.includes(p.status)).length,
-  followup: nonTerminal.value.filter((p) => TAB_STATUSES.followup.includes(p.status)).length,
-  won: crm.myProspects.filter((p) => p.status === 'WON').length,
-}))
+const tabCounts = computed(() => {
+  const counts = {} as Record<ProspectTab, number>
+  for (const tab of TAB_ORDER) {
+    counts[tab] = activeProspects.value.filter((p) => TAB_STAGE_MAP[tab].includes(p.status)).length
+  }
+  return counts
+})
 
 const availableIndustries = computed(() =>
-  [...new Set(nonTerminal.value.map((p) => p.industryGroup).filter(Boolean))].sort(),
+  [...new Set(activeProspects.value.map((p) => p.industryGroup).filter(Boolean))].sort(),
 )
 
 const availableCategories = computed(() =>
-  [...new Set(nonTerminal.value.map((p) => p.placeCategory).filter(Boolean))].sort(),
+  [...new Set(activeProspects.value.map((p) => p.placeCategory).filter(Boolean))].sort(),
 )
 
-const activeProspects = computed(() => {
-  const statuses = TAB_STATUSES[activeTab.value]
-  const pool = activeTab.value === 'won' ? crm.myProspects : nonTerminal.value
-  return pool.filter((p) => statuses.includes(p.status))
+const currentTabProspects = computed(() => {
+  const statuses = TAB_STAGE_MAP[activeTab.value]
+  return activeProspects.value.filter((p) => statuses.includes(p.status))
 })
 
 const filteredProspects = computed(() => {
-  let list = [...activeProspects.value]
+  let list = [...currentTabProspects.value]
   const q = searchQuery.value.trim().toLowerCase()
   if (q) {
     list = list.filter((p) => {
@@ -186,9 +188,16 @@ const displayedProspects = computed(() => {
   return list
 })
 
+const emptyMsg = computed(() => EMPTY_MESSAGES[activeTab.value])
+
 onMounted(async () => {
   acquireGPS()
-  try { await crm.loadMyProspects() } catch (e: unknown) { error.value = crm.errorMessage(e) }
+  try {
+    await crm.loadMyProspects()
+    if (!hasUserSelectedTab.value) {
+      activeTab.value = firstNonEmptyTab(tabCounts.value)
+    }
+  } catch (e: unknown) { error.value = crm.errorMessage(e) }
 })
 </script>
 
@@ -200,16 +209,32 @@ onMounted(async () => {
         <span class="mp-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
         <div class="mp-header-text">
           <strong>My prospects</strong>
-          <small>{{ nonTerminal.length }} prospects &middot; {{ tabCounts[activeTab] }} shown</small>
+          <small>{{ activeProspects.length }} active &middot; {{ displayedProspects.length }} shown</small>
         </div>
       </div>
-      <button class="mp-header-action" @click="showFilterPanel = true" aria-label="Open filters">
-        <i class="pi pi-sliders-h" />
-        <span v-if="activeFilterCount()" class="mp-notif-dot">{{ activeFilterCount() }}</span>
-      </button>
+      <div class="mp-header-actions">
+        <RouterLink class="mp-pipeline-btn" :to="{ name: PIPELINE_ROUTE_NAME }">
+          <i class="pi pi-chart-bar" />
+          <span>Sales Pipeline</span>
+        </RouterLink>
+        <button class="mp-header-action" @click="showFilterPanel = true" aria-label="Open filters">
+          <i class="pi pi-sliders-h" />
+          <span v-if="activeFilterCount()" class="mp-notif-dot">{{ activeFilterCount() }}</span>
+        </button>
+      </div>
     </div>
 
-    <!-- 2. Search -->
+    <!-- 2. Pipeline summary mini card -->
+    <RouterLink class="mp-pipeline-summary" :to="{ name: PIPELINE_ROUTE_NAME }">
+      <div class="mp-pipeline-summary-label"><i class="pi pi-chart-bar" /> Sales Pipeline</div>
+      <div class="mp-pipeline-summary-counts">
+        <span v-for="tab in TAB_ORDER" :key="tab" class="mp-ps-item">
+          {{ tabLabel(tab) }} <strong>{{ tabCounts[tab] }}</strong>
+        </span>
+      </div>
+    </RouterLink>
+
+    <!-- 3. Search -->
     <div class="mp-search">
       <i class="pi pi-search" />
       <input v-model="searchQuery" placeholder="Search business, category or area" aria-label="Search prospects" />
@@ -218,19 +243,10 @@ onMounted(async () => {
       </button>
     </div>
 
-    <!-- 3. Tabs -->
+    <!-- 4. Tabs -->
     <div class="mp-tabs">
-      <button class="mp-tab" :class="{ active: activeTab === 'assigned' }" @click="activeTab = 'assigned'">
-        Assigned <span class="mp-tab-badge">{{ tabCounts.assigned }}</span>
-      </button>
-      <button class="mp-tab" :class="{ active: activeTab === 'visited' }" @click="activeTab = 'visited'">
-        Visited <span class="mp-tab-badge">{{ tabCounts.visited }}</span>
-      </button>
-      <button class="mp-tab" :class="{ active: activeTab === 'followup' }" @click="activeTab = 'followup'">
-        Follow Up <span class="mp-tab-badge">{{ tabCounts.followup }}</span>
-      </button>
-      <button class="mp-tab" :class="{ active: activeTab === 'won' }" @click="activeTab = 'won'">
-        Won <span class="mp-tab-badge">{{ tabCounts.won }}</span>
+      <button v-for="tab in TAB_ORDER" :key="tab" class="mp-tab" :class="{ active: activeTab === tab }" @click="selectTab(tab)">
+        {{ tabLabel(tab) }} <span class="mp-tab-badge">{{ tabCounts[tab] }}</span>
       </button>
     </div>
 
@@ -241,7 +257,7 @@ onMounted(async () => {
     </Message>
 
     <!-- Loading skeleton -->
-    <div v-if="crm.loading && !nonTerminal.length" class="mp-skeleton-list">
+    <div v-if="crm.loading && !activeProspects.length" class="mp-skeleton-list">
       <div v-for="n in 4" :key="n" class="mp-skeleton-card">
         <div class="sk-row"><div class="sk-avatar" /><div class="sk-lines"><div class="sk-line w60" /><div class="sk-line w40" /></div></div>
         <div class="sk-line w80" /><div class="sk-line w50" />
@@ -252,19 +268,26 @@ onMounted(async () => {
     <!-- Empty state -->
     <div v-else-if="!displayedProspects.length && !error" class="mp-empty">
       <div class="mp-empty-icon"><i class="pi pi-briefcase" /></div>
-      <strong>No prospects found</strong>
-      <span v-if="searchQuery || activeFilterCount()">Try changing your search or filters.</span>
-      <span v-else-if="activeTab === 'won'">No won prospects yet.</span>
-      <span v-else>No prospects in this category.</span>
-      <button v-if="searchQuery || activeFilterCount()" class="mp-reset-btn" @click="searchQuery = ''; resetFilters()">
-        <i class="pi pi-refresh" /> Reset filters
-      </button>
+      <template v-if="searchQuery || activeFilterCount()">
+        <strong>No prospects found</strong>
+        <span>Try changing your search or filters.</span>
+        <button class="mp-reset-btn" @click="searchQuery = ''; resetFilters()">
+          <i class="pi pi-refresh" /> Reset filters
+        </button>
+      </template>
+      <template v-else>
+        <strong>{{ emptyMsg.title }}</strong>
+        <span>{{ emptyMsg.subtitle }}</span>
+        <RouterLink class="mp-reset-btn" :to="{ name: PIPELINE_ROUTE_NAME }">
+          <i class="pi pi-chart-bar" /> Open Sales Pipeline
+        </RouterLink>
+      </template>
     </div>
 
     <!-- Sort + Cards -->
     <template v-else>
       <div class="mp-section-header">
-        <strong>Prospects</strong>
+        <strong>{{ tabLabel(activeTab) }} prospects</strong>
         <button class="mp-sort-trigger" @click="showSortMenu = !showSortMenu">
           <i class="pi pi-sort-alt" /> {{ sortOptions.find((s) => s.value === sortBy)?.label }}
           <i class="pi pi-chevron-down" />
@@ -296,12 +319,14 @@ onMounted(async () => {
               <span>{{ prospect.formattedAddress || 'No address' }}</span>
             </div>
             <div class="mp-card-tags">
-              <Tag :value="statusLabel(prospect.status)" :severity="statusSeverity(prospect.status)" />
+              <Tag :value="pipelineStatusLabel(prospect.status)" :severity="statusSeverity(prospect.status)" />
+              <span v-if="prospect.status === 'WON'" class="mp-review-tag">Waiting for Admin Review</span>
             </div>
           </div>
 
-          <div class="mp-card-actions">
-            <button class="mp-action-btn mp-action-navigate" :disabled="!hasCoordinates(prospect) && !prospect.formattedAddress" @click="openGoogleMaps(prospect)" :title="hasCoordinates(prospect) || prospect.formattedAddress ? 'Navigate with Google Maps' : 'No location data available'">
+          <!-- Assigned: Navigate, Detail, Visit -->
+          <div v-if="activeTab === 'assigned'" class="mp-card-actions">
+            <button class="mp-action-btn mp-action-navigate" :disabled="!hasCoordinates(prospect) && !prospect.formattedAddress" @click="openGoogleMaps(prospect)">
               <i class="pi pi-directions" /> Navigate
             </button>
             <RouterLink class="mp-action-btn mp-action-detail" :to="`/sales/my-prospects/${prospect.id}`">
@@ -310,6 +335,45 @@ onMounted(async () => {
             <RouterLink class="mp-action-btn mp-action-visit" :to="`/sales/my-prospects/${prospect.id}/check-in`">
               <i class="pi pi-sign-in" /> Visit
             </RouterLink>
+          </div>
+
+          <!-- Visited: Detail, Update Pipeline, Visit -->
+          <div v-else-if="activeTab === 'visited'" class="mp-card-actions">
+            <RouterLink class="mp-action-btn mp-action-detail" :to="`/sales/my-prospects/${prospect.id}`">
+              <i class="pi pi-eye" /> Detail
+            </RouterLink>
+            <RouterLink class="mp-action-btn mp-action-pipeline" :to="{ name: PIPELINE_ROUTE_NAME, query: { prospectId: prospect.id, action: 'update' } }">
+              <i class="pi pi-chart-bar" /> Pipeline
+            </RouterLink>
+            <RouterLink class="mp-action-btn mp-action-visit" :to="`/sales/my-prospects/${prospect.id}/check-in`">
+              <i class="pi pi-sign-in" /> Visit
+            </RouterLink>
+          </div>
+
+          <!-- Follow Up: Detail, Update Pipeline, Visit -->
+          <div v-else-if="activeTab === 'followup'" class="mp-card-actions">
+            <RouterLink class="mp-action-btn mp-action-detail" :to="`/sales/my-prospects/${prospect.id}`">
+              <i class="pi pi-eye" /> Detail
+            </RouterLink>
+            <RouterLink class="mp-action-btn mp-action-pipeline" :to="{ name: PIPELINE_ROUTE_NAME, query: { prospectId: prospect.id, action: 'update' } }">
+              <i class="pi pi-chart-bar" /> Pipeline
+            </RouterLink>
+            <RouterLink class="mp-action-btn mp-action-visit" :to="`/sales/my-prospects/${prospect.id}/check-in`">
+              <i class="pi pi-sign-in" /> Visit
+            </RouterLink>
+          </div>
+
+          <!-- Won: Detail, View Pipeline -->
+          <div v-else-if="activeTab === 'won'" class="mp-card-actions">
+            <RouterLink class="mp-action-btn mp-action-detail" :to="`/sales/my-prospects/${prospect.id}`">
+              <i class="pi pi-eye" /> Detail
+            </RouterLink>
+            <RouterLink class="mp-action-btn mp-action-pipeline" :to="{ name: PIPELINE_ROUTE_NAME, query: { prospectId: prospect.id, action: 'update' } }">
+              <i class="pi pi-chart-bar" /> Pipeline
+            </RouterLink>
+            <button class="mp-action-btn mp-action-navigate" :disabled="!hasCoordinates(prospect) && !prospect.formattedAddress" @click="openGoogleMaps(prospect)">
+              <i class="pi pi-directions" /> Navigate
+            </button>
           </div>
         </article>
       </div>
@@ -358,6 +422,7 @@ onMounted(async () => {
 /* ── 1. Header ─────────────────────────────────────────────── */
 .mp-header { display: flex; align-items: center; justify-content: space-between; padding: 0.15rem 0; }
 .mp-header-left { display: flex; align-items: center; gap: 0.7rem; }
+.mp-header-actions { display: flex; align-items: center; gap: 0.5rem; }
 .mp-avatar {
   width: 38px; height: 38px; display: grid; place-items: center;
   border-radius: 50%; background: linear-gradient(135deg, #2563eb, #1d4ed8);
@@ -367,6 +432,15 @@ onMounted(async () => {
 .mp-header-text { display: flex; flex-direction: column; gap: 0.05rem; }
 .mp-header-text strong { font-size: 1rem; font-weight: 800; color: #0f172a; }
 .mp-header-text small { color: #64748b; font-size: 0.7rem; font-weight: 500; }
+.mp-pipeline-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.4rem 0.75rem; border-radius: 9999px;
+  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+  font-size: 0.7rem; font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.mp-pipeline-btn:hover { background: #dbeafe; border-color: #93c5fd; }
+.mp-pipeline-btn i { font-size: 0.7rem; }
 .mp-header-action {
   position: relative; width: 36px; height: 36px; display: grid; place-items: center;
   border-radius: 50%; border: 1px solid #e2e8f0; background: #fff; color: #64748b;
@@ -379,7 +453,23 @@ onMounted(async () => {
   color: #fff; font-size: 0.55rem; font-weight: 700; padding: 0 4px; border: 2px solid #fff;
 }
 
-/* ── 2. Search ─────────────────────────────────────────────── */
+/* ── 2. Pipeline summary ────────────────────────────────────── */
+.mp-pipeline-summary {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.75rem 1rem; background: #f0f7ff; border: 1px solid #bfdbfe;
+  border-radius: 14px; text-decoration: none; color: inherit; transition: all 0.15s ease;
+}
+.mp-pipeline-summary:hover { background: #e0efff; border-color: #93c5fd; }
+.mp-pipeline-summary-label {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 700; color: #2563eb;
+}
+.mp-pipeline-summary-label i { font-size: 0.7rem; }
+.mp-pipeline-summary-counts { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.mp-ps-item { font-size: 0.65rem; color: #64748b; }
+.mp-ps-item strong { color: #0f172a; font-weight: 700; }
+
+/* ── 3. Search ─────────────────────────────────────────────── */
 .mp-search {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.55rem 0.8rem; background: #fff; border: 1px solid #e2e8f0;
@@ -399,8 +489,8 @@ onMounted(async () => {
 }
 .mp-search-clear:hover { background: #e2e8f0; }
 
-/* ── 3. Tabs ───────────────────────────────────────────────── */
-.mp-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
+/* ── 4. Tabs ───────────────────────────────────────────────── */
+.mp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.35rem; }
 .mp-tab {
   display: flex; align-items: center; justify-content: center; gap: 0.3rem;
   padding: 0.5rem 0; border-radius: 10px; border: 1px solid #e2e8f0;
@@ -415,7 +505,7 @@ onMounted(async () => {
 }
 .mp-tab.active .mp-tab-badge { background: #dbeafe; color: #2563eb; }
 
-/* ── 4. Section header + sort ──────────────────────────────── */
+/* ── 5. Section header + sort ──────────────────────────────── */
 .mp-section-header { display: flex; align-items: center; justify-content: space-between; }
 .mp-section-header strong { font-size: 0.82rem; font-weight: 800; color: #0f172a; }
 .mp-sort-trigger {
@@ -434,7 +524,7 @@ onMounted(async () => {
 .mp-sort-menu button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 .mp-sort-menu button:not(.active):hover { border-color: #cbd5e1; background: #f8fafc; }
 
-/* ── 5. Card list ──────────────────────────────────────────── */
+/* ── 6. Card list ──────────────────────────────────────────── */
 .mp-card-list { display: flex; flex-direction: column; gap: 0.65rem; }
 .mp-card {
   padding: 0.9rem 1rem; background: #fff; border: 1px solid #eef1f6;
@@ -465,7 +555,11 @@ onMounted(async () => {
 .mp-card-middle { display: flex; flex-direction: column; gap: 0.35rem; }
 .mp-card-address { display: flex; align-items: flex-start; gap: 0.4rem; color: #64748b; font-size: 0.72rem; line-height: 1.4; }
 .mp-card-address i { margin-top: 0.1rem; font-size: 0.68rem; flex-shrink: 0; color: #94a3b8; }
-.mp-card-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.mp-card-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.mp-review-tag {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+  background: #fef3c7; color: #92400e; font-size: 0.58rem; font-weight: 600;
+}
 
 /* Card actions */
 .mp-card-actions {
@@ -485,6 +579,8 @@ onMounted(async () => {
 .mp-action-detail:hover { background: #f8fafc; border-color: #cbd5e1; }
 .mp-action-visit { color: #059669; }
 .mp-action-visit:hover { background: #ecfdf5; border-color: #a7f3d0; }
+.mp-action-pipeline { color: #7c3aed; }
+.mp-action-pipeline:hover { background: #f5f3ff; border-color: #ddd6fe; }
 
 /* ── Empty state ───────────────────────────────────────────── */
 .mp-empty {
@@ -498,10 +594,10 @@ onMounted(async () => {
 .mp-empty strong { color: #0f172a; font-size: 0.88rem; }
 .mp-empty span { color: #64748b; font-size: 0.75rem; line-height: 1.5; }
 .mp-reset-btn {
-  display: flex; align-items: center; gap: 0.3rem; margin-top: 0.3rem;
+  display: inline-flex; align-items: center; gap: 0.3rem; margin-top: 0.3rem;
   padding: 0.45rem 0.85rem; border-radius: 10px; border: 1px solid #e2e8f0;
   background: #fff; color: #2563eb; font-size: 0.72rem; font-weight: 600;
-  cursor: pointer; transition: all 0.15s ease;
+  cursor: pointer; text-decoration: none; transition: all 0.15s ease;
 }
 .mp-reset-btn:hover { background: #eff6ff; border-color: #bfdbfe; }
 
@@ -526,7 +622,8 @@ onMounted(async () => {
 
 /* ── FAB ───────────────────────────────────────────────────── */
 .mp-fab {
-  position: fixed; bottom: 88px; right: calc(50% - 190px);
+  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  right: max(1rem, calc((100vw - min(100%, 440px)) / 2 + 1rem));
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
   font-size: 1.1rem; cursor: pointer; z-index: 50;
@@ -559,5 +656,7 @@ onMounted(async () => {
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .mp-fab { right: 1rem; }
+  .mp-pipeline-btn span { display: none; }
+  .mp-pipeline-btn { padding: 0.4rem; }
 }
 </style>
