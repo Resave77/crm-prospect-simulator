@@ -134,6 +134,17 @@ func (s *Service) AdminCustomer(ctx context.Context, actor Actor, id uuid.UUID) 
 	return s.repository.FindCustomer(ctx, id)
 }
 
+func (s *Service) AutoConvert(ctx context.Context, prospectID uuid.UUID) (customermodel.CustomerSite, error) {
+	return s.repository.AutoConvert(ctx, prospectID)
+}
+
+func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role != authmodel.RoleAdministrator {
+		return ErrForbidden
+	}
+	return s.repository.DeleteCustomer(ctx, id)
+}
+
 func normalize(input *customermodel.ConversionInput) {
 	input.CustomerName = strings.TrimSpace(input.CustomerName)
 	input.CustomerSegment = strings.TrimSpace(input.CustomerSegment)

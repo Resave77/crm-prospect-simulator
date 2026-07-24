@@ -125,6 +125,17 @@ func (h *Handler) AdminCustomerDetail(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, item)
 }
 
+func (h *Handler) DeleteCustomer(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "CUSTOMER_ID_INVALID", "Customer ID is invalid.")
+	}
+	if err := h.service.DeleteCustomer(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func parseID(c *fiber.Ctx) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

@@ -215,6 +215,130 @@ func (r *PostgresRepository) Convert(ctx context.Context, prospectID, administra
 	return result, nil
 }
 
+func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UUID) (model.CustomerSite, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("begin auto conversion: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var prospectStatus, googlePlaceID, placeName, formattedAddress, placeCategory string
+	var latitude, longitude *float64
+	var assignedSalesExecID uuid.UUID
+	err = tx.QueryRow(ctx, `
+		SELECT status::text, google_place_id, place_name, formatted_address,
+		       latitude, longitude, COALESCE(place_category, ''), assigned_sales_executive_id
+		FROM prospects WHERE id = $1 FOR UPDATE`, prospectID).
+		Scan(&prospectStatus, &googlePlaceID, &placeName, &formattedAddress, &latitude, &longitude, &placeCategory, &assignedSalesExecID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.CustomerSite{}, ErrNotFound
+	}
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("lock prospect for auto conversion: %w", err)
+	}
+	if prospectStatus == "CONVERTED" {
+		return model.CustomerSite{}, ErrAlreadyConverted
+	}
+	if prospectStatus != "WON" {
+		return model.CustomerSite{}, ErrProspectNotWon
+	}
+
+	var duplicate bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM customer_sites WHERE source_prospect_id = $1 OR source_google_place_id = $2)`,
+		prospectID, googlePlaceID).Scan(&duplicate); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("check customer duplicate: %w", err)
+	}
+	if duplicate {
+		return model.CustomerSite{}, ErrDuplicatePlace
+	}
+
+	var salesName string
+	if err := tx.QueryRow(ctx, `
+		SELECT full_name FROM users WHERE id = $1 AND role = 'SALES_EXECUTIVE' AND status = 'ACTIVE'`, assignedSalesExecID).Scan(&salesName); err != nil {
+		return model.CustomerSite{}, ErrSalesUnavailable
+	}
+
+	var parentSequence int64
+	if err := tx.QueryRow(ctx, `SELECT nextval('parent_company_code_seq')`).Scan(&parentSequence); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("generate parent code: %w", err)
+	}
+	parentCode := simulationParentCode(parentSequence)
+	parentID := uuid.New()
+	emptyContacts, _ := json.Marshal([]model.Contact{})
+	emptyKams, _ := json.Marshal([]model.PeriodAssignment{})
+	_, err = tx.Exec(ctx, `
+		INSERT INTO parent_companies (
+			id, parent_code, name, address_mode, province, district, sub_district, village,
+			latitude, longitude, preview_address, company_contacts, npwp_name,
+			npwp_address, npwp_number, term_of_payment, kam_assignments)
+		VALUES ($1,$2,$3,'AUTO_CONVERTED','','','','',$4,$5,$6,$7,'','','','',$8)`,
+		parentID, parentCode, placeName, latitude, longitude, formattedAddress, emptyContacts, emptyKams)
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("create auto parent company: %w", err)
+	}
+
+	var customerSequence int64
+	if err := tx.QueryRow(ctx, `SELECT nextval('customer_site_code_seq')`).Scan(&customerSequence); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("generate customer code: %w", err)
+	}
+	customerCode := simulationCustomerCode(parentCode, customerSequence)
+
+	customerID := uuid.New()
+	convertedAt := time.Now().UTC()
+	siteContacts, _ := json.Marshal([]model.Contact{})
+	salesAssignments, _ := json.Marshal([]model.PeriodAssignment{})
+	if placeCategory == "" {
+		placeCategory = "Uncategorized"
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO customer_sites (
+			id, customer_code, parent_company_id, source_prospect_id, source_google_place_id,
+			name, segment, category, address_mode, province, district, sub_district, village,
+			latitude, longitude, preview_address, site_contacts, ppn, id_tku_number, nik,
+			shipment_cost, invoice_type, bank_account, bill_to_source, ship_to_source,
+			billing_address_preview, shipping_address_preview, sales_executive_id,
+			sales_assignments, converted_at, converted_by_admin_id)
+		VALUES ($1,$2,$3,$4,$5,$6,'General Trade',$7,'AUTO_CONVERTED','','','','',$8,$9,$10,$11,'','','','','','','',$12,$13,$14,$15)`,
+		customerID, customerCode, parentID, prospectID, googlePlaceID,
+		placeName, placeCategory, latitude, longitude, formattedAddress, siteContacts,
+		assignedSalesExecID, salesAssignments, convertedAt, uuid.Nil)
+	if err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	if _, err = tx.Exec(ctx, `
+		UPDATE prospects SET status = 'CONVERTED', converted_at = $2, updated_at = $2
+		WHERE id = $1 AND status = 'WON'`, prospectID, convertedAt); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("mark prospect converted: %w", err)
+	}
+	if _, err = tx.Exec(ctx, `
+		INSERT INTO prospect_status_history
+			(id, prospect_id, from_status, to_status, changed_by_user_id, notes)
+		VALUES ($1, $2, 'WON', 'CONVERTED', $3, $4)`,
+		uuid.New(), prospectID, assignedSalesExecID, "Auto-converted on WON transition "+customerCode); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("record auto conversion history: %w", err)
+	}
+	result, err := scanCustomer(tx.QueryRow(ctx, customerSelect+` WHERE cs.id = $1`, customerID))
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("read auto converted customer: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
+func (r *PostgresRepository) DeleteCustomer(ctx context.Context, id uuid.UUID) error {
+	command, err := r.pool.Exec(ctx, `DELETE FROM customer_sites WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete customer site: %w", err)
+	}
+	if command.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *PostgresRepository) resolveParentCompany(ctx context.Context, tx pgx.Tx, input model.ConversionInput) (model.ParentCompany, error) {
 	if input.ParentMethod == model.ParentMethodExisting {
 		if input.ExistingParentCompanyID == nil {

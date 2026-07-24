@@ -65,3 +65,7 @@ export async function getCustomerFilterOptions() {
 export async function getAdminCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`)).data.data
 }
+
+export async function deleteCustomer(id: string) {
+  await api.delete(`/admin/customers/${id}`)
+}

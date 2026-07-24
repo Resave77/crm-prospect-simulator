@@ -5,12 +5,18 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
+import Dialog from 'primevue/dialog'
 import { useCustomerListStore } from '../../../stores/customerList'
+import { deleteCustomer } from '../../../api/crm'
 
 const store = useCustomerListStore()
 const router = useRouter()
 const error = ref('')
 const activeTab = ref('site')
+const deleteDialogVisible = ref(false)
+const deleteTargetId = ref('')
+const deleteTargetName = ref('')
+const deleting = ref(false)
 
 const tabs = [
   { key: 'site', label: 'Customer Site', icon: 'pi pi-map-marker' },
@@ -274,6 +280,27 @@ onMounted(async () => {
     await load()
   } catch (e) { error.value = store.errorMessage(e) }
 })
+
+function confirmDelete(id: string, name: string) {
+  deleteTargetId.value = id
+  deleteTargetName.value = name
+  deleteDialogVisible.value = true
+}
+
+async function executeDelete() {
+  deleting.value = true
+  try {
+    await deleteCustomer(deleteTargetId.value)
+    store.allCustomers = store.allCustomers.filter((c) => c.id !== deleteTargetId.value)
+    store.items = store.items.filter((c) => c.id !== deleteTargetId.value)
+    store.total = store.allCustomers.length
+    deleteDialogVisible.value = false
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -286,6 +313,7 @@ onMounted(async () => {
         <p class="muted">Manage customer sites, corporate hierarchies, and master data configurations.</p>
       </div>
       <div class="page-heading-actions">
+        <Button label="Review Won Prospect" icon="pi pi-check-circle" severity="success" outlined size="small" @click="router.push('/admin/prospects/won')" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
         <Button
           :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'"
@@ -470,7 +498,7 @@ onMounted(async () => {
                     <div class="row-actions">
                       <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="router.push(`/admin/customers/${c.id}`)" />
                       <Button icon="pi pi-pencil" text rounded size="small" class="act-edit" title="Edit" @click="router.push(`/admin/customers/${c.id}/edit`)" />
-                      <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" />
+                      <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDelete(c.id, c.name)" />
                     </div>
                   </td>
                 </tr>
@@ -501,6 +529,15 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
+    <!-- DELETE CONFIRMATION DIALOG -->
+    <Dialog v-model:visible="deleteDialogVisible" header="Delete Customer" modal :style="{ width: '400px' }">
+      <p>Are you sure you want to delete <strong>{{ deleteTargetName }}</strong>? This action cannot be undone.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
+      </template>
+    </Dialog>
 
     <!-- ======================== COMPANY TAB ======================== -->
     <div v-if="activeTab === 'company'" class="panel-stack">

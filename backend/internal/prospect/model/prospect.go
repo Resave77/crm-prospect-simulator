@@ -46,8 +46,9 @@ type Prospect struct {
 var ActiveStatuses = []Status{StatusNewLead, StatusContacted, StatusInterested, StatusQualified, StatusProposalSent, StatusNegotiation}
 
 type SalesExecutive struct {
-	ID       uuid.UUID `json:"id"`
-	FullName string    `json:"fullName"`
+	ID                 uuid.UUID `json:"id"`
+	FullName           string    `json:"fullName"`
+	ActiveProspectCount int      `json:"activeProspectCount"`
 }
 
 type PlaceResult struct {

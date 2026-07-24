@@ -42,7 +42,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 
 	authHandler := authhandler.New(authService, cfg.CookieSecure)
 	authMiddleware := authmiddleware.New(authService)
-	prospectHandler := prospecthandler.New(prospectService)
+	prospectHandler := prospecthandler.New(prospectService, customerService)
 	customerHandler := customerhandler.New(customerService)
 
 	health := func(c *fiber.Ctx) error {
@@ -93,6 +93,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/customers/list", customerHandler.AdminCustomersList)
 	admin.Get("/customers/filter-options", customerHandler.CustomerFilterOptions)
 	admin.Get("/customers/:id", customerHandler.AdminCustomerDetail)
+	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
 
 	app.Use(func(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "The requested API route does not exist.")

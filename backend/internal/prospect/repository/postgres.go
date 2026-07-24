@@ -52,7 +52,13 @@ func (r *PostgresRepository) ListAll(ctx context.Context) ([]model.Prospect, err
 }
 
 func (r *PostgresRepository) ListSalesExecutives(ctx context.Context) ([]model.SalesExecutive, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, full_name FROM users WHERE role = 'SALES_EXECUTIVE' AND status = 'ACTIVE' ORDER BY full_name`)
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id, u.full_name, COUNT(p.id)::int AS active_prospect_count
+		FROM users u
+		LEFT JOIN prospects p ON p.assigned_sales_executive_id = u.id AND p.status IN ('NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION')
+		WHERE u.role = 'SALES_EXECUTIVE' AND u.status = 'ACTIVE'
+		GROUP BY u.id, u.full_name
+		ORDER BY u.full_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list sales executives: %w", err)
 	}
@@ -60,7 +66,7 @@ func (r *PostgresRepository) ListSalesExecutives(ctx context.Context) ([]model.S
 	items := make([]model.SalesExecutive, 0)
 	for rows.Next() {
 		var item model.SalesExecutive
-		if err := rows.Scan(&item.ID, &item.FullName); err != nil {
+		if err := rows.Scan(&item.ID, &item.FullName, &item.ActiveProspectCount); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

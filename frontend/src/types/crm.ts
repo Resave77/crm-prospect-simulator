@@ -44,7 +44,7 @@ export interface PlaceResult {
   placeTypes: string[]
 }
 
-export interface SalesExecutiveOption { id: string; fullName: string }
+export interface SalesExecutiveOption { id: string; fullName: string; activeProspectCount: number }
 
 export interface ProspectHistory {
   id: string

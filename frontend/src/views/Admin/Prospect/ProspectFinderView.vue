@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import Button from 'primevue/button'
@@ -22,8 +22,9 @@ const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty',
 const keyword = ref('')
 const categories = ref<string[]>(['food_drink', 'business', 'culture'])
 const radius = ref(3000)
-const latitude = ref(-6.229561)
-const longitude = ref(106.848651)
+const latitude = ref(0)
+const longitude = ref(0)
+const geoResolved = ref(false)
 const results = ref<PlaceResult[]>([])
 const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
@@ -40,6 +41,11 @@ const resultsScroll = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let searchCircle: L.Circle | null = null
 const markers = new Map<string, L.Marker>()
+
+const selectedSalesCount = computed(() => {
+  const exec = sales.value.find(s => s.id === salesExecutiveId.value)
+  return exec?.activeProspectCount ?? 0
+})
 
 const filteredResults = ref<PlaceResult[]>([])
 
@@ -67,12 +73,11 @@ function markerIcon(item: PlaceResult, active = false) {
 
 function initializeMap() {
   if (!mapElement.value || map) return
-  map = L.map(mapElement.value, { zoomControl: true, preferCanvas: true }).setView([latitude.value, longitude.value], 14)
+  map = L.map(mapElement.value, { zoomControl: true, preferCanvas: true }).setView([-6.2, 106.8], 12)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map)
-  drawSearchArea()
 }
 
 function drawSearchArea() {
@@ -133,8 +138,8 @@ async function search() {
   loading.value = true
   try {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: categories.value.join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
-    selected.value = results.value[0] ?? null
-    detailOpen.value = !!selected.value
+    selected.value = null
+    detailOpen.value = false
     await nextTick()
     renderMarkers()
   } catch (caught) {
@@ -146,13 +151,17 @@ async function search() {
 
 function useGPS() {
   error.value = ''
-  if (!navigator.geolocation) { error.value = 'Geolocation is not available in this browser.'; return }
+  if (!navigator.geolocation) { error.value = 'Geolocation is not available in this browser.'; geoResolved.value = true; return }
   navigator.geolocation.getCurrentPosition((position) => {
     latitude.value = position.coords.latitude
     longitude.value = position.coords.longitude
+    geoResolved.value = true
     drawSearchArea()
     map?.flyTo([latitude.value, longitude.value], 15)
-  }, () => { error.value = 'Location permission was denied or unavailable.' })
+  }, () => {
+    error.value = 'Location permission was denied. Please enable location access and try again.'
+    geoResolved.value = true
+  })
 }
 
 async function save() {
@@ -179,6 +188,7 @@ function crmError(err: unknown) {
 onMounted(async () => {
   await nextTick()
   initializeMap()
+  useGPS()
   try {
     sales.value = await crmApi.getSalesExecutives()
     salesExecutiveId.value = sales.value[0]?.id ?? ''
@@ -250,7 +260,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
           <div class="filter-actions">
             <Button label="GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" />
-            <Button label="Search Area" icon="pi pi-search" :loading="loading" :disabled="!categories.length" @click="search" />
+            <Button :label="!geoResolved ? 'Detecting location...' : 'Search Area'" icon="pi pi-search" :loading="loading || !geoResolved" :disabled="!categories.length || !geoResolved" @click="search" />
           </div>
         </div>
 
@@ -384,6 +394,9 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
           <div class="detail-assignment-fields">
             <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
             <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
+            <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
+              {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
+            </Message>
           </div>
         </div>
       </div>
@@ -1061,6 +1074,11 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.assignment-warning {
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */

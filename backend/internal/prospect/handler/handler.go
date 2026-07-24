@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
+	customerservice "crm-prospect-simulator/backend/internal/customer/service"
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 	"crm-prospect-simulator/backend/internal/prospect/repository"
 	"crm-prospect-simulator/backend/internal/prospect/service"
@@ -15,11 +18,12 @@ import (
 )
 
 type Handler struct {
-	service *service.Service
+	service     *service.Service
+	customerSvc *customerservice.Service
 }
 
-func New(prospectService *service.Service) *Handler {
-	return &Handler{service: prospectService}
+func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
+	return &Handler{service: prospectService, customerSvc: customerSvc}
 }
 
 type transitionRequest struct {
@@ -60,7 +64,19 @@ func (h *Handler) Decide(c *fiber.Ctx) error {
 	if err != nil {
 		return writeError(c, err)
 	}
+	if request.Status == prospectmodel.StatusWon {
+		go h.autoConvert(context.Background(), id)
+	}
 	return response.Data(c, fiber.StatusOK, item)
+}
+
+func (h *Handler) autoConvert(ctx context.Context, prospectID uuid.UUID) {
+	if h.customerSvc == nil {
+		return
+	}
+	if _, err := h.customerSvc.AutoConvert(ctx, prospectID); err != nil {
+		slog.Error("auto convert failed", "prospect_id", prospectID, "error", err)
+	}
 }
 
 func (h *Handler) CheckIn(c *fiber.Ctx) error {
@@ -162,6 +178,11 @@ func (h *Handler) WonQueue(c *fiber.Ctx) error {
 	items, err := h.service.WonQueue(c.UserContext(), actor(c))
 	if err != nil {
 		return writeError(c, err)
+	}
+	if h.customerSvc != nil {
+		for _, item := range items {
+			go h.autoConvert(context.Background(), item.ID)
+		}
 	}
 	return response.Data(c, fiber.StatusOK, items)
 }
