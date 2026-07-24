@@ -48,6 +48,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'SalesDashboard', component: () => import('../views/Sales/Dashboard/SalesDashboardView.vue') },
         { path: 'my-prospects', name: 'SalesMyProspects', component: () => import('../views/Sales/Prospect/MyProspectsView.vue') },
         { path: 'my-prospects/:id', name: 'SalesProspectDetail', component: () => import('../views/Sales/Prospect/ProspectDetailView.vue') },
+        { path: 'pipeline', name: 'SalesPipeline', component: () => import('../views/Sales/Prospect/SalesPipelineView.vue') },
         { path: 'my-customers', name: 'SalesMyCustomers', component: () => import('../views/Sales/Customer/MyCustomersView.vue') },
         { path: 'my-customers/:id', name: 'SalesCustomerDetail', component: () => import('../views/Sales/Customer/CustomerDetailView.vue') },
         { path: 'history', name: 'SalesHistory', component: () => import('../views/Sales/HistoryView.vue') },
