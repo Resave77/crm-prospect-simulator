@@ -213,3 +213,17 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 	}
 	return s.repository.Create(ctx, input, actor.UserID)
 }
+
+func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListVisitMonitoring(ctx, filter)
+}
+
+func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) error {
+	if actor.Role != authmodel.RoleAdministrator {
+		return ErrForbidden
+	}
+	return s.repository.DeleteVisit(ctx, visitID, actor.UserID)
+}

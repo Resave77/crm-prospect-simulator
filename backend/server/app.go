@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"crm-prospect-simulator/backend/config"
@@ -32,6 +33,12 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 
 	app.Use(recover.New())
 	app.Use(requestid.New())
+
+	uploadsDir := "./uploads"
+	if err := os.MkdirAll(uploadsDir, 0755); err == nil {
+		app.Static("/uploads", uploadsDir)
+	}
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.AllowedOrigins,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
@@ -86,6 +93,8 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/prospect-finder/places/:placeId", prospectHandler.PlaceDetail)
 	admin.Post("/prospects", prospectHandler.Save)
 	admin.Get("/prospects/:id", prospectHandler.Review)
+	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
+	admin.Delete("/visits/:visitId", prospectHandler.DeleteVisit)
 	admin.Get("/prospects/:id/conversion-form", customerHandler.ConversionForm)
 	admin.Post("/prospects/:id/convert", customerHandler.Convert)
 	admin.Get("/parent-companies", customerHandler.SearchParentCompanies)

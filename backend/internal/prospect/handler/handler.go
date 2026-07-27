@@ -3,7 +3,10 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -84,10 +87,37 @@ func (h *Handler) CheckIn(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
-	var input prospectmodel.CheckInInput
-	if err := c.BodyParser(&input); err != nil {
-		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
+
+	latitude, err := strconv.ParseFloat(c.FormValue("latitude"), 64)
+	if err != nil {
+		return response.Error(c, 400, "REQUEST_INVALID", "Latitude is required.")
 	}
+	longitude, err := strconv.ParseFloat(c.FormValue("longitude"), 64)
+	if err != nil {
+		return response.Error(c, 400, "REQUEST_INVALID", "Longitude is required.")
+	}
+	visitNotes := c.FormValue("visitNotes", "")
+
+	input := prospectmodel.CheckInInput{
+		Latitude:   latitude,
+		Longitude:  longitude,
+		VisitNotes: visitNotes,
+	}
+
+	file, err := c.FormFile("selfie")
+	if err == nil && file != nil {
+		uploadDir := filepath.Join("uploads", "selfies")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			return response.Error(c, 500, "UPLOAD_FAILED", "Unable to save selfie.")
+		}
+		filename := fmt.Sprintf("%s.jpg", uuid.New().String())
+		dst := filepath.Join(uploadDir, filename)
+		if err := c.SaveFile(file, dst); err != nil {
+			return response.Error(c, 500, "UPLOAD_FAILED", "Unable to save selfie file.")
+		}
+		input.SelfieReference = "/uploads/selfies/" + filename
+	}
+
 	item, err := h.service.CheckIn(c.UserContext(), actor(c), id, input)
 	if err != nil {
 		return writeError(c, err)
@@ -197,6 +227,32 @@ func (h *Handler) Review(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, item)
+}
+
+func (h *Handler) ListVisitMonitoring(c *fiber.Ctx) error {
+	filter := prospectmodel.VisitMonitoringFilter{
+		DateFrom:         c.Query("dateFrom"),
+		DateTo:           c.Query("dateTo"),
+		SalesExecutiveID: c.Query("salesExecutiveId"),
+		CustomerName:     c.Query("customerName"),
+		RadiusStatus:     c.Query("radiusStatus"),
+	}
+	items, err := h.service.ListVisitMonitoring(c.UserContext(), actor(c), filter)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) DeleteVisit(c *fiber.Ctx) error {
+	visitID, err := uuid.Parse(c.Params("visitId"))
+	if err != nil {
+		return response.Error(c, 400, "VISIT_ID_INVALID", "Visit ID is invalid.")
+	}
+	if err := h.service.DeleteVisit(c.UserContext(), actor(c), visitID); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
 func actor(c *fiber.Ctx) service.Actor {

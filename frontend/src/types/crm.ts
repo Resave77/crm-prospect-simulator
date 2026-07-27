@@ -224,3 +224,39 @@ export interface ListFilterOptions {
   regions: string[]
   salesExecutives: SalesExecutiveOption[]
 }
+
+export interface VisitMonitoringItem {
+  id: string
+  prospectId: string
+  customerName: string
+  customerCategory: string
+  industryGroup: string
+  formattedAddress: string
+  phoneNumber: string
+  prospectLatitude: number | null
+  prospectLongitude: number | null
+  salesExecutiveId: string
+  salesExecutiveName: string
+  checkInAt: string
+  checkOutAt?: string
+  checkInLatitude: number
+  checkInLongitude: number
+  checkOutLatitude?: number
+  checkOutLongitude?: number
+  distanceMeters: number
+  durationSeconds?: number
+  radiusStatus: 'INSIDE' | 'OUTSIDE' | 'UNKNOWN'
+  prospectStatus: ProspectStatus
+  selfieReference: string
+  visitNotes: string
+  followUpNotes: string
+  visitCount: number
+}
+
+export interface VisitMonitoringFilters {
+  dateFrom: string
+  dateTo: string
+  salesExecutiveId: string
+  customerName: string
+  radiusStatus: string
+}

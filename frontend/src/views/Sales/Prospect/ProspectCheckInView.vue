@@ -14,6 +14,7 @@ import { getDistanceTo, formatDistance } from '../../../utils/maps'
 const route = useRoute()
 const router = useRouter()
 const prospectId = computed(() => String(route.params.id))
+const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const review = ref<ProspectReview | null>(null)
 const error = ref('')
@@ -23,7 +24,6 @@ const visitBusy = ref(false)
 
 const visitNotes = ref('')
 const followUpNotes = ref('')
-const selfiePlaceholder = ref(false)
 
 const deviceCoords = ref<{ latitude: number; longitude: number } | null>(null)
 const gpsReady = ref(false)
@@ -116,10 +116,9 @@ async function checkIn() {
       latitude: gps.latitude,
       longitude: gps.longitude,
       visitNotes: visitNotes.value,
-      selfiePlaceholder: selfiePlaceholder.value,
     })
     success.value = 'Check-in recorded successfully.'
-    visitNotes.value = ''; selfiePlaceholder.value = false
+    visitNotes.value = ''
     await load()
     startElapsedTimer()
   } catch (caught) { error.value = message(caught) } finally { visitBusy.value = false }
@@ -231,11 +230,6 @@ onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
           <h2>GPS Check In</h2>
           <p class="cicard-hint">Record your visit with GPS location and optional notes.</p>
           <label class="cicard-field"><span>Visit Notes</span><Textarea v-model="visitNotes" rows="3" fluid placeholder="What do you plan to discuss?" /></label>
-          <label class="cicard-checkbox" @click.prevent="selfiePlaceholder = !selfiePlaceholder">
-            <input v-model="selfiePlaceholder" type="checkbox" @click.stop />
-            <i class="pi pi-camera" />
-            <span>Include selfie placeholder</span>
-          </label>
           <Button label="GPS Check In" icon="pi pi-map-marker" :loading="visitBusy" fluid @click="checkIn" />
         </template>
         <template v-else>
@@ -284,6 +278,9 @@ onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
               <div v-if="visit.checkOutAt" class="cicard-visit-detail"><i class="pi pi-clock" /><span>Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</span></div>
               <div v-if="visit.visitNotes" class="cicard-visit-detail"><i class="pi pi-comment" /><span>{{ visit.visitNotes }}</span></div>
               <div v-if="visit.followUpNotes" class="cicard-visit-detail"><i class="pi pi-directions" /><span>Follow-up: {{ visit.followUpNotes }}</span></div>
+              <div v-if="visit.selfieReference && !visit.selfieReference.startsWith('SIMULATED')" class="cicard-visit-selfie">
+                <img :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference" alt="Visit selfie" />
+              </div>
               <div class="cicard-visit-detail cicard-visit-exec"><i class="pi pi-user" /><span>{{ visit.salesExecutiveName }}</span></div>
             </div>
           </div>
@@ -376,6 +373,8 @@ onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
 .cicard-visit-detail { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
 .cicard-visit-detail i { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.18rem; flex-shrink: 0; }
 .cicard-visit-exec { margin-top: 0.25rem; padding-top: 0.35rem; border-top: 1px solid var(--border-light); }
+.cicard-visit-selfie { margin-top: 0.25rem; }
+.cicard-visit-selfie img { width: 100%; max-width: 240px; border-radius: 10px; border: 1px solid var(--border-light); }
 
 .cicard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
 

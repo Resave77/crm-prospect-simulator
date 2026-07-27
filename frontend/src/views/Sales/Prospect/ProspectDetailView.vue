@@ -14,6 +14,7 @@ const review = ref<ProspectReview | null>(null)
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
+const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
@@ -217,6 +218,9 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
               <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-clock" /><span>Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</span></div>
               <div v-if="visit.visitNotes" class="dcard-visit-detail"><i class="pi pi-comment" /><span>{{ visit.visitNotes }}</span></div>
               <div v-if="visit.followUpNotes" class="dcard-visit-detail"><i class="pi pi-directions" /><span>Follow-up: {{ visit.followUpNotes }}</span></div>
+              <div v-if="visit.selfieReference && visit.selfieReference !== 'SIMULATED_SELFIE_PLACEHOLDER'" class="dcard-visit-selfie">
+                <img :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference" alt="Visit selfie" />
+              </div>
               <div class="dcard-visit-detail dcard-visit-exec"><i class="pi pi-user" /><span>{{ visit.salesExecutiveName }}</span></div>
             </div>
           </div>
@@ -351,6 +355,8 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-visit-detail { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
 .dcard-visit-detail i { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.18rem; flex-shrink: 0; }
 .dcard-visit-exec { margin-top: 0.25rem; padding-top: 0.35rem; border-top: 1px solid var(--border-light); }
+.dcard-visit-selfie { margin-top: 0.25rem; }
+.dcard-visit-selfie img { width: 100%; max-width: 240px; border-radius: 10px; border: 1px solid var(--border-light); }
 
 .dcard-timeline { display: grid; }
 .dcard-timeline-entry { display: grid; grid-template-columns: 16px 1fr; gap: 0.75rem; padding-bottom: 1rem; position: relative; }

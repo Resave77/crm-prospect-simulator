@@ -118,10 +118,10 @@ type Visit struct {
 }
 
 type CheckInInput struct {
-	Latitude          float64 `json:"latitude"`
-	Longitude         float64 `json:"longitude"`
-	SelfiePlaceholder bool    `json:"selfiePlaceholder"`
-	VisitNotes        string  `json:"visitNotes"`
+	Latitude        float64 `json:"latitude"`
+	Longitude       float64 `json:"longitude"`
+	SelfieReference string  `json:"selfieReference"`
+	VisitNotes      string  `json:"visitNotes"`
 }
 
 type CheckOutInput struct {

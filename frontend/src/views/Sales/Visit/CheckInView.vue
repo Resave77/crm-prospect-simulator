@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
@@ -18,19 +17,6 @@ import {
 import VisitLocationCard from '../../../components/sales/visit/VisitLocationCard.vue'
 import VisitSelfieCapture from '../../../components/sales/visit/VisitSelfieCapture.vue'
 import type { WatermarkMeta } from '../../../utils/selfieWatermark'
-
-// Demo-only client-side override. Production must enforce radius on backend.
-function envFlag(value: unknown): boolean {
-  return String(value ?? '').trim().toLowerCase() === 'true'
-}
-
-const demoRadiusOverrideEnabled = envFlag(import.meta.env.VITE_DEMO_RADIUS_OVERRIDE)
-
-console.debug('[DemoRadiusOverride]', {
-  raw: import.meta.env.VITE_DEMO_RADIUS_OVERRIDE,
-  enabled: demoRadiusOverrideEnabled,
-  mode: import.meta.env.MODE,
-})
 
 type PageState = 'loading' | 'ready' | 'invalid-params' | 'not-found' | 'error' | 'location-unavailable'
 
@@ -49,7 +35,6 @@ const pageError = ref('')
 const submitBusy = ref(false)
 const visitNotes = ref('')
 const selfieFile = ref<File | null>(null)
-const showDemoConfirm = ref(false)
 
 const location = useVisitLocation()
 
@@ -86,9 +71,7 @@ const insideRadius = computed(() => {
   )
 })
 
-const radiusAllowedForSubmit = computed(() =>
-  insideRadius.value || demoRadiusOverrideEnabled
-)
+const radiusAllowedForSubmit = computed(() => true)
 
 const canCheckIn = computed(() =>
   hasEntity.value &&
@@ -105,33 +88,22 @@ watchEffect(() => {
     hasSelfie: hasSelfie.value,
     selfieSize: selfieFile.value?.size ?? 0,
     insideRadius: insideRadius.value,
-    demoOverride: demoRadiusOverrideEnabled,
     radiusAllowed: radiusAllowedForSubmit.value,
     submitBusy: submitBusy.value,
     canCheckIn: canCheckIn.value,
   })
 })
 
-const usingDemoRadiusOverride = computed(() =>
-  demoRadiusOverrideEnabled &&
-  hasValidGps.value &&
-  !insideRadius.value
-)
-
 const submitLabel = computed(() => {
   if (submitBusy.value) return 'Checking in\u2026'
-  if (usingDemoRadiusOverride.value) return 'Demo Check in'
   return 'Check in'
 })
 
 const submitHelper = computed(() => {
   if (!hasValidGps.value) return 'GPS location required'
   if (!hasSelfie.value) return 'Selfie required'
-  if (!insideRadius.value && !demoRadiusOverrideEnabled) {
-    return 'Outside radius'
-  }
-  if (usingDemoRadiusOverride.value) {
-    return 'Simulation mode \u2022 Outside radius override'
+  if (!insideRadius.value) {
+    return 'Outside radius \u2022 Check-in still allowed'
   }
   return 'GPS verified \u2022 Ready to check in'
 })
@@ -242,22 +214,7 @@ async function refreshGps() {
 
 function requestCheckIn() {
   if (!canCheckIn.value) return
-
-  if (usingDemoRadiusOverride.value) {
-    showDemoConfirm.value = true
-    return
-  }
-
   void submitCheckIn()
-}
-
-async function confirmDemoOverride() {
-  showDemoConfirm.value = false
-  await submitCheckIn()
-}
-
-function cancelDemoOverride() {
-  showDemoConfirm.value = false
 }
 
 async function submitCheckIn() {
@@ -270,25 +227,12 @@ async function submitCheckIn() {
 
     let notes = visitNotes.value
 
-    if (!insideRadius.value && demoRadiusOverrideEnabled) {
-      const c = location.state.value.coords
-      const demoHeader = [
-        '[DEMO RADIUS OVERRIDE]',
-        `Distance: ${location.distanceFormatted(entity.value.latitude!, entity.value.longitude!)}`,
-        `Allowed radius: ${entity.value.attendanceRadiusMeters}m`,
-        c ? `GPS accuracy: \u00b1${Math.round(c.accuracy)}m` : '',
-        'Inside radius: false',
-        '',
-      ].filter(Boolean).join('\n')
-      notes = demoHeader + notes
-    }
-
     if (entity.value.entityType === 'prospect') {
       await checkInProspect(entity.value.entityId, {
         latitude: coords.latitude,
         longitude: coords.longitude,
         visitNotes: notes,
-        selfiePlaceholder: true,
+        selfie: selfieFile.value,
       })
     }
 
@@ -368,14 +312,6 @@ onBeforeUnmount(() => {
           </div>
           <Tag v-if="entity.entityType === 'prospect'" :value="entity.status.replaceAll('_', ' ')" severity="info" />
           <Tag v-else value="ACTIVE" severity="success" />
-        </div>
-      </div>
-
-      <!-- Demo Override Badge -->
-      <div v-if="demoRadiusOverrideEnabled" class="cicard cicard-demo-badge">
-        <div class="cicard-demo-badge-inner">
-          <i class="pi pi-info-circle" />
-          <span><strong>Demo mode active.</strong> Radius validation is not enforced. Location validation is for simulation only.</span>
         </div>
       </div>
 
@@ -463,7 +399,7 @@ onBeforeUnmount(() => {
             <strong>Outside allowed radius</strong>
             <p>You are {{ location.distanceFormatted(entity.latitude!, entity.longitude!) }} from the target. Allowed radius is {{ entity.attendanceRadiusMeters }}m.</p>
             <p v-if="demoRadiusOverrideEnabled" class="cicard-outside-demo-hint">Demo mode: Check-in is permitted for simulation purposes.</p>
-            <p v-else class="cicard-outside-hint">Move closer within {{ entity.attendanceRadiusMeters }}m to check in.</p>
+            <p v-else class="cicard-outside-hint">You are outside the radius, but check-in is still allowed.</p>
           </div>
         </div>
       </div>
@@ -503,41 +439,6 @@ onBeforeUnmount(() => {
       <p class="checkin-bottom-hint">{{ submitHelper }}</p>
     </div>
 
-    <!-- Demo Override Confirmation Dialog -->
-    <Dialog
-      v-model:visible="showDemoConfirm"
-      header="Demo check-in outside radius"
-      :modal="true"
-      :closable="true"
-      :style="{ width: 'min(100%, 420px)' }"
-      @hide="cancelDemoOverride"
-    >
-      <div class="demo-confirm-body">
-        <p>You are currently <strong>outside</strong> the allowed visit radius.</p>
-        <p>This action is permitted only because <strong>simulation mode</strong> is enabled.</p>
-
-        <div v-if="entity && location.state.value.coords" class="demo-confirm-details">
-          <div class="demo-confirm-row">
-            <span>Distance from target</span>
-            <strong>{{ location.distanceFormatted(entity.latitude!, entity.longitude!) }}</strong>
-          </div>
-          <div class="demo-confirm-row">
-            <span>Allowed radius</span>
-            <strong>{{ entity.attendanceRadiusMeters }}m</strong>
-          </div>
-          <div class="demo-confirm-row">
-            <span>GPS accuracy</span>
-            <strong>&plusmn;{{ Math.round(location.state.value.coords.accuracy) }}m</strong>
-          </div>
-        </div>
-
-        <p class="demo-confirm-note">This override is logged for audit. Production builds enforce radius on the server.</p>
-      </div>
-      <template #footer>
-        <Button label="Cancel" severity="secondary" outlined @click="cancelDemoOverride" />
-        <Button label="Continue Demo Check in" icon="pi pi-check" severity="warn" :loading="submitBusy" @click="confirmDemoOverride" />
-      </template>
-    </Dialog>
   </section>
 </template>
 
@@ -583,11 +484,6 @@ onBeforeUnmount(() => {
 .cicard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .cicard-identity .eyebrow { margin: 0; }
 .cicard-identity h1 { margin: 0; font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; }
-
-.cicard-demo-badge { border-color: #fbbf24; background: #fffbeb; }
-.cicard-demo-badge-inner { display: flex; align-items: flex-start; gap: 0.5rem; color: #92400e; font-size: 0.78rem; line-height: 1.4; }
-.cicard-demo-badge-inner i { color: #d97706; font-size: 0.85rem; flex-shrink: 0; margin-top: 0.1rem; }
-.cicard-demo-badge-inner strong { color: #78350f; }
 
 .cicard-gps-header { display: flex; align-items: center; justify-content: space-between; }
 .cicard-gps-header h2 { margin: 0; }
@@ -642,17 +538,6 @@ onBeforeUnmount(() => {
 }
 .checkin-submit-btn { width: 100%; }
 .checkin-bottom-hint { margin: 0; text-align: center; color: var(--text-muted); font-size: 0.68rem; }
-
-.demo-confirm-body { display: grid; gap: 0.6rem; }
-.demo-confirm-body > p { margin: 0; font-size: 0.85rem; line-height: 1.5; color: var(--text-primary); }
-.demo-confirm-details {
-  display: grid; gap: 0.4rem; padding: 0.75rem; border-radius: 10px;
-  background: #f8fafc; border: 1px solid var(--border-light);
-}
-.demo-confirm-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
-.demo-confirm-row span { color: var(--text-muted); }
-.demo-confirm-row strong { color: var(--text-primary); }
-.demo-confirm-note { margin: 0; font-size: 0.72rem; color: var(--text-muted); font-style: italic; }
 
 @media (max-width: 480px) {
   .checkin-page { gap: 0.7rem; }

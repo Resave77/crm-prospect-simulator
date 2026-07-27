@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope } from '../types/auth'
-import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption } from '../types/crm'
+import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -11,8 +11,13 @@ export async function transitionProspect(id: string, status: ProspectStatus, not
 }
 
 export async function getMyProspect(id: string) { return (await api.get<ApiEnvelope<ProspectReview>>(`/sales/prospects/${id}`)).data.data }
-export async function checkInProspect(id: string, input: { latitude: number; longitude: number; visitNotes: string; selfiePlaceholder: boolean }) {
-  return (await api.post<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/check-in`, input)).data.data
+export async function checkInProspect(id: string, input: { latitude: number; longitude: number; visitNotes: string; selfie?: File | null }) {
+  const form = new FormData()
+  form.append('latitude', String(input.latitude))
+  form.append('longitude', String(input.longitude))
+  form.append('visitNotes', input.visitNotes)
+  if (input.selfie) form.append('selfie', input.selfie)
+  return (await api.post<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/check-in`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data
 }
 export async function checkOutProspect(id: string, visitId: string, input: { latitude: number; longitude: number; followUpNotes: string }) {
   return (await api.patch<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/${visitId}/check-out`, input)).data.data
@@ -68,4 +73,18 @@ export async function getAdminCustomer(id: string) {
 
 export async function deleteCustomer(id: string) {
   await api.delete(`/admin/customers/${id}`)
+}
+
+export async function getAdminVisits(filters: VisitMonitoringFilters) {
+  const params: Record<string, string> = {}
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom
+  if (filters.dateTo) params.dateTo = filters.dateTo
+  if (filters.salesExecutiveId) params.salesExecutiveId = filters.salesExecutiveId
+  if (filters.customerName) params.customerName = filters.customerName
+  if (filters.radiusStatus && filters.radiusStatus !== 'ALL') params.radiusStatus = filters.radiusStatus
+  return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/admin/visits', { params })).data.data
+}
+
+export async function deleteVisit(visitId: string) {
+  await api.delete(`/admin/visits/${visitId}`)
 }
