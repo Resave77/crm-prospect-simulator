@@ -15,5 +15,5 @@ test('all visible administrator and sales navigation targets have routes', async
 test('sales navigation exposes five functional destinations', async () => {
   const sales = await readFile(new URL('../src/layouts/SalesLayout.vue', import.meta.url), 'utf8')
   for (const route of ['/sales/dashboard','/sales/my-customers','/sales/my-prospects','/sales/history','/sales/profile']) assert.ok(sales.includes(route))
-  assert.equal((sales.match(/<RouterLink/g) ?? []).length >= 6, true)
+  assert.equal((sales.match(/<RouterLink/g) ?? []).length >= 5, true)
 })

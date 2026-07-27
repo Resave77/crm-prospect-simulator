@@ -32,10 +32,10 @@ export const useCustomerListStore = defineStore('customerList', () => {
     const segments = [...new Set(allCustomers.value.map(c => c.segment).filter(Boolean))].sort()
     const categories = [...new Set(allCustomers.value.map(c => c.category).filter(Boolean))].sort()
     const regions = [...new Set(allCustomers.value.map(c => c.region).filter(Boolean))].sort()
-    const salesMap = new Map<string, { id: string; fullName: string }>()
+    const salesMap = new Map<string, { id: string; fullName: string; activeProspectCount: number }>()
     for (const c of allCustomers.value) {
       if (c.salesExecutiveId && c.salesExecutiveName && !salesMap.has(c.salesExecutiveId)) {
-        salesMap.set(c.salesExecutiveId, { id: c.salesExecutiveId, fullName: c.salesExecutiveName })
+        salesMap.set(c.salesExecutiveId, { id: c.salesExecutiveId, fullName: c.salesExecutiveName, activeProspectCount: 0 })
       }
     }
     filterOptions.value = {

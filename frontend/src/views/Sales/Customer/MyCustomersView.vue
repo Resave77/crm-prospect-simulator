@@ -379,7 +379,7 @@ onMounted(async () => {
           <div v-if="availableSegments.length" class="mc-sheet-group">
             <span class="mc-sheet-group-label">Segment</span>
             <div class="mc-sheet-chips">
-              <button class="mc-chip" :class="{ active: !draftSegment }" aria-pressed="!draftSegment" @click="draftSegment = ''">
+              <button class="mc-chip" :class="{ active: !draftSegment }" :aria-pressed="!draftSegment" @click="draftSegment = ''">
                 All
               </button>
               <button v-for="seg in availableSegments" :key="seg" class="mc-chip" :class="{ active: draftSegment === seg }" :aria-pressed="draftSegment === seg" @click="draftSegment = draftSegment === seg ? '' : seg">
@@ -391,7 +391,7 @@ onMounted(async () => {
           <div v-if="availableCategories.length" class="mc-sheet-group">
             <span class="mc-sheet-group-label">Category</span>
             <div class="mc-sheet-chips">
-              <button class="mc-chip" :class="{ active: !draftCategory }" aria-pressed="!draftCategory" @click="draftCategory = ''">
+              <button class="mc-chip" :class="{ active: !draftCategory }" :aria-pressed="!draftCategory" @click="draftCategory = ''">
                 All
               </button>
               <button v-for="cat in availableCategories" :key="cat" class="mc-chip" :class="{ active: draftCategory === cat }" :aria-pressed="draftCategory === cat" @click="draftCategory = draftCategory === cat ? '' : cat">
