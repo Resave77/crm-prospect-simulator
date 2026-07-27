@@ -370,8 +370,8 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
 
 .detail-bottom-bar {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: min(100%, 440px); z-index: 40;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  width: 100%; z-index: 40;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -394,7 +394,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dbar-checkout { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 .dbar-checkout:hover { background: #ffedd5; }
 
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }

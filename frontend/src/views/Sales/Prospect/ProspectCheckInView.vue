@@ -378,7 +378,7 @@ onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
 
 .cicard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
 
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .checkin-page { gap: 0.7rem; }
   .cicard { padding: 1rem; }
   .cicard-identity h1 { font-size: 1.05rem; }

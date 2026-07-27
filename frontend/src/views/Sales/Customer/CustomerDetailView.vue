@@ -8,6 +8,7 @@ import type { CustomerDetail } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { copyToClipboard } from '../../../utils/placeDetails'
+import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
 
 const route = useRoute()
 const detail = ref<CustomerDetail | null>(null)
@@ -72,6 +73,7 @@ function acquireGPS() {
 }
 
 const copied = ref(false)
+const showLegend = ref(false)
 function handleCopy(text: string) {
   copyToClipboard(text)
   copied.value = true
@@ -93,6 +95,20 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 <template>
   <section class="detail-page">
     <RouterLink class="back-link" to="/sales/my-customers"><i class="pi pi-arrow-left" /> My Customers</RouterLink>
+
+    <!-- Data Source Legend -->
+    <div class="ds-legend">
+      <button class="ds-legend-toggle" @click="showLegend = !showLegend">
+        <i class="pi pi-info-circle" /> Data source legend
+        <i :class="showLegend ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+      </button>
+      <div v-if="showLegend" class="ds-legend-body">
+        <div class="ds-legend-item"><DataSourceBadge source="google" /> <span>Data imported from Google Maps / Places</span></div>
+        <div class="ds-legend-item"><DataSourceBadge source="manual" /> <span>Data entered by Admin during conversion</span></div>
+        <div class="ds-legend-item"><DataSourceBadge source="system" /> <span>Generated automatically by CRM</span></div>
+        <div class="ds-legend-item"><DataSourceBadge source="prospect" /> <span>Carried over from the source Prospect</span></div>
+      </div>
+    </div>
 
     <!-- Loading skeleton -->
     <div v-if="loading" class="detail-skeleton">
@@ -121,25 +137,25 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <div class="dcard-avatar">{{ initials(customer?.name || 'Customer') }}</div>
           <div class="dcard-identity">
             <p class="eyebrow">Customer Existing</p>
-            <h1>{{ customer?.name }}</h1>
-            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }}</small>
+            <h1>{{ customer?.name }} <DataSourceBadge source="google" /></h1>
+            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }} <DataSourceBadge source="manual" /></small>
           </div>
         </div>
         <div class="dcard-codes">
-          <div class="dcard-code-item"><span>Customer code</span><strong>{{ customer?.customerCode }}</strong></div>
-          <div class="dcard-code-item"><span>Parent code</span><strong>{{ customer?.parentCode }}</strong></div>
+          <div class="dcard-code-item"><span>Customer code <DataSourceBadge source="system" /></span><strong>{{ customer?.customerCode }}</strong></div>
+          <div class="dcard-code-item"><span>Parent code <DataSourceBadge source="system" /></span><strong>{{ customer?.parentCode }}</strong></div>
         </div>
         <div class="dcard-tags">
-          <Tag value="ACTIVE" severity="success" />
-          <Tag v-if="customer?.segment" :value="customer.segment" />
-          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" />
+          <Tag value="ACTIVE" severity="success" /> <DataSourceBadge source="system" />
+          <Tag v-if="customer?.segment" :value="customer.segment" /> <DataSourceBadge source="manual" />
+          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" /> <DataSourceBadge source="google" />
         </div>
       </div>
 
       <!-- Location Card -->
       <div class="dcard">
         <div class="dcard-header-row">
-          <h2>Location</h2>
+          <h2>Location <DataSourceBadge source="google" /></h2>
           <span v-if="distance != null" class="dcard-distance-pill">
             <i class="pi pi-compass" /> {{ formatDistance(distance) }} away
           </span>
@@ -164,9 +180,9 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       <div class="dcard">
         <h2>Contact & Address</h2>
         <div v-if="displayContactName || displayPhone || displayEmail" class="dcard-contact-section">
-          <div v-if="displayContactName" class="dcard-row"><i class="pi pi-user" /><span><strong>{{ displayContactName }}</strong><template v-if="displayContactPosition"> · {{ displayContactPosition }}</template></span></div>
-          <div v-if="displayPhone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${displayPhone}`">{{ displayPhone }}</a></div>
-          <div v-if="displayEmail" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${displayEmail}`">{{ displayEmail }}</a></div>
+          <div v-if="displayContactName" class="dcard-row"><i class="pi pi-user" /><span><strong>{{ displayContactName }}</strong><template v-if="displayContactPosition"> · {{ displayContactPosition }}</template> <DataSourceBadge source="manual" /></span></div>
+          <div v-if="displayPhone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${displayPhone}`">{{ displayPhone }}</a> <DataSourceBadge source="google" /></div>
+          <div v-if="displayEmail" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${displayEmail}`">{{ displayEmail }}</a> <DataSourceBadge source="manual" /></div>
         </div>
         <p v-else class="dcard-empty-text">No contacts on file.</p>
         <div v-if="customer?.address?.previewAddress" class="dcard-address-block">
@@ -185,15 +201,15 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       <div class="dcard">
         <h2>Conversion Source</h2>
         <div class="dcard-rows">
-          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Prospect:</strong> {{ detail.sourceProspectName }}</span></div>
-          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Source ID:</strong> {{ customer?.sourceProspectId || '—' }}</span></div>
+          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Prospect:</strong> {{ detail.sourceProspectName }} <DataSourceBadge source="prospect" /></span></div>
+          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Source ID:</strong> {{ customer?.sourceProspectId || '—' }} <DataSourceBadge source="prospect" /></span></div>
           <div v-if="customer?.sourceGooglePlaceId" class="dcard-row">
             <i class="pi pi-info-circle" />
-            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ customer.sourceGooglePlaceId }}</code></span>
+            <span class="dcard-place-id"><span>Google Place ID <DataSourceBadge source="google" /></span><code>{{ customer.sourceGooglePlaceId }}</code></span>
             <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
           </div>
-          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }}</span></div>
-          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }}</span></div>
+          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }} <DataSourceBadge source="system" /></span></div>
+          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }} <DataSourceBadge source="system" /></span></div>
         </div>
       </div>
 
@@ -255,11 +271,11 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 }
 .dcard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .dcard-identity .eyebrow { margin: 0; }
-.dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; }
-.dcard-identity small { color: var(--text-secondary); font-size: 0.75rem; }
+.dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.dcard-identity small { color: var(--text-secondary); font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
 .dcard-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .dcard-code-item { padding: 0.55rem 0.65rem; background: rgba(255,255,255,0.7); border-radius: 10px; display: flex; flex-direction: column; gap: 0.1rem; }
-.dcard-code-item span { color: var(--text-muted); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.dcard-code-item span { color: var(--text-muted); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
 .dcard-code-item strong { font-size: 0.78rem; color: var(--text-primary); font-weight: 700; }
 .dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
@@ -295,8 +311,8 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 /* ── Bottom Action Bar ───────────────────────────────────── */
 .detail-bottom-bar {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: min(100%, 440px); z-index: 40;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  width: 100%; z-index: 40;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -317,8 +333,30 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dbar-checkin { background: #eff6ff; color: var(--brand-blue); border: 1px solid #bfdbfe; }
 .dbar-checkin:hover { background: #dbeafe; }
 
+/* ── Data Source Legend ─────────────────────────────────────── */
+.ds-legend {
+  border: 1px solid var(--border-light); border-radius: var(--radius-xl);
+  background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden;
+}
+.ds-legend-toggle {
+  width: 100%; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.65rem 1rem; border: 0; background: transparent;
+  color: var(--text-muted); font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; transition: color 0.15s ease;
+}
+.ds-legend-toggle:hover { color: var(--text-primary); }
+.ds-legend-toggle i:first-child { font-size: 0.8rem; color: var(--brand-blue); }
+.ds-legend-toggle i:last-child { margin-left: auto; font-size: 0.6rem; }
+.ds-legend-body {
+  display: grid; gap: 0.45rem; padding: 0 1rem 0.75rem;
+}
+.ds-legend-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4;
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }

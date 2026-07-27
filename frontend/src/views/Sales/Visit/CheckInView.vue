@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else-if="pageState === 'ready' && entity">
-      <!-- Entity Summary -->
+      <!-- Entity Summary (full width) -->
       <div class="cicard cicard-summary">
         <div class="cicard-summary-top">
           <div class="cicard-avatar">{{ entity.name.split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') }}</div>
@@ -315,130 +315,137 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- GPS Signal -->
-      <div class="cicard">
-        <div class="cicard-gps-header">
-          <h2>GPS Signal</h2>
-          <button class="cicard-refresh-btn" :disabled="location.state.value.loading" @click="refreshGps" title="Refresh location">
-            <i class="pi" :class="location.state.value.loading ? 'pi-spin pi-sync' : 'pi-refresh'" />
-          </button>
-        </div>
-        <div v-if="location.state.value.permissionGranted && location.state.value.coords" class="cicard-gps-status">
-          <div class="cicard-gps-ready">
-            <i class="pi pi-check-circle" /> GPS signal ready
+      <!-- Two-column content grid -->
+      <div class="checkin-content-grid">
+        <!-- Left column: GPS, location, map -->
+        <div class="checkin-main-column">
+          <!-- GPS Signal -->
+          <div class="cicard">
+            <div class="cicard-gps-header">
+              <h2>GPS Signal</h2>
+              <button class="cicard-refresh-btn" :disabled="location.state.value.loading" @click="refreshGps" title="Refresh location">
+                <i class="pi" :class="location.state.value.loading ? 'pi-spin pi-sync' : 'pi-refresh'" />
+              </button>
+            </div>
+            <div v-if="location.state.value.permissionGranted && location.state.value.coords" class="cicard-gps-status">
+              <div class="cicard-gps-ready">
+                <i class="pi pi-check-circle" /> GPS signal ready
+              </div>
+              <span class="cicard-gps-accuracy">Accuracy &plusmn;{{ Math.round(location.state.value.coords.accuracy) }} meters</span>
+              <Tag
+                :value="insideRadius ? 'Inside radius' : 'Outside radius'"
+                :severity="insideRadius ? 'success' : 'danger'"
+              />
+            </div>
+            <div v-else-if="location.state.value.error" class="cicard-gps-error">
+              <i class="pi pi-exclamation-triangle" /> {{ location.state.value.error }}
+            </div>
+            <div v-else-if="location.state.value.loading" class="cicard-gps-loading">
+              <i class="pi pi-spin pi-sync" /> Acquiring GPS signal...
+            </div>
+            <div v-else class="cicard-gps-idle">
+              <i class="pi pi-info-circle" /> GPS will be acquired for check-in
+            </div>
           </div>
-          <span class="cicard-gps-accuracy">Accuracy &plusmn;{{ Math.round(location.state.value.coords.accuracy) }} meters</span>
-          <Tag
-            :value="insideRadius ? 'Inside radius' : 'Outside radius'"
-            :severity="insideRadius ? 'success' : 'danger'"
-          />
-        </div>
-        <div v-else-if="location.state.value.error" class="cicard-gps-error">
-          <i class="pi pi-exclamation-triangle" /> {{ location.state.value.error }}
-        </div>
-        <div v-else-if="location.state.value.loading" class="cicard-gps-loading">
-          <i class="pi pi-spin pi-sync" /> Acquiring GPS signal...
-        </div>
-        <div v-else class="cicard-gps-idle">
-          <i class="pi pi-info-circle" /> GPS will be acquired for check-in
-        </div>
-      </div>
 
-      <!-- Location Status -->
-      <div v-if="location.state.value.coords" class="cicard cicard-location-status">
-        <div class="cicard-location-status-inner">
-          <i class="pi pi-check-circle" />
-          <span>Location verified &bull; Updated {{ gpsAgeLabel }}</span>
+          <!-- Location Status -->
+          <div v-if="location.state.value.coords" class="cicard cicard-location-status">
+            <div class="cicard-location-status-inner">
+              <i class="pi pi-check-circle" />
+              <span>Location verified &bull; Updated {{ gpsAgeLabel }}</span>
+            </div>
+          </div>
+
+          <!-- Map + Location Details -->
+          <div class="cicard">
+            <h2>Current Location</h2>
+            <VisitLocationCard
+              :target-latitude="entity.latitude"
+              :target-longitude="entity.longitude"
+              :target-label="entity.name"
+              :sales-coords="location.state.value.coords"
+              :radius-meters="entity.attendanceRadiusMeters"
+              height="190px"
+            />
+            <div class="cicard-location-rows">
+              <div v-if="entity.latitude != null && entity.longitude != null" class="cicard-row">
+                <i class="pi pi-compass" />
+                <span>Target: {{ entity.latitude.toFixed(6) }}, {{ entity.longitude.toFixed(6) }}</span>
+              </div>
+              <div v-if="location.state.value.coords" class="cicard-row">
+                <i class="pi pi-map-marker" />
+                <span>Current: {{ location.state.value.coords.latitude.toFixed(6) }}, {{ location.state.value.coords.longitude.toFixed(6) }}</span>
+              </div>
+              <div v-if="location.state.value.coords && entity.latitude != null" class="cicard-row cicard-distance">
+                <i class="pi pi-compass" />
+                <span>{{ location.distanceFormatted(entity.latitude, entity.longitude!) }} from target</span>
+              </div>
+              <div class="cicard-row">
+                <i class="pi pi-info-circle" />
+                <span>Allowed radius: {{ entity.attendanceRadiusMeters }} meters</span>
+              </div>
+              <div v-if="location.state.value.coords" class="cicard-row">
+                <i class="pi pi-info-circle" />
+                <span>GPS accuracy: &plusmn;{{ Math.round(location.state.value.coords.accuracy) }} meters</span>
+              </div>
+              <div v-if="gpsAccuracyWarning" class="cicard-row cicard-warning">
+                <i class="pi pi-exclamation-triangle" />
+                <span>GPS accuracy is low relative to the radius. Position may be imprecise.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Outside Radius Warning -->
+          <div v-if="location.state.value.permissionGranted && location.state.value.coords && !insideRadius" class="cicard cicard-outside">
+            <div class="cicard-outside-inner">
+              <i class="pi pi-exclamation-triangle" />
+              <div>
+                <strong>Outside allowed radius</strong>
+                <p>You are {{ location.distanceFormatted(entity.latitude!, entity.longitude!) }} from the target. Allowed radius is {{ entity.attendanceRadiusMeters }}m.</p>
+                <p class="cicard-outside-hint">You are outside the radius, but check-in is still allowed.</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Map + Location Details -->
-      <div class="cicard">
-        <h2>Current Location</h2>
-        <VisitLocationCard
-          :target-latitude="entity.latitude"
-          :target-longitude="entity.longitude"
-          :target-label="entity.name"
-          :sales-coords="location.state.value.coords"
-          :radius-meters="entity.attendanceRadiusMeters"
-          height="190px"
-        />
-        <div class="cicard-location-rows">
-          <div v-if="entity.latitude != null && entity.longitude != null" class="cicard-row">
-            <i class="pi pi-compass" />
-            <span>Target: {{ entity.latitude.toFixed(6) }}, {{ entity.longitude.toFixed(6) }}</span>
+        <!-- Right column: Selfie, notes, submit -->
+        <div class="checkin-side-column">
+          <!-- Selfie -->
+          <div class="cicard">
+            <VisitSelfieCapture
+              :watermark-meta="selfieMeta"
+              :required="true"
+              @captured="onSelfieCaptured"
+              @cleared="onSelfieCleared"
+              @error="onSelfieError"
+            />
           </div>
-          <div v-if="location.state.value.coords" class="cicard-row">
-            <i class="pi pi-map-marker" />
-            <span>Current: {{ location.state.value.coords.latitude.toFixed(6) }}, {{ location.state.value.coords.longitude.toFixed(6) }}</span>
+
+          <!-- Visit Notes -->
+          <div class="cicard">
+            <h2>Visit Notes</h2>
+            <p class="cicard-hint">Optional &mdash; what do you plan to discuss?</p>
+            <label class="cicard-field">
+              <span class="sr-only">Visit Notes</span>
+              <Textarea v-model="visitNotes" rows="3" fluid placeholder="What do you plan to discuss?" />
+            </label>
           </div>
-          <div v-if="location.state.value.coords && entity.latitude != null" class="cicard-row cicard-distance">
-            <i class="pi pi-compass" />
-            <span>{{ location.distanceFormatted(entity.latitude, entity.longitude!) }} from target</span>
-          </div>
-          <div class="cicard-row">
-            <i class="pi pi-info-circle" />
-            <span>Allowed radius: {{ entity.attendanceRadiusMeters }} meters</span>
-          </div>
-          <div v-if="location.state.value.coords" class="cicard-row">
-            <i class="pi pi-info-circle" />
-            <span>GPS accuracy: &plusmn;{{ Math.round(location.state.value.coords.accuracy) }} meters</span>
-          </div>
-          <div v-if="gpsAccuracyWarning" class="cicard-row cicard-warning">
-            <i class="pi pi-exclamation-triangle" />
-            <span>GPS accuracy is low relative to the radius. Position may be imprecise.</span>
+
+          <!-- Submit Action -->
+          <div class="checkin-bottom">
+            <Button
+              :label="submitLabel"
+              icon="pi pi-sign-in"
+              :loading="submitBusy"
+              :disabled="!canCheckIn"
+              class="checkin-submit-btn"
+              @click="requestCheckIn"
+            />
+            <p class="checkin-bottom-hint">{{ submitHelper }}</p>
           </div>
         </div>
-      </div>
-
-      <!-- Outside Radius Warning -->
-      <div v-if="location.state.value.permissionGranted && location.state.value.coords && !insideRadius" class="cicard cicard-outside">
-        <div class="cicard-outside-inner">
-          <i class="pi pi-exclamation-triangle" />
-          <div>
-            <strong>Outside allowed radius</strong>
-            <p>You are {{ location.distanceFormatted(entity.latitude!, entity.longitude!) }} from the target. Allowed radius is {{ entity.attendanceRadiusMeters }}m.</p>
-            <p v-if="demoRadiusOverrideEnabled" class="cicard-outside-demo-hint">Demo mode: Check-in is permitted for simulation purposes.</p>
-            <p v-else class="cicard-outside-hint">You are outside the radius, but check-in is still allowed.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Selfie -->
-      <div class="cicard">
-        <VisitSelfieCapture
-          :watermark-meta="selfieMeta"
-          :required="true"
-          @captured="onSelfieCaptured"
-          @cleared="onSelfieCleared"
-          @error="onSelfieError"
-        />
-      </div>
-
-      <!-- Visit Notes -->
-      <div class="cicard">
-        <h2>Visit Notes</h2>
-        <p class="cicard-hint">Optional &mdash; what do you plan to discuss?</p>
-        <label class="cicard-field">
-          <span class="sr-only">Visit Notes</span>
-          <Textarea v-model="visitNotes" rows="3" fluid placeholder="What do you plan to discuss?" />
-        </label>
       </div>
     </template>
-
-    <!-- Bottom Submit -->
-    <div v-if="pageState === 'ready' && entity" class="checkin-bottom">
-      <Button
-        :label="submitLabel"
-        icon="pi pi-sign-in"
-        :loading="submitBusy"
-        :disabled="!canCheckIn"
-        class="checkin-submit-btn"
-        @click="requestCheckIn"
-      />
-      <p class="checkin-bottom-hint">{{ submitHelper }}</p>
-    </div>
-
   </section>
 </template>
 
@@ -519,7 +526,6 @@ onBeforeUnmount(() => {
 .cicard-outside-inner > i { color: #dc2626; font-size: 1.1rem; flex-shrink: 0; margin-top: 0.1rem; }
 .cicard-outside-inner strong { color: #991b1b; font-size: 0.82rem; display: block; margin-bottom: 0.15rem; }
 .cicard-outside-inner p { margin: 0; color: #7f1d1d; font-size: 0.75rem; line-height: 1.4; }
-.cicard-outside-demo-hint { color: #92400e; font-weight: 600; margin-top: 0.25rem !important; }
 .cicard-outside-hint { margin-top: 0.25rem !important; }
 
 .cicard-hint { margin: -0.35rem 0 0; color: var(--text-muted); font-size: 0.75rem; }
@@ -528,8 +534,8 @@ onBeforeUnmount(() => {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
 .checkin-bottom {
-  position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
-  width: min(100%, 440px); z-index: 50;
+  position: fixed; bottom: 68px; left: 0; right: 0;
+  width: 100%; z-index: 50;
   display: flex; flex-direction: column; gap: 0.3rem;
   padding: 0.7rem 1rem; padding-bottom: calc(0.7rem + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.98); border-top: 1px solid #e2e8f0;
@@ -539,7 +545,44 @@ onBeforeUnmount(() => {
 .checkin-submit-btn { width: 100%; }
 .checkin-bottom-hint { margin: 0; text-align: center; color: var(--text-muted); font-size: 0.68rem; }
 
-@media (max-width: 480px) {
+/* ── Desktop ──────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .checkin-page {
+    padding-bottom: 2rem;
+    max-width: 1280px;
+  }
+
+  .checkin-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  .checkin-main-column,
+  .checkin-side-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .checkin-bottom {
+    position: sticky;
+    top: 1rem;
+    width: 100%;
+    z-index: 2;
+  }
+
+  .checkin-submit-btn { width: 100%; }
+
+  .visit-location-map,
+  .entity-map-frame,
+  .vlm-wrapper { height: 320px !important; max-height: 360px; }
+}
+
+/* ── Mobile ──────────────────────────────────────────── */
+@media (max-width: 767px) {
   .checkin-page { gap: 0.7rem; }
   .cicard { padding: 1rem; }
   .cicard-identity h1 { font-size: 1rem; }

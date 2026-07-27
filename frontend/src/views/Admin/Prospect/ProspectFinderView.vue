@@ -416,7 +416,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 <style scoped>
 /* ════════════════════════════════════════════════════════════════
-   PROSPECT FINDER — Workspace Layout
+   PROSPECT FINDER — Workspace Layout (modernized visual pass)
    ════════════════════════════════════════════════════════════════ */
 
 .finder-page {
@@ -437,8 +437,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   overflow: hidden;
   background: var(--surface-card);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -8px rgba(16, 24, 40, 0.10);
 }
 
 /* ── Left Panel ──────────────────────────────────────────────── */
@@ -451,32 +451,33 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 .finder-panel-header {
-  padding: 0.85rem 1rem;
+  padding: 1rem 1.1rem;
   border-bottom: 1px solid var(--border-light);
-  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff 100%);
+  background: linear-gradient(150deg, var(--brand-blue-50) 0%, #ffffff 70%);
 }
 
 .finder-panel-title {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.7rem;
 }
 
 .finder-panel-title > i {
-  width: 2rem;
-  height: 2rem;
+  width: 2.15rem;
+  height: 2.15rem;
   display: grid;
   place-items: center;
   color: #fff;
-  background: var(--brand-blue);
-  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--brand-blue) 0%, #1d4fd8 100%);
+  border-radius: 0.7rem;
   font-size: 0.85rem;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px -2px rgba(37, 99, 235, 0.45);
 }
 
 .finder-panel-title h1 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.02rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text-primary);
@@ -485,28 +486,29 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .finder-panel-title span {
   display: block;
-  margin-top: 0.1rem;
+  margin-top: 0.15rem;
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: 0.63rem;
   font-weight: 500;
 }
 
 .finder-filter-scroll {
   max-height: 380px;
-  padding: 0.5rem 0.85rem;
+  padding: 0.55rem 0.9rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-.finder-filter-scroll::-webkit-scrollbar { width: 3px; }
+.finder-filter-scroll::-webkit-scrollbar { width: 4px; }
 .finder-filter-scroll::-webkit-scrollbar-track { background: transparent; }
-.finder-filter-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+.finder-filter-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+.finder-filter-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 
 /* ── Filter Sections ─────────────────────────────────────────── */
 .filter-section {
-  padding: 0.55rem 0;
+  padding: 0.6rem 0;
   border-bottom: 1px solid #eef1f5;
 }
 
@@ -516,32 +518,32 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .filter-section-title {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.5rem;
   color: var(--text-primary);
   font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .filter-section-header .filter-section-title { margin-bottom: 0; }
 
 .category-count {
-  padding: 0.1rem 0.45rem;
+  padding: 0.12rem 0.5rem;
   color: var(--brand-blue);
   background: var(--brand-blue-50);
   border: 1px solid var(--brand-blue-100);
-  border-radius: 1rem;
+  border-radius: 999px;
   font-size: 0.55rem;
   font-weight: 700;
 }
 
 /* Keyword */
-.finder-keyword-field { gap: 0.3rem; }
+.finder-keyword-field { gap: 0.32rem; }
 .finder-keyword-field > span { color: var(--text-muted); font-size: 0.65rem; font-weight: 700; }
 
 .keyword-input-wrap {
@@ -552,51 +554,52 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .keyword-icon {
   position: absolute;
-  left: 0.65rem;
+  left: 0.7rem;
   color: var(--text-faint);
   font-size: 0.7rem;
   pointer-events: none;
 }
 
 .keyword-input-wrap :deep(.p-inputtext) {
-  padding-left: 1.85rem;
-  border-radius: var(--radius-sm);
+  padding-left: 1.9rem;
+  border-radius: 0.6rem;
   border-color: var(--border-default);
   font-size: 0.78rem;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
+  padding-top: 0.52rem;
+  padding-bottom: 0.52rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .keyword-input-wrap :deep(.p-inputtext:focus) {
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
 }
 
 /* Categories */
 .category-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .category-chip {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.28rem;
   align-items: center;
-  padding: 0.25rem 0.35rem;
-  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.55rem;
   background: var(--surface-subtle);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
-.category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
+.category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); transform: translateY(-1px); }
 
 .category-chip.active {
-  background: var(--brand-blue-50);
+  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #eaf1ff 100%);
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.14), 0 2px 6px -2px rgba(37, 99, 235, 0.25);
 }
 
 .category-chip span {
@@ -606,7 +609,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   color: var(--text-secondary);
   font-size: 0.58rem;
   font-weight: 550;
-  transition: color var(--transition-fast);
+  transition: color 160ms ease;
 }
 
 .category-chip.active span { color: var(--brand-blue); font-weight: 700; }
@@ -616,15 +619,15 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.45rem;
 }
 
 .radius-value {
-  padding: 0.15rem 0.5rem;
+  padding: 0.16rem 0.55rem;
   color: var(--brand-blue);
-  background: var(--brand-blue-50);
+  background: linear-gradient(135deg, var(--brand-blue-50), #eaf1ff);
   border: 1px solid var(--brand-blue-100);
-  border-radius: 1rem;
+  border-radius: 999px;
   font-size: 0.65rem;
   font-weight: 800;
 }
@@ -632,7 +635,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .radius-range-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.2rem;
+  margin-top: 0.25rem;
   color: var(--text-faint);
   font-size: 0.52rem;
 }
@@ -641,47 +644,53 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .coordinate-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
-.coordinate-grid .field { gap: 0.2rem; }
+.coordinate-grid .field { gap: 0.22rem; }
 .coordinate-grid .field > span { color: var(--text-muted); font-size: 0.58rem; font-weight: 700; }
 
 .coordinate-grid input {
   width: 100%;
-  padding: 0.4rem 0.55rem;
+  padding: 0.42rem 0.6rem;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: 0.55rem;
   font-size: 0.7rem;
   color: var(--text-primary);
   background: var(--surface-card);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .coordinate-grid input:focus {
   outline: none;
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
 }
 
 /* Filter Actions */
 .filter-actions {
-  margin-top: 0.5rem;
+  margin-top: 0.55rem;
   display: grid;
   grid-template-columns: 0.8fr 1.2fr;
-  gap: 0.4rem;
+  gap: 0.45rem;
 }
 
 .filter-actions :deep(.p-button) {
-  padding: 0.5rem;
+  padding: 0.52rem;
   font-size: 0.68rem;
   font-weight: 700;
-  border-radius: var(--radius-sm);
+  border-radius: 0.6rem;
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.filter-actions :deep(.p-button:not(:disabled):hover) {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
 }
 
 /* ── Results Header ──────────────────────────────────────────── */
 .finder-results-header {
-  padding: 0.5rem 0.85rem;
+  padding: 0.55rem 0.9rem;
   border-top: 1px solid var(--border-light);
   border-bottom: 1px solid var(--border-light);
   background: var(--surface-subtle);
@@ -691,7 +700,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
 
 .finder-results-header strong {
@@ -714,7 +723,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .result-search-wrap i {
   position: absolute;
-  left: 0.55rem;
+  left: 0.6rem;
   color: var(--text-faint);
   font-size: 0.65rem;
   pointer-events: none;
@@ -722,18 +731,19 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .result-search-wrap input {
   width: 100%;
-  padding: 0.35rem 0.55rem 0.35rem 1.5rem;
+  padding: 0.38rem 0.6rem 0.38rem 1.55rem;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: 0.55rem;
   background: var(--surface-card);
   font-size: 0.68rem;
   color: var(--text-primary);
-  transition: border-color var(--transition-fast);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .result-search-wrap input:focus {
   outline: none;
   border-color: var(--brand-blue);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
 }
 
 .result-search-wrap input::placeholder { color: var(--text-faint); }
@@ -741,7 +751,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 /* ── Results List ────────────────────────────────────────────── */
 .finder-result-state {
   min-height: 140px;
-  gap: 0.5rem;
+  gap: 0.55rem;
   padding: 1rem;
 }
 
@@ -761,67 +771,69 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .finder-results {
   min-height: 0;
-  padding: 0.45rem;
+  padding: 0.5rem;
   overflow-y: auto;
   align-content: start;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.35rem;
 }
 
-.finder-results::-webkit-scrollbar { width: 3px; }
+.finder-results::-webkit-scrollbar { width: 4px; }
 .finder-results::-webkit-scrollbar-track { background: transparent; }
-.finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+.finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+.finder-results::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 
 .result-card {
   width: 100%;
-  padding: 0.6rem;
+  padding: 0.65rem;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.55rem;
+  gap: 0.6rem;
   align-items: center;
   text-align: left;
   color: var(--text-primary);
   background: var(--surface-card);
   border: 1px solid #eef1f5;
-  border-radius: var(--radius-md);
+  border-radius: 0.85rem;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
 .result-card:hover {
   border-color: var(--brand-blue-100);
   background: #f8faff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
+  box-shadow: 0 4px 14px -4px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
 }
 
 .result-card.selected {
   border-color: var(--brand-blue);
   background: linear-gradient(135deg, #f5f8ff 0%, #eef3ff 100%);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1), 0 2px 8px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12), 0 6px 16px -4px rgba(37, 99, 235, 0.18);
 }
 
 .result-marker {
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.95rem;
+  height: 1.95rem;
   display: grid;
   place-items: center;
   color: #fff;
   border-radius: 50%;
   font-size: 0.6rem;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16);
 }
 
 .result-info {
   min-width: 0;
   display: grid;
-  gap: 0.1rem;
+  gap: 0.12rem;
 }
 
 .result-name-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.38rem;
 }
 
 .result-name-row strong {
@@ -846,7 +858,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .result-address {
   color: var(--text-faint);
   font-size: 0.58rem;
-  line-height: 1.35;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -855,14 +867,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .result-meta-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  margin-top: 0.1rem;
+  gap: 0.38rem;
+  margin-top: 0.12rem;
 }
 
 .result-distance {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.22rem;
   color: var(--text-muted);
   font-size: 0.55rem;
   font-weight: 500;
@@ -876,11 +888,11 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   color: var(--text-faint);
   font-size: 0.6rem;
   flex-shrink: 0;
-  transition: color var(--transition-fast);
+  transition: color 160ms ease, transform 160ms ease;
 }
 
 .result-card:hover .result-chevron,
-.result-card.selected .result-chevron { color: var(--brand-blue); }
+.result-card.selected .result-chevron { color: var(--brand-blue); transform: translateX(2px); }
 
 /* ── Map Stage ───────────────────────────────────────────────── */
 .finder-map-stage {
@@ -901,8 +913,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .leaflet-map :deep(.leaflet-control-zoom) {
   border: 0;
-  box-shadow: 0 4px 16px rgba(30, 54, 84, 0.18);
-  border-radius: var(--radius-md) !important;
+  box-shadow: 0 6px 20px rgba(30, 54, 84, 0.16);
+  border-radius: 0.7rem !important;
   overflow: hidden;
 }
 
@@ -911,7 +923,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .leaflet-map :deep(.leaflet-control-attribution) {
   color: #617087;
   background: rgba(255, 255, 255, 0.9);
-  border-radius: var(--radius-sm) 0 0 0;
+  border-radius: 0.4rem 0 0 0;
   font-size: 9px;
 }
 
@@ -919,48 +931,54 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .map-source-badge {
   position: absolute;
   z-index: 500;
-  left: 0.75rem;
-  bottom: 0.75rem;
+  left: 0.8rem;
+  bottom: 0.8rem;
   max-width: 260px;
-  padding: 0.5rem 0.7rem;
+  padding: 0.55rem 0.75rem;
   display: flex;
-  gap: 0.45rem;
+  gap: 0.5rem;
   align-items: flex-start;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(221, 229, 239, 0.95);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 10px rgba(30, 54, 84, 0.1);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(221, 229, 239, 0.9);
+  border-radius: 0.7rem;
+  box-shadow: 0 6px 20px rgba(30, 54, 84, 0.12);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
 }
 
-.map-source-badge > i { margin-top: 0.02rem; color: #16a34a; font-size: 0.75rem; }
-.map-source-badge div { display: grid; gap: 0.1rem; }
+.map-source-badge > i {
+  margin-top: 0.02rem;
+  color: #16a34a;
+  font-size: 0.75rem;
+  filter: drop-shadow(0 1px 1px rgba(22, 163, 74, 0.25));
+}
+.map-source-badge div { display: grid; gap: 0.12rem; }
 .map-source-badge strong { font-size: 0.58rem; font-weight: 700; }
-.map-source-badge span { color: #718096; font-size: 0.52rem; line-height: 1.45; }
+.map-source-badge span { color: #718096; font-size: 0.52rem; line-height: 1.5; }
 
 /* ── Detail Dialog ───────────────────────────────────────────── */
 .detail-dialog {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .detail-hero-bar {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.8rem;
   align-items: flex-start;
 }
 
 .detail-hero {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.85rem;
+  height: 2.85rem;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   color: #fff;
-  border-radius: var(--radius-md);
+  border-radius: 0.85rem;
   font-size: 1rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
 }
 
 .detail-hero-info h2 {
@@ -975,8 +993,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .detail-hero-meta {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  margin-top: 0.3rem;
+  gap: 0.38rem;
+  margin-top: 0.32rem;
   flex-wrap: wrap;
 }
 
@@ -988,17 +1006,17 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .detail-info-grid {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.7rem;
 }
 
 .detail-info-item {
   display: flex;
-  gap: 0.65rem;
+  gap: 0.7rem;
   align-items: flex-start;
 }
 
 .detail-info-item > i {
-  margin-top: 0.1rem;
+  margin-top: 0.12rem;
   color: var(--brand-blue);
   font-size: 0.72rem;
   width: 1rem;
@@ -1008,7 +1026,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .detail-info-item > div {
   display: grid;
-  gap: 0.1rem;
+  gap: 0.12rem;
 }
 
 .detail-info-label {
@@ -1016,13 +1034,13 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   font-size: 0.58rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .detail-info-value {
   color: var(--text-primary);
   font-size: 0.78rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .detail-info-value.detail-types {
@@ -1035,33 +1053,33 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   font-size: 0.75rem;
   font-weight: 600;
   text-decoration: none;
-  transition: opacity var(--transition-fast);
+  transition: opacity 160ms ease;
 }
 
-.detail-info-link:hover { opacity: 0.75; }
+.detail-info-link:hover { opacity: 0.72; }
 
 .detail-assignment {
-  padding-top: 0.85rem;
+  padding-top: 0.9rem;
   border-top: 1px solid var(--border-light);
 }
 
 .detail-assignment h3 {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.7rem;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
 .detail-assignment-fields {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.7rem;
 }
 
 .detail-assignment-fields .field {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.32rem;
 }
 
 .detail-assignment-fields .field > span {
@@ -1073,12 +1091,13 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .detail-dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.55rem;
 }
 
 .assignment-warning {
   font-size: 0.72rem;
-  margin-top: 0.15rem;
+  margin-top: 0.18rem;
+  border-radius: 0.6rem;
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
@@ -1117,11 +1136,11 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   background: var(--marker-color);
   border: 3px solid #fff;
   border-radius: 50% 50% 50% 0;
-  box-shadow: 0 4px 14px rgba(22, 41, 67, 0.3);
+  box-shadow: 0 6px 16px rgba(22, 41, 67, 0.32), 0 0 0 1px rgba(22, 41, 67, 0.04);
   transform: rotate(-45deg);
-  transition: width 150ms cubic-bezier(0.4, 0, 0.2, 1),
-              height 150ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 160ms cubic-bezier(0.4, 0, 0.2, 1),
+              height 160ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .finder-leaflet-marker i { transform: rotate(45deg); font-size: 0.8rem; }
@@ -1129,8 +1148,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .finder-leaflet-marker.is-selected {
   width: 44px;
   height: 44px;
-  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18),
-              0 6px 18px rgba(22, 41, 67, 0.35);
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16),
+              0 8px 22px rgba(22, 41, 67, 0.38);
 }
 
 .finder-leaflet-marker.is-selected i { font-size: 1rem; }

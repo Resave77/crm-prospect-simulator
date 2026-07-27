@@ -816,7 +816,7 @@ onMounted(async () => {
 /* ── FAB ───────────────────────────────────────────────────── */
 .mp-fab {
   position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  right: max(1rem, calc((100vw - min(100%, 440px)) / 2 + 1rem));
+  right: 1rem;
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
   font-size: 1.1rem; cursor: pointer; z-index: 50;
@@ -837,7 +837,7 @@ onMounted(async () => {
 }
 .mp-sheet {
   position: fixed; left: 50%; bottom: 0;
-  width: min(100%, 440px); max-height: 82dvh;
+  width: 100%; max-width: 480px; max-height: 82dvh;
   transform: translateX(-50%);
   background: #fff; border-radius: 20px 20px 0 0;
   box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.12);
@@ -924,8 +924,7 @@ onMounted(async () => {
 @keyframes mp-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
 /* ── Responsive ────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .mp-fab { right: 1rem; }
+@media (max-width: 767px) {
   .mp-pipeline-btn span { display: none; }
   .mp-pipeline-btn { padding: 0.4rem; }
 }

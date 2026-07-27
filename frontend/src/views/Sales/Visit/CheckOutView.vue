@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else-if="pageState === 'ready' && entity && activeVisit">
-      <!-- Visit Summary -->
+      <!-- Visit Summary (full width) -->
       <div class="cocard cocard-summary">
         <div class="cocard-summary-top">
           <div class="cocard-avatar">{{ entity.name.split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') }}</div>
@@ -336,81 +336,88 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- Location -->
-      <div class="cocard">
-        <div class="cocard-header-row">
-          <h2>Location</h2>
-          <button class="cocard-refresh-btn" :disabled="location.state.value.loading" @click="location.refreshOnce()" title="Refresh location">
-            <i class="pi" :class="location.state.value.loading ? 'pi-spin pi-sync' : 'pi-refresh'" />
-          </button>
-        </div>
-        <VisitLocationCard
-          :target-latitude="entity.latitude"
-          :target-longitude="entity.longitude"
-          :target-label="entity.name"
-          :sales-coords="location.state.value.coords"
-          :radius-meters="entity.attendanceRadiusMeters"
-          height="170px"
-        />
-        <div class="cocard-location-rows">
-          <div v-if="location.state.value.coords" class="cocard-row">
-            <i class="pi pi-map-marker" />
-            <span>Current: {{ location.state.value.coords.latitude.toFixed(6) }}, {{ location.state.value.coords.longitude.toFixed(6) }}</span>
-          </div>
-          <div v-if="location.state.value.coords && entity.latitude != null" class="cocard-row cocard-distance">
-            <i class="pi pi-compass" />
-            <span>{{ location.distanceFormatted(entity.latitude, entity.longitude!) }} from target</span>
-          </div>
-          <div v-if="location.state.value.coords" class="cocard-row">
-            <Tag
-              :value="insideRadius ? 'Inside radius' : 'Outside radius'"
-              :severity="insideRadius ? 'success' : 'warn'"
+      <!-- Two-column content grid -->
+      <div class="checkout-content-grid">
+        <!-- Left column: Location/map -->
+        <div class="checkout-main-column">
+          <div class="cocard">
+            <div class="cocard-header-row">
+              <h2>Location</h2>
+              <button class="cocard-refresh-btn" :disabled="location.state.value.loading" @click="location.refreshOnce()" title="Refresh location">
+                <i class="pi" :class="location.state.value.loading ? 'pi-spin pi-sync' : 'pi-refresh'" />
+              </button>
+            </div>
+            <VisitLocationCard
+              :target-latitude="entity.latitude"
+              :target-longitude="entity.longitude"
+              :target-label="entity.name"
+              :sales-coords="location.state.value.coords"
+              :radius-meters="entity.attendanceRadiusMeters"
+              height="170px"
             />
+            <div class="cocard-location-rows">
+              <div v-if="location.state.value.coords" class="cocard-row">
+                <i class="pi pi-map-marker" />
+                <span>Current: {{ location.state.value.coords.latitude.toFixed(6) }}, {{ location.state.value.coords.longitude.toFixed(6) }}</span>
+              </div>
+              <div v-if="location.state.value.coords && entity.latitude != null" class="cocard-row cocard-distance">
+                <i class="pi pi-compass" />
+                <span>{{ location.distanceFormatted(entity.latitude, entity.longitude!) }} from target</span>
+              </div>
+              <div v-if="location.state.value.coords" class="cocard-row">
+                <Tag
+                  :value="insideRadius ? 'Inside radius' : 'Outside radius'"
+                  :severity="insideRadius ? 'success' : 'warn'"
+                />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Visit Result Form -->
-      <div class="cocard">
-        <h2>Visit Result</h2>
-        <div class="cocard-form">
-          <label class="cocard-field">
-            <span>Visit Result *</span>
-            <select v-model="visitResult" class="cocard-select">
-              <option value="" disabled>Select result</option>
-              <option v-for="opt in VISIT_RESULT_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </label>
-          <label class="cocard-field">
-            <span>Visit Outcome *</span>
-            <select v-model="visitOutcome" class="cocard-select">
-              <option value="" disabled>Select outcome</option>
-              <option v-for="opt in outcomeOptions" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </label>
-          <label class="cocard-field">
-            <span>Visit Notes</span>
-            <Textarea v-model="followUpNotes" rows="3" fluid placeholder="Details about the visit..." />
-          </label>
-          <label v-if="needsFollowUp" class="cocard-field">
-            <span>Next Follow-Up Date *</span>
-            <input v-model="followUpDate" type="date" class="cocard-input" :min="new Date().toISOString().split('T')[0]" />
-            <span v-if="!followUpDateValid" class="cocard-field-error">Follow-up date cannot be in the past.</span>
-          </label>
+        <!-- Right column: Visit result form + submit -->
+        <div class="checkout-side-column">
+          <div class="cocard">
+            <h2>Visit Result</h2>
+            <div class="cocard-form">
+              <label class="cocard-field">
+                <span>Visit Result *</span>
+                <select v-model="visitResult" class="cocard-select">
+                  <option value="" disabled>Select result</option>
+                  <option v-for="opt in VISIT_RESULT_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+                </select>
+              </label>
+              <label class="cocard-field">
+                <span>Visit Outcome *</span>
+                <select v-model="visitOutcome" class="cocard-select">
+                  <option value="" disabled>Select outcome</option>
+                  <option v-for="opt in outcomeOptions" :key="opt" :value="opt">{{ opt }}</option>
+                </select>
+              </label>
+              <label class="cocard-field">
+                <span>Visit Notes</span>
+                <Textarea v-model="followUpNotes" rows="3" fluid placeholder="Details about the visit..." />
+              </label>
+              <label v-if="needsFollowUp" class="cocard-field">
+                <span>Next Follow-Up Date *</span>
+                <input v-model="followUpDate" type="date" class="cocard-input" :min="new Date().toISOString().split('T')[0]" />
+                <span v-if="!followUpDateValid" class="cocard-field-error">Follow-up date cannot be in the past.</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Submit Action -->
+          <div class="checkout-bottom">
+            <Button
+              :label="checkoutButtonLabel"
+              icon="pi pi-check-circle"
+              :loading="submitBusy"
+              :disabled="!canCheckOut"
+              class="checkout-submit-btn"
+              @click="handleSubmit"
+            />
+            <p class="checkout-bottom-hint">{{ checkoutHelper }}</p>
+          </div>
         </div>
-      </div>
-
-      <!-- Bottom Submit -->
-      <div class="checkout-bottom">
-        <Button
-          :label="checkoutButtonLabel"
-          icon="pi pi-check-circle"
-          :loading="submitBusy"
-          :disabled="!canCheckOut"
-          class="checkout-submit-btn"
-          @click="handleSubmit"
-        />
-        <p class="checkout-bottom-hint">{{ checkoutHelper }}</p>
       </div>
     </template>
   </section>
@@ -490,8 +497,8 @@ onBeforeUnmount(() => {
 .cocard-select:focus, .cocard-input:focus { outline: 0; border-color: var(--brand-blue); }
 
 .checkout-bottom {
-  position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
-  width: min(100%, 440px); z-index: 50;
+  position: fixed; bottom: 68px; left: 0; right: 0;
+  width: 100%; z-index: 50;
   display: flex; flex-direction: column; gap: 0.3rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.98); border-top: 1px solid #e2e8f0;
@@ -501,7 +508,44 @@ onBeforeUnmount(() => {
 .checkout-submit-btn { width: 100%; }
 .checkout-bottom-hint { margin: 0; text-align: center; color: var(--text-muted); font-size: 0.68rem; }
 
-@media (max-width: 480px) {
+/* ── Desktop ──────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .checkout-page {
+    padding-bottom: 2rem;
+    max-width: 1280px;
+  }
+
+  .checkout-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  .checkout-main-column,
+  .checkout-side-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .checkout-bottom {
+    position: sticky;
+    top: 1rem;
+    width: 100%;
+    z-index: 2;
+  }
+
+  .checkout-submit-btn { width: 100%; }
+
+  .visit-location-map,
+  .entity-map-frame,
+  .vlm-wrapper { height: 320px !important; max-height: 360px; }
+}
+
+/* ── Mobile ──────────────────────────────────────────── */
+@media (max-width: 767px) {
   .checkout-page { gap: 0.7rem; }
   .cocard { padding: 1rem; }
   .cocard-identity h1 { font-size: 1rem; }

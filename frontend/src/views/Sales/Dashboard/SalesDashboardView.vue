@@ -351,4 +351,10 @@ onMounted(async () => {
 }
 .empty-state strong { display: block; color: #0f172a; font-size: 0.88rem; margin-bottom: 0.25rem; }
 .empty-state span { color: #94a3b8; font-size: 0.75rem; }
+
+/* ── Desktop responsive ──────────────────────────────────────── */
+@media (min-width: 768px) {
+  .quick-stats { grid-template-columns: repeat(4, 1fr); }
+  .today-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+}
 </style>

@@ -285,7 +285,7 @@ onMounted(loadStats)
 @keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .profile-page { gap: 0.7rem; }
   .profile-card { padding: 1.25rem 1rem; }
   .profile-card-strip { gap: 0.35rem; }
