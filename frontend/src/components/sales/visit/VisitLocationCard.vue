@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { GpsCoords } from '../../composables/sales/useVisitLocation'
+import type { GpsCoords } from '../../../composables/sales/useVisitLocation'
 
 const props = withDefaults(defineProps<{
   targetLatitude: number | null

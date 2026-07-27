@@ -534,7 +534,7 @@ onMounted(async () => {
           <div class="mp-sheet-group">
             <span class="mp-sheet-group-label">Pipeline Stage</span>
             <div class="mp-sheet-chips">
-              <button class="mp-chip" :class="{ active: !draftStage }" aria-pressed="!draftStage" @click="draftStage = ''">
+              <button class="mp-chip" :class="{ active: !draftStage }" :aria-pressed="!draftStage" @click="draftStage = ''">
                 All stages <span class="mp-chip-count">{{ draftCountForStage('') }}</span>
               </button>
               <button v-for="tab in TAB_ORDER" :key="tab" class="mp-chip" :class="{ active: draftStage === tab }" :aria-pressed="draftStage === tab" @click="draftStage = draftStage === tab ? '' : tab">
@@ -547,7 +547,7 @@ onMounted(async () => {
           <div v-if="availableIndustries.length" class="mp-sheet-group">
             <span class="mp-sheet-group-label">Industry</span>
             <div class="mp-sheet-chips">
-              <button class="mp-chip" :class="{ active: !draftIndustry }" aria-pressed="!draftIndustry" @click="draftIndustry = ''">
+              <button class="mp-chip" :class="{ active: !draftIndustry }" :aria-pressed="!draftIndustry" @click="draftIndustry = ''">
                 All industries <span class="mp-chip-count">{{ draftCountForIndustry('') }}</span>
               </button>
               <button v-for="ind in availableIndustries" :key="ind" class="mp-chip" :class="{ active: draftIndustry === ind }" :aria-pressed="draftIndustry === ind" @click="draftIndustry = draftIndustry === ind ? '' : ind">
@@ -560,7 +560,7 @@ onMounted(async () => {
           <div v-if="availableCategories.length" class="mp-sheet-group">
             <span class="mp-sheet-group-label">Category</span>
             <div class="mp-sheet-chips">
-              <button class="mp-chip" :class="{ active: !draftCategory }" aria-pressed="!draftCategory" @click="draftCategory = ''">
+              <button class="mp-chip" :class="{ active: !draftCategory }" :aria-pressed="!draftCategory" @click="draftCategory = ''">
                 All categories <span class="mp-chip-count">{{ draftCountForCategory('') }}</span>
               </button>
               <button v-for="cat in availableCategories" :key="cat" class="mp-chip" :class="{ active: draftCategory === cat }" :aria-pressed="draftCategory === cat" @click="draftCategory = draftCategory === cat ? '' : cat">
