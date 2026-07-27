@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { useAuthStore } from '../../../stores/auth'
@@ -29,10 +27,19 @@ const sortBy = ref<'distance' | 'name-asc' | 'name-desc' | 'recently-assigned' |
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 const gpsDenied = ref(false)
 const showSortMenu = ref(false)
-const showFilterPanel = ref(false)
-const filterIndustry = ref('')
+
+/* ── Filter state ──────────────────────────────────────────── */
+const filterStage = ref('')
 const filterCategory = ref('')
-const filterHasCoords = ref(false)
+const filterIndustry = ref('')
+const filterDistance = ref('')
+
+const draftStage = ref('')
+const draftCategory = ref('')
+const draftIndustry = ref('')
+const draftDistance = ref('')
+
+const showFilterSheet = ref(false)
 
 type SortOption = { label: string; value: typeof sortBy.value }
 const sortOptions: SortOption[] = [
@@ -79,9 +86,7 @@ function statusSeverity(status: ProspectStatus): 'info' | 'warn' | 'success' | '
   }
 }
 
-function tabLabel(tab: ProspectTab): string {
-  return TAB_LABELS[tab]
-}
+function tabLabel(tab: ProspectTab): string { return TAB_LABELS[tab] }
 
 function hasCoordinates(p: Prospect): boolean {
   return p.latitude != null && p.longitude != null
@@ -104,28 +109,148 @@ function acquireGPS() {
   )
 }
 
+function matchesDistance(p: Prospect, dist: string): boolean {
+  if (!dist) return true
+  const d = getDistance(p)
+  if (d === null) return false
+  if (dist === 'lt1') return d < 1
+  if (dist === '1to3') return d >= 1 && d <= 3
+  if (dist === '3to5') return d > 3 && d <= 5
+  return true
+}
+
 function applyFilters(list: Prospect[]): Prospect[] {
   let result = list
+  if (filterStage.value) {
+    const statuses = TAB_STAGE_MAP[filterStage.value as ProspectTab]
+    if (statuses) result = result.filter((p) => statuses.includes(p.status))
+  }
   if (filterIndustry.value) result = result.filter((p) => p.industryGroup === filterIndustry.value)
   if (filterCategory.value) result = result.filter((p) => p.placeCategory === filterCategory.value)
-  if (filterHasCoords.value) result = result.filter((p) => hasCoordinates(p))
+  if (filterDistance.value) result = result.filter((p) => matchesDistance(p, filterDistance.value))
   return result
 }
 
 function activeFilterCount(): number {
   let n = 0
+  if (filterStage.value) n++
   if (filterIndustry.value) n++
   if (filterCategory.value) n++
-  if (filterHasCoords.value) n++
+  if (filterDistance.value) n++
   return n
 }
 
 function resetFilters() {
+  filterStage.value = ''
   filterIndustry.value = ''
   filterCategory.value = ''
-  filterHasCoords.value = false
+  filterDistance.value = ''
+  draftStage.value = ''
+  draftIndustry.value = ''
+  draftCategory.value = ''
+  draftDistance.value = ''
 }
 
+/* ── Bottom sheet ──────────────────────────────────────────── */
+function openFilterSheet() {
+  draftStage.value = filterStage.value
+  draftIndustry.value = filterIndustry.value
+  draftCategory.value = filterCategory.value
+  draftDistance.value = filterDistance.value
+  showFilterSheet.value = true
+}
+
+function applyDraftFilters() {
+  filterStage.value = draftStage.value
+  filterIndustry.value = draftIndustry.value
+  filterCategory.value = draftCategory.value
+  filterDistance.value = draftDistance.value
+  showFilterSheet.value = false
+}
+
+function clearDraft() {
+  draftStage.value = ''
+  draftIndustry.value = ''
+  draftCategory.value = ''
+  draftDistance.value = ''
+}
+
+function draftFilterCount(): number {
+  let n = 0
+  if (draftStage.value) n++
+  if (draftIndustry.value) n++
+  if (draftCategory.value) n++
+  if (draftDistance.value) n++
+  return n
+}
+
+const draftFilteredCount = computed(() => {
+  let list = activeProspects.value
+  if (draftStage.value) {
+    const statuses = TAB_STAGE_MAP[draftStage.value as ProspectTab]
+    if (statuses) list = list.filter((p) => statuses.includes(p.status))
+  }
+  if (draftIndustry.value) list = list.filter((p) => p.industryGroup === draftIndustry.value)
+  if (draftCategory.value) list = list.filter((p) => p.placeCategory === draftCategory.value)
+  if (draftDistance.value) list = list.filter((p) => matchesDistance(p, draftDistance.value))
+  return list.length
+})
+
+function draftCountForStage(stage: string): number {
+  let list = activeProspects.value
+  if (draftIndustry.value) list = list.filter((p) => p.industryGroup === draftIndustry.value)
+  if (draftCategory.value) list = list.filter((p) => p.placeCategory === draftCategory.value)
+  if (draftDistance.value) list = list.filter((p) => matchesDistance(p, draftDistance.value))
+  if (stage) {
+    const statuses = TAB_STAGE_MAP[stage as ProspectTab]
+    if (statuses) return list.filter((p) => statuses.includes(p.status)).length
+    return 0
+  }
+  return list.length
+}
+
+function draftCountForIndustry(ind: string): number {
+  let list = activeProspects.value
+  if (draftStage.value) {
+    const statuses = TAB_STAGE_MAP[draftStage.value as ProspectTab]
+    if (statuses) list = list.filter((p) => statuses.includes(p.status))
+  }
+  if (draftCategory.value) list = list.filter((p) => p.placeCategory === draftCategory.value)
+  if (draftDistance.value) list = list.filter((p) => matchesDistance(p, draftDistance.value))
+  if (ind) return list.filter((p) => p.industryGroup === ind).length
+  return list.length
+}
+
+function draftCountForCategory(cat: string): number {
+  let list = activeProspects.value
+  if (draftStage.value) {
+    const statuses = TAB_STAGE_MAP[draftStage.value as ProspectTab]
+    if (statuses) list = list.filter((p) => statuses.includes(p.status))
+  }
+  if (draftIndustry.value) list = list.filter((p) => p.industryGroup === draftIndustry.value)
+  if (draftDistance.value) list = list.filter((p) => matchesDistance(p, draftDistance.value))
+  if (cat) return list.filter((p) => p.placeCategory === cat).length
+  return list.length
+}
+
+function onSheetKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') showFilterSheet.value = false
+}
+
+watch(showFilterSheet, (open) => {
+  if (open) {
+    document.body.style.overflow = 'hidden'
+    nextTick(() => document.getElementById('prospect-filter-close')?.focus())
+    document.addEventListener('keydown', onSheetKeydown)
+  } else {
+    document.body.style.overflow = ''
+    document.removeEventListener('keydown', onSheetKeydown)
+  }
+})
+
+onUnmounted(() => { document.body.style.overflow = ''; document.removeEventListener('keydown', onSheetKeydown) })
+
+/* ── Data ──────────────────────────────────────────────────── */
 function selectTab(tab: ProspectTab) {
   hasUserSelectedTab.value = true
   activeTab.value = tab
@@ -217,7 +342,7 @@ onMounted(async () => {
           <i class="pi pi-chart-bar" />
           <span>Sales Pipeline</span>
         </RouterLink>
-        <button class="mp-header-action" @click="showFilterPanel = true" aria-label="Open filters">
+        <button class="mp-header-action" @click="openFilterSheet" aria-label="Open filters">
           <i class="pi pi-sliders-h" />
           <span v-if="activeFilterCount()" class="mp-notif-dot">{{ activeFilterCount() }}</span>
         </button>
@@ -380,38 +505,106 @@ onMounted(async () => {
     </template>
 
     <!-- FAB filter -->
-    <button class="mp-fab" @click="showFilterPanel = true" aria-label="Open filter panel">
+    <button class="mp-fab" @click="openFilterSheet" aria-label="Open filter panel">
       <i class="pi pi-filter" />
       <span v-if="activeFilterCount()" class="mp-fab-badge">{{ activeFilterCount() }}</span>
     </button>
 
-    <!-- Filter dialog -->
-    <Dialog v-model:visible="showFilterPanel" modal header="Filter prospects" :style="{ width: 'min(92vw, 400px)' }" :dt="{ background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)' }">
-      <div class="mp-filter-body">
-        <label class="mp-filter-field">
-          <span>Industry</span>
-          <select v-model="filterIndustry">
-            <option value="">All industries</option>
-            <option v-for="s in availableIndustries" :key="s" :value="s">{{ s }}</option>
-          </select>
-        </label>
-        <label class="mp-filter-field">
-          <span>Category</span>
-          <select v-model="filterCategory">
-            <option value="">All categories</option>
-            <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
-          </select>
-        </label>
-        <label class="mp-filter-check">
-          <input v-model="filterHasCoords" type="checkbox" />
-          <span>Only with GPS coordinates</span>
-        </label>
+    <!-- Filter Bottom Sheet -->
+    <Teleport to="body">
+      <div v-if="showFilterSheet" class="mp-sheet-overlay" @click.self="showFilterSheet = false" />
+      <div v-if="showFilterSheet" class="mp-sheet" role="dialog" aria-labelledby="prospect-filter-title">
+        <div class="mp-sheet-handle" />
+
+        <div class="mp-sheet-header">
+          <div class="mp-sheet-header-text">
+            <strong id="prospect-filter-title">Filter prospects</strong>
+            <small>Refine prospects by pipeline, category, and distance</small>
+          </div>
+          <div class="mp-sheet-header-actions">
+            <button class="mp-sheet-clear" @click="clearDraft">Clear all</button>
+            <button id="prospect-filter-close" class="mp-sheet-close" aria-label="Close filters" @click="showFilterSheet = false">
+              <i class="pi pi-times" />
+            </button>
+          </div>
+        </div>
+
+        <div class="mp-sheet-body">
+          <!-- Pipeline Stage -->
+          <div class="mp-sheet-group">
+            <span class="mp-sheet-group-label">Pipeline Stage</span>
+            <div class="mp-sheet-chips">
+              <button class="mp-chip" :class="{ active: !draftStage }" aria-pressed="!draftStage" @click="draftStage = ''">
+                All stages <span class="mp-chip-count">{{ draftCountForStage('') }}</span>
+              </button>
+              <button v-for="tab in TAB_ORDER" :key="tab" class="mp-chip" :class="{ active: draftStage === tab }" :aria-pressed="draftStage === tab" @click="draftStage = draftStage === tab ? '' : tab">
+                {{ tabLabel(tab) }} <span class="mp-chip-count">{{ draftCountForStage(draftStage === tab ? '' : tab) }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Industry -->
+          <div v-if="availableIndustries.length" class="mp-sheet-group">
+            <span class="mp-sheet-group-label">Industry</span>
+            <div class="mp-sheet-chips">
+              <button class="mp-chip" :class="{ active: !draftIndustry }" aria-pressed="!draftIndustry" @click="draftIndustry = ''">
+                All industries <span class="mp-chip-count">{{ draftCountForIndustry('') }}</span>
+              </button>
+              <button v-for="ind in availableIndustries" :key="ind" class="mp-chip" :class="{ active: draftIndustry === ind }" :aria-pressed="draftIndustry === ind" @click="draftIndustry = draftIndustry === ind ? '' : ind">
+                {{ ind }} <span class="mp-chip-count">{{ draftCountForIndustry(draftIndustry === ind ? '' : ind) }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Category -->
+          <div v-if="availableCategories.length" class="mp-sheet-group">
+            <span class="mp-sheet-group-label">Category</span>
+            <div class="mp-sheet-chips">
+              <button class="mp-chip" :class="{ active: !draftCategory }" aria-pressed="!draftCategory" @click="draftCategory = ''">
+                All categories <span class="mp-chip-count">{{ draftCountForCategory('') }}</span>
+              </button>
+              <button v-for="cat in availableCategories" :key="cat" class="mp-chip" :class="{ active: draftCategory === cat }" :aria-pressed="draftCategory === cat" @click="draftCategory = draftCategory === cat ? '' : cat">
+                {{ cat }} <span class="mp-chip-count">{{ draftCountForCategory(draftCategory === cat ? '' : cat) }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Distance -->
+          <div v-if="userCoords" class="mp-sheet-group">
+            <span class="mp-sheet-group-label">Distance from you</span>
+            <div class="mp-sheet-chips">
+              <button class="mp-chip" :class="{ active: !draftDistance }" @click="draftDistance = ''">
+                Any
+              </button>
+              <button class="mp-chip" :class="{ active: draftDistance === 'lt1' }" @click="draftDistance = draftDistance === 'lt1' ? '' : 'lt1'">
+                &lt; 1 km
+              </button>
+              <button class="mp-chip" :class="{ active: draftDistance === '1to3' }" @click="draftDistance = draftDistance === '1to3' ? '' : '1to3'">
+                1&ndash;3 km
+              </button>
+              <button class="mp-chip" :class="{ active: draftDistance === '3to5' }" @click="draftDistance = draftDistance === '3to5' ? '' : '3to5'">
+                3&ndash;5 km
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!userCoords" class="mp-sheet-helper">
+            <i class="pi pi-info-circle" /> Enable location to filter prospects by distance.
+          </div>
+
+          <div v-if="!availableIndustries.length && !availableCategories.length" class="mp-sheet-empty">
+            <span>No filter options available yet.</span>
+          </div>
+        </div>
+
+        <div class="mp-sheet-footer">
+          <button class="mp-sheet-reset" @click="clearDraft">Reset</button>
+          <button class="mp-sheet-apply" @click="applyDraftFilters">
+            Show {{ draftFilteredCount }} prospect{{ draftFilteredCount !== 1 ? 's' : '' }}
+          </button>
+        </div>
       </div>
-      <template #footer>
-        <Button label="Reset" severity="secondary" text @click="resetFilters" />
-        <Button label="Apply filters" @click="showFilterPanel = false" />
-      </template>
-    </Dialog>
+    </Teleport>
   </section>
 </template>
 
@@ -637,21 +830,98 @@ onMounted(async () => {
   color: #fff; font-size: 0.55rem; font-weight: 700; padding: 0 4px; border: 2px solid #fff;
 }
 
-/* ── Filter dialog ─────────────────────────────────────────── */
-.mp-filter-body { display: flex; flex-direction: column; gap: 0.85rem; }
-.mp-filter-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.mp-filter-field span { color: #64748b; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.mp-filter-field select {
-  padding: 0.55rem 0.7rem; border: 1px solid #e2e8f0; border-radius: 10px;
-  background: #f8fafc; color: #0f172a; font-size: 0.8rem; font-weight: 500;
-  cursor: pointer; transition: border-color 0.15s ease;
+/* ── Filter Bottom Sheet ───────────────────────────────────── */
+.mp-sheet-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+  z-index: 200; animation: mp-fade-in 0.2s ease;
 }
-.mp-filter-field select:focus { outline: 0; border-color: #2563eb; }
-.mp-filter-check {
-  display: flex; align-items: center; gap: 0.5rem; color: #0f172a;
-  font-size: 0.8rem; font-weight: 500; cursor: pointer;
+.mp-sheet {
+  position: fixed; left: 50%; bottom: 0;
+  width: min(100%, 440px); max-height: 82dvh;
+  transform: translateX(-50%);
+  background: #fff; border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.12);
+  z-index: 201; display: flex; flex-direction: column;
+  animation: mp-sheet-up 0.25s ease;
 }
-.mp-filter-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: #2563eb; }
+.mp-sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: #d1d5db; margin: 0.65rem auto 0; flex-shrink: 0;
+}
+.mp-sheet-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 0.75rem 1.25rem 0.5rem; flex-shrink: 0;
+}
+.mp-sheet-header-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.mp-sheet-header-text strong { font-size: 0.95rem; font-weight: 800; color: #0f172a; }
+.mp-sheet-header-text small { font-size: 0.72rem; color: #64748b; }
+.mp-sheet-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.mp-sheet-clear {
+  padding: 0.3rem 0.6rem; border-radius: 8px; border: 0;
+  background: transparent; color: #2563eb; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.mp-sheet-clear:hover { background: #eff6ff; }
+.mp-sheet-close {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 50%; border: 0; background: #f1f5f9; color: #64748b;
+  cursor: pointer; font-size: 0.85rem; transition: all 0.15s ease;
+}
+.mp-sheet-close:hover { background: #e2e8f0; color: #0f172a; }
+.mp-sheet-body {
+  flex: 1; overflow-y: auto; padding: 0.25rem 1.25rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+.mp-sheet-group { margin-bottom: 1rem; }
+.mp-sheet-group-label {
+  display: block; margin-bottom: 0.5rem;
+  font-size: 0.7rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.mp-sheet-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.mp-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.4rem 0.75rem; border-radius: 9999px;
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  font-size: 0.72rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mp-chip:hover { border-color: #cbd5e1; background: #f8fafc; }
+.mp-chip.active {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.mp-chip.active:hover { background: #1d4ed8; }
+.mp-chip-count { font-size: 0.6rem; font-weight: 700; opacity: 0.7; }
+.mp-chip.active .mp-chip-count { opacity: 1; }
+.mp-sheet-empty {
+  padding: 1.5rem 0; text-align: center; color: #94a3b8; font-size: 0.8rem;
+}
+.mp-sheet-helper {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 1rem; background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 12px; color: #92400e; font-size: 0.72rem; font-weight: 500;
+}
+.mp-sheet-helper i { font-size: 0.85rem; color: #d97706; flex-shrink: 0; }
+.mp-sheet-footer {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #f1f5f9; flex-shrink: 0;
+}
+.mp-sheet-reset {
+  padding: 0.65rem 1rem; border-radius: 12px; border: 1px solid #e2e8f0;
+  background: #fff; color: #475569; font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.mp-sheet-reset:hover { background: #f8fafc; border-color: #cbd5e1; }
+.mp-sheet-apply {
+  flex: 1; padding: 0.65rem 1rem; border-radius: 12px; border: 0;
+  background: #2563eb; color: #fff; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.mp-sheet-apply:hover { background: #1d4ed8; }
+
+@keyframes mp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mp-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 480px) {

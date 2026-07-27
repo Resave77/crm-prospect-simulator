@@ -1,16 +1,122 @@
-<script setup lang="ts">import {computed,onMounted,ref} from 'vue'; import Message from 'primevue/message'; import Tag from 'primevue/tag'; import {useAuthStore} from '../../../stores/auth'; import {useCrmStore} from '../../../stores/crm'; const auth=useAuthStore(),crm=useCrmStore(),error=ref(''); const active=computed(()=>crm.myProspects.filter(v=>!['LOST','CONVERTED'].includes(v.status))); const completed=computed(()=>crm.myProspects.filter(v=>['WON','LOST','CONVERTED'].includes(v.status)).length); onMounted(async()=>{try{await Promise.all([crm.loadMyProspects(),crm.loadMyCustomers()])}catch(e){error.value=crm.errorMessage(e)}})</script>
+<script setup lang="ts">
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import Message from 'primevue/message'
+import { useAuthStore } from '../../../stores/auth'
+import { useCrmStore } from '../../../stores/crm'
+import type { Prospect } from '../../../types/crm'
+import { isActiveProspectStatus } from '../../../utils/prospectPipeline'
+
+const auth = useAuthStore()
+const crm = useCrmStore()
+const error = ref('')
+
+const currentTime = ref(new Date())
+let clockTimer: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  clockTimer = setInterval(() => { currentTime.value = new Date() }, 60_000)
+})
+onBeforeUnmount(() => { if (clockTimer) clearInterval(clockTimer) })
+
+const greeting = computed(() => {
+  const hour = currentTime.value.getHours()
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 18) return 'Good afternoon'
+  return 'Good evening'
+})
+
+const firstName = computed(() => {
+  const name = auth.user?.fullName
+  if (!name) return 'there'
+  return name.split(' ')[0] || 'there'
+})
+
+const formattedDate = computed(() =>
+  new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  }).format(currentTime.value),
+)
+
+const activeProspects = computed(() =>
+  crm.myProspects.filter((p) => isActiveProspectStatus(p.status)),
+)
+
+const todayDateKey = computed(() => {
+  const d = currentTime.value
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+const todayVisits = computed(() => {
+  const key = todayDateKey.value
+  return activeProspects.value.filter((p) => {
+    if (!p.updatedAt) return false
+    const d = new Date(p.updatedAt)
+    const visitKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return visitKey === key
+  })
+})
+
+const daySummaryText = computed(() => {
+  const count = activeProspects.value.length
+  if (count === 0) return 'No visits planned for today'
+  return `${count} active visit${count !== 1 ? 's' : ''}`
+})
+
+const completed = computed(() =>
+  crm.myProspects.filter((v) => ['WON', 'LOST', 'CONVERTED'].includes(v.status)).length,
+)
+
+const pendingCount = computed(() =>
+  activeProspects.value.filter(
+    (v) => v.status === 'NEGOTIATION' || v.status === 'CONTACTED',
+  ).length,
+)
+
+function formatVisitTime(p: Prospect): string {
+  if (!p.updatedAt) return 'Time not scheduled'
+  const d = new Date(p.updatedAt)
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+onMounted(async () => {
+  try {
+    await Promise.all([crm.loadMyProspects(), crm.loadMyCustomers()])
+  } catch (e: unknown) {
+    error.value = crm.errorMessage(e)
+  }
+})
+</script>
+
 <template>
   <section class="sales-home">
+    <!-- Greeting -->
+    <header class="sales-dash-header">
+      <RouterLink class="sales-identity" to="/sales/profile">
+        <span class="sales-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
+        <div class="sales-identity-text">
+          <strong>{{ greeting }}, {{ firstName }}</strong>
+          <small>{{ formattedDate }}</small>
+        </div>
+      </RouterLink>
+      <RouterLink class="sales-settings-btn" to="/sales/profile" aria-label="Open settings">
+        <i class="pi pi-sliders-h" />
+      </RouterLink>
+    </header>
+
     <Message v-if="error" severity="error">{{ error }}</Message>
 
+    <!-- Your day is ready -->
     <RouterLink class="ready-card" to="/sales/my-prospects">
       <div>
-        <strong>Your day is ready</strong>
-        <span>{{ active.length }} visits planned · First at 09:30</span>
+        <strong>{{ activeProspects.length > 0 ? 'Your day is ready' : 'Your schedule is clear' }}</strong>
+        <span>{{ daySummaryText }}</span>
       </div>
       <i class="pi pi-arrow-right" />
     </RouterLink>
 
+    <!-- Quick statistics -->
     <div class="section-title">
       <strong>Quick statistics</strong>
       <RouterLink to="/sales/history">View all</RouterLink>
@@ -30,7 +136,7 @@
           <span class="stat-icon amber-dot">P</span>
           <small>Today's prospects</small>
         </div>
-        <strong>{{ active.length }}</strong>
+        <strong>{{ todayVisits.length }}</strong>
       </RouterLink>
 
       <RouterLink to="/sales/history">
@@ -46,10 +152,11 @@
           <span class="stat-icon red-dot"><i class="pi pi-clock" /></span>
           <small>Pending visits</small>
         </div>
-        <strong>{{ active.filter(v => v.status === 'NEGOTIATION' || v.status === 'CONTACTED').length }}</strong>
+        <strong>{{ pendingCount }}</strong>
       </RouterLink>
     </div>
 
+    <!-- Quick actions -->
     <div class="section-title">
       <strong>Quick actions</strong>
       <RouterLink :to="{ name: 'SalesPipeline' }" class="pipeline-link">
@@ -80,6 +187,7 @@
       </RouterLink>
     </div>
 
+    <!-- Today's visits -->
     <div class="section-title">
       <strong>Today's visits</strong>
       <RouterLink to="/sales/my-prospects">See route</RouterLink>
@@ -87,24 +195,25 @@
 
     <div class="today-list">
       <RouterLink
-        v-for="(item, index) in active.slice(0, 3)"
+        v-for="(item, index) in todayVisits.slice(0, 3)"
         :key="item.id"
         :to="`/sales/my-prospects/${item.id}`"
       >
         <time>
-          {{ `${9 + index * 2}:30` }}
+          {{ formatVisitTime(item) }}
           <small>Today</small>
         </time>
         <i class="visit-dot" :class="index % 2 === 0 ? 'dot-amber' : 'dot-blue'" />
         <div>
           <strong>{{ item.placeName }}</strong>
-          <small>{{ item.placeCategory || item.industryGroup }} · 1.8 km away</small>
+          <small>{{ item.placeCategory || item.industryGroup || 'Uncategorized' }}</small>
         </div>
         <span class="visit-badge">Pending</span>
       </RouterLink>
 
-      <div v-if="!active.length" class="empty-state">
-        <strong>No visits queued</strong>
+      <div v-if="!todayVisits.length" class="empty-state">
+        <strong>No visits today</strong>
+        <span>No prospects updated today yet.</span>
       </div>
     </div>
   </section>
@@ -113,6 +222,31 @@
 <style scoped>
 .sales-home { display: flex; flex-direction: column; gap: 1.5rem; }
 
+/* ── Greeting Header ───────────────────────────────────────── */
+.sales-dash-header {
+  display: flex; align-items: center; justify-content: space-between; padding: 0.15rem 0;
+}
+.sales-identity {
+  display: flex; gap: 0.75rem; align-items: center; color: #0f172a; text-decoration: none;
+}
+.sales-avatar {
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 14px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff; font-weight: 800; font-size: 1.05rem; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+.sales-identity-text { display: flex; flex-direction: column; }
+.sales-identity-text strong { font-size: 0.92rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
+.sales-identity-text small { color: #64748b; font-size: 0.72rem; font-weight: 500; margin-top: 2px; }
+.sales-settings-btn {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: 12px; color: #64748b; background: #f8fafc;
+  border: 1px solid #eef1f6; text-decoration: none; font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+.sales-settings-btn:hover { color: #2563eb; border-color: #dbeafe; background: #eff6ff; }
+
+/* ── Ready card ────────────────────────────────────────────── */
 .ready-card {
   padding: 1.25rem 1.35rem; display: flex; align-items: center; justify-content: space-between;
   color: #ffffff; background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #1d4ed8 100%);
@@ -121,13 +255,11 @@
   transition: transform 0.25s ease, box-shadow 0.25s ease;
   position: relative; overflow: hidden;
 }
-
 .ready-card::before {
   content: ''; position: absolute; top: -40%; right: -20%; width: 200px; height: 200px;
   background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
   border-radius: 50%; pointer-events: none;
 }
-
 .ready-card:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -4px rgba(37, 99, 235, 0.5), 0 4px 12px rgba(37, 99, 235, 0.2); }
 .ready-card div { display: flex; flex-direction: column; gap: 0.3rem; }
 .ready-card strong { font-size: 1.1rem; font-weight: 800; color: #ffffff; }
@@ -139,6 +271,7 @@
 }
 .ready-card:hover > i { transform: translateX(2px); }
 
+/* ── Section titles ────────────────────────────────────────── */
 .section-title { display: flex; justify-content: space-between; align-items: center; }
 .section-title strong { font-size: 0.92rem; font-weight: 800; color: #0f172a; }
 .section-title a { color: #2563eb; font-size: 0.78rem; text-decoration: none; font-weight: 700; transition: opacity 0.15s ease; }
@@ -148,6 +281,7 @@
 .pipeline-link:hover { background: #dbeafe; opacity: 1; }
 .pipeline-link i { font-size: 0.75rem; }
 
+/* ── Quick stats ───────────────────────────────────────────── */
 .quick-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
 .quick-stats > a {
   padding: 1rem 1.1rem; display: flex; align-items: center; justify-content: space-between;
@@ -169,6 +303,7 @@
 .green-dot { color: #16a34a; background: #f0fdf4; }
 .red-dot { color: #dc2626; background: #fef2f2; }
 
+/* ── Quick actions ─────────────────────────────────────────── */
 .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.55rem; }
 .quick-actions > a {
   padding: 0.9rem 0.3rem; display: flex; flex-direction: column; align-items: center;
@@ -190,6 +325,7 @@
 .action-icon-indigo { background: #eef2ff; color: #4f46e5; }
 .action-icon-amber { background: #fffbeb; color: #d97706; }
 
+/* ── Today's visits ────────────────────────────────────────── */
 .today-list { display: flex; flex-direction: column; gap: 0.65rem; }
 .today-list > a {
   display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.85rem; align-items: center;
@@ -209,4 +345,10 @@
 .today-list strong { font-size: 0.88rem; font-weight: 700; }
 .today-list span, .today-list small { color: var(--text-muted); font-size: 0.78rem; }
 .visit-badge { background: #fef3c7; color: #b45309; font-size: 0.7rem; font-weight: 700; border-radius: 9999px; padding: 0.3rem 0.75rem; }
+
+.empty-state {
+  padding: 1.5rem; text-align: center; background: #fff; border: 1px solid #eef1f6; border-radius: 18px;
+}
+.empty-state strong { display: block; color: #0f172a; font-size: 0.88rem; margin-bottom: 0.25rem; }
+.empty-state span { color: #94a3b8; font-size: 0.75rem; }
 </style>

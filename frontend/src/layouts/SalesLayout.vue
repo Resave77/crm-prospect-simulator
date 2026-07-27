@@ -1,26 +1,6 @@
-<script setup lang="ts">
-import { useAuthStore } from '../stores/auth'
-
-const auth = useAuthStore()
-</script>
-
 <template>
   <div class="sales-page-wrapper">
     <div class="sales-shell">
-      <header class="sales-header">
-        <RouterLink class="sales-identity" to="/sales/profile">
-          <span>{{ auth.user?.fullName?.slice(0, 1) }}</span>
-          <div>
-            <strong>Good morning, {{ auth.user?.fullName?.split(' ')[0] }}</strong>
-            <small>{{ new Intl.DateTimeFormat('en', { weekday: 'long', day: 'numeric', month: 'short' }).format(new Date()) }}</small>
-          </div>
-        </RouterLink>
-
-        <RouterLink class="icon-control" to="/sales/profile" aria-label="Open settings">
-          <i class="pi pi-sliders-h" />
-        </RouterLink>
-      </header>
-
       <main class="sales-content">
         <RouterView />
       </main>
@@ -77,67 +57,6 @@ const auth = useAuthStore()
   padding-bottom: 80px;
   overflow: hidden;
   color: #0f172a;
-}
-
-.sales-header {
-  height: 68px;
-  padding: 0.85rem 1.15rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #ffffff;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.sales-identity {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  color: #0f172a;
-  text-decoration: none;
-}
-
-.sales-identity span {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: #ffffff;
-  font-weight: 800;
-  font-size: 1.05rem;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
-}
-
-.sales-identity div { display: flex; flex-direction: column; }
-.sales-identity strong { font-size: 0.92rem; font-weight: 800; color: #0f172a; line-height: 1.2; }
-.sales-identity small {
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 500;
-  margin-top: 2px;
-}
-
-.sales-header :deep(.icon-control) {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: #64748b;
-  background: #f8fafc;
-  border: 1px solid #eef1f6;
-  text-decoration: none;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
-}
-
-.sales-header :deep(.icon-control:hover) {
-  color: #2563eb;
-  border-color: #dbeafe;
-  background: #eff6ff;
 }
 
 .sales-content {
