@@ -16,11 +16,12 @@ import (
 )
 
 type Handler struct {
-	service *service.Service
+	service       *service.Service
+	prospectSvc   *prospectservice.Service
 }
 
-func New(customerService *service.Service) *Handler {
-	return &Handler{service: customerService}
+func New(customerService *service.Service, prospectSvc *prospectservice.Service) *Handler {
+	return &Handler{service: customerService, prospectSvc: prospectSvc}
 }
 
 func (h *Handler) ConversionForm(c *fiber.Ctx) error {
@@ -113,6 +114,25 @@ func (h *Handler) MyCustomer(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, item)
 }
 
+func (h *Handler) MyCustomerPlaceDetails(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "CUSTOMER_ID_INVALID", "Customer ID is invalid.")
+	}
+	detail, err := h.service.MyCustomer(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	if detail.Customer.SourceGooglePlaceID == "" {
+		return response.Data(c, fiber.StatusOK, nil)
+	}
+	place, err := h.prospectSvc.PlaceDetailFull(c.UserContext(), detail.Customer.SourceGooglePlaceID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, place)
+}
+
 func (h *Handler) AdminCustomerDetail(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -125,6 +145,25 @@ func (h *Handler) AdminCustomerDetail(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, item)
 }
 
+func (h *Handler) AdminCustomerPlaceDetails(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "CUSTOMER_ID_INVALID", "Customer ID is invalid.")
+	}
+	detail, err := h.service.AdminCustomer(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	if detail.Customer.SourceGooglePlaceID == "" {
+		return response.Data(c, fiber.StatusOK, nil)
+	}
+	place, err := h.prospectSvc.PlaceDetailFull(c.UserContext(), detail.Customer.SourceGooglePlaceID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, place)
+}
+
 func (h *Handler) DeleteCustomer(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -134,6 +173,32 @@ func (h *Handler) DeleteCustomer(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *Handler) GetParentCompanyByCode(c *fiber.Ctx) error {
+	code := c.Params("id")
+	item, err := h.service.FindParentCompanyByCode(c.UserContext(), actor(c), code)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
+}
+
+func (h *Handler) UpdateParentCompany(c *fiber.Ctx) error {
+	code := c.Params("id")
+	existing, err := h.service.FindParentCompanyByCode(c.UserContext(), actor(c), code)
+	if err != nil {
+		return writeError(c, err)
+	}
+	var input customermodel.UpdateParentCompanyInput
+	if err := c.BodyParser(&input); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	item, err := h.service.UpdateParentCompany(c.UserContext(), actor(c), existing.ID, input)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
 }
 
 func parseID(c *fiber.Ctx) (uuid.UUID, error) {

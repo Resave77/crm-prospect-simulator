@@ -29,4 +29,5 @@ type Repository interface {
 	CheckOut(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, model.CheckOutInput) (model.Visit, error)
 	ListVisitMonitoring(context.Context, model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error)
 	DeleteVisit(context.Context, uuid.UUID, uuid.UUID) error
+	DeleteProspect(context.Context, uuid.UUID) error
 }

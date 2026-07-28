@@ -129,3 +129,78 @@ type CheckOutInput struct {
 	Longitude     float64 `json:"longitude"`
 	FollowUpNotes string  `json:"followUpNotes"`
 }
+
+type PlacePhoto struct {
+	Name      string `json:"name"`
+	PhotoURL  string `json:"photoUrl"`
+	WidthPx   int    `json:"widthPx"`
+	HeightPx  int    `json:"heightPx"`
+	Attribution string `json:"attribution"`
+}
+
+type PlaceOpeningHours struct {
+	OpenNow   bool     `json:"openNow"`
+	Weekdays  []string `json:"weekdays"`
+}
+
+type PlaceReview struct {
+	AuthorName   string  `json:"authorName"`
+	AuthorPhoto  string  `json:"authorPhoto"`
+	Rating       float64 `json:"rating"`
+	Text         string  `json:"text"`
+	Time         string  `json:"time"`
+	LanguageCode string  `json:"languageCode"`
+}
+
+type PlaceDetails struct {
+	GooglePlaceID      string              `json:"googlePlaceId"`
+	PlaceName          string              `json:"placeName"`
+	FormattedAddress   string              `json:"formattedAddress"`
+	Latitude           float64             `json:"latitude"`
+	Longitude          float64             `json:"longitude"`
+	PlaceCategory      string              `json:"placeCategory"`
+	PlaceTypes         []string            `json:"placeTypes"`
+	PhoneNumber        string              `json:"phoneNumber"`
+	InternationalPhone string              `json:"internationalPhone"`
+	WebsiteURL         string              `json:"websiteUrl"`
+	GoogleMapsURL      string              `json:"googleMapsUrl"`
+	Rating             float64             `json:"rating"`
+	UserRatingCount    int                 `json:"userRatingCount"`
+	BusinessStatus     string              `json:"businessStatus"`
+	PriceLevel         string              `json:"priceLevel"`
+	EditorialSummary   string              `json:"editorialSummary"`
+	UTCOffsetMinutes   int                 `json:"utcOffsetMinutes"`
+	Photos             []PlacePhoto        `json:"photos"`
+	OpeningHours       *PlaceOpeningHours  `json:"openingHours"`
+	Reviews            []PlaceReview       `json:"reviews"`
+	Delivery           bool                `json:"delivery"`
+	DineIn             bool                `json:"dineIn"`
+	Takeout            bool                `json:"takeout"`
+	CurbsidePickup     bool                `json:"curbsidePickup"`
+	ParkingOptions     *PlaceParking       `json:"parkingOptions"`
+	PaymentOptions     *PlacePayments      `json:"paymentOptions"`
+	AccessibilityOptions *PlaceAccessibility `json:"accessibilityOptions"`
+}
+
+type PlaceParking struct {
+	PaidStreetParking bool `json:"paidStreetParking"`
+	PaidParkingLot    bool `json:"paidParkingLot"`
+	FreeStreetParking bool `json:"freeStreetParking"`
+	FreeParkingLot    bool `json:"freeParkingLot"`
+	ValetParking      bool `json:"valetParking"`
+	GarageParking     bool `json:"garageParking"`
+}
+
+type PlacePayments struct {
+	CashOnly           bool `json:"cashOnly"`
+	CreditCardOnly     bool `json:"creditCardOnly"`
+	DebitCardOnly      bool `json:"debitCardOnly"`
+	NfcOnly            bool `json:"nfcOnly"`
+}
+
+type PlaceAccessibility struct {
+	WheelchairAccessibleEntrance bool `json:"wheelchairAccessibleEntrance"`
+	WheelchairAccessibleParking  bool `json:"wheelchairAccessibleParking"`
+	WheelchairAccessibleRestroom bool `json:"wheelchairAccessibleRestroom"`
+	WheelchairAccessibleSeating  bool `json:"wheelchairAccessibleSeating"`
+}

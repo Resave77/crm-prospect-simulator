@@ -707,3 +707,64 @@ func simulationParentCode(sequence int64) string {
 func simulationCustomerCode(parentCode string, sequence int64) string {
 	return fmt.Sprintf("%s-S%03d", parentCode, sequence)
 }
+
+func (r *PostgresRepository) UpdateParentCompany(ctx context.Context, id uuid.UUID, input model.UpdateParentCompanyInput) (model.ParentCompany, error) {
+	contacts, err := json.Marshal(input.CompanyContacts)
+	if err != nil {
+		contacts = []byte("[]")
+	}
+	command, err := r.pool.Exec(ctx, `
+		UPDATE parent_companies SET
+			name = $2, term_of_payment = $3,
+			npwp_name = $4, npwp_address = $5, npwp_number = $6,
+			company_contacts = $7,
+			address_mode = COALESCE(NULLIF($8, ''), address_mode),
+			province = COALESCE(NULLIF($9, ''), province),
+			district = COALESCE(NULLIF($10, ''), district),
+			sub_district = COALESCE(NULLIF($11, ''), sub_district),
+			village = COALESCE(NULLIF($12, ''), village),
+			latitude = COALESCE($13, latitude),
+			longitude = COALESCE($14, longitude),
+			preview_address = COALESCE(NULLIF($15, ''), preview_address)
+		WHERE id = $1`,
+		id, strings.TrimSpace(input.Name), strings.TrimSpace(input.TermOfPayment),
+		strings.TrimSpace(input.NPWPName), strings.TrimSpace(input.NPWPAddress), strings.TrimSpace(input.NPWPNumber),
+		contacts,
+		addrField(input.CompanyAddress, "Mode"), addrField(input.CompanyAddress, "Province"),
+		addrField(input.CompanyAddress, "District"), addrField(input.CompanyAddress, "SubDistrict"),
+		addrField(input.CompanyAddress, "Village"), addrPtr(input.CompanyAddress, "Latitude"),
+		addrPtr(input.CompanyAddress, "Longitude"), addrField(input.CompanyAddress, "PreviewAddress"))
+	if err != nil {
+		return model.ParentCompany{}, fmt.Errorf("update parent company: %w", err)
+	}
+	if command.RowsAffected() == 0 {
+		return model.ParentCompany{}, ErrNotFound
+	}
+	return scanParent(r.pool.QueryRow(ctx, parentSelect+` WHERE pc.id=$1`, id))
+}
+
+func (r *PostgresRepository) FindParentCompanyByCode(ctx context.Context, code string) (model.ParentCompany, error) {
+	return scanParent(r.pool.QueryRow(ctx, parentSelect+` WHERE pc.parent_code=$1`, strings.TrimSpace(code)))
+}
+
+func addrField(a *model.Address, field string) string {
+	if a == nil { return "" }
+	switch field {
+	case "Mode": return a.Mode
+	case "Province": return a.Province
+	case "District": return a.District
+	case "SubDistrict": return a.SubDistrict
+	case "Village": return a.Village
+	case "PreviewAddress": return a.PreviewAddress
+	}
+	return ""
+}
+
+func addrPtr(a *model.Address, field string) interface{} {
+	if a == nil { return nil }
+	switch field {
+	case "Latitude": return a.Latitude
+	case "Longitude": return a.Longitude
+	}
+	return nil
+}

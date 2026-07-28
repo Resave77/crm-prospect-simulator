@@ -30,6 +30,7 @@ type Actor struct {
 
 type ConversionForm struct {
 	Prospect            prospectmodel.Review          `json:"prospect"`
+	PlaceDetails        *prospectmodel.PlaceDetails    `json:"placeDetails,omitempty"`
 	ParentCompanies     []customermodel.ParentCompany `json:"parentCompanies"`
 	SalesExecutives     []customermodel.UserOption    `json:"salesExecutives"`
 	ParentCodePreview   string                        `json:"parentCodePreview"`
@@ -66,8 +67,16 @@ func (s *Service) ConversionForm(ctx context.Context, actor Actor, prospectID uu
 	if err != nil {
 		return ConversionForm{}, err
 	}
+
+	var placeDetails *prospectmodel.PlaceDetails
+	if review.Prospect.GooglePlaceID != "" {
+		if details, err := s.prospects.PlaceDetailFull(ctx, review.Prospect.GooglePlaceID); err == nil {
+			placeDetails = &details
+		}
+	}
+
 	return ConversionForm{
-		Prospect: review, ParentCompanies: companies, SalesExecutives: sales,
+		Prospect: review, PlaceDetails: placeDetails, ParentCompanies: companies, SalesExecutives: sales,
 		ParentCodePreview: "Generated on save", CustomerCodePreview: "Generated on save",
 		SellerIdentity: "PT Yummy Corp — Simulation",
 		Options:        simulationOptions(),
@@ -143,6 +152,24 @@ func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID)
 		return ErrForbidden
 	}
 	return s.repository.DeleteCustomer(ctx, id)
+}
+
+func (s *Service) FindParentCompanyByCode(ctx context.Context, actor Actor, code string) (customermodel.ParentCompany, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return customermodel.ParentCompany{}, ErrForbidden
+	}
+	return s.repository.FindParentCompanyByCode(ctx, code)
+}
+
+func (s *Service) UpdateParentCompany(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.UpdateParentCompanyInput) (customermodel.ParentCompany, error) {
+	if actor.Role != authmodel.RoleAdministrator {
+		return customermodel.ParentCompany{}, ErrForbidden
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" {
+		return customermodel.ParentCompany{}, fmt.Errorf("%w: company name is required", ErrValidation)
+	}
+	return s.repository.UpdateParentCompany(ctx, id, input)
 }
 
 func normalize(input *customermodel.ConversionInput) {

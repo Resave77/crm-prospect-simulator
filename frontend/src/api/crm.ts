@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope } from '../types/auth'
-import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -23,6 +23,10 @@ export async function checkOutProspect(id: string, visitId: string, input: { lat
   return (await api.patch<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/${visitId}/check-out`, input)).data.data
 }
 export async function getPipeline() { return (await api.get<ApiEnvelope<Prospect[]>>('/admin/prospects/pipeline')).data.data }
+
+export async function deleteProspect(id: string) {
+  await api.delete(`/admin/prospects/${id}`)
+}
 export async function getSalesExecutives() { return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>('/admin/sales-executives')).data.data }
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
 export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
@@ -59,6 +63,10 @@ export async function getMyCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/sales/customers/${id}`)).data.data
 }
 
+export async function getMyCustomerPlaceDetails(id: string) {
+  return (await api.get<ApiEnvelope<PlaceDetails>>(`/sales/customers/${id}/place-details`)).data.data
+}
+
 export async function getAdminCustomersList(params: CustomerListParams) {
   return (await api.get<ApiEnvelope<CustomerListResult>>('/admin/customers/list', { params })).data.data
 }
@@ -69,6 +77,10 @@ export async function getCustomerFilterOptions() {
 
 export async function getAdminCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`)).data.data
+}
+
+export async function getAdminCustomerPlaceDetails(id: string) {
+  return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/customers/${id}/place-details`)).data.data
 }
 
 export async function deleteCustomer(id: string) {
@@ -86,5 +98,13 @@ export async function getAdminVisits(filters: VisitMonitoringFilters) {
 }
 
 export async function deleteVisit(visitId: string) {
-  await api.delete(`/admin/visits/${visitId}`)
+  await api.post(`/admin/visits/${visitId}/delete`)
+}
+
+export async function getParentCompany(id: string) {
+  return (await api.get<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`)).data.data
+}
+
+export async function updateParentCompany(id: string, input: UpdateParentCompanyInput) {
+  return (await api.patch<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`, input)).data.data
 }

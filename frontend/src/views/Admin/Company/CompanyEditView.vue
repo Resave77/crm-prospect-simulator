@@ -5,29 +5,25 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import { useCustomerListStore } from '../../../stores/customerList'
+import { getParentCompany, updateParentCompany } from '../../../api/crm'
+import type { ParentCompany } from '../../../types/crm'
 
 const route = useRoute()
 const router = useRouter()
-const store = useCustomerListStore()
 const error = ref('')
 const loading = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 
 const code = computed(() => route.params.id as string)
-const companyName = computed(() => {
-  const match = store.allCustomers.find((c) => c.parentCode === code.value)
-  return match?.parentCompanyName || code.value
-})
+const companyName = ref('')
 
 const form = ref({
   name: '',
-  address: '',
+  termOfPayment: '',
   npwpName: '',
   npwpAddress: '',
   npwpNumber: '',
-  termOfPayment: '',
   notes: '',
 })
 
@@ -36,11 +32,18 @@ const isFormValid = computed(() => form.value.name.trim() !== '')
 async function handleSave() {
   if (!isFormValid.value) return
   saving.value = true
+  error.value = ''
   try {
-    await new Promise((r) => setTimeout(r, 1000))
+    await updateParentCompany(code.value, {
+      name: form.value.name,
+      termOfPayment: form.value.termOfPayment,
+      npwpName: form.value.npwpName,
+      npwpAddress: form.value.npwpAddress,
+      npwpNumber: form.value.npwpNumber,
+    })
     saved.value = true
-  } catch {
-    error.value = 'Failed to update company. Please try again.'
+  } catch (caught) {
+    error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Failed to update company. Please try again.'
   } finally {
     saving.value = false
   }
@@ -48,10 +51,16 @@ async function handleSave() {
 
 onMounted(async () => {
   try {
-    if (store.allCustomers.length === 0) await store.fetchCustomers()
-    form.value.name = companyName.value
-  } catch (e) { error.value = store.errorMessage(e) }
-  finally { loading.value = false }
+    const company = await getParentCompany(code.value)
+    companyName.value = company.name
+    form.value.name = company.name
+    form.value.termOfPayment = company.termOfPayment || ''
+    form.value.npwpName = company.npwpName || ''
+    form.value.npwpAddress = company.npwpAddress || ''
+    form.value.npwpNumber = company.npwpNumber || ''
+  } catch (e) {
+    error.value = (e as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Failed to load company data.'
+  } finally { loading.value = false }
 })
 </script>
 

@@ -25,6 +25,9 @@ func (f *fakePlaces) Search(_ context.Context, _ prospectmodel.PlaceSearchInput)
 func (f *fakePlaces) Detail(_ context.Context, _ string) (prospectmodel.PlaceResult, error) {
 	return prospectmodel.PlaceResult{GooglePlaceID: "place-1"}, nil
 }
+func (f *fakePlaces) DetailFull(_ context.Context, _ string) (prospectmodel.PlaceDetails, error) {
+	return prospectmodel.PlaceDetails{GooglePlaceID: "place-1"}, nil
+}
 
 func (f *fakeProspectRepository) ListAssigned(_ context.Context, owner uuid.UUID) ([]prospectmodel.Prospect, error) {
 	if f.prospect.AssignedSalesExecutiveID != owner {
@@ -83,6 +86,18 @@ func (f *fakeProspectRepository) Transition(_ context.Context, id, owner uuid.UU
 	f.prospect.Status = status
 	f.history = append(f.history, prospectmodel.StatusHistory{FromStatus: &previous, ToStatus: status, Notes: notes})
 	return f.prospect, nil
+}
+
+func (f *fakeProspectRepository) ListVisitMonitoring(_ context.Context, _ prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
+	return []prospectmodel.VisitMonitoringItem{}, nil
+}
+
+func (f *fakeProspectRepository) DeleteVisit(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeProspectRepository) DeleteProspect(_ context.Context, _ uuid.UUID) error {
+	return nil
 }
 
 func TestSalesExecutiveCanMarkOwnNegotiationProspectWon(t *testing.T) {

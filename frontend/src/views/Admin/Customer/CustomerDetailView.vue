@@ -5,21 +5,60 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { useCrmStore } from '../../../stores/crm'
-import type { CustomerDetail } from '../../../types/crm'
+import { getAdminCustomerPlaceDetails } from '../../../api/crm'
+import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
 
 const route = useRoute()
 const router = useRouter()
 const crm = useCrmStore()
 const error = ref('')
 const detail = ref<CustomerDetail | null>(null)
+const placeDetails = ref<PlaceDetails | null>(null)
 const activeTab = ref('overview')
+const activePhotoIdx = ref(0)
+const showAllHours = ref(false)
 
 const tabs = [
   { key: 'overview', label: 'Overview', icon: 'pi pi-id-card' },
+  { key: 'google', label: 'Google Maps', icon: 'pi pi-map' },
   { key: 'contacts', label: 'Contacts', icon: 'pi pi-users' },
   { key: 'company', label: 'Company', icon: 'pi pi-building' },
-  { key: 'address', label: 'Address', icon: 'pi pi-map' },
+  { key: 'address', label: 'Address', icon: 'pi pi-map-marker' },
 ]
+
+function priceLevelLabel(level: string): string {
+  const map: Record<string, string> = {
+    PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: 'Inexpensive',
+    PRICE_LEVEL_MODERATE: 'Moderate', PRICE_LEVEL_EXPENSIVE: 'Expensive',
+    PRICE_LEVEL_VERY_EXPENSIVE: 'Very Expensive',
+  }
+  return map[level] ?? level
+}
+
+function businessStatusLabel(status: string): string {
+  if (status === 'OPERATIONAL') return 'Open'
+  if (status === 'CLOSED_TEMPORARILY') return 'Temporarily Closed'
+  if (status === 'CLOSED_PERMANENTLY') return 'Permanently Closed'
+  return status || 'Unknown'
+}
+
+function businessStatusSeverity(status: string): string {
+  if (status === 'OPERATIONAL') return 'success'
+  if (status === 'CLOSED_TEMPORARILY') return 'warn'
+  if (status === 'CLOSED_PERMANENTLY') return 'danger'
+  return 'secondary'
+}
+
+function stars(rating: number): string[] {
+  const full = Math.floor(rating)
+  const half = rating - full >= 0.5 ? 1 : 0
+  const empty = 5 - full - half
+  return [
+    ...Array(full).fill('pi-star-fill'),
+    ...Array(half).fill('pi-star-half-fill'),
+    ...Array(empty).fill('pi-star'),
+  ]
+}
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '—'
@@ -42,7 +81,13 @@ function segmentSeverity(seg: string) {
 
 onMounted(async () => {
   try {
-    detail.value = await crm.loadAdminCustomer(String(route.params.id))
+    const customerId = String(route.params.id)
+    const [cust, place] = await Promise.all([
+      crm.loadAdminCustomer(customerId),
+      getAdminCustomerPlaceDetails(customerId).catch(() => null),
+    ])
+    detail.value = cust
+    placeDetails.value = place
   } catch (e) {
     error.value = crm.errorMessage(e)
   }
@@ -201,6 +246,179 @@ onMounted(async () => {
           </div>
           <Button label="View Full Company" icon="pi pi-arrow-right" severity="secondary" text size="small" class="card-footer-link" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}`)" />
         </div>
+      </div>
+
+      <!-- =================== GOOGLE MAPS TAB =================== -->
+      <div v-if="activeTab === 'google'" class="detail-grid">
+        <!-- No Google Data -->
+        <div v-if="!placeDetails" class="empty-card" style="grid-column: 1 / -1;">
+          <i class="pi pi-map" />
+          <strong>No Google Maps data</strong>
+          <span class="muted">This customer was not created from a Google Place.</span>
+        </div>
+
+        <template v-else>
+          <!-- Editorial Summary -->
+          <div v-if="placeDetails.editorialSummary" class="detail-card" style="grid-column: 1 / -1;">
+            <h3 class="card-heading"><i class="pi pi-info-circle" /> About this place</h3>
+            <p class="editorial-text">{{ placeDetails.editorialSummary }}</p>
+          </div>
+
+          <!-- Photos -->
+          <div v-if="placeDetails.photos?.length" class="detail-card" style="grid-column: 1 / -1;">
+            <h3 class="card-heading"><i class="pi pi-images" /> Photos</h3>
+            <div class="photo-scroll">
+              <div
+                v-for="(photo, idx) in placeDetails.photos"
+                :key="photo.name"
+                class="photo-item"
+                :class="{ active: idx === activePhotoIdx }"
+                @click="activePhotoIdx = idx"
+              >
+                <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+              </div>
+            </div>
+            <div v-if="placeDetails.photos[activePhotoIdx]?.attribution" class="photo-attribution">
+              Photo: {{ placeDetails.photos[activePhotoIdx].attribution }}
+            </div>
+          </div>
+
+          <!-- Rating & Business Status -->
+          <div class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-star" /> Rating & Status</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.rating > 0" class="info-item full">
+                <span class="info-label">Google Rating</span>
+                <div class="rating-row">
+                  <span class="rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
+                  <div class="rating-stars">
+                    <i v-for="(s, i) in stars(placeDetails.rating)" :key="i" :class="['pi', s]" />
+                  </div>
+                  <span class="rating-count">({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
+                </div>
+              </div>
+              <div v-if="placeDetails.businessStatus" class="info-item">
+                <span class="info-label">Business Status</span>
+                <Tag :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
+              </div>
+              <div v-if="placeDetails.priceLevel" class="info-item">
+                <span class="info-label">Price Level</span>
+                <strong>{{ priceLevelLabel(placeDetails.priceLevel) }}</strong>
+              </div>
+              <div v-if="placeDetails.phoneNumber" class="info-item">
+                <span class="info-label">Phone</span>
+                <a :href="`tel:${placeDetails.phoneNumber}`" class="info-link">{{ placeDetails.phoneNumber }}</a>
+              </div>
+              <div v-if="placeDetails.internationalPhone" class="info-item">
+                <span class="info-label">International Phone</span>
+                <strong>{{ placeDetails.internationalPhone }}</strong>
+              </div>
+              <div v-if="placeDetails.websiteUrl" class="info-item">
+                <span class="info-label">Website</span>
+                <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="info-link"><i class="pi pi-external-link" /> {{ placeDetails.websiteUrl }}</a>
+              </div>
+              <div v-if="placeDetails.googleMapsUrl" class="info-item">
+                <span class="info-label">Google Maps</span>
+                <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="info-link"><i class="pi pi-map" /> View on Google Maps</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Place Types -->
+          <div v-if="placeDetails.placeTypes?.length" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-tags" /> Place Categories</h3>
+            <div class="types-wrap">
+              <Tag v-for="t in placeDetails.placeTypes" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="type-tag" />
+            </div>
+          </div>
+
+          <!-- Opening Hours -->
+          <div v-if="placeDetails.openingHours" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-clock" /> Opening Hours</h3>
+            <div class="hours-status">
+              <span :class="['hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
+              <strong>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</strong>
+            </div>
+            <div v-if="placeDetails.openingHours.weekdays?.length" class="hours-list">
+              <div
+                v-for="(day, i) in (showAllHours ? placeDetails.openingHours.weekdays : placeDetails.openingHours.weekdays.slice(0, 3))"
+                :key="i"
+                class="hours-row"
+                v-html="day"
+              />
+              <button v-if="placeDetails.openingHours.weekdays.length > 3" class="hours-toggle" @click="showAllHours = !showAllHours">
+                {{ showAllHours ? 'Show less' : `Show all ${placeDetails.openingHours.weekdays.length} days` }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Reviews -->
+          <div v-if="placeDetails.reviews?.length" class="detail-card" style="grid-column: 1 / -1;">
+            <h3 class="card-heading"><i class="pi pi-comments" /> Reviews</h3>
+            <div class="reviews-list">
+              <div v-for="(review, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="review-item">
+                <div class="review-header">
+                  <img v-if="review.authorPhoto" :src="review.authorPhoto" class="review-avatar" :alt="review.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
+                  <div v-else class="review-avatar-placeholder">{{ review.authorName?.charAt(0) || '?' }}</div>
+                  <div class="review-meta">
+                    <strong>{{ review.authorName }}</strong>
+                    <div class="review-stars">
+                      <i v-for="(s, j) in stars(review.rating)" :key="j" :class="['pi', s]" />
+                      <span class="review-time">{{ review.time }}</span>
+                    </div>
+                  </div>
+                </div>
+                <p v-if="review.text" class="review-text">{{ review.text }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Service Options -->
+          <div v-if="placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-cog" /> Service Options</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.dineIn" class="info-item"><span class="info-label">Dine In</span><strong>Available</strong></div>
+              <div v-if="placeDetails.takeout" class="info-item"><span class="info-label">Takeout</span><strong>Available</strong></div>
+              <div v-if="placeDetails.delivery" class="info-item"><span class="info-label">Delivery</span><strong>Available</strong></div>
+              <div v-if="placeDetails.curbsidePickup" class="info-item"><span class="info-label">Curbside Pickup</span><strong>Available</strong></div>
+            </div>
+          </div>
+
+          <!-- Parking Options -->
+          <div v-if="placeDetails.parkingOptions" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-directions" /> Parking</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.parkingOptions.freeParkingLot" class="info-item"><span class="info-label">Free Parking Lot</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.parkingOptions.freeStreetParking" class="info-item"><span class="info-label">Free Street Parking</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.parkingOptions.paidParkingLot" class="info-item"><span class="info-label">Paid Parking Lot</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.parkingOptions.paidStreetParking" class="info-item"><span class="info-label">Paid Street Parking</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.parkingOptions.garageParking" class="info-item"><span class="info-label">Garage Parking</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.parkingOptions.valetParking" class="info-item"><span class="info-label">Valet Parking</span><strong>Yes</strong></div>
+            </div>
+          </div>
+
+          <!-- Payment Options -->
+          <div v-if="placeDetails.paymentOptions && (placeDetails.paymentOptions.cashOnly || placeDetails.paymentOptions.creditCardOnly || placeDetails.paymentOptions.debitCardOnly || placeDetails.paymentOptions.nfcOnly)" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-wallet" /> Payment Options</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.paymentOptions.cashOnly" class="info-item"><span class="info-label">Cash Only</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.paymentOptions.creditCardOnly" class="info-item"><span class="info-label">Credit Card Only</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.paymentOptions.debitCardOnly" class="info-item"><span class="info-label">Debit Card Only</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.paymentOptions.nfcOnly" class="info-item"><span class="info-label">NFC Only</span><strong>Yes</strong></div>
+            </div>
+          </div>
+
+          <!-- Accessibility -->
+          <div v-if="placeDetails.accessibilityOptions" class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-verified" /> Accessibility</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.accessibilityOptions.wheelchairAccessibleEntrance" class="info-item"><span class="info-label">Wheelchair Entrance</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.accessibilityOptions.wheelchairAccessibleParking" class="info-item"><span class="info-label">Wheelchair Parking</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.accessibilityOptions.wheelchairAccessibleRestroom" class="info-item"><span class="info-label">Wheelchair Restroom</span><strong>Yes</strong></div>
+              <div v-if="placeDetails.accessibilityOptions.wheelchairAccessibleSeating" class="info-item"><span class="info-label">Wheelchair Seating</span><strong>Yes</strong></div>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- =================== CONTACTS TAB =================== -->
@@ -783,6 +1001,46 @@ onMounted(async () => {
   font-size: 1.75rem;
   color: var(--brand-blue);
 }
+
+/* ── GOOGLE MAPS TAB ──────────────────────────────────────────────── */
+.editorial-text { margin: 0; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; font-style: italic; }
+.photo-scroll { display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 0.3rem; }
+.photo-scroll::-webkit-scrollbar { height: 4px; }
+.photo-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.photo-item { flex: 0 0 220px; height: 160px; border-radius: 10px; overflow: hidden; cursor: pointer; scroll-snap-align: start; border: 2px solid transparent; transition: border-color 0.15s, transform 0.15s; }
+.photo-item:hover { transform: scale(1.02); }
+.photo-item.active { border-color: var(--brand-blue); }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-attribution { margin-top: 0.35rem; color: var(--text-muted); font-size: 0.65rem; font-style: italic; }
+.rating-row { display: flex; align-items: center; gap: 0.4rem; }
+.rating-num { font-size: 1.15rem; font-weight: 800; color: #f59e0b; }
+.rating-stars { display: flex; gap: 1px; }
+.rating-stars .pi { font-size: 0.7rem; color: #f59e0b; }
+.rating-count { color: var(--text-muted); font-size: 0.75rem; }
+.info-link { color: #2563eb; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
+.info-link:hover { text-decoration: underline; }
+.types-wrap { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.type-tag { font-size: 0.68rem !important; }
+.hours-status { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.75rem; }
+.hours-dot { width: 8px; height: 8px; border-radius: 50%; }
+.hours-dot.open { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
+.hours-dot.closed { background: #ef4444; }
+.hours-list { display: grid; gap: 0.3rem; }
+.hours-row { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; }
+.hours-toggle { background: none; border: none; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
+.hours-toggle:hover { text-decoration: underline; }
+.reviews-list { display: grid; gap: 0.85rem; }
+.review-item { padding-bottom: 0.75rem; border-bottom: 1px solid #f0f3f7; }
+.review-item:last-child { border-bottom: none; padding-bottom: 0; }
+.review-header { display: flex; align-items: center; gap: 0.6rem; }
+.review-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+.review-avatar-placeholder { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #e2e8f0; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+.review-meta { flex: 1; min-width: 0; }
+.review-meta strong { font-size: 0.82rem; color: var(--text-primary); }
+.review-stars { display: flex; align-items: center; gap: 1px; }
+.review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
+.review-time { color: var(--text-muted); font-size: 0.68rem; margin-left: 0.4rem; }
+.review-text { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
 
 /* ── RESPONSIVE ────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {

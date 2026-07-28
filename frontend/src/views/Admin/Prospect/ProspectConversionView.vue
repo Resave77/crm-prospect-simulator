@@ -22,6 +22,7 @@ const data = ref<ConversionFormData | null>(null)
 const error = ref('')
 const submitted = ref(false)
 const saving = ref(false)
+const loading = ref(true)
 const companySuggestions = ref<ParentCompany[]>([])
 const showConfirmDialog = ref(false)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
@@ -159,14 +160,45 @@ onMounted(async () => {
   try {
     data.value = await getConversionForm(String(route.params.id))
     const prospect = data.value.prospect.prospect
-    form.customerName = prospect.placeName
-    form.customerCategory = data.value.options.categories.includes(prospect.placeCategory) ? prospect.placeCategory : ''
-    form.siteAddress = { mode: 'GMAPS_SIMULATION', province: '', district: '', subDistrict: '', village: '', latitude: prospect.latitude, longitude: prospect.longitude, previewAddress: prospect.formattedAddress }
-    form.siteContacts = prospect.phoneNumber ? [blankContact(prospect.phoneNumber)] : []
+    const detail = data.value.placeDetails
+
+    form.customerName = detail?.placeName || prospect.placeName
+
+    const category = detail?.placeCategory || prospect.placeCategory
+    form.customerCategory = data.value.options.categories.includes(category) ? category : ''
+
+    const address = detail?.formattedAddress || prospect.formattedAddress
+    form.siteAddress = { mode: 'GMAPS_SIMULATION', province: '', district: '', subDistrict: '', village: '', latitude: detail?.latitude ?? prospect.latitude, longitude: detail?.longitude ?? prospect.longitude, previewAddress: address }
+
+    const phone = detail?.internationalPhone || detail?.phoneNumber || prospect.phoneNumber
+    form.siteContacts = phone ? [blankContact(phone)] : []
+
+    if (detail?.websiteUrl) {
+      const websiteContact = blankContact()
+      websiteContact.email = detail.websiteUrl
+      form.siteContacts.push(websiteContact)
+    }
+
     form.salesExecutiveId = prospect.assignedSalesExecutiveId
     autoParseAddress()
+
+    if (form.customerName) {
+      try {
+        const results = await searchParentCompanies(form.customerName)
+        const exactMatch = results.find((c) => c.name.toLowerCase() === form.customerName.toLowerCase())
+        if (exactMatch) {
+          form.existingParentCompanyId = exactMatch.id
+          form.parentMethod = 'EXISTING_COMPANY'
+        } else if (results.length === 1 && results[0].name.toLowerCase().includes(form.customerName.toLowerCase())) {
+          form.parentMethod = 'MATCH_CUSTOMER_NAME'
+          form.parentCompanyName = form.customerName
+        }
+      } catch {}
+    }
   } catch (caught) {
     error.value = crm.errorMessage(caught)
+  } finally {
+    loading.value = false
   }
 })
 

@@ -143,6 +143,81 @@ export interface CustomerDetail {
   sourceProspectName: string
 }
 
+export interface PlacePhoto {
+  name: string
+  photoUrl: string
+  widthPx: number
+  heightPx: number
+  attribution: string
+}
+
+export interface PlaceOpeningHours {
+  openNow: boolean
+  weekdays: string[]
+}
+
+export interface PlaceReview {
+  authorName: string
+  authorPhoto: string
+  rating: number
+  text: string
+  time: string
+  languageCode: string
+}
+
+export interface PlaceDetails {
+  googlePlaceId: string
+  placeName: string
+  formattedAddress: string
+  latitude: number
+  longitude: number
+  placeCategory: string
+  placeTypes: string[]
+  phoneNumber: string
+  internationalPhone: string
+  websiteUrl: string
+  googleMapsUrl: string
+  rating: number
+  userRatingCount: number
+  businessStatus: string
+  priceLevel: string
+  editorialSummary: string
+  utcOffsetMinutes: number
+  photos: PlacePhoto[]
+  openingHours: PlaceOpeningHours | null
+  reviews: PlaceReview[]
+  delivery: boolean
+  dineIn: boolean
+  takeout: boolean
+  curbsidePickup: boolean
+  parkingOptions: PlaceParking | null
+  paymentOptions: PlacePayments | null
+  accessibilityOptions: PlaceAccessibility | null
+}
+
+export interface PlaceParking {
+  paidStreetParking: boolean
+  paidParkingLot: boolean
+  freeStreetParking: boolean
+  freeParkingLot: boolean
+  valetParking: boolean
+  garageParking: boolean
+}
+
+export interface PlacePayments {
+  cashOnly: boolean
+  creditCardOnly: boolean
+  debitCardOnly: boolean
+  nfcOnly: boolean
+}
+
+export interface PlaceAccessibility {
+  wheelchairAccessibleEntrance: boolean
+  wheelchairAccessibleParking: boolean
+  wheelchairAccessibleRestroom: boolean
+  wheelchairAccessibleSeating: boolean
+}
+
 export interface UserOption {
   id: string
   fullName: string
@@ -160,6 +235,7 @@ export interface MasterOptions {
 
 export interface ConversionFormData {
   prospect: ProspectReview
+  placeDetails?: PlaceDetails
   parentCompanies: ParentCompany[]
   salesExecutives: UserOption[]
   parentCodePreview: string
@@ -259,4 +335,14 @@ export interface VisitMonitoringFilters {
   salesExecutiveId: string
   customerName: string
   radiusStatus: string
+}
+
+export interface UpdateParentCompanyInput {
+  name: string
+  termOfPayment: string
+  npwpName: string
+  npwpAddress: string
+  npwpNumber: string
+  companyAddress?: Address
+  companyContacts?: Contact[]
 }

@@ -160,3 +160,13 @@ type MasterOptions struct {
 	KAMs               []string  `json:"kams"`
 	AddressSuggestions []Address `json:"addressSuggestions"`
 }
+
+type UpdateParentCompanyInput struct {
+	Name           string  `json:"name"`
+	TermOfPayment  string  `json:"termOfPayment"`
+	NPWPName       string  `json:"npwpName"`
+	NPWPAddress    string  `json:"npwpAddress"`
+	NPWPNumber     string  `json:"npwpNumber"`
+	CompanyAddress *Address `json:"companyAddress,omitempty"`
+	CompanyContacts []Contact `json:"companyContacts,omitempty"`
+}

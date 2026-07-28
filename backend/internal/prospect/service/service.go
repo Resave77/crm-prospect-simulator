@@ -34,6 +34,7 @@ type Service struct {
 type Places interface {
 	Search(context.Context, prospectmodel.PlaceSearchInput) ([]prospectmodel.PlaceResult, error)
 	Detail(context.Context, string) (prospectmodel.PlaceResult, error)
+	DetailFull(context.Context, string) (prospectmodel.PlaceDetails, error)
 }
 
 func New(repo repository.Repository, placeClients ...Places) *Service {
@@ -203,6 +204,16 @@ func (s *Service) PlaceDetail(ctx context.Context, actor Actor, placeID string) 
 	return s.places.Detail(ctx, placeID)
 }
 
+func (s *Service) PlaceDetailFull(ctx context.Context, placeID string) (prospectmodel.PlaceDetails, error) {
+	if strings.TrimSpace(placeID) == "" {
+		return prospectmodel.PlaceDetails{}, ErrFinderInput
+	}
+	if s.places == nil {
+		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
+	}
+	return s.places.DetailFull(ctx, placeID)
+}
+
 func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.SaveProspectInput) (prospectmodel.Prospect, error) {
 	if actor.Role != authmodel.RoleAdministrator {
 		return prospectmodel.Prospect{}, ErrForbidden
@@ -226,4 +237,11 @@ func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUI
 		return ErrForbidden
 	}
 	return s.repository.DeleteVisit(ctx, visitID, actor.UserID)
+}
+
+func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role != authmodel.RoleAdministrator {
+		return ErrForbidden
+	}
+	return s.repository.DeleteProspect(ctx, id)
 }

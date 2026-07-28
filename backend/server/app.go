@@ -50,7 +50,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	authHandler := authhandler.New(authService, cfg.CookieSecure)
 	authMiddleware := authmiddleware.New(authService)
 	prospectHandler := prospecthandler.New(prospectService, customerService)
-	customerHandler := customerhandler.New(customerService)
+	customerHandler := customerhandler.New(customerService, prospectService)
 
 	health := func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"status": "ok"})
@@ -84,6 +84,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Patch("/prospects/:id/visits/:visitId/check-out", prospectHandler.CheckOut)
 	sales.Get("/customers", customerHandler.MyCustomers)
 	sales.Get("/customers/:id", customerHandler.MyCustomer)
+	sales.Get("/customers/:id/place-details", customerHandler.MyCustomerPlaceDetails)
 
 	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequireRole(model.RoleAdministrator))
 	admin.Get("/prospects/won", prospectHandler.WonQueue)
@@ -92,9 +93,10 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/prospect-finder/search", prospectHandler.SearchPlaces)
 	admin.Get("/prospect-finder/places/:placeId", prospectHandler.PlaceDetail)
 	admin.Post("/prospects", prospectHandler.Save)
+	admin.Delete("/prospects/:id", prospectHandler.DeleteProspect)
 	admin.Get("/prospects/:id", prospectHandler.Review)
 	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
-	admin.Delete("/visits/:visitId", prospectHandler.DeleteVisit)
+	admin.Post("/visits/:visitId/delete", prospectHandler.DeleteVisit)
 	admin.Get("/prospects/:id/conversion-form", customerHandler.ConversionForm)
 	admin.Post("/prospects/:id/convert", customerHandler.Convert)
 	admin.Get("/parent-companies", customerHandler.SearchParentCompanies)
@@ -102,7 +104,10 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/customers/list", customerHandler.AdminCustomersList)
 	admin.Get("/customers/filter-options", customerHandler.CustomerFilterOptions)
 	admin.Get("/customers/:id", customerHandler.AdminCustomerDetail)
+	admin.Get("/customers/:id/place-details", customerHandler.AdminCustomerPlaceDetails)
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
+	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
+	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
 
 	app.Use(func(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "The requested API route does not exist.")

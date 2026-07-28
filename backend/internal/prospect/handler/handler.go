@@ -255,6 +255,17 @@ func (h *Handler) DeleteVisit(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
+func (h *Handler) DeleteProspect(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.DeleteProspect(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
+}
+
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
 	return service.Actor{UserID: principal.UserID, Role: principal.Role}

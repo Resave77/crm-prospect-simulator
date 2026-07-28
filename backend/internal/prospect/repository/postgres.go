@@ -378,6 +378,29 @@ func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID,
 	return nil
 }
 
+func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM prospect_visits WHERE prospect_id = $1`, id); err != nil {
+		return fmt.Errorf("delete prospect visits: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM prospect_status_history WHERE prospect_id = $1`, id); err != nil {
+		return fmt.Errorf("delete prospect status history: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM prospects WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete prospect: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *PostgresRepository) findVisit(ctx context.Context, id uuid.UUID) (model.Visit, error) {
 	return scanVisit(r.pool.QueryRow(ctx, `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id WHERE v.id=$1`, id))
 }

@@ -7,7 +7,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const search = ref('')
 
-function runSearch() { router.push({ path: '/admin/prospects/pipeline', query: search.value.trim() ? { search: search.value.trim() } : {} }) }
+function runSearch() { router.push({ path: '/admin/prospects', query: search.value.trim() ? { search: search.value.trim() } : {} }) }
 
 async function logout() {
   await auth.logout()
@@ -27,7 +27,7 @@ async function logout() {
         <RouterLink to="/admin/customer-assignment"><i class="pi pi-directions-alt" /> Customer Assignment</RouterLink>
         <RouterLink to="/admin/visit-monitoring"><i class="pi pi-map-marker" /> Visit Monitoring</RouterLink>
         <RouterLink to="/admin/prospect-finder"><i class="pi pi-compass" /> Prospect Finder</RouterLink>
-        <RouterLink to="/admin/prospects/pipeline"><i class="pi pi-list" /> Prospect List</RouterLink>
+        <RouterLink to="/admin/prospects"><i class="pi pi-list" /> Prospect List</RouterLink>
         <RouterLink to="/admin/prospect-assignment"><i class="pi pi-id-card" /> Prospect Assignment</RouterLink>
         <RouterLink to="/admin/reports"><i class="pi pi-chart-bar" /> Reports</RouterLink>
       </nav>

@@ -23,7 +23,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/Admin/Dashboard/AdminDashboardView.vue') },
         { path: 'prospect-finder', name: 'AdminProspectFinder', component: () => import('../views/Admin/Prospect/ProspectFinderView.vue') },
         { path: 'prospects/pipeline', name: 'AdminProspectPipeline', component: () => import('../views/Admin/Prospect/ProspectPipelineView.vue') },
-        { path: 'prospects', name: 'AdminProspects', redirect: '/admin/prospects/pipeline' },
+        { path: 'prospects', name: 'AdminProspects', component: () => import('../views/Admin/Prospect/ProspectListView.vue') },
         { path: 'prospects/won', name: 'AdminWonProspects', component: () => import('../views/Admin/Prospect/WonProspectsView.vue') },
         { path: 'prospects/:id/review', name: 'AdminProspectReview', component: () => import('../views/Admin/Prospect/ProspectReviewView.vue') },
         { path: 'prospects/:id/convert', name: 'AdminProspectConvert', component: () => import('../views/Admin/Prospect/ProspectConversionView.vue') },
