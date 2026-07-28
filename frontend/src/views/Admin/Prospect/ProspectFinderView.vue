@@ -202,6 +202,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 <template>
   <section class="finder-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded class="finder-back" @click="$router.back()" title="Back" />
     <div class="finder-desktop-shell">
       <aside class="finder-left-panel">
         <div class="finder-panel-header">
@@ -419,6 +420,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
    PROSPECT FINDER — Workspace Layout (modernized visual pass)
    ════════════════════════════════════════════════════════════════ */
 
+.finder-back { align-self: flex-start; margin: 0.75rem 0 0 0.75rem; }
 .finder-page {
   display: flex;
   flex-direction: column;

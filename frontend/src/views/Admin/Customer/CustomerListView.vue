@@ -305,6 +305,7 @@ async function executeDelete() {
 
 <template>
   <section class="admin-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <!-- PAGE HEADER -->
     <header class="page-heading">
       <div class="page-title-wrapper">

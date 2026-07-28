@@ -157,7 +157,7 @@ onMounted(async () => {
       <header class="page-heading">
         <div class="page-title-wrapper">
           <button class="back-link" @click="router.push(`/admin/customers/${route.params.id}`)">
-            <i class="pi pi-arrow-left" /> Back to Detail
+            <i class="pi pi-arrow-left" />
           </button>
           <span class="eyebrow">Edit Customer</span>
           <h1>{{ detail.customer.name }}</h1>
@@ -382,18 +382,18 @@ onMounted(async () => {
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   color: var(--brand-blue);
-  font-size: 0.8rem;
-  font-weight: 600;
+  background: var(--brand-blue-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  transition: opacity 0.15s;
+  font-size: 0.9rem;
+  transition: background 0.15s, border-color 0.15s;
 }
-.back-link:hover { opacity: 0.8; }
+.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 .code-tag {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;

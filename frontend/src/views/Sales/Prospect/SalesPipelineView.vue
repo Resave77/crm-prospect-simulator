@@ -134,7 +134,6 @@ onMounted(async () => {
   <section class="pl-page">
     <RouterLink class="pl-back" to="/sales/dashboard">
       <i class="pi pi-arrow-left" />
-      <span>Back</span>
     </RouterLink>
 
     <div class="pl-header">
@@ -284,16 +283,20 @@ onMounted(async () => {
 .pl-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #2563eb;
-  font-size: 0.78rem;
-  font-weight: 600;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--brand-blue);
+  background: var(--brand-blue-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   text-decoration: none;
+  font-size: 0.9rem;
   margin-bottom: 8px;
-  transition: opacity 0.15s;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.pl-back:hover { opacity: 0.75; }
+.pl-back:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 .pl-header {
   display: flex;

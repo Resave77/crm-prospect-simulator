@@ -28,6 +28,13 @@ type Repository interface {
 	CheckIn(context.Context, uuid.UUID, uuid.UUID, model.CheckInInput) (model.Visit, error)
 	CheckOut(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, model.CheckOutInput) (model.Visit, error)
 	ListVisitMonitoring(context.Context, model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error)
+	ListMyVisits(context.Context, uuid.UUID, model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error)
 	DeleteVisit(context.Context, uuid.UUID, uuid.UUID) error
 	DeleteProspect(context.Context, uuid.UUID) error
+	RequestDeletion(context.Context, uuid.UUID, uuid.UUID) error
+	ApproveDeletion(context.Context, uuid.UUID) error
+	RejectDeletion(context.Context, uuid.UUID) error
+	ListComments(context.Context, uuid.UUID) ([]model.ProspectComment, error)
+	CreateComment(context.Context, uuid.UUID, uuid.UUID, string) (model.ProspectComment, error)
+	FindProspectOwner(context.Context, uuid.UUID) (uuid.UUID, error)
 }

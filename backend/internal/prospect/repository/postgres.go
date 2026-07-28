@@ -27,7 +27,7 @@ const prospectSelect = `
 	       p.industry_group,
 	       COALESCE(p.phone_number, ''), COALESCE(p.website_url, ''), COALESCE(p.google_maps_url, ''), p.assigned_sales_executive_id,
 	       u.full_name, p.visit_notes, p.follow_up_notes, p.status::text,
-	       p.converted_at, p.created_at, p.updated_at
+	       p.deletion_requested, p.converted_at, p.created_at, p.updated_at
 	FROM prospects p
 	JOIN users u ON u.id = p.assigned_sales_executive_id`
 
@@ -254,6 +254,14 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 }
 
 func (r *PostgresRepository) ListVisitMonitoring(ctx context.Context, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
+	return r.listVisitsWithFilter(ctx, "", filter)
+}
+
+func (r *PostgresRepository) ListMyVisits(ctx context.Context, salesExecutiveID uuid.UUID, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
+	return r.listVisitsWithFilter(ctx, salesExecutiveID.String(), filter)
+}
+
+func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExecutiveID string, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
 	const baseQuery = `
 		SELECT v.id, v.prospect_id, p.place_name, p.place_category,
 		       COALESCE(p.industry_group, ''),
@@ -291,6 +299,12 @@ func (r *PostgresRepository) ListVisitMonitoring(ctx context.Context, filter mod
 	whereClauses := make([]string, 0)
 	args := make([]any, 0)
 	argIdx := 1
+
+	if salesExecutiveID != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("v.sales_executive_id = $%d", argIdx))
+		args = append(args, salesExecutiveID)
+		argIdx++
+	}
 
 	if filter.DateFrom != "" {
 		whereClauses = append(whereClauses, fmt.Sprintf("v.check_in_at::date >= $%d", argIdx))
@@ -385,6 +399,9 @@ func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) e
 	}
 	defer tx.Rollback(ctx)
 
+	if _, err := tx.Exec(ctx, `DELETE FROM prospect_comments WHERE prospect_id = $1`, id); err != nil {
+		return fmt.Errorf("delete prospect comments: %w", err)
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM prospect_visits WHERE prospect_id = $1`, id); err != nil {
 		return fmt.Errorf("delete prospect visits: %w", err)
 	}
@@ -399,6 +416,90 @@ func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) e
 		return ErrNotFound
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, salesExecID uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE prospects SET deletion_requested = TRUE, updated_at = now()
+		WHERE id = $1 AND assigned_sales_executive_id = $2`, prospectID, salesExecID)
+	if err != nil {
+		return fmt.Errorf("request deletion: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ApproveDeletion(ctx context.Context, prospectID uuid.UUID) error {
+	return r.DeleteProspect(ctx, prospectID)
+}
+
+func (r *PostgresRepository) RejectDeletion(ctx context.Context, prospectID uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE prospects SET deletion_requested = FALSE, updated_at = now()
+		WHERE id = $1`, prospectID)
+	if err != nil {
+		return fmt.Errorf("reject deletion: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.UUID) ([]model.ProspectComment, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.created_at, c.updated_at
+		FROM prospect_comments c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.prospect_id = $1
+		ORDER BY c.created_at ASC`, prospectID)
+	if err != nil {
+		return nil, fmt.Errorf("list prospect comments: %w", err)
+	}
+	defer rows.Close()
+	items := make([]model.ProspectComment, 0)
+	for rows.Next() {
+		var item model.ProspectComment
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan prospect comment: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, userID uuid.UUID, content string) (model.ProspectComment, error) {
+	id := uuid.New()
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO prospect_comments (id, prospect_id, user_id, content)
+		VALUES ($1, $2, $3, $4)`, id, prospectID, userID, content)
+	if err != nil {
+		return model.ProspectComment{}, fmt.Errorf("create prospect comment: %w", err)
+	}
+	var item model.ProspectComment
+	err = r.pool.QueryRow(ctx, `
+		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.created_at, c.updated_at
+		FROM prospect_comments c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.id = $1`, id).Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return model.ProspectComment{}, fmt.Errorf("read created comment: %w", err)
+	}
+	return item, nil
+}
+
+func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID uuid.UUID) (uuid.UUID, error) {
+	var ownerID uuid.UUID
+	err := r.pool.QueryRow(ctx, `SELECT assigned_sales_executive_id FROM prospects WHERE id = $1`, prospectID).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("find prospect owner: %w", err)
+	}
+	return ownerID, nil
 }
 
 func (r *PostgresRepository) findVisit(ctx context.Context, id uuid.UUID) (model.Visit, error) {
@@ -439,7 +540,7 @@ func scanProspect(row rowScanner) (model.Prospect, error) {
 	err := row.Scan(&item.ID, &item.GooglePlaceID, &item.PlaceName, &item.FormattedAddress,
 		&item.Latitude, &item.Longitude, &item.PlaceCategory, &placeTypes, &item.IndustryGroup,
 		&item.PhoneNumber, &item.WebsiteURL, &item.GoogleMapsURL, &item.AssignedSalesExecutiveID, &item.AssignedSalesExecutive,
-		&item.VisitNotes, &item.FollowUpNotes, &item.Status, &item.ConvertedAt,
+		&item.VisitNotes, &item.FollowUpNotes, &item.Status, &item.DeletionRequested, &item.ConvertedAt,
 		&item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Prospect{}, ErrNotFound

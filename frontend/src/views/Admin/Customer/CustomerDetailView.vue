@@ -7,6 +7,7 @@ import Tag from 'primevue/tag'
 import { useCrmStore } from '../../../stores/crm'
 import { getAdminCustomerPlaceDetails } from '../../../api/crm'
 import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
+import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,40 +26,6 @@ const tabs = [
   { key: 'company', label: 'Company', icon: 'pi pi-building' },
   { key: 'address', label: 'Address', icon: 'pi pi-map-marker' },
 ]
-
-function priceLevelLabel(level: string): string {
-  const map: Record<string, string> = {
-    PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: 'Inexpensive',
-    PRICE_LEVEL_MODERATE: 'Moderate', PRICE_LEVEL_EXPENSIVE: 'Expensive',
-    PRICE_LEVEL_VERY_EXPENSIVE: 'Very Expensive',
-  }
-  return map[level] ?? level
-}
-
-function businessStatusLabel(status: string): string {
-  if (status === 'OPERATIONAL') return 'Open'
-  if (status === 'CLOSED_TEMPORARILY') return 'Temporarily Closed'
-  if (status === 'CLOSED_PERMANENTLY') return 'Permanently Closed'
-  return status || 'Unknown'
-}
-
-function businessStatusSeverity(status: string): string {
-  if (status === 'OPERATIONAL') return 'success'
-  if (status === 'CLOSED_TEMPORARILY') return 'warn'
-  if (status === 'CLOSED_PERMANENTLY') return 'danger'
-  return 'secondary'
-}
-
-function stars(rating: number): string[] {
-  const full = Math.floor(rating)
-  const half = rating - full >= 0.5 ? 1 : 0
-  const empty = 5 - full - half
-  return [
-    ...Array(full).fill('pi-star-fill'),
-    ...Array(half).fill('pi-star-half-fill'),
-    ...Array(empty).fill('pi-star'),
-  ]
-}
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '—'
@@ -109,7 +76,7 @@ onMounted(async () => {
       <header class="page-heading">
         <div class="page-title-wrapper">
           <button class="back-link" @click="router.push('/admin/customers')">
-            <i class="pi pi-arrow-left" /> Back to Customer List
+            <i class="pi pi-arrow-left" />
           </button>
           <span class="eyebrow">Customer Detail</span>
           <div class="title-row">
@@ -644,19 +611,19 @@ onMounted(async () => {
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   color: var(--brand-blue);
-  font-size: 0.8rem;
-  font-weight: 600;
+  background: var(--brand-blue-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   text-decoration: none;
   cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  transition: opacity 0.15s;
+  font-size: 0.9rem;
+  transition: background 0.15s, border-color 0.15s;
 }
-.back-link:hover { opacity: 0.8; }
+.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 .code-tag {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;

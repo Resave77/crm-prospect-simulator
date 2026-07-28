@@ -73,6 +73,7 @@ onMounted(loadStats)
 
 <template>
   <section class="profile-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <!-- Header -->
     <div class="profile-header">
       <div class="profile-header-left">

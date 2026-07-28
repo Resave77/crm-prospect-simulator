@@ -9,6 +9,8 @@ import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { copyToClipboard } from '../../../utils/placeDetails'
 import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
+import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
+import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const detail = ref<CustomerDetail | null>(null)
@@ -53,53 +55,6 @@ const distance = computed(() => {
   )
 })
 
-function priceLevelLabel(level: string): string {
-  const map: Record<string, string> = {
-    PRICE_LEVEL_FREE: 'Free', PRICE_LEVEL_INEXPENSIVE: 'Inexpensive',
-    PRICE_LEVEL_MODERATE: 'Moderate', PRICE_LEVEL_EXPENSIVE: 'Expensive',
-    PRICE_LEVEL_VERY_EXPENSIVE: 'Very Expensive',
-  }
-  return map[level] ?? level
-}
-
-function priceLevelSeverity(level: string): string {
-  const map: Record<string, string> = {
-    PRICE_LEVEL_FREE: 'success', PRICE_LEVEL_INEXPENSIVE: 'success',
-    PRICE_LEVEL_MODERATE: 'info', PRICE_LEVEL_EXPENSIVE: 'warn',
-    PRICE_LEVEL_VERY_EXPENSIVE: 'danger',
-  }
-  return map[level] ?? 'secondary'
-}
-
-function businessStatusLabel(status: string): string {
-  if (status === 'OPERATIONAL') return 'Open'
-  if (status === 'CLOSED_TEMPORARILY') return 'Temporarily Closed'
-  if (status === 'CLOSED_PERMANENTLY') return 'Permanently Closed'
-  return status || 'Unknown'
-}
-
-function businessStatusSeverity(status: string): string {
-  if (status === 'OPERATIONAL') return 'success'
-  if (status === 'CLOSED_TEMPORARILY') return 'warn'
-  if (status === 'CLOSED_PERMANENTLY') return 'danger'
-  return 'secondary'
-}
-
-function stars(rating: number): string[] {
-  const full = Math.floor(rating)
-  const half = rating - full >= 0.5 ? 1 : 0
-  const empty = 5 - full - half
-  return [
-    ...Array(full).fill('pi-star-fill'),
-    ...Array(half).fill('pi-star-half-fill'),
-    ...Array(empty).fill('pi-star'),
-  ]
-}
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
-}
-
 function navigate() {
   if (!customer.value) return
   openGoogleMapsNavigation({
@@ -137,7 +92,7 @@ onMounted(async () => {
     detail.value = cust
     placeDetails.value = place
   } catch (caught) {
-    error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Unable to load customer.'
+    error.value = formatErrorMessage(caught) ?? 'Unable to load customer.'
   } finally { loading.value = false }
 })
 
@@ -146,7 +101,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 <template>
   <section class="detail-page">
-    <RouterLink class="back-link" to="/sales/my-customers"><i class="pi pi-arrow-left" /> My Customers</RouterLink>
+    <RouterLink class="back-link" to="/sales/my-customers"><i class="pi pi-arrow-left" /></RouterLink>
 
     <!-- Data Source Legend -->
     <div class="ds-legend">

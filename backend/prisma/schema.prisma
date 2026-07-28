@@ -42,6 +42,7 @@ model User {
   assignedCustomerSites CustomerSite[]      @relation("CustomerSalesExecutive")
   convertedCustomerSites CustomerSite[]     @relation("CustomerConverter")
   prospectVisits ProspectVisit[]             @relation("ProspectVisitSalesExecutive")
+  prospectComments ProspectComment[]        @relation("ProspectCommentUser")
 
   @@map("users")
 }
@@ -89,6 +90,7 @@ model Prospect {
   statusHistory            ProspectStatusHistory[]
   convertedCustomerSite    CustomerSite?
   visits                   ProspectVisit[]
+  comments                 ProspectComment[]        @relation("ProspectCommentProspect")
 
   @@index([assignedSalesExecutiveId, status])
   @@index([status, createdAt])
@@ -201,4 +203,19 @@ model CustomerSite {
   @@index([salesExecutiveId, convertedAt])
   @@index([parentCompanyId])
   @@map("customer_sites")
+}
+
+model ProspectComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  prospectId String   @map("prospect_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  content    String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  prospect   Prospect @relation("ProspectCommentProspect", fields: [prospectId], references: [id], onDelete: Cascade)
+  user       User     @relation("ProspectCommentUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([prospectId, createdAt])
+  @@index([userId])
+  @@map("prospect_comments")
 }

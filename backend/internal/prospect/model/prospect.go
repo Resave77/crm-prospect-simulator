@@ -38,6 +38,7 @@ type Prospect struct {
 	VisitNotes               string     `json:"visitNotes"`
 	FollowUpNotes            string     `json:"followUpNotes"`
 	Status                   Status     `json:"status"`
+	DeletionRequested        bool       `json:"deletionRequested"`
 	ConvertedAt              *time.Time `json:"convertedAt,omitempty"`
 	CreatedAt                time.Time  `json:"createdAt"`
 	UpdatedAt                time.Time  `json:"updatedAt"`
@@ -203,4 +204,14 @@ type PlaceAccessibility struct {
 	WheelchairAccessibleParking  bool `json:"wheelchairAccessibleParking"`
 	WheelchairAccessibleRestroom bool `json:"wheelchairAccessibleRestroom"`
 	WheelchairAccessibleSeating  bool `json:"wheelchairAccessibleSeating"`
+}
+
+type ProspectComment struct {
+	ID         uuid.UUID `json:"id"`
+	ProspectID uuid.UUID `json:"prospectId"`
+	UserID     uuid.UUID `json:"userId"`
+	UserName   string    `json:"userName"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }

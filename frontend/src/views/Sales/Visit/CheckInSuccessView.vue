@@ -27,11 +27,11 @@ const detailRoute = computed(() => {
   return { name: 'SalesProspectDetail', params: { id: entityId.value } }
 })
 
-const checkoutRoute = computed(() => {
+const visitResultRoute = computed(() => {
   if (entityType.value === 'customer') {
-    return { name: 'SalesCustomerCheckOut', params: { id: entityId.value } }
+    return { name: 'SalesCustomerVisitResult', params: { id: entityId.value } }
   }
-  return { name: 'SalesProspectCheckOut', params: { id: entityId.value } }
+  return { name: 'SalesProspectVisitResult', params: { id: entityId.value } }
 })
 
 onMounted(async () => {
@@ -63,8 +63,8 @@ onMounted(async () => {
       icon="pi pi-check"
       title="Check-in successful"
       message="Your arrival time, GPS location, and visit evidence have been recorded."
-      primary-label="Continue to Check-Out"
-      :primary-to="checkoutRoute"
+      primary-label="Continue to Visit Result"
+      :primary-to="visitResultRoute"
       secondary-label="Back to Detail"
       :secondary-to="detailRoute"
     />

@@ -19,6 +19,7 @@ export interface Prospect {
   visitNotes: string
   followUpNotes: string
   status: ProspectStatus
+  deletionRequested: boolean
   convertedAt?: string
   createdAt: string
   updatedAt: string
@@ -345,4 +346,14 @@ export interface UpdateParentCompanyInput {
   npwpNumber: string
   companyAddress?: Address
   companyContacts?: Contact[]
+}
+
+export interface ProspectComment {
+  id: string
+  prospectId: string
+  userId: string
+  userName: string
+  content: string
+  createdAt: string
+  updatedAt: string
 }

@@ -84,15 +84,20 @@ button, input, select, textarea { font: inherit; }
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   color: var(--brand-blue);
+  background: var(--brand-blue-bg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   text-decoration: none;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.back-link:hover { opacity: 0.8; }
+.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── Global Layout ─────────────────────────────────────────────── */
 .admin-page {

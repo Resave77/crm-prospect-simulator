@@ -3,23 +3,41 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { getMyProspect } from '../../../api/crm'
-import type { ProspectReview } from '../../../types/crm'
+import { getMyProspect, getProspectPlaceDetails } from '../../../api/crm'
+import type { ProspectReview, PlaceDetails } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
+import ProspectComments from '../../../components/ProspectComments.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
-import { formatPlaceType, businessStatusLabel, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
+import { formatPlaceType, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
+import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
+import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const review = ref<ProspectReview | null>(null)
+const placeDetails = ref<PlaceDetails | null>(null)
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
+const activePhotoIdx = ref(0)
+const menuPhotoIdx = ref(0)
+const showAllHours = ref(false)
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
 
 const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
+
+const menuPhotos = computed(() => {
+  if (!placeDetails.value?.photos) return []
+  return placeDetails.value.photos.filter((p) => /menu/i.test(p.name) || /menu/i.test(p.attribution))
+})
+
+const regularPhotos = computed(() => {
+  if (!placeDetails.value?.photos) return []
+  const menuNames = new Set(menuPhotos.value.map((p) => p.name))
+  return placeDetails.value.photos.filter((p) => !menuNames.has(p.name))
+})
 
 const statusSeverity = computed(() => {
   const s = review.value?.prospect.status
@@ -37,14 +55,7 @@ const displayTypes = computed(() => {
   return types.filter((t) => !skip.has(t)).slice(0, 5)
 })
 
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
-}
-
-function message(err: unknown) {
-  return (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-    ?? (err instanceof Error ? err.message : 'Unable to complete the request.')
-}
+const userCoordsForDistance = computed(() => userCoords.value)
 
 function navigate() {
   const p = review.value?.prospect
@@ -66,18 +77,6 @@ function acquireGPS() {
   )
 }
 
-function formatVisitDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function calcDuration(checkIn: string, checkOut: string) {
-  const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime()
-  const mins = Math.floor(diff / 60000)
-  const hrs = Math.floor(mins / 60)
-  const remMins = mins % 60
-  return hrs > 0 ? `${hrs}h ${remMins}m` : `${remMins}m`
-}
-
 function handleCopy(text: string) {
   copyToClipboard(text)
   success.value = 'Copied to clipboard.'
@@ -87,8 +86,14 @@ function handleCopy(text: string) {
 onMounted(async () => {
   acquireGPS()
   try {
-    review.value = await getMyProspect(String(route.params.id))
-  } catch (caught) { error.value = message(caught) } finally { loading.value = false }
+    const prospectId = String(route.params.id)
+    const [reviewData, placeData] = await Promise.all([
+      getMyProspect(prospectId),
+      getProspectPlaceDetails(prospectId, 'SALES_EXECUTIVE').catch(() => null),
+    ])
+    review.value = reviewData
+    placeDetails.value = placeData
+  } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
 
 onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
@@ -96,13 +101,14 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 <template>
   <section class="detail-page">
-    <RouterLink class="back-link" to="/sales/my-prospects"><i class="pi pi-arrow-left" /> My Prospects</RouterLink>
+    <RouterLink class="back-link" to="/sales/my-prospects"><i class="pi pi-arrow-left" /></RouterLink>
 
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
 
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>
+      <div class="sk-gallery" />
       <div class="sk-card"><div class="sk-line w60" /><div class="sk-line w80" /><div class="sk-line w50" /></div>
       <div class="sk-card"><div class="sk-map" /><div class="sk-line w70" /></div>
       <div class="sk-card"><div class="sk-line w40" /><div class="sk-line w80" /></div>
@@ -126,10 +132,14 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           </div>
           <Tag :value="review.prospect.status.replaceAll('_', ' ')" :severity="statusSeverity" />
         </div>
-        <div class="dcard-rows">
-          <div v-if="review.prospect.placeCategory" class="dcard-row"><i class="pi pi-bookmark" /><span>{{ review.prospect.placeCategory }}</span></div>
-          <div v-if="review.prospect.industryGroup" class="dcard-row"><i class="pi pi-tag" /><span>{{ review.prospect.industryGroup }}</span></div>
-          <div class="dcard-row"><i class="pi pi-user" /><span>{{ review.prospect.assignedSalesExecutive }}</span></div>
+        <div class="dcard-tags">
+          <Tag v-if="review.prospect.placeCategory" :value="review.prospect.placeCategory" severity="secondary" />
+          <Tag v-if="review.prospect.industryGroup" :value="review.prospect.industryGroup" />
+          <Tag v-if="review.prospect.assignedSalesExecutive" :value="`Assigned: ${review.prospect.assignedSalesExecutive}`" severity="info" />
+          <template v-if="placeDetails">
+            <Tag v-if="placeDetails.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
+            <Tag v-if="placeDetails.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
+          </template>
         </div>
         <div v-if="displayTypes.length" class="dcard-type-badges">
           <span v-for="t in displayTypes" :key="t" class="dcard-type-badge">{{ formatPlaceType(t) }}</span>
@@ -147,15 +157,179 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </div>
       </div>
 
-      <!-- Contact Card -->
-      <div v-if="review.prospect.phoneNumber || review.prospect.websiteUrl" class="dcard">
-        <h2>Contact</h2>
-        <div class="dcard-rows">
-          <div v-if="review.prospect.phoneNumber && isValidPhone(review.prospect.phoneNumber)" class="dcard-row">
-            <i class="pi pi-phone" /><a :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a>
+      <!-- Google Maps Info Card -->
+      <div v-if="placeDetails" class="dcard dcard-google-info">
+        <h2>Google Maps Info</h2>
+        <p v-if="placeDetails.editorialSummary" class="dcard-editorial">{{ placeDetails.editorialSummary }}</p>
+        <div class="dcard-info-grid">
+          <div v-if="placeDetails.rating > 0" class="dcard-info-item">
+            <div class="dcard-rating">
+              <span class="dcard-rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
+              <div class="dcard-stars">
+                <i v-for="(s, i) in stars(placeDetails.rating)" :key="i" :class="['pi', s]" />
+              </div>
+              <span class="dcard-rating-count">({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
+            </div>
           </div>
-          <div v-if="review.prospect.websiteUrl && isValidWebsite(review.prospect.websiteUrl)" class="dcard-row">
-            <i class="pi pi-globe" /><a :href="review.prospect.websiteUrl.startsWith('http') ? review.prospect.websiteUrl : `https://${review.prospect.websiteUrl}`" target="_blank" rel="noopener noreferrer">{{ websiteDisplayUrl(review.prospect.websiteUrl) }}</a>
+          <div v-if="placeDetails.websiteUrl" class="dcard-info-item">
+            <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="dcard-link">
+              <i class="pi pi-external-link" /> Website
+            </a>
+          </div>
+          <div v-if="placeDetails.googleMapsUrl" class="dcard-info-item">
+            <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="dcard-link">
+              <i class="pi pi-map" /> View on Google Maps
+            </a>
+          </div>
+          <div v-if="placeDetails.phoneNumber" class="dcard-info-item">
+            <a :href="`tel:${placeDetails.phoneNumber}`" class="dcard-link">
+              <i class="pi pi-phone" /> {{ placeDetails.phoneNumber }}
+            </a>
+            <span v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber" class="dcard-intl-phone">
+              International: {{ placeDetails.internationalPhone }}
+            </span>
+          </div>
+        </div>
+        <div v-if="placeDetails.placeTypes?.length" class="dcard-types">
+          <span class="dcard-types-label">Categories:</span>
+          <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
+        </div>
+      </div>
+
+      <!-- Menu Photos -->
+      <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
+        <h2><i class="pi pi-image" /> Menu</h2>
+        <template v-if="menuPhotos.length">
+          <div class="dcard-photo-scroll">
+            <div
+              v-for="(photo, idx) in menuPhotos"
+              :key="photo.name"
+              class="dcard-photo-item"
+              :class="{ active: idx === menuPhotoIdx }"
+              @click="menuPhotoIdx = idx"
+            >
+              <img :src="photo.photoUrl" :alt="`Menu ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+            </div>
+          </div>
+          <div v-if="menuPhotos[menuPhotoIdx]?.attribution" class="dcard-photo-attribution">
+            Photo: {{ menuPhotos[menuPhotoIdx].attribution }}
+          </div>
+        </template>
+        <div v-else class="dcard-menu-empty">
+          <i class="pi pi-image" />
+          <span>Menu not found</span>
+        </div>
+      </div>
+
+      <!-- Regular Photos -->
+      <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
+        <h2><i class="pi pi-images" /> Photos</h2>
+        <template v-if="regularPhotos.length">
+          <div class="dcard-photo-scroll">
+            <div
+              v-for="(photo, idx) in regularPhotos"
+              :key="photo.name"
+              class="dcard-photo-item"
+              :class="{ active: idx === activePhotoIdx }"
+              @click="activePhotoIdx = idx"
+            >
+              <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+            </div>
+          </div>
+          <div v-if="regularPhotos[activePhotoIdx]?.attribution" class="dcard-photo-attribution">
+            Photo: {{ regularPhotos[activePhotoIdx].attribution }}
+          </div>
+        </template>
+        <div v-else class="dcard-menu-empty">
+          <i class="pi pi-images" />
+          <span>No photos available</span>
+        </div>
+      </div>
+
+      <!-- Opening Hours Card -->
+      <div v-if="placeDetails?.openingHours" class="dcard dcard-hours">
+        <h2><i class="pi pi-clock" /> Opening Hours</h2>
+        <div class="dcard-hours-status">
+          <span :class="['dcard-hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
+          <strong>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</strong>
+        </div>
+        <div v-if="placeDetails.openingHours.weekdays?.length" class="dcard-hours-list">
+          <div
+            v-for="(day, i) in (showAllHours ? placeDetails.openingHours.weekdays : placeDetails.openingHours.weekdays.slice(0, 3))"
+            :key="i"
+            class="dcard-hours-row"
+            v-html="day"
+          />
+          <button v-if="placeDetails.openingHours.weekdays.length > 3" class="dcard-hours-toggle" @click="showAllHours = !showAllHours">
+            {{ showAllHours ? 'Show less' : `Show all ${placeDetails.openingHours.weekdays.length} days` }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Reviews -->
+      <div v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
+        <h2><i class="pi pi-comments" /> Reviews</h2>
+        <div class="dcard-reviews-list">
+          <div v-for="(item, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="dcard-review">
+            <div class="dcard-review-header">
+              <img v-if="item.authorPhoto" :src="item.authorPhoto" class="dcard-review-avatar" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
+              <div v-else class="dcard-review-avatar-placeholder">{{ item.authorName?.charAt(0) || '?' }}</div>
+              <div class="dcard-review-meta">
+                <strong>{{ item.authorName }}</strong>
+                <div class="dcard-review-stars">
+                  <i v-for="(s, j) in stars(item.rating)" :key="j" :class="['pi', s]" />
+                  <span class="dcard-review-time">{{ item.time }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-if="item.text" class="dcard-review-text">{{ item.text }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service Options -->
+      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services">
+        <h2><i class="pi pi-shopping-bag" /> Service Options</h2>
+        <div class="dcard-service-tags">
+          <Tag v-if="placeDetails.dineIn" value="Dine In" severity="success" />
+          <Tag v-if="placeDetails.takeout" value="Takeout" severity="info" />
+          <Tag v-if="placeDetails.delivery" value="Delivery" severity="warn" />
+          <Tag v-if="placeDetails.curbsidePickup" value="Curbside Pickup" severity="secondary" />
+        </div>
+      </div>
+
+      <!-- Amenities -->
+      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services">
+        <h2><i class="pi pi-building" /> Amenities</h2>
+        <div class="dcard-amenities-grid">
+          <div v-if="placeDetails?.parkingOptions" class="dcard-amenity-section">
+            <strong><i class="pi pi-directions" /> Parking</strong>
+            <div class="dcard-amenity-list">
+              <span v-if="placeDetails.parkingOptions.freeParkingLot" class="dcard-amenity-chip"><i class="pi pi-check" /> Free Lot</span>
+              <span v-if="placeDetails.parkingOptions.freeStreetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Free Street</span>
+              <span v-if="placeDetails.parkingOptions.paidParkingLot" class="dcard-amenity-chip"><i class="pi pi-check" /> Paid Lot</span>
+              <span v-if="placeDetails.parkingOptions.paidStreetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Paid Street</span>
+              <span v-if="placeDetails.parkingOptions.garageParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Garage</span>
+              <span v-if="placeDetails.parkingOptions.valetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Valet</span>
+            </div>
+          </div>
+          <div v-if="placeDetails?.paymentOptions && (placeDetails.paymentOptions.cashOnly || placeDetails.paymentOptions.creditCardOnly || placeDetails.paymentOptions.debitCardOnly || placeDetails.paymentOptions.nfcOnly)" class="dcard-amenity-section">
+            <strong><i class="pi pi-wallet" /> Payment</strong>
+            <div class="dcard-amenity-list">
+              <span v-if="placeDetails.paymentOptions.cashOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Cash</span>
+              <span v-if="placeDetails.paymentOptions.creditCardOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Credit Card</span>
+              <span v-if="placeDetails.paymentOptions.debitCardOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Debit Card</span>
+              <span v-if="placeDetails.paymentOptions.nfcOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> NFC</span>
+            </div>
+          </div>
+          <div v-if="placeDetails?.accessibilityOptions" class="dcard-amenity-section">
+            <strong><i class="pi pi-verified" /> Accessibility</strong>
+            <div class="dcard-amenity-list">
+              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleEntrance" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Entrance</span>
+              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Parking</span>
+              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleRestroom" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Restroom</span>
+              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleSeating" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Seating</span>
+            </div>
           </div>
         </div>
       </div>
@@ -185,21 +359,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <a v-if="review.prospect.googleMapsUrl" :href="review.prospect.googleMapsUrl" target="_blank" rel="noopener noreferrer" class="dcard-row dcard-row-link">
             <i class="pi pi-external-link" /><span>Open in Google Maps</span>
           </a>
-        </div>
-      </div>
-
-      <!-- Google Place Info -->
-      <div v-if="review.prospect.googlePlaceId" class="dcard">
-        <h2>Google Place</h2>
-        <div class="dcard-rows">
-          <div class="dcard-row">
-            <i class="pi pi-info-circle" />
-            <span class="dcard-place-id">
-              <span>Place ID</span>
-              <code>{{ review.prospect.googlePlaceId }}</code>
-            </span>
-            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(review.prospect.googlePlaceId)"><i class="pi pi-copy" /></button>
-          </div>
         </div>
       </div>
 
@@ -244,6 +403,9 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         <p v-else class="dcard-empty-text">No status changes recorded.</p>
       </div>
 
+      <!-- Comments / Ticketing -->
+      <ProspectComments :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
+
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">
         <button class="dbar-btn dbar-navigate" :disabled="review.prospect.latitude == null && review.prospect.longitude == null && !review.prospect.formattedAddress" @click="navigate">
@@ -279,6 +441,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .sk-line.w40 { width: 40%; }
 .sk-line.w80 { width: 80%; }
 .sk-map { height: 180px; border-radius: 12px; background: #e2e8f0; }
+.sk-gallery { height: 160px; border-radius: var(--radius-xl); background: #e2e8f0; }
 
 .detail-empty { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2.5rem 1rem; text-align: center; }
 .detail-empty-icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: #f1f5f9; color: #94a3b8; font-size: 1.4rem; }
@@ -300,6 +463,8 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-identity .eyebrow { margin: 0; }
 .dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; }
 
+.dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
 .dcard-type-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .dcard-type-badge {
   display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px;
@@ -316,6 +481,98 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 }
 .dcard-active-visit-link:hover { background: #d97706; }
 
+/* Google Info */
+.dcard-google-info { border: 1px solid #e0e7ff; background: linear-gradient(135deg, #f5f3ff 0%, var(--surface-card) 100%); }
+.dcard-editorial { margin: 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.55; font-style: italic; }
+.dcard-info-grid { display: grid; gap: 0.4rem; }
+.dcard-info-item { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.dcard-link { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--brand-blue); text-decoration: none; font-size: 0.8rem; font-weight: 600; }
+.dcard-link:hover { text-decoration: underline; }
+.dcard-intl-phone { color: var(--text-muted); font-size: 0.72rem; }
+.dcard-rating { display: flex; align-items: center; gap: 0.35rem; }
+.dcard-rating-num { font-size: 0.95rem; font-weight: 800; color: #f59e0b; }
+.dcard-stars { display: flex; gap: 1px; }
+.dcard-stars .pi { font-size: 0.6rem; color: #f59e0b; }
+.dcard-rating-count { color: var(--text-muted); font-size: 0.72rem; }
+.dcard-types { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.dcard-types-label { color: var(--text-muted); font-size: 0.68rem; font-weight: 600; margin-right: 0.2rem; }
+.dcard-type-tag { font-size: 0.62rem !important; }
+
+/* Photo Gallery */
+.dcard-photos { border: 1px solid #e0e7ff; }
+.dcard-photos h2 { display: flex; align-items: center; gap: 0.4rem; }
+.dcard-photos h2 i { color: var(--brand-blue); font-size: 0.75rem; }
+.dcard-photo-scroll {
+  display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; padding-bottom: 0.3rem;
+}
+.dcard-photo-scroll::-webkit-scrollbar { height: 4px; }
+.dcard-photo-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.dcard-photo-item {
+  flex: 0 0 200px; height: 150px; border-radius: 12px; overflow: hidden;
+  cursor: pointer; scroll-snap-align: start; border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.dcard-photo-item:hover { transform: scale(1.02); }
+.dcard-photo-item.active { border-color: var(--brand-blue); }
+.dcard-photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.dcard-photo-attribution { color: var(--text-muted); font-size: 0.62rem; font-style: italic; }
+.dcard-menu-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: 2rem 1rem; color: var(--text-muted); text-align: center;
+  background: var(--surface-subtle); border-radius: 12px;
+}
+.dcard-menu-empty i { font-size: 1.5rem; color: #cbd5e1; }
+.dcard-menu-empty span { font-size: 0.82rem; font-weight: 600; }
+
+/* Opening Hours */
+.dcard-hours { border: 1px solid #fef3c7; background: linear-gradient(135deg, #fffbeb 0%, var(--surface-card) 100%); }
+.dcard-hours-status { display: flex; align-items: center; gap: 0.4rem; }
+.dcard-hours-dot { width: 8px; height: 8px; border-radius: 50%; }
+.dcard-hours-dot.open { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
+.dcard-hours-dot.closed { background: #ef4444; }
+.dcard-hours-list { display: grid; gap: 0.3rem; }
+.dcard-hours-row { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; }
+.dcard-hours-toggle {
+  background: none; border: none; color: var(--brand-blue); font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; padding: 0.2rem 0; text-align: left;
+}
+.dcard-hours-toggle:hover { text-decoration: underline; }
+
+/* Reviews */
+.dcard-reviews { border: 1px solid #e0e7ff; }
+.dcard-reviews-list { display: grid; gap: 0.75rem; }
+.dcard-review { padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-light); }
+.dcard-review:last-child { border-bottom: none; padding-bottom: 0; }
+.dcard-review-header { display: flex; align-items: center; gap: 0.6rem; }
+.dcard-review-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.dcard-review-avatar-placeholder {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: #e2e8f0; color: var(--text-muted); font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
+}
+.dcard-review-meta { flex: 1; min-width: 0; }
+.dcard-review-meta strong { font-size: 0.78rem; color: var(--text-primary); }
+.dcard-review-stars { display: flex; align-items: center; gap: 1px; }
+.dcard-review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
+.dcard-review-time { color: var(--text-muted); font-size: 0.65rem; margin-left: 0.4rem; }
+.dcard-review-text { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.5; }
+
+/* Services & Amenities */
+.dcard-services { border: 1px solid #fef3c7; background: linear-gradient(135deg, #fffbeb 0%, var(--surface-card) 100%); }
+.dcard-service-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.dcard-amenities-grid { display: grid; gap: 0.65rem; }
+.dcard-amenity-section { display: flex; flex-direction: column; gap: 0.3rem; }
+.dcard-amenity-section strong { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--text-primary); }
+.dcard-amenity-section strong i { color: var(--brand-blue); font-size: 0.7rem; }
+.dcard-amenity-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.dcard-amenity-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.2rem 0.5rem; border-radius: 9999px;
+  background: #f0fdf4; color: #059669;
+  font-size: 0.62rem; font-weight: 600;
+}
+.dcard-amenity-chip i { font-size: 0.5rem; }
+
 .dcard-header-row { display: flex; align-items: center; justify-content: space-between; }
 .dcard-header-row h2 { margin: 0; }
 .dcard-distance-pill {
@@ -330,7 +587,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-row a { color: var(--brand-blue); text-decoration: none; }
 .dcard-row a:hover { text-decoration: underline; }
 .dcard-row-link { cursor: pointer; }
-.dcard-distance { color: var(--brand-blue); font-weight: 600; }
 .dcard-row-coords { color: var(--text-muted); font-size: 0.75rem; }
 .dcard-row-coords code { font-size: 0.7rem; color: var(--text-muted); background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 4px; }
 
@@ -398,5 +654,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }
+  .dcard-photo-item { flex: 0 0 160px; height: 120px; }
 }
 </style>

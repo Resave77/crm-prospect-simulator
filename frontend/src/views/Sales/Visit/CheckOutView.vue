@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import Textarea from 'primevue/textarea'
 import { checkOutProspect, transitionProspect } from '../../../api/crm'
 import { useVisitLocation } from '../../../composables/sales/useVisitLocation'
 import {
@@ -12,9 +11,10 @@ import {
   normalizeRouteId,
   fetchProspectVisitData,
   fetchCustomerVisitData,
+  saveCustomerVisit,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
-import { formatDistance } from '../../../utils/maps'
+import { formatErrorMessage } from '../../../utils/format'
 import VisitLocationCard from '../../../components/sales/visit/VisitLocationCard.vue'
 
 type PageState = 'loading' | 'ready' | 'invalid-params' | 'not-found' | 'no-active-visit' | 'error' | 'location-unavailable'
@@ -34,55 +34,11 @@ const pageState = ref<PageState>('loading')
 const pageError = ref('')
 const submitBusy = ref(false)
 
-const visitResult = ref('')
-const visitOutcome = ref('')
-const followUpNotes = ref('')
-const followUpDate = ref('')
-
 const location = useVisitLocation()
 
+const storedVisitResult = ref<{ visitResult: string; visitOutcome: string; followUpNotes: string; followUpDate: string } | null>(null)
 const elapsed = ref('—')
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
-
-const VISIT_RESULT_OPTIONS = [
-  'Meeting completed',
-  'Contacted',
-  'No response',
-  'Location closed',
-  'Reschedule required',
-  'Not interested',
-]
-
-const PROSPECT_OUTCOME_OPTIONS = [
-  'Visited',
-  'Needs follow-up',
-  'No follow-up',
-  'Unsuccessful',
-]
-
-const CUSTOMER_OUTCOME_OPTIONS = [
-  'Completed',
-  'Follow-up required',
-  'Issue reported',
-  'Order discussion',
-  'Routine visit',
-]
-
-const outcomeOptions = computed(() =>
-  resolvedEntityType.value === 'customer' ? CUSTOMER_OUTCOME_OPTIONS : PROSPECT_OUTCOME_OPTIONS,
-)
-
-const needsFollowUp = computed(() => {
-  const v = visitOutcome.value
-  return v === 'Needs follow-up' || v === 'Follow-up required'
-})
-
-const followUpDateValid = computed(() => {
-  if (!needsFollowUp.value || !followUpDate.value) return true
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return new Date(followUpDate.value) >= today
-})
 
 const hasValidGps = computed(() =>
   Boolean(
@@ -95,26 +51,22 @@ const hasValidGps = computed(() =>
 const canCheckOut = computed(() =>
   Boolean(
     activeVisit.value &&
-    visitResult.value !== '' &&
-    visitOutcome.value !== '' &&
-    followUpDateValid.value &&
+    storedVisitResult.value &&
     hasValidGps.value &&
     !submitBusy.value
   )
 )
 
 const checkoutButtonLabel = computed(() => {
-  if (submitBusy.value) return 'Saving visit\u2026'
-  return 'Save & Check Out'
+  if (submitBusy.value) return 'Saving check-out\u2026'
+  return 'Confirm Check-Out'
 })
 
 const checkoutHelper = computed(() => {
   if (!activeVisit.value) return 'No active visit found'
-  if (!visitResult.value) return 'Visit result is required'
-  if (!visitOutcome.value) return 'Visit outcome is required'
-  if (!followUpDateValid.value) return 'Valid follow-up date is required'
+  if (!storedVisitResult.value) return 'No visit result found. Go back and complete the visit result form first.'
   if (!hasValidGps.value) return 'Current location is required'
-  return 'Visit details are ready to save'
+  return 'Ready to check out'
 })
 
 const insideRadius = computed(() => {
@@ -139,10 +91,26 @@ function goBackToList() {
   router.push(resolvedEntityType.value === 'customer' ? '/sales/my-customers' : '/sales/my-prospects')
 }
 
-function extractError(err: unknown): string {
-  return (
-    (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ??
-    (err instanceof Error ? err.message : 'Unable to complete the request.')
+function localStorageKey() {
+  return `visit-result-${resolvedEntityType.value}-${resolvedEntityId.value}`
+}
+
+function loadStoredVisitResult() {
+  try {
+    const raw = localStorage.getItem(localStorageKey())
+    if (raw) {
+      storedVisitResult.value = JSON.parse(raw)
+    }
+  } catch {
+    storedVisitResult.value = null
+  }
+}
+
+function goBackToVisitResult() {
+  router.push(
+    resolvedEntityType.value === 'customer'
+      ? { name: 'SalesCustomerVisitResult', params: { id: resolvedEntityId.value } }
+      : { name: 'SalesProspectVisitResult', params: { id: resolvedEntityId.value } }
   )
 }
 
@@ -196,6 +164,7 @@ async function initialize() {
 
       pageState.value = 'ready'
       location.startWatching()
+      loadStoredVisitResult()
     } else {
       const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx
@@ -205,14 +174,24 @@ async function initialize() {
         return
       }
 
-      pageState.value = 'no-active-visit'
+      if (entity.value.latitude == null || entity.value.longitude == null) {
+        pageState.value = 'location-unavailable'
+        return
+      }
+
+      activeVisit.value = { id: 'customer-sim', checkInAt: new Date().toISOString() }
+      startElapsedTimer()
+
+      pageState.value = 'ready'
+      location.startWatching()
+      loadStoredVisitResult()
     }
   } catch (caught) {
     const status = (caught as { response?: { status?: number } })?.response?.status
     if (status === 404) {
       pageState.value = 'not-found'
     } else {
-      pageError.value = extractError(caught)
+      pageError.value = formatErrorMessage(caught)
       pageState.value = 'error'
     }
   }
@@ -227,12 +206,13 @@ async function handleSubmit() {
     const coords = await location.refreshOnce().catch(() => location.state.value.coords)
     const lat = coords?.latitude ?? 0
     const lng = coords?.longitude ?? 0
+    const stored = storedVisitResult.value
 
     if (entity.value.entityType === 'prospect') {
       await checkOutProspect(entity.value.entityId, activeVisit.value.id, {
         latitude: lat,
         longitude: lng,
-        followUpNotes: followUpNotes.value,
+        followUpNotes: stored?.followUpNotes ?? '',
       })
 
       try {
@@ -241,18 +221,38 @@ async function handleSubmit() {
         // Transition may fail if already CONTACTED or beyond
       }
 
+      localStorage.removeItem(localStorageKey())
+
       router.replace({
         name: 'SalesProspectCheckOutSuccess',
         params: { id: entity.value.entityId },
       })
     } else {
+      const stored = storedVisitResult.value
+      const coords = await location.refreshOnce().catch(() => location.state.value.coords)
+      saveCustomerVisit({
+        entityId: entity.value.entityId,
+        entityName: entity.value.name,
+        entityType: 'customer',
+        checkInAt: activeVisit.value.checkInAt,
+        checkOutAt: new Date().toISOString(),
+        checkInLatitude: coords?.latitude ?? 0,
+        checkInLongitude: coords?.longitude ?? 0,
+        visitResult: stored?.visitResult ?? '',
+        visitOutcome: stored?.visitOutcome ?? '',
+        followUpNotes: stored?.followUpNotes ?? '',
+        followUpDate: stored?.followUpDate ?? '',
+      })
+
+      localStorage.removeItem(localStorageKey())
+
       router.replace({
         name: 'SalesCustomerCheckOutSuccess',
         params: { id: entity.value.entityId },
       })
     }
   } catch (caught) {
-    pageError.value = extractError(caught)
+    pageError.value = formatErrorMessage(caught)
   } finally {
     submitBusy.value = false
   }
@@ -268,7 +268,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="checkout-page">
-    <button class="back-link" @click="pageState === 'loading' ? goBackToList() : goBack()"><i class="pi pi-arrow-left" /> Back to detail</button>
+    <button class="back-link" @click="pageState === 'loading' ? goBackToList() : goBack()"><i class="pi pi-arrow-left" /></button>
 
     <Message v-if="pageError" severity="error" closable @close="pageError = ''">{{ pageError }}</Message>
 
@@ -374,35 +374,38 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Right column: Visit result form + submit -->
+        <!-- Right column: Visit result summary + submit -->
         <div class="checkout-side-column">
-          <div class="cocard">
+          <div v-if="storedVisitResult" class="cocard">
             <h2>Visit Result</h2>
-            <div class="cocard-form">
-              <label class="cocard-field">
-                <span>Visit Result *</span>
-                <select v-model="visitResult" class="cocard-select">
-                  <option value="" disabled>Select result</option>
-                  <option v-for="opt in VISIT_RESULT_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-              </label>
-              <label class="cocard-field">
-                <span>Visit Outcome *</span>
-                <select v-model="visitOutcome" class="cocard-select">
-                  <option value="" disabled>Select outcome</option>
-                  <option v-for="opt in outcomeOptions" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-              </label>
-              <label class="cocard-field">
-                <span>Visit Notes</span>
-                <Textarea v-model="followUpNotes" rows="3" fluid placeholder="Details about the visit..." />
-              </label>
-              <label v-if="needsFollowUp" class="cocard-field">
-                <span>Next Follow-Up Date *</span>
-                <input v-model="followUpDate" type="date" class="cocard-input" :min="new Date().toISOString().split('T')[0]" />
-                <span v-if="!followUpDateValid" class="cocard-field-error">Follow-up date cannot be in the past.</span>
-              </label>
+            <div class="cocard-summary-rows">
+              <div class="cocard-summary-row">
+                <span>Result</span>
+                <strong>{{ storedVisitResult.visitResult }}</strong>
+              </div>
+              <div class="cocard-summary-row">
+                <span>Outcome</span>
+                <strong>{{ storedVisitResult.visitOutcome }}</strong>
+              </div>
+              <div v-if="storedVisitResult.followUpNotes" class="cocard-summary-row">
+                <span>Notes</span>
+                <strong>{{ storedVisitResult.followUpNotes }}</strong>
+              </div>
+              <div v-if="storedVisitResult.followUpDate" class="cocard-summary-row">
+                <span>Follow-Up Date</span>
+                <strong>{{ new Date(storedVisitResult.followUpDate).toLocaleDateString() }}</strong>
+              </div>
             </div>
+            <button class="cocard-edit-btn" @click="goBackToVisitResult">
+              <i class="pi pi-pencil" /> Edit visit result
+            </button>
+          </div>
+
+          <div v-else class="cocard cocard-missing">
+            <div class="cocard-missing-icon"><i class="pi pi-exclamation-circle" /></div>
+            <strong>No visit result found</strong>
+            <p>You must complete the visit result form before checking out.</p>
+            <button class="checkout-empty-btn" @click="goBackToVisitResult"><i class="pi pi-arrow-left" /> Fill visit result</button>
           </div>
 
           <!-- Submit Action -->
@@ -425,13 +428,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .checkout-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: calc(68px + 92px + env(safe-area-inset-bottom) + 1rem); }
-
-.back-link {
-  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0;
-  border: 0; background: transparent; color: var(--brand-blue, #2563eb);
-  font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none;
-}
-.back-link:hover { text-decoration: underline; }
 
 .checkout-skeleton { display: grid; gap: 0.85rem; }
 .sk-card { padding: 1rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl); background: var(--surface-card); display: flex; flex-direction: column; gap: 0.5rem; }
@@ -486,15 +482,21 @@ onBeforeUnmount(() => {
 .cocard-distance { color: var(--brand-blue); font-weight: 600; }
 
 .cocard-form { display: grid; gap: 0.75rem; }
-.cocard-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.cocard-field span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.cocard-field-error { color: #dc2626; font-size: 0.7rem; }
-.cocard-select, .cocard-input {
-  padding: 0.65rem 0.85rem; border: 1px solid var(--border-light); border-radius: 12px;
-  background: #f8fafc; color: var(--text-primary); font-size: 0.82rem; font-family: inherit;
-  width: 100%; box-sizing: border-box;
+.cocard-summary-rows { display: grid; gap: 0.5rem; }
+.cocard-summary-row { display: flex; flex-direction: column; gap: 0.1rem; }
+.cocard-summary-row span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.cocard-summary-row strong { color: var(--text-primary); font-size: 0.82rem; font-weight: 600; }
+.cocard-edit-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.5rem 0.85rem; border-radius: 10px; border: 1px solid var(--border-light);
+  background: #fff; color: var(--brand-blue); font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; margin-top: 0.25rem;
 }
-.cocard-select:focus, .cocard-input:focus { outline: 0; border-color: var(--brand-blue); }
+.cocard-edit-btn:hover { background: var(--brand-blue-bg); border-color: #bfdbfe; }
+.cocard-missing { text-align: center; }
+.cocard-missing-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: #fef2f2; color: #dc2626; font-size: 1rem; margin: 0 auto 0.5rem; }
+.cocard-missing strong { display: block; font-size: 0.85rem; color: var(--text-primary); }
+.cocard-missing p { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
 
 .checkout-bottom {
   position: fixed; bottom: 68px; left: 0; right: 0;

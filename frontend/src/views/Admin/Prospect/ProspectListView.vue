@@ -6,7 +6,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
-import { getPipeline, getSalesExecutives, deleteProspect } from '../../../api/crm'
+import { getPipeline, getSalesExecutives, deleteProspect, approveProspectDeletion, rejectProspectDeletion } from '../../../api/crm'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
@@ -27,6 +27,10 @@ const deleteDialogVisible = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const deleting = ref(false)
+
+const deletionTarget = ref<Prospect | null>(null)
+const showDeletionDialog = ref(false)
+const deletionBusy = ref(false)
 
 const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty', 'Services', 'Other']
 const industryOptions = computed(() => [{ label: 'All Business Segments', value: '' }, ...industries.map((v) => ({ label: v, value: v }))])
@@ -92,9 +96,36 @@ async function executeDelete() {
   }
 }
 
-function detailRoute(p: Prospect) {
-  if (p.status === 'WON') return `/admin/prospects/${p.id}/review`
-  return `/admin/prospects/${p.id}/review`
+function confirmApproveDeletion(p: Prospect) {
+  deletionTarget.value = p
+  showDeletionDialog.value = true
+}
+
+async function executeApproveDeletion() {
+  if (!deletionTarget.value) return
+  deletionBusy.value = true
+  try {
+    await approveProspectDeletion(deletionTarget.value.id)
+    prospects.value = prospects.value.filter((p) => p.id !== deletionTarget.value!.id)
+    showDeletionDialog.value = false
+    deletionTarget.value = null
+  } catch (e) {
+    error.value = crm.errorMessage(e)
+  } finally {
+    deletionBusy.value = false
+  }
+}
+
+async function executeRejectDeletion(p: Prospect) {
+  try {
+    await rejectProspectDeletion(p.id)
+    const idx = prospects.value.findIndex((item) => item.id === p.id)
+    if (idx >= 0) {
+      prospects.value[idx] = { ...prospects.value[idx], deletionRequested: false }
+    }
+  } catch (e) {
+    error.value = crm.errorMessage(e)
+  }
 }
 
 onMounted(async () => {
@@ -112,6 +143,7 @@ onMounted(async () => {
 
 <template>
   <section class="admin-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <header class="page-heading">
       <div class="page-title-wrapper">
         <span class="eyebrow">Prospect Management</span>
@@ -211,18 +243,26 @@ onMounted(async () => {
               <tr v-for="p in filtered" :key="p.id">
                 <td>
                   <div class="cell-stack">
-                    <button class="link-btn" @click="router.push(detailRoute(p))">{{ p.placeName }}</button>
+                    <RouterLink class="link-btn" to="/admin/prospects/pipeline">{{ p.placeName }}</RouterLink>
                     <span class="cell-sub">{{ p.formattedAddress }}</span>
                   </div>
                 </td>
                 <td><span class="cell-text">{{ p.placeCategory }}</span></td>
                 <td><span class="cell-text">{{ p.industryGroup }}</span></td>
                 <td><span class="cell-text">{{ p.assignedSalesExecutive }}</span></td>
-                <td><Tag :value="p.status.replaceAll('_', ' ')" :severity="statusSeverity(p.status)" /></td>
+                <td>
+                  <div class="status-cell">
+                    <Tag :value="p.status.replaceAll('_', ' ')" :severity="statusSeverity(p.status)" />
+                    <span v-if="p.deletionRequested" class="deletion-badge">Deletion Requested</span>
+                  </div>
+                </td>
                 <td><span class="cell-date">{{ formatDate(p.createdAt) }}</span></td>
                 <td class="td-action">
                   <div class="row-actions">
-                    <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="Detail" @click="router.push(detailRoute(p))" />
+                    <template v-if="p.deletionRequested">
+                      <Button icon="pi pi-check" text rounded size="small" class="act-approve" title="Approve Deletion" @click="confirmApproveDeletion(p)" />
+                      <Button icon="pi pi-times" text rounded size="small" class="act-reject" title="Reject Deletion" @click="executeRejectDeletion(p)" />
+                    </template>
                     <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDelete(p.id, p.placeName)" />
                   </div>
                 </td>
@@ -238,6 +278,17 @@ onMounted(async () => {
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="showDeletionDialog" header="Approve Deletion" modal :style="{ width: '400px' }">
+      <p v-if="deletionTarget" style="margin:0;font-size:0.85rem;line-height:1.5;">
+        Approve deletion of <strong>{{ deletionTarget.placeName }}</strong>?
+      </p>
+      <p style="margin:0.5rem 0 0;font-size:0.78rem;color:var(--text-muted);">This will permanently remove the prospect and all associated data.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="showDeletionDialog = false" :disabled="deletionBusy" />
+        <Button label="Approve & Delete" severity="danger" icon="pi pi-trash" :loading="deletionBusy" @click="executeApproveDeletion" />
       </template>
     </Dialog>
   </section>
@@ -303,6 +354,17 @@ onMounted(async () => {
 .act-view:hover { background: #eff6ff !important; }
 .act-delete { color: #dc2626 !important; }
 .act-delete:hover { background: #fef2f2 !important; }
+.act-approve { color: #16a34a !important; }
+.act-approve:hover { background: #f0fdf4 !important; }
+.act-reject { color: #d97706 !important; }
+.act-reject:hover { background: #fffbeb !important; }
+
+.status-cell { display: flex; flex-direction: column; gap: 0.3rem; }
+.deletion-badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+  background: #fef3c7; color: #92400e; font-size: 0.65rem; font-weight: 600;
+  white-space: nowrap;
+}
 
 .state-box { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; padding: 2rem; text-align: center; color: var(--text-muted); }
 .state-icon { font-size: 1.75rem; color: var(--brand-blue); margin-bottom: 0.25rem; }

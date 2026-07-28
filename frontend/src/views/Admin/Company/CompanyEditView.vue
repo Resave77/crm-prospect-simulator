@@ -91,7 +91,7 @@ onMounted(async () => {
       <header class="page-heading">
         <div class="page-title-wrapper">
           <button class="back-link" @click="router.push(`/admin/companies/${code}`)">
-            <i class="pi pi-arrow-left" /> Back to Company Detail
+            <i class="pi pi-arrow-left" />
           </button>
           <span class="eyebrow">Edit Company</span>
           <h1>{{ companyName }}</h1>

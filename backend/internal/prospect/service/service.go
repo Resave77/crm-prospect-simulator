@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
@@ -232,6 +233,13 @@ func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter p
 	return s.repository.ListVisitMonitoring(ctx, filter)
 }
 
+func (s *Service) ListMyVisits(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
+	if actor.Role != authmodel.RoleSalesExecutive {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListMyVisits(ctx, actor.UserID, filter)
+}
+
 func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) error {
 	if actor.Role != authmodel.RoleAdministrator {
 		return ErrForbidden
@@ -244,4 +252,68 @@ func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID)
 		return ErrForbidden
 	}
 	return s.repository.DeleteProspect(ctx, id)
+}
+
+func (s *Service) RequestDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role != authmodel.RoleSalesExecutive {
+		return ErrForbidden
+	}
+	ownerID, err := s.repository.FindProspectOwner(ctx, id)
+	if err != nil {
+		return fmt.Errorf("find prospect owner: %w", err)
+	}
+	if ownerID != actor.UserID {
+		return ErrForbidden
+	}
+	return s.repository.RequestDeletion(ctx, id, actor.UserID)
+}
+
+func (s *Service) ApproveDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role != authmodel.RoleAdministrator {
+		return ErrForbidden
+	}
+	return s.repository.ApproveDeletion(ctx, id)
+}
+
+func (s *Service) RejectDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role != authmodel.RoleAdministrator {
+		return ErrForbidden
+	}
+	return s.repository.RejectDeletion(ctx, id)
+}
+
+func (s *Service) ListComments(ctx context.Context, actor Actor, prospectID uuid.UUID) ([]prospectmodel.ProspectComment, error) {
+	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
+		return nil, err
+	}
+	return s.repository.ListComments(ctx, prospectID)
+}
+
+func (s *Service) CreateComment(ctx context.Context, actor Actor, prospectID uuid.UUID, content string) (prospectmodel.ProspectComment, error) {
+	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
+		return prospectmodel.ProspectComment{}, err
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return prospectmodel.ProspectComment{}, ErrNotesRequired
+	}
+	return s.repository.CreateComment(ctx, prospectID, actor.UserID, content)
+}
+
+func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {
+	if actor.Role == authmodel.RoleAdministrator {
+		_, err := s.repository.FindProspectOwner(ctx, prospectID)
+		return err
+	}
+	if actor.Role != authmodel.RoleSalesExecutive {
+		return ErrForbidden
+	}
+	ownerID, err := s.repository.FindProspectOwner(ctx, prospectID)
+	if err != nil {
+		return err
+	}
+	if ownerID != actor.UserID {
+		return ErrForbidden
+	}
+	return nil
 }

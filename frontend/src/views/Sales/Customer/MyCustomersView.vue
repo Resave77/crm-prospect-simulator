@@ -4,6 +4,8 @@ import Message from 'primevue/message'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
 import type { CustomerSite } from '../../../types/crm'
+import { haversineKm, formatDistance } from '../../../utils/maps'
+import { initials } from '../../../utils/format'
 
 const auth = useAuthStore()
 const crm = useCrmStore()
@@ -28,26 +30,9 @@ const sortOptions: SortOption[] = [
   { label: 'Name Z\u2013A', value: 'name-desc' },
 ]
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function formatDistance(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`
-  return `${km.toFixed(1)} km`
-}
-
 function getDistance(c: CustomerSite): number | null {
   if (c.address?.latitude == null || c.address?.longitude == null || !userCoords.value) return null
   return haversineKm(userCoords.value.lat, userCoords.value.lng, c.address.latitude, c.address.longitude)
-}
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
 }
 
 function localDateKey(value: string | Date): string {
@@ -233,6 +218,7 @@ onMounted(async () => {
 
 <template>
   <section class="mc-page">
+    <RouterLink class="mc-back" to="/sales/dashboard"><i class="pi pi-arrow-left" /></RouterLink>
     <div class="mc-header">
       <div class="mc-header-left">
         <span class="mc-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
@@ -418,6 +404,15 @@ onMounted(async () => {
 
 <style scoped>
 .mc-page { display: flex; flex-direction: column; gap: 0.85rem; padding-bottom: 1.5rem; }
+
+.mc-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; color: var(--brand-blue); background: var(--brand-blue-bg);
+  border: 1px solid transparent; border-radius: var(--radius-md);
+  text-decoration: none; font-size: 0.9rem;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.mc-back:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 .mc-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -705,6 +700,4 @@ onMounted(async () => {
 @keyframes mc-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mc-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
-@media (max-width: 767px) {
-}
 </style>

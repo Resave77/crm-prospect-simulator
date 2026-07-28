@@ -2,8 +2,11 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import Dialog from 'primevue/dialog'
+import Button from 'primevue/button'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
+import { requestProspectDeletion } from '../../../api/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 import {
   TAB_STAGE_MAP,
@@ -16,6 +19,8 @@ import {
   EMPTY_MESSAGES,
   PIPELINE_ROUTE_NAME,
 } from '../../../utils/prospectPipeline'
+import { haversineKm, formatDistance } from '../../../utils/maps'
+import { initials } from '../../../utils/format'
 
 const auth = useAuthStore()
 const crm = useCrmStore()
@@ -41,6 +46,34 @@ const draftDistance = ref('')
 
 const showFilterSheet = ref(false)
 
+/* ── Delete state ─────────────────────────────────────────── */
+const showDeleteDialog = ref(false)
+const deleteTarget = ref<Prospect | null>(null)
+const deleteBusy = ref(false)
+
+function confirmDelete(p: Prospect) {
+  deleteTarget.value = p
+  showDeleteDialog.value = true
+}
+
+async function executeDelete() {
+  if (!deleteTarget.value) return
+  deleteBusy.value = true
+  try {
+    await requestProspectDeletion(deleteTarget.value.id)
+    const idx = crm.myProspects.findIndex((p) => p.id === deleteTarget.value!.id)
+    if (idx >= 0) {
+      crm.myProspects[idx] = { ...crm.myProspects[idx], deletionRequested: true }
+    }
+    showDeleteDialog.value = false
+    deleteTarget.value = null
+  } catch (e: unknown) {
+    error.value = crm.errorMessage(e)
+  } finally {
+    deleteBusy.value = false
+  }
+}
+
 type SortOption = { label: string; value: typeof sortBy.value }
 const sortOptions: SortOption[] = [
   { label: 'Nearest first', value: 'distance' },
@@ -50,26 +83,9 @@ const sortOptions: SortOption[] = [
   { label: 'Last updated', value: 'last-updated' },
 ]
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLng = ((lng2 - lng1) * Math.PI) / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function formatDistance(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`
-  return `${km.toFixed(1)} km`
-}
-
 function getDistance(p: Prospect): number | null {
   if (p.latitude == null || p.longitude == null || !userCoords.value) return null
   return haversineKm(userCoords.value.lat, userCoords.value.lng, p.latitude, p.longitude)
-}
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('')
 }
 
 function statusSeverity(status: ProspectStatus): 'info' | 'warn' | 'success' | 'danger' | 'secondary' {
@@ -328,6 +344,7 @@ onMounted(async () => {
 
 <template>
   <section class="mp-page">
+    <RouterLink class="mp-back" to="/sales/dashboard"><i class="pi pi-arrow-left" /></RouterLink>
     <!-- 1. Header -->
     <div class="mp-header">
       <div class="mp-header-left">
@@ -433,6 +450,22 @@ onMounted(async () => {
               <strong>{{ prospect.placeName || 'Unnamed prospect' }}</strong>
               <small>{{ prospect.industryGroup || prospect.placeCategory || 'Uncategorized' }}</small>
             </div>
+            <button
+              v-if="prospect.deletionRequested"
+              class="mp-card-delete mp-card-delete-pending"
+              title="Deletion requested — awaiting admin approval"
+              disabled
+            >
+              <i class="pi pi-clock" />
+            </button>
+            <button
+              v-else
+              class="mp-card-delete"
+              title="Request deletion"
+              @click.stop="confirmDelete(prospect)"
+            >
+              <i class="pi pi-trash" />
+            </button>
             <span v-if="getDistance(prospect) !== null" class="mp-distance-pill">
               <i class="pi pi-map-marker" /> {{ formatDistance(getDistance(prospect)!) }}
             </span>
@@ -445,6 +478,7 @@ onMounted(async () => {
             </div>
             <div class="mp-card-tags">
               <Tag :value="pipelineStatusLabel(prospect.status)" :severity="statusSeverity(prospect.status)" />
+              <span v-if="prospect.deletionRequested" class="mp-deletion-badge">Deletion Requested</span>
               <span v-if="prospect.status === 'WON'" class="mp-review-tag">Waiting for Admin Review</span>
             </div>
           </div>
@@ -503,6 +537,18 @@ onMounted(async () => {
         </article>
       </div>
     </template>
+
+    <!-- Request Deletion Confirmation -->
+    <Dialog v-model:visible="showDeleteDialog" modal header="Request Deletion" :style="{ width: 'min(100%, 400px)' }" :closable="!deleteBusy">
+      <p v-if="deleteTarget" style="margin:0;font-size:0.85rem;line-height:1.5;">
+        Request deletion of <strong>{{ deleteTarget.placeName }}</strong>?
+      </p>
+      <p style="margin:0.5rem 0 0;font-size:0.78rem;color:var(--text-muted);">Admin will review and approve or reject this request.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" outlined :disabled="deleteBusy" @click="showDeleteDialog = false" />
+        <Button label="Request Deletion" icon="pi pi-trash" severity="danger" :loading="deleteBusy" @click="executeDelete" />
+      </template>
+    </Dialog>
 
     <!-- FAB filter -->
     <button class="mp-fab" @click="openFilterSheet" aria-label="Open filter panel">
@@ -611,6 +657,8 @@ onMounted(async () => {
 <style scoped>
 /* ── Page ───────────────────────────────────────────────────── */
 .mp-page { display: flex; flex-direction: column; gap: 0.85rem; padding-bottom: 1.5rem; }
+.mp-back { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; color: var(--brand-blue); background: var(--brand-blue-bg); border: 1px solid transparent; border-radius: var(--radius-md); text-decoration: none; font-size: 0.9rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
+.mp-back:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── 1. Header ─────────────────────────────────────────────── */
 .mp-header { display: flex; align-items: center; justify-content: space-between; padding: 0.15rem 0; }
@@ -743,6 +791,23 @@ onMounted(async () => {
   font-size: 0.6rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
 }
 .mp-distance-pill i { font-size: 0.55rem; }
+
+.mp-card-delete {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; border: 1px solid #fee2e2; background: #fff;
+  color: #dc2626; font-size: 0.72rem; cursor: pointer; flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.mp-card-delete:hover { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+.mp-card-delete-pending {
+  border-color: #fde68a; background: #fffbeb; color: #d97706; cursor: default;
+}
+.mp-card-delete-pending:hover { background: #fffbeb; border-color: #fde68a; color: #d97706; }
+
+.mp-deletion-badge {
+  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+  background: #fef3c7; color: #92400e; font-size: 0.58rem; font-weight: 600;
+}
 
 /* Card middle */
 .mp-card-middle { display: flex; flex-direction: column; gap: 0.35rem; }

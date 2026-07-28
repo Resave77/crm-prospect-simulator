@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope } from '../types/auth'
-import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -26,6 +26,15 @@ export async function getPipeline() { return (await api.get<ApiEnvelope<Prospect
 
 export async function deleteProspect(id: string) {
   await api.delete(`/admin/prospects/${id}`)
+}
+export async function requestProspectDeletion(id: string) {
+  await api.post(`/sales/prospects/${id}/request-deletion`)
+}
+export async function approveProspectDeletion(id: string) {
+  await api.post(`/admin/prospects/${id}/approve-deletion`)
+}
+export async function rejectProspectDeletion(id: string) {
+  await api.post(`/admin/prospects/${id}/reject-deletion`)
 }
 export async function getSalesExecutives() { return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>('/admin/sales-executives')).data.data }
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
@@ -97,6 +106,14 @@ export async function getAdminVisits(filters: VisitMonitoringFilters) {
   return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/admin/visits', { params })).data.data
 }
 
+export async function getMyVisits(filters?: { dateFrom?: string; dateTo?: string; customerName?: string }) {
+  const params: Record<string, string> = {}
+  if (filters?.dateFrom) params.dateFrom = filters.dateFrom
+  if (filters?.dateTo) params.dateTo = filters.dateTo
+  if (filters?.customerName) params.customerName = filters.customerName
+  return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/sales/visits', { params })).data.data
+}
+
 export async function deleteVisit(visitId: string) {
   await api.post(`/admin/visits/${visitId}/delete`)
 }
@@ -107,4 +124,19 @@ export async function getParentCompany(id: string) {
 
 export async function updateParentCompany(id: string, input: UpdateParentCompanyInput) {
   return (await api.patch<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`, input)).data.data
+}
+
+export async function getProspectComments(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+  return (await api.get<ApiEnvelope<ProspectComment[]>>(`${base}/prospects/${prospectId}/comments`)).data.data
+}
+
+export async function addProspectComment(prospectId: string, content: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+  return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, { content })).data.data
+}
+
+export async function getProspectPlaceDetails(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+  return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/place-details`)).data.data
 }

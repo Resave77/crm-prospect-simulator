@@ -16,6 +16,7 @@ import {
 } from '../../../utils/visitEntity'
 import VisitLocationCard from '../../../components/sales/visit/VisitLocationCard.vue'
 import VisitSelfieCapture from '../../../components/sales/visit/VisitSelfieCapture.vue'
+import { formatErrorMessage } from '../../../utils/format'
 import type { WatermarkMeta } from '../../../utils/selfieWatermark'
 
 type PageState = 'loading' | 'ready' | 'invalid-params' | 'not-found' | 'error' | 'location-unavailable'
@@ -81,18 +82,7 @@ const canCheckIn = computed(() =>
   !submitBusy.value
 )
 
-watchEffect(() => {
-  console.debug('[CheckInEligibility]', {
-    hasEntity: hasEntity.value,
-    hasValidGps: hasValidGps.value,
-    hasSelfie: hasSelfie.value,
-    selfieSize: selfieFile.value?.size ?? 0,
-    insideRadius: insideRadius.value,
-    radiusAllowed: radiusAllowedForSubmit.value,
-    submitBusy: submitBusy.value,
-    canCheckIn: canCheckIn.value,
-  })
-})
+
 
 const submitLabel = computed(() => {
   if (submitBusy.value) return 'Checking in\u2026'
@@ -143,13 +133,6 @@ function goBackToList() {
   router.push(resolvedEntityType.value === 'customer' ? '/sales/my-customers' : '/sales/my-prospects')
 }
 
-function extractError(err: unknown): string {
-  return (
-    (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ??
-    (err instanceof Error ? err.message : 'Unable to complete the request.')
-  )
-}
-
 function onSelfieCaptured(file: File) {
   selfieFile.value = file
 }
@@ -198,7 +181,7 @@ async function initialize() {
     if (status === 404) {
       pageState.value = 'not-found'
     } else {
-      pageError.value = extractError(caught)
+      pageError.value = formatErrorMessage(caught)
       pageState.value = 'error'
     }
   }
@@ -243,7 +226,7 @@ async function submitCheckIn() {
       params: { id: entity.value.entityId },
     })
   } catch (caught) {
-    pageError.value = extractError(caught)
+    pageError.value = formatErrorMessage(caught)
   } finally {
     submitBusy.value = false
   }
@@ -258,7 +241,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="checkin-page">
-    <button class="back-link" @click="pageState === 'loading' ? goBackToList() : goBack()"><i class="pi pi-arrow-left" /> Back to detail</button>
+    <button class="back-link" @click="pageState === 'loading' ? goBackToList() : goBack()"><i class="pi pi-arrow-left" /></button>
 
     <Message v-if="pageError" severity="error" closable @close="pageError = ''">{{ pageError }}</Message>
 
@@ -451,13 +434,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .checkin-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: calc(68px + 88px + env(safe-area-inset-bottom) + 1rem); }
-
-.back-link {
-  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0;
-  border: 0; background: transparent; color: var(--brand-blue, #2563eb);
-  font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none;
-}
-.back-link:hover { text-decoration: underline; }
 
 .checkin-skeleton { display: grid; gap: 0.85rem; }
 .sk-card { padding: 1rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl); background: var(--surface-card); display: flex; flex-direction: column; gap: 0.5rem; }

@@ -6,10 +6,13 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const search = ref('')
+const sidebarOpen = ref(false)
 
-function runSearch() { router.push({ path: '/admin/prospects', query: search.value.trim() ? { search: search.value.trim() } : {} }) }
+function runSearch() { router.push({ path: '/admin/prospects/list', query: search.value.trim() ? { search: search.value.trim() } : {} }) }
+function closeSidebar() { sidebarOpen.value = false }
 
 async function logout() {
+  closeSidebar()
   await auth.logout()
   await router.replace('/login')
 }
@@ -17,24 +20,28 @@ async function logout() {
 
 <template>
   <div class="admin-shell">
-    <aside class="admin-sidebar">
+    <div v-if="sidebarOpen" class="mobile-backdrop" @click="closeSidebar" />
+    <aside class="admin-sidebar" :class="{ 'sidebar-open': sidebarOpen }">
       <div class="shell-logo"><span>Y</span><div>Yummy Food<small>Field Sales CRM</small></div></div>
       <small class="nav-caption">WORKSPACE</small>
       <nav aria-label="Administrator navigation">
-        <RouterLink to="/admin/dashboard"><i class="pi pi-home" /> Dashboard</RouterLink>
-        <RouterLink to="/admin/sales-executives"><i class="pi pi-user" /> Sales Executive</RouterLink>
-        <RouterLink to="/admin/customers"><i class="pi pi-users" /> Customer</RouterLink>
-        <RouterLink to="/admin/customer-assignment"><i class="pi pi-directions-alt" /> Customer Assignment</RouterLink>
-        <RouterLink to="/admin/visit-monitoring"><i class="pi pi-map-marker" /> Visit Monitoring</RouterLink>
-        <RouterLink to="/admin/prospect-finder"><i class="pi pi-compass" /> Prospect Finder</RouterLink>
-        <RouterLink to="/admin/prospects"><i class="pi pi-list" /> Prospect List</RouterLink>
-        <RouterLink to="/admin/prospect-assignment"><i class="pi pi-id-card" /> Prospect Assignment</RouterLink>
-        <RouterLink to="/admin/reports"><i class="pi pi-chart-bar" /> Reports</RouterLink>
+        <RouterLink to="/admin/dashboard" @click="closeSidebar"><i class="pi pi-home" /> Dashboard</RouterLink>
+        <RouterLink to="/admin/sales-executives" @click="closeSidebar"><i class="pi pi-user" /> Sales Executive</RouterLink>
+        <RouterLink to="/admin/customers" @click="closeSidebar"><i class="pi pi-users" /> Customer</RouterLink>
+        <RouterLink to="/admin/customer-assignment" @click="closeSidebar"><i class="pi pi-directions-alt" /> Customer Assignment</RouterLink>
+        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar"><i class="pi pi-map-marker" /> Visit Monitoring</RouterLink>
+        <RouterLink to="/admin/prospect-finder" @click="closeSidebar"><i class="pi pi-compass" /> Prospect Finder</RouterLink>
+        <RouterLink to="/admin/prospects/list" @click="closeSidebar"><i class="pi pi-list" /> Prospect List</RouterLink>
+        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar"><i class="pi pi-id-card" /> Prospect Assignment</RouterLink>
+        <RouterLink to="/admin/reports" @click="closeSidebar"><i class="pi pi-chart-bar" /> Reports</RouterLink>
       </nav>
       <div class="sidebar-note"><i class="pi pi-arrow-up-right" /><strong>Team performance</strong><span>Pipeline activity updates from real CRM records.</span></div>
     </aside>
     <div class="admin-workspace">
       <header class="admin-topbar">
+        <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle navigation">
+          <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
+        </button>
         <form class="global-search" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="submit">Enter</button></form>
         <RouterLink class="icon-control" to="/admin/prospects/won" aria-label="Won prospect notifications"><i class="pi pi-bell" /></RouterLink>
         <div class="topbar-spacer" />
@@ -329,12 +336,39 @@ async function logout() {
   flex: 1;
   padding: 1.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
 }
+
+/* ── Mobile Hamburger ──────────────────────────────────────── */
+.mobile-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 90;
+  background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(2px);
+}
+
+.hamburger-btn {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 36px; height: 36px; flex-shrink: 0;
+  border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+  background: var(--surface-card); color: var(--text-primary);
+  cursor: pointer; font-size: 1rem;
+  transition: background var(--transition-fast);
+}
+.hamburger-btn:hover { background: var(--surface-subtle); }
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .admin-shell { grid-template-columns: 1fr; }
-  .admin-sidebar { display: none; }
+  .admin-sidebar {
+    position: fixed; top: 0; left: 0; z-index: 100;
+    width: 260px; height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    display: flex;
+  }
+  .admin-sidebar.sidebar-open { transform: translateX(0); }
+  .mobile-backdrop { display: block; }
+  .hamburger-btn { display: flex; }
   .admin-topbar { padding: 0 0.8rem; }
   .admin-content { padding: 0.8rem; }
   .profile-menu summary div { display: none; }

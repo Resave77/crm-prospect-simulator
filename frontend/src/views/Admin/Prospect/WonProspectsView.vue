@@ -24,6 +24,7 @@ function createdAgo(dateStr: string) {
 
 <template>
   <section class="admin-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <div class="page-heading"><div><p class="eyebrow">Point 11</p><h1>Won Prospect Review</h1><p class="muted">Review qualified Google snapshots before creating a Customer Existing record.</p></div><Tag :value="`${crm.wonProspects.length} waiting`" severity="success" /></div>
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     <div class="table-card">

@@ -19,6 +19,8 @@ const error = ref('')
 const visits = ref<VisitMonitoringItem[]>([])
 const salesExecutives = ref<SalesExecutiveOption[]>([])
 const selfieModalItem = ref<VisitMonitoringItem | null>(null)
+const detailModalItem = ref<VisitMonitoringItem | null>(null)
+const showDetailModal = ref(false)
 const deleteModalItem = ref<VisitMonitoringItem | null>(null)
 const showDeleteModal = ref(false)
 const deleteBusy = ref(false)
@@ -148,6 +150,11 @@ function openSelfie(item: VisitMonitoringItem) {
   selfieModalItem.value = item
 }
 
+function openDetail(item: VisitMonitoringItem) {
+  detailModalItem.value = item
+  showDetailModal.value = true
+}
+
 function goToProspect(item: VisitMonitoringItem) {
   router.push({ name: 'AdminProspectReview', params: { id: item.prospectId } })
 }
@@ -210,6 +217,7 @@ onMounted(() => {
 
 <template>
   <section class="admin-page">
+    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <header class="page-heading">
       <div class="page-title-wrapper">
         <span class="eyebrow">Field Operations</span>
@@ -352,6 +360,7 @@ onMounted(() => {
               </td>
               <td class="td-action">
                 <div class="row-actions">
+                  <Button v-tooltip.top="'Visit Details'" icon="pi pi-info-circle" text rounded size="small" class="act-detail" @click="openDetail(visit)" />
                   <Button v-tooltip.top="'View Prospect'" icon="pi pi-eye" text rounded size="small" class="act-prospect" @click="goToProspect(visit)" />
                   <Button v-tooltip.top="'Selfie Evidence'" icon="pi pi-camera" text rounded size="small" class="act-view" @click="openSelfie(visit)" />
                   <Button v-tooltip.top="'Download Evidence'" icon="pi pi-download" text rounded size="small" class="act-edit" @click="downloadVisitData(visit)" />
@@ -375,6 +384,59 @@ onMounted(() => {
       <template #footer>
         <Button label="Cancel" severity="secondary" outlined :disabled="deleteBusy" @click="showDeleteModal = false" />
         <Button label="Delete" icon="pi pi-trash" severity="danger" :loading="deleteBusy" @click="executeDelete" />
+      </template>
+    </Dialog>
+
+    <!-- Visit Detail Modal -->
+    <Dialog v-model:visible="showDetailModal" modal header="Visit Details" :style="{ width: 'min(100%, 520px)' }" :closable="true">
+      <template v-if="detailModalItem">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h3 class="detail-heading">Prospect Information</h3>
+            <div class="detail-row"><span class="detail-label">Name</span><strong>{{ detailModalItem.customerName }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Industry</span><strong>{{ detailModalItem.industryGroup || '—' }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Category</span><strong>{{ detailModalItem.customerCategory || '—' }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Address</span><strong>{{ detailModalItem.formattedAddress || '—' }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Phone</span><strong>{{ detailModalItem.phoneNumber || '—' }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Status</span>
+              <Tag :value="statusLabel(detailModalItem.prospectStatus)" :severity="statusSeverity(detailModalItem.prospectStatus)" size="small" />
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h3 class="detail-heading">Visit Information</h3>
+            <div class="detail-row"><span class="detail-label">Sales Executive</span><strong>{{ detailModalItem.salesExecutiveName }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Check In</span><strong>{{ formatDateShort(detailModalItem.checkInAt) }} {{ formatTime(detailModalItem.checkInAt) }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Check Out</span><strong v-if="detailModalItem.checkOutAt">{{ formatDateShort(detailModalItem.checkOutAt) }} {{ formatTime(detailModalItem.checkOutAt) }}</strong><span v-else class="open-badge">Open</span></div>
+            <div class="detail-row"><span class="detail-label">Duration</span><strong>{{ formatDuration(detailModalItem.durationSeconds) }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Total Visits</span><strong>{{ detailModalItem.visitCount }}</strong></div>
+          </div>
+
+          <div class="detail-section">
+            <h3 class="detail-heading">GPS & Location</h3>
+            <div class="detail-row"><span class="detail-label">Check-in GPS</span><strong>{{ detailModalItem.checkInLatitude.toFixed(6) }}, {{ detailModalItem.checkInLongitude.toFixed(6) }}</strong></div>
+            <div class="detail-row" v-if="detailModalItem.checkOutLatitude"><span class="detail-label">Check-out GPS</span><strong>{{ detailModalItem.checkOutLatitude?.toFixed(6) }}, {{ detailModalItem.checkOutLongitude?.toFixed(6) }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Distance from target</span><strong>{{ formatDistance(detailModalItem.distanceMeters) }}</strong></div>
+            <div class="detail-row"><span class="detail-label">Radius Status</span>
+              <Tag
+                :value="detailModalItem.radiusStatus === 'INSIDE' ? 'Inside' : detailModalItem.radiusStatus === 'OUTSIDE' ? 'Outside' : 'Unknown'"
+                :severity="detailModalItem.radiusStatus === 'INSIDE' ? 'success' : detailModalItem.radiusStatus === 'OUTSIDE' ? 'danger' : 'secondary'"
+                size="small"
+              />
+            </div>
+          </div>
+
+          <div class="detail-section" v-if="detailModalItem.visitNotes || detailModalItem.followUpNotes">
+            <h3 class="detail-heading">Notes</h3>
+            <div v-if="detailModalItem.visitNotes" class="detail-row"><span class="detail-label">Visit Notes</span><strong>{{ detailModalItem.visitNotes }}</strong></div>
+            <div v-if="detailModalItem.followUpNotes" class="detail-row"><span class="detail-label">Follow-up Notes</span><strong>{{ detailModalItem.followUpNotes }}</strong></div>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <Button label="Close" severity="secondary" outlined @click="showDetailModal = false" />
+        <Button label="View Prospect" icon="pi pi-eye" @click="detailModalItem && goToProspect(detailModalItem)" />
+        <Button label="View on Map" icon="pi pi-map" @click="detailModalItem && viewGpsLocation(detailModalItem)" />
       </template>
     </Dialog>
   </section>
@@ -470,6 +532,15 @@ onMounted(() => {
 .act-map:hover { background: #fff7ed !important; }
 .act-delete { color: #dc2626 !important; }
 .act-delete:hover { background: #fef2f2 !important; }
+.act-detail { color: #0d9488 !important; }
+.act-detail:hover { background: #f0fdfa !important; }
+
+.detail-grid { display: grid; gap: 1rem; }
+.detail-section { display: grid; gap: 0.45rem; }
+.detail-heading { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding-bottom: 0.35rem; border-bottom: 1px solid var(--border-light); }
+.detail-row { display: flex; flex-direction: column; gap: 0.1rem; }
+.detail-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.detail-row strong { font-size: 0.82rem; color: var(--text-primary); }
 
 @media (max-width: 1200px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } .filter-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 768px) { .admin-page { padding: 1.25rem 1rem; } .filter-grid { grid-template-columns: repeat(2, 1fr); } }

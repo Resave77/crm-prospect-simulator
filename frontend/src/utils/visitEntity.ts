@@ -69,3 +69,37 @@ export function normalizeRouteId(value: unknown): string {
   if (Array.isArray(value)) return String(value[0] ?? '').trim()
   return String(value ?? '').trim()
 }
+
+const CUSTOMER_VISITS_KEY = 'crm-customer-visits'
+
+export interface CustomerVisitRecord {
+  id: string
+  entityId: string
+  entityName: string
+  entityType: 'customer'
+  checkInAt: string
+  checkOutAt: string
+  checkInLatitude: number
+  checkInLongitude: number
+  visitResult: string
+  visitOutcome: string
+  followUpNotes: string
+  followUpDate: string
+}
+
+export function saveCustomerVisit(record: Omit<CustomerVisitRecord, 'id'>) {
+  const existing = loadCustomerVisits()
+  const entry: CustomerVisitRecord = { ...record, id: `cust-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }
+  existing.push(entry)
+  localStorage.setItem(CUSTOMER_VISITS_KEY, JSON.stringify(existing))
+}
+
+export function loadCustomerVisits(): CustomerVisitRecord[] {
+  try {
+    const raw = localStorage.getItem(CUSTOMER_VISITS_KEY)
+    if (!raw) return []
+    return JSON.parse(raw)
+  } catch {
+    return []
+  }
+}

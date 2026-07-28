@@ -25,6 +25,10 @@ type Handler struct {
 	customerSvc *customerservice.Service
 }
 
+type createCommentRequest struct {
+	Content string `json:"content"`
+}
+
 func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
 	return &Handler{service: prospectService, customerSvc: customerSvc}
 }
@@ -244,6 +248,19 @@ func (h *Handler) ListVisitMonitoring(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) ListMyVisits(c *fiber.Ctx) error {
+	filter := prospectmodel.VisitMonitoringFilter{
+		DateFrom:     c.Query("dateFrom"),
+		DateTo:       c.Query("dateTo"),
+		CustomerName: c.Query("customerName"),
+	}
+	items, err := h.service.ListMyVisits(c.UserContext(), actor(c), filter)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func (h *Handler) DeleteVisit(c *fiber.Ctx) error {
 	visitID, err := uuid.Parse(c.Params("visitId"))
 	if err != nil {
@@ -264,6 +281,86 @@ func (h *Handler) DeleteProspect(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
+}
+
+func (h *Handler) RequestDeletion(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.RequestDeletion(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deletionRequested": true})
+}
+
+func (h *Handler) ApproveDeletion(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.ApproveDeletion(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
+}
+
+func (h *Handler) RejectDeletion(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.RejectDeletion(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deletionRejected": true})
+}
+
+func (h *Handler) ListComments(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	items, err := h.service.ListComments(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) CreateComment(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	var request createCommentRequest
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	item, err := h.service.CreateComment(c.UserContext(), actor(c), id, request.Content)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusCreated, item)
+}
+
+func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	item, err := h.service.Review(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	if item.Prospect.GooglePlaceID == "" {
+		return response.Data(c, fiber.StatusOK, nil)
+	}
+	place, err := h.service.PlaceDetailFull(c.UserContext(), item.Prospect.GooglePlaceID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, place)
 }
 
 func actor(c *fiber.Ctx) service.Actor {
