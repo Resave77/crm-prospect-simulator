@@ -112,6 +112,8 @@ function renderMarkers() {
   else map.setView([latitude.value, longitude.value], 14)
 }
 
+function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false }
+
 function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
   detailOpen.value = true
@@ -265,61 +267,53 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
           </div>
         </div>
 
-        <div class="finder-results-header">
-          <div class="results-header-row">
-            <strong>{{ filteredResults.length }} result{{ filteredResults.length !== 1 ? 's' : '' }}</strong>
-            <span v-if="results.length && resultSearch" class="results-filter-note">of {{ results.length }}</span>
-          </div>
-          <div v-if="results.length" class="result-search-wrap">
-            <i class="pi pi-search" />
-            <input v-model="resultSearch" placeholder="Filter results..." />
-          </div>
-        </div>
-
-        <div v-if="loading" class="empty-state finder-result-state">
-          <div class="loading-pulse" />
-          <strong>Searching Places</strong>
-          <span>Scanning nearby businesses...</span>
-        </div>
-        <div v-else-if="!results.length" class="empty-state finder-result-state">
-          <i class="pi pi-map-marker" />
-          <strong>Select categories and search</strong>
-          <span>Business results will appear here.</span>
-        </div>
-        <div v-else-if="!filteredResults.length" class="empty-state finder-result-state">
-          <i class="pi pi-filter" />
-          <strong>No matching results</strong>
-          <span>Try a different filter.</span>
-        </div>
-        <div v-else ref="resultsScroll" class="finder-results">
-          <button
-            v-for="item in filteredResults"
-            :key="item.googlePlaceId"
-            :data-place-id="item.googlePlaceId"
-            class="result-card"
-            :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }"
-            @click="selectResult(item, true)"
-          >
-            <span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span>
-            <div class="result-info">
-              <div class="result-name-row">
-                <strong>{{ item.name }}</strong>
-                <Tag v-if="item.rating" :value="`★ ${item.rating}`" severity="info" class="result-rating-tag" />
-              </div>
-              <span class="result-category">{{ item.category }}</span>
-              <span class="result-address">{{ item.address }}</span>
-              <div class="result-meta-row">
-                <span v-if="item.distance" class="result-distance"><i class="pi pi-map-marker" /> {{ Math.round(item.distance) }} m</span>
-                <Tag v-if="item.businessStatus" :value="item.businessStatus === 'OPERATIONAL' ? 'Open' : item.businessStatus" :severity="item.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" class="result-status-tag" />
-              </div>
-            </div>
-            <i class="pi pi-chevron-right result-chevron" />
-          </button>
-        </div>
       </aside>
 
       <div class="finder-map-stage">
         <div ref="mapElement" class="leaflet-map" role="region" aria-label="OpenStreetMap with Google Places prospect markers" />
+
+        <div v-if="results.length" class="finder-floating-results">
+          <div class="floating-results-header">
+            <div class="floating-results-title">
+              <strong>{{ filteredResults.length }} result{{ filteredResults.length !== 1 ? 's' : '' }}</strong>
+              <span v-if="results.length && resultSearch" class="results-filter-note">of {{ results.length }}</span>
+            </div>
+            <button class="floating-results-close" @click="closeResults" title="Close results"><i class="pi pi-times" /></button>
+          </div>
+          <div class="floating-results-search">
+            <i class="pi pi-search" />
+            <input v-model="resultSearch" placeholder="Filter results..." />
+          </div>
+          <div ref="resultsScroll" class="floating-results-list">
+            <button
+              v-for="item in filteredResults"
+              :key="item.googlePlaceId"
+              :data-place-id="item.googlePlaceId"
+              class="result-card"
+              :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }"
+              @click="selectResult(item, true)"
+            >
+              <span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span>
+              <div class="result-info">
+                <div class="result-name-row">
+                  <strong>{{ item.name }}</strong>
+                  <Tag v-if="item.rating" :value="`★ ${item.rating}`" severity="info" class="result-rating-tag" />
+                </div>
+                <span class="result-category">{{ item.category }}</span>
+                <span class="result-address">{{ item.address }}</span>
+                <div class="result-meta-row">
+                  <span v-if="item.distance" class="result-distance"><i class="pi pi-map-marker" /> {{ Math.round(item.distance) }} m</span>
+                  <Tag v-if="item.businessStatus" :value="item.businessStatus === 'OPERATIONAL' ? 'Open' : item.businessStatus" :severity="item.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" class="result-status-tag" />
+                </div>
+              </div>
+              <i class="pi pi-chevron-right result-chevron" />
+            </button>
+          </div>
+          <div v-if="!filteredResults.length" class="floating-results-empty">
+            <i class="pi pi-filter" />
+            <span>No matching results</span>
+          </div>
+        </div>
 
         <div class="map-source-badge">
           <i class="pi pi-shield" />
@@ -447,7 +441,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .finder-left-panel {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: var(--surface-card);
   border-right: 1px solid var(--border-light);
 }
@@ -495,7 +489,6 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 .finder-filter-scroll {
-  max-height: 380px;
   padding: 0.55rem 0.9rem;
   overflow-y: auto;
   display: flex;
@@ -690,100 +683,141 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   filter: brightness(1.03);
 }
 
-/* ── Results Header ──────────────────────────────────────────── */
-.finder-results-header {
-  padding: 0.55rem 0.9rem;
-  border-top: 1px solid var(--border-light);
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface-subtle);
-}
-
-.results-header-row {
+/* ── Floating Results Panel ──────────────────────────────────── */
+.finder-floating-results {
+  position: absolute;
+  z-index: 600;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 340px;
+  max-height: calc(100% - 1.5rem);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.4rem;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(221, 229, 239, 0.9);
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(16, 24, 40, 0.14), 0 2px 8px rgba(16, 24, 40, 0.06);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  overflow: hidden;
+  animation: float-results-in 0.25s ease both;
 }
 
-.finder-results-header strong {
+@keyframes float-results-in {
+  from { opacity: 0; transform: translateX(12px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.floating-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.floating-results-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.floating-results-title strong {
   font-size: 0.72rem;
   font-weight: 800;
   color: var(--text-primary);
 }
 
-.results-filter-note {
+.floating-results-title .results-filter-note {
   color: var(--text-muted);
   font-size: 0.6rem;
   font-weight: 500;
 }
 
-.result-search-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
+.floating-results-close {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.6rem;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.result-search-wrap i {
+.floating-results-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.floating-results-search {
+  position: relative;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.floating-results-search i {
   position: absolute;
-  left: 0.6rem;
+  left: 1.15rem;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-faint);
   font-size: 0.65rem;
   pointer-events: none;
 }
 
-.result-search-wrap input {
+.floating-results-search input {
   width: 100%;
   padding: 0.38rem 0.6rem 0.38rem 1.55rem;
   border: 1px solid var(--border-default);
   border-radius: 0.55rem;
-  background: var(--surface-card);
+  background: var(--surface-subtle);
   font-size: 0.68rem;
   color: var(--text-primary);
+  outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.result-search-wrap input:focus {
-  outline: none;
+.floating-results-search input:focus {
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
 }
 
-.result-search-wrap input::placeholder { color: var(--text-faint); }
+.floating-results-search input::placeholder { color: var(--text-faint); }
 
-/* ── Results List ────────────────────────────────────────────── */
-.finder-result-state {
-  min-height: 140px;
-  gap: 0.55rem;
-  padding: 1rem;
-}
-
-.finder-result-state span { font-size: 0.72rem; }
-.finder-result-state i { font-size: 1.5rem; }
-
-.loading-pulse {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--brand-blue-100);
-  border-top-color: var(--brand-blue);
-  border-radius: 50%;
-  animation: finder-spin 0.75s linear infinite;
-}
-
-@keyframes finder-spin { to { transform: rotate(360deg); } }
-
-.finder-results {
+.floating-results-list {
+  flex: 1;
   min-height: 0;
   padding: 0.5rem;
   overflow-y: auto;
-  align-content: start;
   display: grid;
   gap: 0.35rem;
+  align-content: start;
 }
 
-.finder-results::-webkit-scrollbar { width: 4px; }
-.finder-results::-webkit-scrollbar-track { background: transparent; }
-.finder-results::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
-.finder-results::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+.floating-results-list::-webkit-scrollbar { width: 4px; }
+.floating-results-list::-webkit-scrollbar-track { background: transparent; }
+.floating-results-list::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+.floating-results-list::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+.floating-results-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 1.5rem;
+  color: var(--text-faint);
+}
+
+.floating-results-empty i { font-size: 1.2rem; }
+.floating-results-empty span { font-size: 0.72rem; }
 
 .result-card {
   width: 100%;
@@ -1104,8 +1138,9 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .finder-desktop-shell { grid-template-columns: 340px minmax(0, 1fr); }
+  .finder-desktop-shell { grid-template-columns: 320px minmax(0, 1fr); }
   .category-grid { grid-template-columns: 1fr 1fr; }
+  .finder-floating-results { width: 300px; }
 }
 
 @media (max-width: 900px) {
@@ -1115,7 +1150,12 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
     grid-template-rows: auto minmax(400px, 1fr);
   }
   .finder-left-panel { border-right: 0; border-bottom: 1px solid var(--border-light); }
-  .finder-filter-scroll { max-height: 300px; }
+  .finder-floating-results {
+    top: 0.5rem;
+    right: 0.5rem;
+    width: calc(100% - 1rem);
+    max-height: calc(100% - 1rem);
+  }
 }
 
 @media (max-width: 760px) {
@@ -1123,6 +1163,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   .finder-panel-title h1 { font-size: 0.9rem; }
   .map-source-badge { max-width: none; }
   .category-grid { grid-template-columns: repeat(3, 1fr); }
+  .finder-floating-results {
+    top: 0;
+    right: 0;
+    width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    border: none;
+  }
 }
 </style>
 

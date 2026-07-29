@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
@@ -7,9 +7,13 @@ const auth = useAuthStore()
 const router = useRouter()
 const search = ref('')
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
+
+const sidebarWidth = computed(() => sidebarCollapsed.value ? '64px' : '220px')
 
 function runSearch() { router.push({ path: '/admin/prospects/list', query: search.value.trim() ? { search: search.value.trim() } : {} }) }
 function closeSidebar() { sidebarOpen.value = false }
+function toggleCollapse() { sidebarCollapsed.value = !sidebarCollapsed.value }
 
 async function logout() {
   closeSidebar()
@@ -19,23 +23,49 @@ async function logout() {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <div class="admin-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <div v-if="sidebarOpen" class="mobile-backdrop" @click="closeSidebar" />
-    <aside class="admin-sidebar" :class="{ 'sidebar-open': sidebarOpen }">
-      <div class="shell-logo"><span>Y</span><div>Yummy Food<small>Field Sales CRM</small></div></div>
-      <small class="nav-caption">WORKSPACE</small>
+    <aside class="admin-sidebar" :class="{ 'sidebar-open': sidebarOpen, collapsed: sidebarCollapsed }" :style="{ width: sidebarWidth }">
+      <div class="sidebar-header">
+        <div class="shell-logo">
+          <span class="logo-mark">Y</span>
+          <div v-show="!sidebarCollapsed" class="logo-text">Yummy Food<small>Field Sales CRM</small></div>
+        </div>
+        <button class="collapse-btn" @click="toggleCollapse" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+          <i class="pi" :class="sidebarCollapsed ? 'pi-chevron-right' : 'pi-chevron-left'" />
+        </button>
+      </div>
+      <small v-show="!sidebarCollapsed" class="nav-caption">WORKSPACE</small>
       <nav aria-label="Administrator navigation">
-        <RouterLink to="/admin/dashboard" @click="closeSidebar"><i class="pi pi-home" /> Dashboard</RouterLink>
-        <RouterLink to="/admin/sales-executives" @click="closeSidebar"><i class="pi pi-user" /> Sales Executive</RouterLink>
-        <RouterLink to="/admin/customers" @click="closeSidebar"><i class="pi pi-users" /> Customer</RouterLink>
-        <RouterLink to="/admin/customer-assignment" @click="closeSidebar"><i class="pi pi-directions-alt" /> Customer Assignment</RouterLink>
-        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar"><i class="pi pi-map-marker" /> Visit Monitoring</RouterLink>
-        <RouterLink to="/admin/prospect-finder" @click="closeSidebar"><i class="pi pi-compass" /> Prospect Finder</RouterLink>
-        <RouterLink to="/admin/prospects/list" @click="closeSidebar"><i class="pi pi-list" /> Prospect List</RouterLink>
-        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar"><i class="pi pi-id-card" /> Prospect Assignment</RouterLink>
-        <RouterLink to="/admin/reports" @click="closeSidebar"><i class="pi pi-chart-bar" /> Reports</RouterLink>
+        <RouterLink to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
+          <i class="pi pi-home" /> <span v-show="!sidebarCollapsed">Dashboard</span>
+        </RouterLink>
+        <RouterLink to="/admin/sales-executives" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Executive' : ''">
+          <i class="pi pi-user" /> <span v-show="!sidebarCollapsed">Sales Executive</span>
+        </RouterLink>
+        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
+          <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
+        </RouterLink>
+        <RouterLink to="/admin/customer-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Assignment' : ''">
+          <i class="pi pi-directions-alt" /> <span v-show="!sidebarCollapsed">Customer Assignment</span>
+        </RouterLink>
+        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
+          <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
+          <i class="pi pi-compass" /> <span v-show="!sidebarCollapsed">Prospect Finder</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect List' : ''">
+          <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Prospect List</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Assignment' : ''">
+          <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Prospect Assignment</span>
+        </RouterLink>
+        <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
+          <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
+        </RouterLink>
       </nav>
-      <div class="sidebar-note"><i class="pi pi-arrow-up-right" /><strong>Team performance</strong><span>Pipeline activity updates from real CRM records.</span></div>
+      <div v-show="!sidebarCollapsed" class="sidebar-note"><i class="pi pi-arrow-up-right" /><strong>Team performance</strong><span>Pipeline activity updates from real CRM records.</span></div>
     </aside>
     <div class="admin-workspace">
       <header class="admin-topbar">
@@ -71,6 +101,11 @@ async function logout() {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   background: var(--surface-page);
+  transition: grid-template-columns 0.25s ease;
+}
+
+.admin-shell.sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .admin-sidebar {
@@ -80,11 +115,18 @@ async function logout() {
   padding: 1.25rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   color: var(--text-primary);
   background: var(--surface-card);
   border-right: 1px solid var(--border-light);
   overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.25s ease;
+}
+
+.admin-sidebar.collapsed {
+  padding: 1.25rem 0.5rem;
+  align-items: center;
 }
 
 .shell-logo {
@@ -95,25 +137,69 @@ async function logout() {
   font-weight: 800;
   letter-spacing: -0.02em;
   font-size: 0.85rem;
+  min-height: 2rem;
 }
 
-.shell-logo span {
+.admin-sidebar.collapsed .shell-logo {
+  padding: 0;
+  justify-content: center;
+}
+
+.logo-mark {
   width: 2rem;
   height: 2rem;
   display: inline-grid;
   place-items: center;
   border-radius: var(--radius-sm);
   font-weight: 900;
-  background: var(--brand-blue);
+  background: linear-gradient(135deg, var(--brand-blue), #6366f1);
   color: #fff;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
-.shell-logo div { display: grid; }
-.shell-logo small {
+.logo-text { display: grid; }
+.logo-text small {
   color: var(--text-muted);
   font-size: 0.55rem;
   font-weight: 550;
   line-height: 1.3;
+}
+
+/* ── Sidebar Header ─────────────────────────────────────────── */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.admin-sidebar.collapsed .sidebar-header {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Collapse Toggle ────────────────────────────────────────── */
+.collapse-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.55rem;
+  flex-shrink: 0;
+  transition: background var(--transition-fast),
+              color var(--transition-fast);
+}
+
+.collapse-btn:hover {
+  background: var(--brand-blue);
+  color: #fff;
+  border-color: var(--brand-blue);
 }
 
 .nav-caption {
@@ -123,12 +209,15 @@ async function logout() {
   font-weight: 750;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .admin-sidebar nav {
   display: grid;
   gap: 2px;
   flex: 1;
+  width: 100%;
 }
 
 .admin-sidebar nav a,
@@ -142,13 +231,25 @@ async function logout() {
   text-decoration: none;
   font-size: 0.72rem;
   font-weight: 500;
+  white-space: nowrap;
   transition: color var(--transition-fast),
-              background var(--transition-fast);
+              background var(--transition-fast),
+              padding var(--transition-fast);
+}
+
+.admin-sidebar.collapsed nav a {
+  justify-content: center;
+  padding: 0.6rem 0;
+  border-radius: var(--radius-sm);
 }
 
 .admin-sidebar nav a:hover {
   color: var(--brand-blue);
   background: var(--surface-hover);
+}
+
+.admin-sidebar.collapsed nav a:hover {
+  background: var(--brand-blue-bg);
 }
 
 .admin-sidebar nav a.router-link-active {
@@ -158,10 +259,28 @@ async function logout() {
   box-shadow: inset 3px 0 0 var(--brand-blue);
 }
 
+.admin-sidebar.collapsed nav a.router-link-active {
+  box-shadow: none;
+  position: relative;
+}
+
+.admin-sidebar.collapsed nav a.router-link-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.2rem;
+  background: var(--brand-blue);
+  border-radius: 0 3px 3px 0;
+}
+
 .admin-sidebar nav i {
   width: 1rem;
   text-align: center;
   font-size: 0.78rem;
+  flex-shrink: 0;
 }
 
 .nav-placeholder { opacity: 0.5; }
@@ -172,7 +291,8 @@ async function logout() {
   grid-template-columns: auto 1fr;
   gap: 0.25rem 0.55rem;
   color: #fff;
-  background: #1a2540;
+  background: linear-gradient(135deg, #1a2540, #1e293b);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: var(--radius-md);
 }
 
@@ -183,7 +303,7 @@ async function logout() {
   display: grid;
   place-items: center;
   color: #fff;
-  background: var(--brand-blue);
+  background: linear-gradient(135deg, var(--brand-blue), #6366f1);
   border-radius: var(--radius-sm);
 }
 
@@ -359,14 +479,27 @@ async function logout() {
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .admin-shell { grid-template-columns: 1fr; }
+  .admin-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .admin-sidebar {
     position: fixed; top: 0; left: 0; z-index: 100;
     width: 260px; height: 100vh;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     display: flex;
+    align-items: stretch;
+    padding: 1.25rem 0.75rem;
   }
   .admin-sidebar.sidebar-open { transform: translateX(0); }
+  .admin-sidebar.collapsed { width: 260px; align-items: stretch; padding: 1.25rem 0.75rem; }
+  .admin-sidebar.collapsed .shell-logo { padding: 0 0.45rem; justify-content: flex-start; }
+  .admin-sidebar.collapsed .logo-text { display: grid !important; }
+  .admin-sidebar.collapsed nav a { justify-content: flex-start; padding: 0.6rem 0.7rem; }
+  .admin-sidebar.collapsed nav a span { display: inline !important; }
+  .admin-sidebar.collapsed nav a.router-link-active::before { display: none; }
+  .admin-sidebar.collapsed nav a.router-link-active { box-shadow: inset 3px 0 0 var(--brand-blue); }
+  .admin-sidebar.collapsed .nav-caption { display: block !important; }
+  .admin-sidebar.collapsed .sidebar-note { display: grid !important; }
+  .collapse-btn { display: none; }
   .mobile-backdrop { display: block; }
   .hamburger-btn { display: flex; }
   .admin-topbar { padding: 0 0.8rem; }
