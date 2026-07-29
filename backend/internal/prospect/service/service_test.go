@@ -92,12 +92,39 @@ func (f *fakeProspectRepository) ListVisitMonitoring(_ context.Context, _ prospe
 	return []prospectmodel.VisitMonitoringItem{}, nil
 }
 
+func (f *fakeProspectRepository) ListMyVisits(_ context.Context, _ uuid.UUID, _ prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
+	return []prospectmodel.VisitMonitoringItem{}, nil
+}
+
+func (f *fakeProspectRepository) ListProspectVisits(_ context.Context, _ uuid.UUID) ([]prospectmodel.Visit, error) {
+	return []prospectmodel.Visit{}, nil
+}
+
 func (f *fakeProspectRepository) DeleteVisit(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return nil
 }
 
 func (f *fakeProspectRepository) DeleteProspect(_ context.Context, _ uuid.UUID) error {
 	return nil
+}
+
+func (f *fakeProspectRepository) RequestDeletion(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+func (f *fakeProspectRepository) ApproveDeletion(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+func (f *fakeProspectRepository) RejectDeletion(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+func (f *fakeProspectRepository) ListComments(_ context.Context, _ uuid.UUID) ([]prospectmodel.ProspectComment, error) {
+	return []prospectmodel.ProspectComment{}, nil
+}
+func (f *fakeProspectRepository) CreateComment(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (prospectmodel.ProspectComment, error) {
+	return prospectmodel.ProspectComment{}, nil
+}
+func (f *fakeProspectRepository) FindProspectOwner(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, nil
 }
 
 func TestSalesExecutiveCanMarkOwnNegotiationProspectWon(t *testing.T) {

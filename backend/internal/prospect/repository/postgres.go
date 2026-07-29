@@ -381,6 +381,29 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 	return items, nil
 }
 
+func (r *PostgresRepository) ListProspectVisits(ctx context.Context, prospectID uuid.UUID) ([]model.Visit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT v.id, v.prospect_id, v.sales_executive_id, u.full_name,
+		       v.check_in_at, v.check_in_latitude, v.check_in_longitude,
+		       v.check_out_at, v.check_out_latitude, v.check_out_longitude,
+		       v.selfie_reference, v.visit_notes, v.follow_up_notes
+		FROM prospect_visits v JOIN users u ON u.id = v.sales_executive_id
+		WHERE v.prospect_id = $1 ORDER BY v.check_in_at DESC`, prospectID)
+	if err != nil {
+		return nil, fmt.Errorf("list prospect visits: %w", err)
+	}
+	defer rows.Close()
+	items := make([]model.Visit, 0)
+	for rows.Next() {
+		item, scanErr := scanVisit(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID, adminID uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID)
 	if err != nil {

@@ -106,6 +106,10 @@ export async function getAdminVisits(filters: VisitMonitoringFilters) {
   return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/admin/visits', { params })).data.data
 }
 
+export async function getProspectVisits(prospectId: string) {
+  return (await api.get<ApiEnvelope<ProspectVisit[]>>(`/admin/prospects/${prospectId}/visits`)).data.data
+}
+
 export async function getMyVisits(filters?: { dateFrom?: string; dateTo?: string; customerName?: string }) {
   const params: Record<string, string> = {}
   if (filters?.dateFrom) params.dateFrom = filters.dateFrom

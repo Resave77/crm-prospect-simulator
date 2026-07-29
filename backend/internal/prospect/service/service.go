@@ -240,6 +240,10 @@ func (s *Service) ListMyVisits(ctx context.Context, actor Actor, filter prospect
 	return s.repository.ListMyVisits(ctx, actor.UserID, filter)
 }
 
+func (s *Service) ListProspectVisits(ctx context.Context, prospectID uuid.UUID) ([]prospectmodel.Visit, error) {
+	return s.repository.ListProspectVisits(ctx, prospectID)
+}
+
 func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) error {
 	if actor.Role != authmodel.RoleAdministrator {
 		return ErrForbidden

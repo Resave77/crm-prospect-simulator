@@ -104,6 +104,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Post("/prospects/:id/comments", prospectHandler.CreateComment)
 	admin.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
+	admin.Get("/prospects/:prospectId/visits", prospectHandler.ListProspectVisits)
 	admin.Post("/visits/:visitId/delete", prospectHandler.DeleteVisit)
 	admin.Post("/prospects/:id/approve-deletion", prospectHandler.ApproveDeletion)
 	admin.Post("/prospects/:id/reject-deletion", prospectHandler.RejectDeletion)

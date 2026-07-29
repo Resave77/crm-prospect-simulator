@@ -261,6 +261,18 @@ func (h *Handler) ListMyVisits(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) ListProspectVisits(c *fiber.Ctx) error {
+	prospectID, err := uuid.Parse(c.Params("prospectId"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	items, err := h.service.ListProspectVisits(c.UserContext(), prospectID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func (h *Handler) DeleteVisit(c *fiber.Ctx) error {
 	visitID, err := uuid.Parse(c.Params("visitId"))
 	if err != nil {
