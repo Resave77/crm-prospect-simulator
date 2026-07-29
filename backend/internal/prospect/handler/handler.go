@@ -375,6 +375,18 @@ func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, place)
 }
 
+func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
+	placeID := c.Params("googlePlaceId")
+	if strings.TrimSpace(placeID) == "" {
+		return response.Error(c, 400, "PLACE_ID_REQUIRED", "Google Place ID is required.")
+	}
+	place, err := h.service.PlaceDetailFull(c.UserContext(), placeID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, place)
+}
+
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
 	return service.Actor{UserID: principal.UserID, Role: principal.Role}

@@ -38,6 +38,7 @@ export async function rejectProspectDeletion(id: string) {
 }
 export async function getSalesExecutives() { return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>('/admin/sales-executives')).data.data }
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
+export async function getPlaceDetails(googlePlaceId: string) { return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/prospect-finder/place-details/${googlePlaceId}`)).data.data }
 export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
 
 export async function getWonProspects() {

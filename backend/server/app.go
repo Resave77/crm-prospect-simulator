@@ -97,6 +97,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/sales-executives", prospectHandler.SalesExecutives)
 	admin.Get("/prospect-finder/search", prospectHandler.SearchPlaces)
 	admin.Get("/prospect-finder/places/:placeId", prospectHandler.PlaceDetail)
+	admin.Get("/prospect-finder/place-details/:googlePlaceId", prospectHandler.PlaceFinderPlaceDetails)
 	admin.Post("/prospects", prospectHandler.Save)
 	admin.Delete("/prospects/:id", prospectHandler.DeleteProspect)
 	admin.Get("/prospects/:id", prospectHandler.Review)

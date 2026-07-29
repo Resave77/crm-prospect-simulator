@@ -12,7 +12,7 @@ import Slider from 'primevue/slider'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import * as crmApi from '../../../api/crm'
-import type { PlaceResult, SalesExecutiveOption } from '../../../types/crm'
+import type { PlaceDetails, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
 const categoryOptions = [
   ['food_drink', 'Food & Drink'], ['business', 'Business'], ['culture', 'Culture'], ['education', 'Education'],
@@ -28,6 +28,9 @@ const geoResolved = ref(false)
 const results = ref<PlaceResult[]>([])
 const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
+const placeDetails = ref<PlaceDetails | null>(null)
+const placeDetailsLoading = ref(false)
+const placeDetailsError = ref('')
 const sales = ref<SalesExecutiveOption[]>([])
 const salesExecutiveId = ref('')
 const industryGroup = ref('N&B / Kuliner')
@@ -112,11 +115,21 @@ function renderMarkers() {
   else map.setView([latitude.value, longitude.value], 14)
 }
 
-function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false }
+function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = null }
 
-function selectResult(item: PlaceResult, focusMap = true) {
+async function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
+  placeDetails.value = null
+  placeDetailsError.value = ''
+  placeDetailsLoading.value = true
   detailOpen.value = true
+  try {
+    placeDetails.value = await crmApi.getPlaceDetails(item.googlePlaceId)
+  } catch (caught) {
+    placeDetailsError.value = crmError(caught)
+  } finally {
+    placeDetailsLoading.value = false
+  }
   if (focusMap && map && item.latitude !== null && item.longitude !== null) {
     map.flyTo([item.latitude, item.longitude], Math.max(map.getZoom(), 16), { duration: 0.55 })
     markers.get(item.googlePlaceId)?.openTooltip()
@@ -141,6 +154,7 @@ async function search() {
   try {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: categories.value.join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
     selected.value = null
+    placeDetails.value = null
     detailOpen.value = false
     await nextTick()
     renderMarkers()
@@ -185,6 +199,29 @@ async function save() {
 function crmError(err: unknown) {
   const candidate = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
   return candidate.response?.data?.error?.message ?? candidate.message ?? 'Prospect Finder request failed.'
+}
+
+function parkingLabel(key: string) {
+  const labels: Record<string, string> = { freeStreetParking:'Free Street', paidStreetParking:'Paid Street', freeParkingLot:'Free Lot', paidParkingLot:'Paid Lot', valetParking:'Valet', garageParking:'Garage' }
+  return labels[key] || key
+}
+
+function paymentLabel(key: string) {
+  const labels: Record<string, string> = { cashOnly:'Cash Only', creditCardOnly:'Credit Card', debitCardOnly:'Debit Card', nfcOnly:'NFC' }
+  return labels[key] || key
+}
+
+function accessibilityLabel(key: string) {
+  const labels: Record<string, string> = { wheelchairAccessibleEntrance:'Entrance', wheelchairAccessibleParking:'Parking', wheelchairAccessibleRestroom:'Restroom', wheelchairAccessibleSeating:'Seating' }
+  return labels[key] || key
+}
+
+function optionActive(details: PlaceDetails | null, key: string): boolean {
+  if (!details) return false
+  const parking = details.parkingOptions as Record<string, boolean> | null
+  const payment = details.paymentOptions as Record<string, boolean> | null
+  const access = details.accessibilityOptions as Record<string, boolean> | null
+  return !!(parking?.[key] || payment?.[key] || access?.[key])
 }
 
 onMounted(async () => {
@@ -325,63 +362,161 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
       </div>
     </div>
 
-    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '420px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
-      <div v-if="selected" class="detail-dialog">
+    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '520px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
+      <div v-if="placeDetailsLoading" class="dialog-loading"><div class="loading-pulse" /><span>Loading full details...</span></div>
+      <div v-else-if="selected" class="detail-dialog">
         <div class="detail-hero-bar">
           <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
           <div class="detail-hero-info">
-            <h2>{{ selected.name }}</h2>
+            <h2>{{ placeDetails?.placeName || selected.name }}</h2>
             <div class="detail-hero-meta">
-              <span>{{ selected.category }}</span>
-              <Tag v-if="selected.rating" :value="`★ ${selected.rating}`" severity="info" />
-              <Tag v-if="selected.userRatingCount" :value="`${selected.userRatingCount} reviews`" severity="secondary" />
+              <span>{{ placeDetails?.placeCategory || selected.category }}</span>
+              <Tag v-if="(placeDetails?.rating || selected.rating)!" :value="`★ ${(placeDetails?.rating || selected.rating)!.toFixed(1)}`" severity="info" />
+              <Tag v-if="placeDetails?.userRatingCount || selected.userRatingCount" :value="`${placeDetails?.userRatingCount || selected.userRatingCount} reviews`" severity="secondary" />
+              <Tag v-if="placeDetails?.priceLevel" :value="placeDetails.priceLevel" severity="contrast" />
             </div>
           </div>
         </div>
 
-        <div class="detail-info-grid">
-          <div class="detail-info-item">
-            <i class="pi pi-map-marker" />
-            <div>
-              <span class="detail-info-label">Address</span>
-              <span class="detail-info-value">{{ selected.address }}</span>
+        <div v-if="placeDetails?.editorialSummary" class="detail-editorial">
+          <i class="pi pi-quote-left" /> {{ placeDetails.editorialSummary }}
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-info-circle" /> Basic Info</h3>
+          <div class="detail-info-grid">
+            <div class="detail-info-item">
+              <i class="pi pi-map-marker" />
+              <div>
+                <span class="detail-info-label">Address</span>
+                <span class="detail-info-value">{{ placeDetails?.formattedAddress || selected.address }}</span>
+              </div>
+            </div>
+            <div v-if="placeDetails?.phoneNumber || selected.phone" class="detail-info-item">
+              <i class="pi pi-phone" />
+              <div>
+                <span class="detail-info-label">Phone</span>
+                <span class="detail-info-value">{{ placeDetails?.phoneNumber || selected.phone }}</span>
+              </div>
+            </div>
+            <div v-if="placeDetails?.internationalPhone" class="detail-info-item">
+              <i class="pi pi-phone" />
+              <div>
+                <span class="detail-info-label">International</span>
+                <span class="detail-info-value">{{ placeDetails.internationalPhone }}</span>
+              </div>
+            </div>
+            <div v-if="placeDetails?.websiteUrl || selected.website" class="detail-info-item">
+              <i class="pi pi-globe" />
+              <div>
+                <span class="detail-info-label">Website</span>
+                <a :href="placeDetails?.websiteUrl || selected.website" target="_blank" rel="noreferrer" class="detail-info-link">Open website →</a>
+              </div>
+            </div>
+            <div v-if="placeDetails?.googleMapsUrl || selected.googleMapsUrl" class="detail-info-item">
+              <i class="pi pi-external-link" />
+              <div>
+                <span class="detail-info-label">Google Maps</span>
+                <a :href="placeDetails?.googleMapsUrl || selected.googleMapsUrl" target="_blank" rel="noreferrer" class="detail-info-link">View listing →</a>
+              </div>
+            </div>
+            <div class="detail-info-item">
+              <i class="pi pi-tag" />
+              <div>
+                <span class="detail-info-label">Place Types</span>
+                <span class="detail-info-value detail-types">{{ placeDetails?.placeTypes?.join(', ') || selected.placeTypes?.join(', ') || selected.markerCategory }}</span>
+              </div>
+            </div>
+            <div class="detail-info-item">
+              <i class="pi pi-info-circle" />
+              <div>
+                <span class="detail-info-label">Status</span>
+                <Tag :value="(placeDetails?.businessStatus || selected.businessStatus || 'UNKNOWN')" :severity="(placeDetails?.businessStatus || selected.businessStatus) === 'OPERATIONAL' ? 'success' : 'warn'" />
+              </div>
             </div>
           </div>
-          <div v-if="selected.phone" class="detail-info-item">
-            <i class="pi pi-phone" />
-            <div>
-              <span class="detail-info-label">Phone</span>
-              <span class="detail-info-value">{{ selected.phone }}</span>
+        </div>
+
+        <div v-if="placeDetails?.openingHours" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-clock" /> Opening Hours</h3>
+          <div class="detail-hours-grid">
+            <div class="detail-hours-badge" :class="{ 'is-open': placeDetails.openingHours.openNow }">
+              <span class="hours-dot" />
+              {{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}
+            </div>
+            <div v-for="day in placeDetails.openingHours.weekdays" :key="day" class="detail-hours-day">{{ day }}</div>
+          </div>
+        </div>
+
+        <div v-if="placeDetails" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-cog" /> Services &amp; Options</h3>
+          <div class="detail-options-grid">
+            <div v-if="placeDetails.delivery !== undefined" class="detail-option-chip" :class="{ active: placeDetails.delivery }">
+              <i class="pi pi-truck" /> <span>Delivery</span>
+            </div>
+            <div v-if="placeDetails.dineIn !== undefined" class="detail-option-chip" :class="{ active: placeDetails.dineIn }">
+              <i class="pi pi-building" /> <span>Dine In</span>
+            </div>
+            <div v-if="placeDetails.takeout !== undefined" class="detail-option-chip" :class="{ active: placeDetails.takeout }">
+              <i class="pi pi-box" /> <span>Takeout</span>
+            </div>
+            <div v-if="placeDetails.curbsidePickup !== undefined" class="detail-option-chip" :class="{ active: placeDetails.curbsidePickup }">
+              <i class="pi pi-car" /> <span>Curbside Pickup</span>
             </div>
           </div>
-          <div v-if="selected.website" class="detail-info-item">
-            <i class="pi pi-globe" />
-            <div>
-              <span class="detail-info-label">Website</span>
-              <a :href="selected.website" target="_blank" rel="noreferrer" class="detail-info-link">Open website →</a>
+        </div>
+
+        <div v-if="placeDetails?.parkingOptions" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-car" /> Parking</h3>
+          <div class="detail-options-grid">
+            <div v-for="key in ['freeStreetParking','paidStreetParking','freeParkingLot','paidParkingLot','valetParking','garageParking']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
+              <i class="pi pi-check-circle" /> <span>{{ parkingLabel(key) }}</span>
             </div>
           </div>
-          <div v-if="selected.googleMapsUrl" class="detail-info-item">
-            <i class="pi pi-external-link" />
-            <div>
-              <span class="detail-info-label">Google Maps</span>
-              <a :href="selected.googleMapsUrl" target="_blank" rel="noreferrer" class="detail-info-link">View listing →</a>
+        </div>
+
+        <div v-if="placeDetails?.paymentOptions" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-credit-card" /> Payment</h3>
+          <div class="detail-options-grid">
+            <div v-for="key in ['cashOnly','creditCardOnly','debitCardOnly','nfcOnly']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
+              <i class="pi pi-check-circle" /> <span>{{ paymentLabel(key) }}</span>
             </div>
           </div>
-          <div class="detail-info-item">
-            <i class="pi pi-info-circle" />
-            <div>
-              <span class="detail-info-label">Status</span>
-              <Tag :value="selected.businessStatus || 'UNKNOWN'" :severity="selected.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" />
+        </div>
+
+        <div v-if="placeDetails?.accessibilityOptions" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-universal-access" /> Accessibility</h3>
+          <div class="detail-options-grid">
+            <div v-for="key in ['wheelchairAccessibleEntrance','wheelchairAccessibleParking','wheelchairAccessibleRestroom','wheelchairAccessibleSeating']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
+              <i class="pi pi-check-circle" /> <span>Wheelchair {{ accessibilityLabel(key) }}</span>
             </div>
           </div>
-          <div class="detail-info-item">
-            <i class="pi pi-tag" />
-            <div>
-              <span class="detail-info-label">Place Types</span>
-              <span class="detail-info-value detail-types">{{ selected.placeTypes?.join(', ') || selected.markerCategory }}</span>
+        </div>
+
+        <div v-if="placeDetails?.reviews?.length" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-comments" /> Reviews ({{ placeDetails.reviews.length }})</h3>
+          <div class="detail-reviews-list">
+            <div v-for="review in placeDetails.reviews.slice(0, 5)" :key="review.authorName + review.time" class="detail-review">
+              <div class="review-author">
+                <img v-if="review.authorPhoto" :src="review.authorPhoto" alt="" class="review-author-photo" />
+                <span class="review-author-name">{{ review.authorName }}</span>
+                <Tag :value="`★ ${review.rating.toFixed(1)}`" severity="info" class="review-rating" />
+                <small class="review-time">{{ review.time }}</small>
+              </div>
+              <p v-if="review.text" class="review-text">{{ review.text }}</p>
             </div>
           </div>
+        </div>
+
+        <div v-if="placeDetails?.photos?.length" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
+          <div class="detail-photos-row">
+            <img v-for="photo in placeDetails.photos.slice(0, 6)" :key="photo.name" :src="photo.photoUrl" alt="Place photo" class="detail-photo" loading="lazy" />
+          </div>
+        </div>
+
+        <div v-if="placeDetailsError" class="detail-section">
+          <Message severity="warn" :closable="false">{{ placeDetailsError }}</Message>
         </div>
 
         <div class="detail-assignment">
@@ -996,8 +1131,29 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 /* ── Detail Dialog ───────────────────────────────────────────── */
 .detail-dialog {
   display: grid;
-  gap: 1.1rem;
+  gap: 1rem;
 }
+
+.dialog-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.loading-pulse {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--brand-blue-100);
+  border-top-color: var(--brand-blue);
+  border-radius: 50%;
+  animation: finder-spin 0.75s linear infinite;
+}
+
+@keyframes finder-spin { to { transform: rotate(360deg); } }
 
 .detail-hero-bar {
   display: flex;
@@ -1040,9 +1196,51 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   font-weight: 500;
 }
 
+.detail-editorial {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.detail-editorial i {
+  color: var(--brand-blue);
+  font-size: 0.65rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.detail-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-section-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.detail-section-title i {
+  font-size: 0.6rem;
+  color: var(--brand-blue);
+}
+
 .detail-info-grid {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.6rem;
 }
 
 .detail-info-item {
@@ -1062,12 +1260,12 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .detail-info-item > div {
   display: grid;
-  gap: 0.12rem;
+  gap: 0.08rem;
 }
 
 .detail-info-label {
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1094,8 +1292,144 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .detail-info-link:hover { opacity: 0.72; }
 
+/* Hours */
+.detail-hours-grid {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.detail-hours-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  width: fit-content;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.detail-hours-badge.is-open {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.hours-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.detail-hours-day {
+  padding: 0.2rem 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.detail-hours-day:last-child { border-bottom: 0; }
+
+/* Options grid */
+.detail-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.detail-option-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--text-faint);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-light);
+}
+
+.detail-option-chip.active {
+  color: #16a34a;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.detail-option-chip i { font-size: 0.55rem; }
+
+/* Reviews */
+.detail-reviews-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-review {
+  padding: 0.65rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.review-author {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.review-author-photo {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.review-author-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.review-rating { transform: scale(0.8); transform-origin: left; }
+
+.review-time {
+  color: var(--text-faint);
+  font-size: 0.55rem;
+}
+
+.review-text {
+  margin: 0.4rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
+/* Photos */
+.detail-photos-row {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.detail-photo {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-light);
+}
+
+.detail-photo::-webkit-scrollbar { height: 3px; }
+.detail-photo::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+
 .detail-assignment {
-  padding-top: 0.9rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--border-light);
 }
 
