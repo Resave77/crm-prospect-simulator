@@ -221,7 +221,7 @@ onMounted(async () => {
         <div v-if="!placeDetails" class="empty-card" style="grid-column: 1 / -1;">
           <i class="pi pi-map" />
           <strong>No Google Maps data</strong>
-          <span class="muted">This customer was not created from a Google Place.</span>
+           <span class="muted">This customer was not created from a Google Place.</span>
         </div>
 
         <template v-else>
