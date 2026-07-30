@@ -9,6 +9,26 @@ import { getAdminCustomerPlaceDetails } from '../../../api/crm'
 import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
 import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
 
+const fieldSources = {
+  customerCode: { source: 'system' as const, tooltip: 'Generated automatically by the system during prospect conversion.' },
+  siteName: { source: 'google' as const, tooltip: 'Retrieved from Google Places. Can still be edited by administrators.' },
+  segment: { source: 'manual' as const, tooltip: 'Selected manually by the administrator.' },
+  category: { source: 'google' as const, tooltip: 'Retrieved from Google Places and may be adjusted manually.' },
+  region: { source: 'system' as const, tooltip: 'Derived from the selected location.' },
+  salesExec: { source: 'manual' as const, tooltip: 'Assigned manually by administrator.' },
+  convertedAt: { source: 'system' as const, tooltip: 'Generated automatically when the prospect is converted.' },
+  lastUpdated: { source: 'system' as const, tooltip: 'Automatically updated whenever the customer data changes.' },
+  companyName: { source: 'system' as const, tooltip: 'Linked to the parent company.' },
+  companyCode: { source: 'system' as const, tooltip: 'Generated automatically by the system.' },
+  sourceProspect: { source: 'system' as const, tooltip: 'Automatically references the original prospect.' },
+}
+
+function getFieldSource(key: string) {
+  return fieldSources[key as keyof typeof fieldSources] ?? null
+}
+
+const fsLabels: Record<string, string> = { google: 'GOOGLE', manual: 'MANUAL', system: 'SYSTEM' }
+
 const route = useRoute()
 const router = useRouter()
 const crm = useCrmStore()
@@ -100,35 +120,35 @@ onMounted(async () => {
         <div class="strip-item">
           <i class="pi pi-tag" />
           <div>
-            <span>Segment</span>
+            <span>Segment <span v-if="getFieldSource('segment')" class="fs-badge" :class="'fs-' + getFieldSource('segment')!.source" :title="getFieldSource('segment')!.tooltip">{{ fsLabels[getFieldSource('segment')!.source] }}</span></span>
             <Tag :value="detail.customer.segment" :severity="segmentSeverity(detail.customer.segment)" />
           </div>
         </div>
         <div class="strip-item">
           <i class="pi pi-folder" />
           <div>
-            <span>Category</span>
+            <span>Category <span v-if="getFieldSource('category')" class="fs-badge" :class="'fs-' + getFieldSource('category')!.source" :title="getFieldSource('category')!.tooltip">{{ fsLabels[getFieldSource('category')!.source] }}</span></span>
             <strong>{{ detail.customer.category || '—' }}</strong>
           </div>
         </div>
         <div class="strip-item">
           <i class="pi pi-map-marker" />
           <div>
-            <span>Region</span>
+            <span>Region <span v-if="getFieldSource('region')" class="fs-badge" :class="'fs-' + getFieldSource('region')!.source" :title="getFieldSource('region')!.tooltip">{{ fsLabels[getFieldSource('region')!.source] }}</span></span>
             <strong>{{ detail.customer.region || '—' }}</strong>
           </div>
         </div>
         <div class="strip-item">
           <i class="pi pi-user" />
           <div>
-            <span>Sales Executive</span>
+            <span>Sales Executive <span v-if="getFieldSource('salesExec')" class="fs-badge" :class="'fs-' + getFieldSource('salesExec')!.source" :title="getFieldSource('salesExec')!.tooltip">{{ fsLabels[getFieldSource('salesExec')!.source] }}</span></span>
             <strong>{{ detail.customer.salesExecutiveName || 'Unassigned' }}</strong>
           </div>
         </div>
         <div class="strip-item">
           <i class="pi pi-calendar" />
           <div>
-            <span>Converted</span>
+            <span>Converted <span v-if="getFieldSource('convertedAt')" class="fs-badge" :class="'fs-' + getFieldSource('convertedAt')!.source" :title="getFieldSource('convertedAt')!.tooltip">{{ fsLabels[getFieldSource('convertedAt')!.source] }}</span></span>
             <strong>{{ formatDate(detail.customer.convertedAt) }}</strong>
           </div>
         </div>
@@ -155,35 +175,35 @@ onMounted(async () => {
           </h3>
           <div class="info-grid">
             <div class="info-item">
-              <span class="info-label">Customer Code</span>
+              <span class="info-label">Customer Code <span v-if="getFieldSource('customerCode')" class="fs-badge" :class="'fs-' + getFieldSource('customerCode')!.source" :title="getFieldSource('customerCode')!.tooltip">{{ fsLabels[getFieldSource('customerCode')!.source] }}</span></span>
               <code class="code-tag code-blue">{{ detail.customer.customerCode }}</code>
             </div>
             <div class="info-item">
-              <span class="info-label">Site Name</span>
+              <span class="info-label">Site Name <span v-if="getFieldSource('siteName')" class="fs-badge" :class="'fs-' + getFieldSource('siteName')!.source" :title="getFieldSource('siteName')!.tooltip">{{ fsLabels[getFieldSource('siteName')!.source] }}</span></span>
               <strong>{{ detail.customer.name }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Segment</span>
+              <span class="info-label">Segment <span v-if="getFieldSource('segment')" class="fs-badge" :class="'fs-' + getFieldSource('segment')!.source" :title="getFieldSource('segment')!.tooltip">{{ fsLabels[getFieldSource('segment')!.source] }}</span></span>
               <Tag :value="detail.customer.segment" :severity="segmentSeverity(detail.customer.segment)" />
             </div>
             <div class="info-item">
-              <span class="info-label">Category</span>
+              <span class="info-label">Category <span v-if="getFieldSource('category')" class="fs-badge" :class="'fs-' + getFieldSource('category')!.source" :title="getFieldSource('category')!.tooltip">{{ fsLabels[getFieldSource('category')!.source] }}</span></span>
               <strong>{{ detail.customer.category || '—' }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Region</span>
+              <span class="info-label">Region <span v-if="getFieldSource('region')" class="fs-badge" :class="'fs-' + getFieldSource('region')!.source" :title="getFieldSource('region')!.tooltip">{{ fsLabels[getFieldSource('region')!.source] }}</span></span>
               <strong>{{ detail.customer.region || '—' }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Sales Executive</span>
+              <span class="info-label">Sales Executive <span v-if="getFieldSource('salesExec')" class="fs-badge" :class="'fs-' + getFieldSource('salesExec')!.source" :title="getFieldSource('salesExec')!.tooltip">{{ fsLabels[getFieldSource('salesExec')!.source] }}</span></span>
               <strong>{{ detail.customer.salesExecutiveName || 'Unassigned' }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Converted At</span>
+              <span class="info-label">Converted At <span v-if="getFieldSource('convertedAt')" class="fs-badge" :class="'fs-' + getFieldSource('convertedAt')!.source" :title="getFieldSource('convertedAt')!.tooltip">{{ fsLabels[getFieldSource('convertedAt')!.source] }}</span></span>
               <strong>{{ formatDateTime(detail.customer.convertedAt) }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Last Updated</span>
+              <span class="info-label">Last Updated <span v-if="getFieldSource('lastUpdated')" class="fs-badge" :class="'fs-' + getFieldSource('lastUpdated')!.source" :title="getFieldSource('lastUpdated')!.tooltip">{{ fsLabels[getFieldSource('lastUpdated')!.source] }}</span></span>
               <strong>{{ formatDateTime(detail.customer.updatedAt) }}</strong>
             </div>
           </div>
@@ -195,15 +215,15 @@ onMounted(async () => {
           </h3>
           <div class="info-grid">
             <div class="info-item full">
-              <span class="info-label">Company Name</span>
+              <span class="info-label">Company Name <span v-if="getFieldSource('companyName')" class="fs-badge" :class="'fs-' + getFieldSource('companyName')!.source" :title="getFieldSource('companyName')!.tooltip">{{ fsLabels[getFieldSource('companyName')!.source] }}</span></span>
               <strong>{{ detail.parentCompany.name }}</strong>
             </div>
             <div class="info-item">
-              <span class="info-label">Company Code</span>
+              <span class="info-label">Company Code <span v-if="getFieldSource('companyCode')" class="fs-badge" :class="'fs-' + getFieldSource('companyCode')!.source" :title="getFieldSource('companyCode')!.tooltip">{{ fsLabels[getFieldSource('companyCode')!.source] }}</span></span>
               <code class="code-tag">{{ detail.parentCompany.parentCode }}</code>
             </div>
             <div class="info-item">
-              <span class="info-label">Source Prospect</span>
+              <span class="info-label">Source Prospect <span v-if="getFieldSource('sourceProspect')" class="fs-badge" :class="'fs-' + getFieldSource('sourceProspect')!.source" :title="getFieldSource('sourceProspect')!.tooltip">{{ fsLabels[getFieldSource('sourceProspect')!.source] }}</span></span>
               <strong>{{ detail.sourceProspectName }}</strong>
             </div>
             <div class="info-item" v-if="detail.parentCompany.termOfPayment">
@@ -401,10 +421,10 @@ onMounted(async () => {
           </div>
           <div class="contact-info">
             <h4>{{ contact.name || 'Unnamed Contact' }}</h4>
-            <span class="contact-position" v-if="contact.position">{{ contact.position }}</span>
+            <span class="contact-position" v-if="contact.position">{{ contact.position }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
             <div class="contact-details">
-              <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }}</span>
-              <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }}</span>
+              <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
+              <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
             </div>
           </div>
         </div>
@@ -418,27 +438,27 @@ onMounted(async () => {
           </h3>
           <div class="info-grid">
             <div class="info-item full">
-              <span class="info-label">Company Name</span>
+              <span class="info-label">Company Name <span v-if="getFieldSource('companyName')" class="fs-badge" :class="'fs-' + getFieldSource('companyName')!.source" :title="getFieldSource('companyName')!.tooltip">{{ fsLabels[getFieldSource('companyName')!.source] }}</span></span>
               <button class="link-btn" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}`)">{{ detail.parentCompany.name }}</button>
             </div>
             <div class="info-item">
-              <span class="info-label">Parent Code</span>
+              <span class="info-label">Parent Code <span v-if="getFieldSource('companyCode')" class="fs-badge" :class="'fs-' + getFieldSource('companyCode')!.source" :title="getFieldSource('companyCode')!.tooltip">{{ fsLabels[getFieldSource('companyCode')!.source] }}</span></span>
               <code class="code-tag">{{ detail.parentCompany.parentCode }}</code>
             </div>
             <div class="info-item" v-if="detail.parentCompany.npwpNumber">
-              <span class="info-label">NPWP Number</span>
+              <span class="info-label">NPWP Number <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
               <code class="code-tag">{{ detail.parentCompany.npwpNumber }}</code>
             </div>
             <div class="info-item" v-if="detail.parentCompany.npwpName">
-              <span class="info-label">NPWP Name</span>
+              <span class="info-label">NPWP Name <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
               <strong>{{ detail.parentCompany.npwpName }}</strong>
             </div>
             <div class="info-item" v-if="detail.parentCompany.npwpAddress">
-              <span class="info-label">NPWP Address</span>
+              <span class="info-label">NPWP Address <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
               <strong>{{ detail.parentCompany.npwpAddress }}</strong>
             </div>
             <div class="info-item" v-if="detail.parentCompany.termOfPayment">
-              <span class="info-label">Term of Payment</span>
+              <span class="info-label">Term of Payment <span class="fs-badge fs-manual" title="Configured manually by the administrator.">MANUAL</span></span>
               <strong>{{ detail.parentCompany.termOfPayment }}</strong>
             </div>
           </div>
@@ -457,8 +477,8 @@ onMounted(async () => {
                 <h4>{{ contact.name || 'Unnamed' }}</h4>
                 <span class="contact-position" v-if="contact.position">{{ contact.position }}</span>
                 <div class="contact-details">
-                  <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }}</span>
-                  <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }}</span>
+                  <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
+                  <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
                 </div>
               </div>
             </div>
@@ -495,23 +515,23 @@ onMounted(async () => {
             <p class="address-full">{{ detail.customer.address.previewAddress }}</p>
             <div class="info-grid">
               <div class="info-item" v-if="detail.customer.address.province">
-                <span class="info-label">Province</span>
+                <span class="info-label">Province <span class="fs-badge fs-google" title="Derived from Google Places data.">GOOGLE</span></span>
                 <strong>{{ detail.customer.address.province }}</strong>
               </div>
               <div class="info-item" v-if="detail.customer.address.district">
-                <span class="info-label">District</span>
+                <span class="info-label">District <span class="fs-badge fs-google" title="Derived from Google Places data.">GOOGLE</span></span>
                 <strong>{{ detail.customer.address.district }}</strong>
               </div>
               <div class="info-item" v-if="detail.customer.address.subDistrict">
-                <span class="info-label">Sub-District</span>
+                <span class="info-label">Sub-District <span class="fs-badge fs-google" title="Derived from Google Places data.">GOOGLE</span></span>
                 <strong>{{ detail.customer.address.subDistrict }}</strong>
               </div>
               <div class="info-item" v-if="detail.customer.address.village">
-                <span class="info-label">Village</span>
+                <span class="info-label">Village <span class="fs-badge fs-google" title="Derived from Google Places data.">GOOGLE</span></span>
                 <strong>{{ detail.customer.address.village }}</strong>
               </div>
               <div class="info-item" v-if="detail.customer.address.latitude != null">
-                <span class="info-label">Coordinates</span>
+                <span class="info-label">Coordinates <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
                 <strong>{{ detail.customer.address.latitude?.toFixed(6) }}, {{ detail.customer.address.longitude?.toFixed(6) }}</strong>
               </div>
             </div>
@@ -530,19 +550,19 @@ onMounted(async () => {
             <p class="address-full">{{ detail.parentCompany.address.previewAddress }}</p>
             <div class="info-grid">
               <div class="info-item" v-if="detail.parentCompany.address.province">
-                <span class="info-label">Province</span>
+                <span class="info-label">Province <span class="fs-badge fs-system" title="Linked from the parent company record.">SYSTEM</span></span>
                 <strong>{{ detail.parentCompany.address.province }}</strong>
               </div>
               <div class="info-item" v-if="detail.parentCompany.address.district">
-                <span class="info-label">District</span>
+                <span class="info-label">District <span class="fs-badge fs-system" title="Linked from the parent company record.">SYSTEM</span></span>
                 <strong>{{ detail.parentCompany.address.district }}</strong>
               </div>
               <div class="info-item" v-if="detail.parentCompany.address.subDistrict">
-                <span class="info-label">Sub-District</span>
+                <span class="info-label">Sub-District <span class="fs-badge fs-system" title="Linked from the parent company record.">SYSTEM</span></span>
                 <strong>{{ detail.parentCompany.address.subDistrict }}</strong>
               </div>
               <div class="info-item" v-if="detail.parentCompany.address.village">
-                <span class="info-label">Village</span>
+                <span class="info-label">Village <span class="fs-badge fs-system" title="Linked from the parent company record.">SYSTEM</span></span>
                 <strong>{{ detail.parentCompany.address.village }}</strong>
               </div>
             </div>
@@ -1008,6 +1028,34 @@ onMounted(async () => {
 .review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
 .review-time { color: var(--text-muted); font-size: 0.68rem; margin-left: 0.4rem; }
 .review-text { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
+
+/* ── FIELD SOURCE BADGE ────────────────────────────────────────────── */
+.fs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  vertical-align: middle;
+  white-space: nowrap;
+  margin-left: 0.25rem;
+}
+.fs-system {
+  background: #10b981;
+  color: #fff;
+}
+.fs-google {
+  background: #3b82f6;
+  color: #fff;
+}
+.fs-manual {
+  background: #f59e0b;
+  color: #78350f;
+}
 
 /* ── RESPONSIVE ────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
