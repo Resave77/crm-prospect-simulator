@@ -92,12 +92,10 @@ onMounted(async () => {
     </div>
 
     <template v-if="detail">
+      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <!-- PAGE HEADER -->
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push('/admin/customers')">
-            <i class="pi pi-arrow-left" />
-          </button>
           <span class="eyebrow">Customer Detail</span>
           <div class="title-row">
             <h1>{{ detail.customer.name }}</h1>
@@ -417,16 +415,11 @@ onMounted(async () => {
         </div>
         <div v-for="(contact, idx) in detail.customer.contacts" :key="idx" class="contact-card">
           <div class="contact-avatar">
-            <span>{{ (contact.name || 'U').charAt(0).toUpperCase() }}</span>
+            <span>{{ (contact.name || detail.customer.name || 'U').charAt(0).toUpperCase() }}</span>
           </div>
           <div class="contact-info">
-<<<<<<< HEAD
-            <h4>{{ contact.name || 'Unnamed Contact' }}</h4>
+            <h4>{{ contact.name || detail.customer.name || 'Unnamed Contact' }}</h4>
             <span class="contact-position" v-if="contact.position">{{ contact.position }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
-=======
-            <h4>{{ contact.name || detail.customer.name }}</h4>
-            <span class="contact-position" v-if="contact.position">{{ contact.position }}</span>
->>>>>>> 50549f7 (modified visit)
             <div class="contact-details">
               <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
               <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
@@ -637,22 +630,6 @@ onMounted(async () => {
   align-items: center;
   padding-top: 0.15rem;
 }
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  color: var(--brand-blue);
-  background: var(--brand-blue-bg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 .code-tag {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;

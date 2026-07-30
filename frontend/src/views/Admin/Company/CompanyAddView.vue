@@ -58,7 +58,7 @@ function resetForm() {
         <h2>Company Created Successfully</h2>
         <p class="muted">The new company <strong>{{ form.name }}</strong> has been added to the system.</p>
         <div class="success-actions">
-          <Button label="View Company List" icon="pi pi-list" @click="router.push('/admin/companies')" />
+          <Button label="View Customers" icon="pi pi-list" @click="router.push('/admin/customers')" />
           <Button label="Add Another" icon="pi pi-plus" severity="secondary" outlined @click="saved = false; resetForm()" />
         </div>
       </div>
@@ -67,17 +67,15 @@ function resetForm() {
     <!-- FORM -->
     <template v-else>
       <!-- PAGE HEADER -->
+      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push('/admin/companies')">
-            <i class="pi pi-arrow-left" />
-          </button>
           <span class="eyebrow">New Company</span>
           <h1>Add Company</h1>
           <p class="muted">Register a new corporate company entity into the CRM system.</p>
         </div>
         <div class="page-heading-actions">
-          <Button label="Cancel" severity="secondary" text size="small" @click="router.push('/admin/companies')" />
+          <Button label="Cancel" severity="secondary" text size="small" @click="router.push('/admin/customers')" />
           <Button label="Save Company" icon="pi pi-check" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
         </div>
       </header>
@@ -193,7 +191,7 @@ function resetForm() {
           </div>
           <div class="sidebar-actions">
             <Button label="Save Company" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
-            <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push('/admin/companies')" />
+            <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push('/admin/customers')" />
           </div>
         </aside>
       </div>
@@ -248,22 +246,6 @@ function resetForm() {
   align-items: center;
   padding-top: 0.15rem;
 }
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  color: var(--brand-blue);
-  background: var(--brand-blue-bg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── FORM LAYOUT ──────────────────────────────────────────────────── */
 .form-layout {

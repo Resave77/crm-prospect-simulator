@@ -154,11 +154,9 @@ onMounted(async () => {
       <Message v-if="error" severity="error">{{ error }}</Message>
 
       <!-- PAGE HEADER -->
+      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push(`/admin/customers/${route.params.id}`)" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push(`/admin/customers/${route.params.id}`)">
-            <i class="pi pi-arrow-left" />
-          </button>
           <span class="eyebrow">Edit Customer</span>
           <h1>{{ detail.customer.name }}</h1>
           <div class="subtitle-row">
@@ -379,21 +377,7 @@ onMounted(async () => {
   align-items: center;
   padding-top: 0.15rem;
 }
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  color: var(--brand-blue);
-  background: var(--brand-blue-bg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
+
 .code-tag {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;

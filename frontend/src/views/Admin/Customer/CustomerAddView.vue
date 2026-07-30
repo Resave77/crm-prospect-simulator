@@ -111,11 +111,9 @@ onMounted(async () => {
     <!-- FORM -->
     <template v-else>
       <!-- PAGE HEADER -->
+      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push('/admin/customers')">
-            <i class="pi pi-arrow-left" />
-          </button>
           <span class="eyebrow">New Customer</span>
           <h1>Add Customer Site</h1>
           <p class="muted">Register a new customer site into the CRM system.</p>
@@ -366,22 +364,6 @@ onMounted(async () => {
   align-items: center;
   padding-top: 0.15rem;
 }
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  color: var(--brand-blue);
-  background: var(--brand-blue-bg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-.back-link:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── FORM LAYOUT ──────────────────────────────────────────────────── */
 .form-layout {

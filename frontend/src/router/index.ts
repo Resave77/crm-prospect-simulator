@@ -31,7 +31,6 @@ const router = createRouter({
         { path: 'customers/add', name: 'AdminCustomerAdd', component: () => import('../views/Admin/Customer/CustomerAddView.vue') },
         { path: 'customers/:id', name: 'AdminCustomerDetail', component: () => import('../views/Admin/Customer/CustomerDetailView.vue') },
         { path: 'customers/:id/edit', name: 'AdminCustomerEdit', component: () => import('../views/Admin/Customer/CustomerEditView.vue') },
-        { path: 'companies', name: 'AdminCompanies', component: () => import('../views/Admin/Company/CompanyListView.vue') },
         { path: 'companies/add', name: 'AdminCompanyAdd', component: () => import('../views/Admin/Company/CompanyAddView.vue') },
         { path: 'companies/:id', name: 'AdminCompanyDetail', component: () => import('../views/Admin/Company/CompanyDetailView.vue'), meta: { title: 'Company Detail', description: 'Company detail interface is under construction for the first release.' } },
         { path: 'companies/:id/edit', name: 'AdminCompanyEdit', component: () => import('../views/Admin/Company/CompanyEditView.vue') },

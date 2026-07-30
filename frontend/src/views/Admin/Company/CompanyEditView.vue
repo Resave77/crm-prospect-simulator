@@ -80,7 +80,7 @@ onMounted(async () => {
         <h2>Company Updated Successfully</h2>
         <p class="muted">Changes to <strong>{{ form.name }}</strong> have been saved.</p>
         <div class="success-actions">
-          <Button label="Back to Company List" icon="pi pi-list" @click="router.push('/admin/companies')" />
+          <Button label="Back to Customers" icon="pi pi-list" @click="router.push('/admin/customers')" />
           <Button label="View Detail" icon="pi pi-eye" severity="secondary" outlined @click="router.push(`/admin/companies/${code}`)" />
         </div>
       </div>
@@ -88,11 +88,9 @@ onMounted(async () => {
 
     <!-- FORM -->
     <template v-else-if="!loading">
+      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push(`/admin/companies/${code}`)" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <button class="back-link" @click="router.push(`/admin/companies/${code}`)">
-            <i class="pi pi-arrow-left" />
-          </button>
           <span class="eyebrow">Edit Company</span>
           <h1>{{ companyName }}</h1>
           <div class="subtitle-row">
@@ -208,8 +206,6 @@ onMounted(async () => {
 .page-title-wrapper h1 { font-size: 1.65rem; font-weight: 800; color: var(--text-primary); margin: 0.2rem 0 0.15rem; letter-spacing: -0.03em; }
 .subtitle-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.1rem; }
 .page-heading-actions { display: flex; gap: 0.5rem; align-items: center; padding-top: 0.15rem; }
-.back-link { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--brand-blue); font-size: 0.8rem; font-weight: 600; cursor: pointer; background: none; border: none; padding: 0; font: inherit; transition: opacity 0.15s; }
-.back-link:hover { opacity: 0.8; }
 .code-tag { display: inline-block; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.78rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; background: #f1f5f9; color: var(--text-secondary); }
 .code-blue { background: #eff6ff; color: #2563eb; }
 

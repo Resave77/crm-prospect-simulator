@@ -247,13 +247,13 @@ watch(() => form.existingParentCompanyId, () => {
   const parent = selectedParent.value
   if (!parent) return
   form.parentCompanyName = parent.name
-  form.companyAddress = structuredClone(parent.address)
-  form.companyContacts = structuredClone(parent.contacts ?? [])
+  form.companyAddress = clone(parent.address)
+  form.companyContacts = clone(parent.contacts ?? [])
   form.companyNpwpName = parent.npwpName
   form.companyNpwpAddress = parent.npwpAddress
   form.companyNpwpNumber = parent.npwpNumber
   form.termOfPayment = parent.termOfPayment
-  form.kamAssignments = structuredClone(parent.kamAssignments ?? [])
+  form.kamAssignments = clone(parent.kamAssignments ?? [])
 })
 
 watch(() => form.sameAsSiteAddress, (same) => {
