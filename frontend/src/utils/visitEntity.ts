@@ -56,9 +56,9 @@ export async function fetchProspectVisitData(entityId: string): Promise<{ entity
   return { entity: prospectToVisitEntity(review.prospect), review }
 }
 
-export async function fetchCustomerVisitData(entityId: string): Promise<{ entity: VisitEntityContext; detail: CustomerDetail }> {
+export async function fetchCustomerVisitData(entityId: string): Promise<{ entity: VisitEntityContext; detail: CustomerDetail; sourceProspectId: string }> {
   const detail = await getMyCustomer(entityId)
-  return { entity: customerToVisitEntity(detail.customer), detail }
+  return { entity: customerToVisitEntity(detail.customer), detail, sourceProspectId: detail.customer.sourceProspectId }
 }
 
 export function isValidEntityType(value: unknown): value is VisitEntityType {
@@ -102,4 +102,9 @@ export function loadCustomerVisits(): CustomerVisitRecord[] {
   } catch {
     return []
   }
+}
+
+export function deleteCustomerVisit(id: string) {
+  const remaining = loadCustomerVisits().filter((visit) => visit.id !== id)
+  localStorage.setItem(CUSTOMER_VISITS_KEY, JSON.stringify(remaining))
 }

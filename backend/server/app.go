@@ -87,6 +87,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	sales.Post("/prospects/:id/request-deletion", prospectHandler.RequestDeletion)
 	sales.Get("/visits", prospectHandler.ListMyVisits)
+	sales.Post("/visits/:visitId/delete", prospectHandler.DeleteVisit)
 	sales.Get("/customers", customerHandler.MyCustomers)
 	sales.Get("/customers/:id", customerHandler.MyCustomer)
 	sales.Get("/customers/:id/place-details", customerHandler.MyCustomerPlaceDetails)

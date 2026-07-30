@@ -9,6 +9,8 @@ import (
 type VisitMonitoringItem struct {
 	ID                   uuid.UUID  `json:"id"`
 	ProspectID           uuid.UUID  `json:"prospectId"`
+	CustomerID           *uuid.UUID `json:"customerId,omitempty"`
+	EntityType           string     `json:"entityType"`
 	CustomerName         string     `json:"customerName"`
 	CustomerCategory     string     `json:"customerCategory"`
 	IndustryGroup        string     `json:"industryGroup"`

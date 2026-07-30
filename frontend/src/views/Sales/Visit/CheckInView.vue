@@ -219,14 +219,12 @@ async function submitCheckIn() {
 
     let notes = visitNotes.value
 
-    if (entity.value.entityType === 'prospect') {
-      await checkInProspect(entity.value.entityId, {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        visitNotes: notes,
-        selfie: selfieFile.value,
-      })
-    }
+    await checkInProspect(entity.value.entityId, {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      visitNotes: notes,
+      selfie: selfieFile.value,
+    })
 
     selfieFile.value = null
 

@@ -245,7 +245,10 @@ func (s *Service) ListProspectVisits(ctx context.Context, prospectID uuid.UUID) 
 }
 
 func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) error {
-	if actor.Role != authmodel.RoleAdministrator {
+	if actor.Role == authmodel.RoleAdministrator {
+		return s.repository.DeleteVisit(ctx, visitID, uuid.Nil)
+	}
+	if actor.Role != authmodel.RoleSalesExecutive {
 		return ErrForbidden
 	}
 	return s.repository.DeleteVisit(ctx, visitID, actor.UserID)

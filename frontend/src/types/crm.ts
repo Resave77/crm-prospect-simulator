@@ -307,6 +307,8 @@ export interface ListFilterOptions {
 export interface VisitMonitoringItem {
   id: string
   prospectId: string
+  customerId?: string
+  entityType: 'prospect' | 'customer'
   customerName: string
   customerCategory: string
   industryGroup: string

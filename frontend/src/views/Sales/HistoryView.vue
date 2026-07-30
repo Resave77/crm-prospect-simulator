@@ -3,9 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
 import { useCrmStore } from '../../stores/crm'
-import { getMyVisits } from '../../api/crm'
-import { loadCustomerVisits, type CustomerVisitRecord } from '../../utils/visitEntity'
+import { deleteMyVisit, getMyVisits } from '../../api/crm'
+import { deleteCustomerVisit, loadCustomerVisits, type CustomerVisitRecord } from '../../utils/visitEntity'
 import type { VisitMonitoringItem } from '../../types/crm'
 import { formatErrorMessage } from '../../utils/format'
 
@@ -16,12 +18,20 @@ const activeTab = ref<'visits' | 'outcomes'>('visits')
 const prospectVisits = ref<VisitMonitoringItem[]>([])
 const customerVisits = ref<CustomerVisitRecord[]>([])
 const visitsLoading = ref(false)
+const deleteTarget = ref<VisitHistoryItem | null>(null)
+const deleteBusy = ref(false)
+const deleteDialogVisible = computed({
+  get: () => deleteTarget.value !== null,
+  set: (visible: boolean) => {
+    if (!visible && !deleteBusy.value) deleteTarget.value = null
+  },
+})
 
 const allVisits = computed(() => {
   const prospect: VisitHistoryItem[] = prospectVisits.value.map((v) => ({
     id: v.id,
     entityName: v.customerName,
-    entityType: 'prospect' as const,
+    entityType: v.entityType,
     checkInAt: v.checkInAt,
     checkOutAt: v.checkOutAt,
     duration: v.durationSeconds,
@@ -31,6 +41,8 @@ const allVisits = computed(() => {
     distanceMeters: v.distanceMeters,
     industryGroup: v.industryGroup,
     prospectId: v.prospectId,
+    entityId: v.customerId,
+    localOnly: false,
   }))
   const customer: VisitHistoryItem[] = customerVisits.value.map((v) => ({
     id: v.id,
@@ -45,6 +57,8 @@ const allVisits = computed(() => {
     distanceMeters: 0,
     industryGroup: '',
     prospectId: '',
+    entityId: v.entityId,
+    localOnly: true,
   }))
   return [...prospect, ...customer].sort((a, b) => new Date(b.checkInAt).getTime() - new Date(a.checkInAt).getTime())
 })
@@ -66,6 +80,33 @@ interface VisitHistoryItem {
   distanceMeters: number
   industryGroup: string
   prospectId: string
+  entityId?: string
+  localOnly: boolean
+}
+
+function confirmDelete(visit: VisitHistoryItem) {
+  deleteTarget.value = visit
+}
+
+async function executeDelete() {
+  const target = deleteTarget.value
+  if (!target) return
+  deleteBusy.value = true
+  error.value = ''
+  try {
+    if (target.localOnly) {
+      deleteCustomerVisit(target.id)
+      customerVisits.value = customerVisits.value.filter((visit) => visit.id !== target.id)
+    } else {
+      await deleteMyVisit(target.id)
+      prospectVisits.value = prospectVisits.value.filter((visit) => visit.id !== target.id)
+    }
+    deleteTarget.value = null
+  } catch (e) {
+    error.value = formatErrorMessage(e)
+  } finally {
+    deleteBusy.value = false
+  }
 }
 
 function formatDuration(seconds?: number) {
@@ -149,6 +190,9 @@ onMounted(async () => {
                 {{ visit.industryGroup }}
               </span>
             </div>
+            <button class="ht-delete-btn" type="button" aria-label="Delete visit" @click="confirmDelete(visit)">
+              <i class="pi pi-trash" />
+            </button>
           </div>
 
           <div class="ht-visit-details">
@@ -190,7 +234,7 @@ onMounted(async () => {
           <RouterLink
             v-else-if="visit.entityType === 'customer'"
             class="ht-visit-link"
-            :to="`/sales/my-customers/${visit.id}`"
+            :to="`/sales/my-customers/${visit.entityId}`"
           >
             View customer <i class="pi pi-arrow-right" />
           </RouterLink>
@@ -227,6 +271,16 @@ onMounted(async () => {
         <p>Prospect outcomes will appear here.</p>
       </div>
     </template>
+
+    <Dialog v-model:visible="deleteDialogVisible" modal header="Delete History" :style="{ width: 'min(92vw, 400px)' }" :closable="!deleteBusy">
+      <p v-if="deleteTarget" class="ht-delete-copy">
+        Delete visit history for <strong>{{ deleteTarget.entityName }}</strong>? This action cannot be undone.
+      </p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" outlined :disabled="deleteBusy" @click="deleteTarget = null" />
+        <Button label="Delete" icon="pi pi-trash" severity="danger" :loading="deleteBusy" @click="executeDelete" />
+      </template>
+    </Dialog>
   </section>
 </template>
 
@@ -262,6 +316,12 @@ onMounted(async () => {
 .ht-visit-card:hover, .ht-outcome-card:hover { border-color: var(--border-default); box-shadow: var(--shadow-md); transform: translateY(-1px); }
 
 .ht-visit-header { display: flex; align-items: center; gap: 0.6rem; }
+.ht-delete-btn {
+  width: 2rem; height: 2rem; display: grid; place-items: center; flex-shrink: 0;
+  border: 0; border-radius: 10px; background: #fef2f2; color: #dc2626; cursor: pointer;
+}
+.ht-delete-btn:hover { background: #fee2e2; }
+.ht-delete-copy { margin: 0; font-size: 0.85rem; line-height: 1.5; }
 .ht-visit-avatar {
   width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px;
   font-size: 0.7rem; font-weight: 800; color: #fff; flex-shrink: 0;

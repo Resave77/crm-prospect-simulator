@@ -11,7 +11,6 @@ import {
   normalizeRouteId,
   fetchProspectVisitData,
   fetchCustomerVisitData,
-  saveCustomerVisit,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
 import { formatErrorMessage } from '../../../utils/format'
@@ -166,7 +165,7 @@ async function initialize() {
       location.startWatching()
       loadStoredVisitResult()
     } else {
-      const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
+      const { entity: ctx, sourceProspectId } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx
 
       if (!entity.value) {
@@ -174,13 +173,20 @@ async function initialize() {
         return
       }
 
+      const { review } = await fetchProspectVisitData(sourceProspectId)
+      const open = review.visits.find((v) => !v.checkOutAt)
+      if (!open) {
+        pageState.value = 'no-active-visit'
+        return
+      }
+
+      activeVisit.value = { id: open.id, checkInAt: open.checkInAt }
+      startElapsedTimer()
+
       if (entity.value.latitude == null || entity.value.longitude == null) {
         pageState.value = 'location-unavailable'
         return
       }
-
-      activeVisit.value = { id: 'customer-sim', checkInAt: new Date().toISOString() }
-      startElapsedTimer()
 
       pageState.value = 'ready'
       location.startWatching()
@@ -230,20 +236,12 @@ async function handleSubmit() {
         params: { id: entity.value.entityId },
       })
     } else {
-      const stored = storedVisitResult.value
-      const coords = await location.refreshOnce().catch(() => location.state.value.coords)
-      saveCustomerVisit({
-        entityId: entity.value.entityId,
-        entityName: entity.value.name,
-        entityType: 'customer',
-        checkInAt: activeVisit.value.checkInAt,
-        checkOutAt: new Date().toISOString(),
-        checkInLatitude: coords?.latitude ?? 0,
-        checkInLongitude: coords?.longitude ?? 0,
+      await checkOutProspect(entity.value.entityId, activeVisit.value.id, {
+        latitude: lat,
+        longitude: lng,
+        followUpNotes: stored?.followUpNotes ?? '',
         visitResult: stored?.visitResult ?? '',
         visitOutcome: stored?.visitOutcome ?? '',
-        followUpNotes: stored?.followUpNotes ?? '',
-        followUpDate: stored?.followUpDate ?? '',
       })
 
       localStorage.removeItem(localStorageKey())

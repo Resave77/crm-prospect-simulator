@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
+	customerrepo "crm-prospect-simulator/backend/internal/customer/repository"
 	customerservice "crm-prospect-simulator/backend/internal/customer/service"
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 	"crm-prospect-simulator/backend/internal/prospect/repository"
@@ -86,6 +87,21 @@ func (h *Handler) autoConvert(ctx context.Context, prospectID uuid.UUID) {
 	}
 }
 
+func (h *Handler) resolveProspectID(ctx context.Context, id uuid.UUID, act service.Actor) (uuid.UUID, error) {
+	if h.customerSvc == nil {
+		return id, nil
+	}
+	custActor := customerservice.Actor{UserID: act.UserID, Role: act.Role}
+	detail, err := h.customerSvc.MyCustomer(ctx, custActor, id)
+	if err != nil {
+		if errors.Is(err, customerrepo.ErrNotFound) || errors.Is(err, customerservice.ErrForbidden) {
+			return id, nil
+		}
+		return uuid.UUID{}, err
+	}
+	return detail.Customer.SourceProspectID, nil
+}
+
 func (h *Handler) CheckIn(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -122,7 +138,12 @@ func (h *Handler) CheckIn(c *fiber.Ctx) error {
 		input.SelfieReference = "/uploads/selfies/" + filename
 	}
 
-	item, err := h.service.CheckIn(c.UserContext(), actor(c), id, input)
+	prospectID, err := h.resolveProspectID(c.UserContext(), id, actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+
+	item, err := h.service.CheckIn(c.UserContext(), actor(c), prospectID, input)
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -142,7 +163,12 @@ func (h *Handler) CheckOut(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
 	}
-	item, err := h.service.CheckOut(c.UserContext(), actor(c), prospectID, visitID, input)
+	resolvedID, err := h.resolveProspectID(c.UserContext(), prospectID, actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+
+	item, err := h.service.CheckOut(c.UserContext(), actor(c), resolvedID, visitID, input)
 	if err != nil {
 		return writeError(c, err)
 	}

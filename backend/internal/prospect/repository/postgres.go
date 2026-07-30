@@ -209,7 +209,15 @@ func (r *PostgresRepository) CheckIn(ctx context.Context, prospectID, salesExecu
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO prospect_visits (id, prospect_id, sales_executive_id, check_in_at, check_in_latitude, check_in_longitude, selfie_reference, visit_notes)
 		SELECT $1, p.id, $3, now(), $4, $5, $6, $7 FROM prospects p
-		WHERE p.id = $2 AND p.assigned_sales_executive_id = $3 AND p.status NOT IN ('LOST','CONVERTED')`,
+		WHERE p.id = $2
+		  AND (
+			p.assigned_sales_executive_id = $3
+			OR EXISTS (
+				SELECT 1 FROM customer_sites cs
+				WHERE cs.source_prospect_id = p.id AND cs.sales_executive_id = $3
+			)
+		  )
+		  AND p.status NOT IN ('LOST')`,
 		id, prospectID, salesExecutiveID, input.Latitude, input.Longitude, selfie, input.VisitNotes)
 	if err != nil {
 		var pgError *pgconn.PgError
@@ -235,7 +243,15 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 	command, err := r.pool.Exec(ctx, `
 		UPDATE prospect_visits v SET check_out_at=now(), check_out_latitude=$4, check_out_longitude=$5, follow_up_notes=$6, visit_result=$7, visit_outcome=$8, updated_at=now()
 		FROM prospects p WHERE v.id=$2 AND v.prospect_id=$1 AND p.id=v.prospect_id
-		AND v.sales_executive_id=$3 AND p.assigned_sales_executive_id=$3 AND v.check_out_at IS NULL`,
+		AND v.sales_executive_id=$3
+		AND (
+			p.assigned_sales_executive_id=$3
+			OR EXISTS (
+				SELECT 1 FROM customer_sites cs
+				WHERE cs.source_prospect_id = p.id AND cs.sales_executive_id = $3
+			)
+		)
+		AND v.check_out_at IS NULL`,
 		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome)
 	if err != nil {
 		return model.Visit{}, fmt.Errorf("check out prospect visit: %w", err)
@@ -264,39 +280,42 @@ func (r *PostgresRepository) ListMyVisits(ctx context.Context, salesExecutiveID 
 
 func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExecutiveID string, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
 	const baseQuery = `
-		SELECT v.id, v.prospect_id, p.place_name, p.place_category,
+		SELECT v.id, v.prospect_id, COALESCE(cs.name, p.place_name), COALESCE(cs.category, p.place_category),
 		       COALESCE(p.industry_group, ''),
-		       COALESCE(p.formatted_address, ''),
+		       COALESCE(cs.preview_address, p.formatted_address, ''),
 		       COALESCE(p.phone_number, ''),
-		       p.latitude, p.longitude,
+		       COALESCE(cs.latitude, p.latitude), COALESCE(cs.longitude, p.longitude),
 		       v.sales_executive_id, u.full_name,
 		       v.check_in_at, v.check_out_at,
 		       v.check_in_latitude, v.check_in_longitude,
 		       v.check_out_latitude, v.check_out_longitude,
-		       CASE WHEN p.latitude IS NOT NULL AND p.longitude IS NOT NULL THEN
+		       CASE WHEN COALESCE(cs.latitude, p.latitude) IS NOT NULL AND COALESCE(cs.longitude, p.longitude) IS NOT NULL THEN
 		           (2 * 6371000 * ASIN(SQRT(
-		             POWER(SIN(RADIANS(v.check_in_latitude - p.latitude) / 2), 2) +
-		             COS(RADIANS(p.latitude)) * COS(RADIANS(v.check_in_latitude)) *
-		             POWER(SIN(RADIANS(v.check_in_longitude - p.longitude) / 2), 2)
+		             POWER(SIN(RADIANS(v.check_in_latitude - COALESCE(cs.latitude, p.latitude)) / 2), 2) +
+		             COS(RADIANS(COALESCE(cs.latitude, p.latitude))) * COS(RADIANS(v.check_in_latitude)) *
+		             POWER(SIN(RADIANS(v.check_in_longitude - COALESCE(cs.longitude, p.longitude)) / 2), 2)
 		           )))
 		       ELSE 0 END AS distance_meters,
 		       CASE WHEN v.check_out_at IS NOT NULL THEN
 		           EXTRACT(EPOCH FROM (v.check_out_at - v.check_in_at))
 		       ELSE NULL END AS duration_seconds,
-		       CASE WHEN p.latitude IS NOT NULL AND p.longitude IS NOT NULL THEN
+		       CASE WHEN COALESCE(cs.latitude, p.latitude) IS NOT NULL AND COALESCE(cs.longitude, p.longitude) IS NOT NULL THEN
 		           CASE WHEN (2 * 6371000 * ASIN(SQRT(
-		             POWER(SIN(RADIANS(v.check_in_latitude - p.latitude) / 2), 2) +
-		             COS(RADIANS(p.latitude)) * COS(RADIANS(v.check_in_latitude)) *
-		             POWER(SIN(RADIANS(v.check_in_longitude - p.longitude) / 2), 2)
+		             POWER(SIN(RADIANS(v.check_in_latitude - COALESCE(cs.latitude, p.latitude)) / 2), 2) +
+		             COS(RADIANS(COALESCE(cs.latitude, p.latitude))) * COS(RADIANS(v.check_in_latitude)) *
+		             POWER(SIN(RADIANS(v.check_in_longitude - COALESCE(cs.longitude, p.longitude)) / 2), 2)
 		           ))) <= 100 THEN 'INSIDE' ELSE 'OUTSIDE' END
 		       ELSE 'UNKNOWN' END AS radius_status,
 		       p.status::text AS prospect_status,
 		       v.selfie_reference, v.visit_notes, v.follow_up_notes,
 		       (SELECT COUNT(*)::int FROM prospect_visits pv WHERE pv.prospect_id = v.prospect_id) AS visit_count,
-		       v.visit_result, v.visit_outcome
+		       v.visit_result, v.visit_outcome,
+		       cs.id, CASE WHEN cs.id IS NULL THEN 'prospect' ELSE 'customer' END
 		FROM prospect_visits v
 		JOIN users u ON u.id = v.sales_executive_id
-		JOIN prospects p ON p.id = v.prospect_id`
+		JOIN prospects p ON p.id = v.prospect_id
+		LEFT JOIN customer_sites cs ON cs.source_prospect_id = p.id
+		  AND cs.sales_executive_id = v.sales_executive_id`
 
 	whereClauses := make([]string, 0)
 	args := make([]any, 0)
@@ -324,7 +343,7 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 		argIdx++
 	}
 	if filter.CustomerName != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("p.place_name ILIKE $%d", argIdx))
+		whereClauses = append(whereClauses, fmt.Sprintf("COALESCE(cs.name, p.place_name) ILIKE $%d", argIdx))
 		args = append(args, "%"+filter.CustomerName+"%")
 		argIdx++
 	}
@@ -361,6 +380,7 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 			&item.DistanceMeters, &item.DurationSeconds, &item.RadiusStatus,
 			&item.ProspectStatus, &item.SelfieReference, &item.VisitNotes, &item.FollowUpNotes,
 			&item.VisitCount, &item.VisitResult, &item.VisitOutcome,
+			&item.CustomerID, &item.EntityType,
 		); err != nil {
 			return nil, fmt.Errorf("scan visit monitoring: %w", err)
 		}
@@ -407,8 +427,19 @@ func (r *PostgresRepository) ListProspectVisits(ctx context.Context, prospectID 
 	return items, rows.Err()
 }
 
-func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID, adminID uuid.UUID) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID)
+func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID, salesExecutiveID uuid.UUID) error {
+	var (
+		tag pgconn.CommandTag
+		err error
+	)
+	if salesExecutiveID == uuid.Nil {
+		tag, err = r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID)
+	} else {
+		tag, err = r.pool.Exec(ctx, `
+			DELETE FROM prospect_visits
+			WHERE id = $1 AND sales_executive_id = $2`,
+			visitID, salesExecutiveID)
+	}
 	if err != nil {
 		return fmt.Errorf("delete visit: %w", err)
 	}

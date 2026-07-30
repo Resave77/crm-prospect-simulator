@@ -120,6 +120,10 @@ export async function deleteVisit(visitId: string) {
   await api.post(`/admin/visits/${visitId}/delete`)
 }
 
+export async function deleteMyVisit(visitId: string) {
+  await api.post(`/sales/visits/${visitId}/delete`)
+}
+
 export async function getParentCompany(id: string) {
   return (await api.get<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`)).data.data
 }
