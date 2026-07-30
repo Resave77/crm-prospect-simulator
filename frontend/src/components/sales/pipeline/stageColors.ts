@@ -23,7 +23,7 @@ export function stageTone(status: ProspectStatus): StageTone {
 }
 
 export function stageLabel(status: ProspectStatus): string {
-  return status.replaceAll('_', ' ')
+  return status.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
 export function stageInitial(status: ProspectStatus): string {

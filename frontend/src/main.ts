@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
 import { definePreset } from '@primeuix/themes'
+import ToastService from 'primevue/toastservice'
 import 'primeicons/primeicons.css'
 import './assets/main.css'
 import App from './App.vue'
@@ -57,4 +58,5 @@ createApp(App)
   .use(pinia)
   .use(PrimeVue, { theme: { preset: RefinedAura } })
   .use(router)
+  .use(ToastService)
   .mount('#app')

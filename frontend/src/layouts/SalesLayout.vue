@@ -41,6 +41,7 @@
 
     <!-- Main content area -->
     <div class="sales-shell">
+      <Toast position="top-right" />
       <main class="sales-content">
         <RouterView />
       </main>
@@ -70,6 +71,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -106,17 +108,36 @@ async function logout() {
     right: 1.5rem;
   }
 }
+
+/* ── Toast positioning for Sales layout ── */
+.sales-layout .p-toast-top-right {
+  top: 1rem;
+  right: 1.5rem;
+}
+@media (max-width: 767px) {
+  .sales-layout .p-toast {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+  .sales-layout .p-toast-top-right {
+    top: calc(env(safe-area-inset-top) + 0.75rem);
+    right: 1rem;
+  }
+}
 </style>
 
 <style scoped>
 /* ── Layout Root ──────────────────────────────────────────────── */
 .sales-layout {
   --sales-shell-sidebar-w: 0px;
+  --sales-nav-height: 78px;
   display: flex;
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
-  background: var(--surface-page);
+  background:
+    linear-gradient(180deg, #f3f7fd 0%, #f8fafc 42%, #f8fafc 100%);
 }
 
 /* ── Desktop Sidebar ──────────────────────────────────────────── */
@@ -127,45 +148,57 @@ async function logout() {
 /* ── Mobile Bottom Nav ────────────────────────────────────────── */
 .sales-nav {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.98);
-  border-top: 1px solid var(--border-light);
-  border-radius: 20px 20px 0 0;
+  bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
+  left: 0.75rem;
+  right: 0.75rem;
+  width: auto;
+  max-width: 460px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(219, 226, 237, 0.9);
+  border-radius: 24px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+  padding: 0.45rem;
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.14),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
   z-index: 100;
 }
 
 .sales-nav .nav-item {
   min-width: 0;
-  min-height: 52px;
+  min-height: 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.18rem;
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.62rem;
-  font-weight: 600;
-  border-radius: 14px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  border-radius: 18px;
   transition: all 0.2s ease;
 }
 
 .sales-nav .nav-item i {
-  font-size: 1.05rem;
-  transition: color 0.2s ease;
+  font-size: 1.18rem;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .sales-nav .nav-item.router-link-active {
   color: var(--brand-blue);
-  background: var(--brand-blue-50);
+  background: #eef5ff;
   font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+}
+
+.sales-nav .nav-item.router-link-active i {
+  transform: translateY(-1px);
 }
 
 .sales-nav .nav-item:not(.router-link-active):hover {
@@ -177,20 +210,21 @@ async function logout() {
   flex: 1;
   min-width: 0;
   width: 100%;
-  padding-bottom: 80px;
+  padding-bottom: calc(var(--sales-nav-height) + 1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .sales-content {
   width: 100%;
-  max-width: 1280px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 1.15rem;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem 1.25rem;
 }
 
 /* ── Desktop Breakpoint ───────────────────────────────────────── */
 @media (min-width: 768px) {
   .sales-layout {
     --sales-shell-sidebar-w: 240px;
+    --sales-nav-height: 0px;
   }
 
   .sales-sidebar {
@@ -216,6 +250,7 @@ async function logout() {
   }
 
   .sales-content {
+    max-width: 1280px;
     padding: 2rem;
   }
 }
