@@ -31,6 +31,8 @@ type VisitMonitoringItem struct {
 	SelfieReference      string     `json:"selfieReference"`
 	VisitNotes           string     `json:"visitNotes"`
 	FollowUpNotes        string     `json:"followUpNotes"`
+	VisitResult          string     `json:"visitResult"`
+	VisitOutcome         string     `json:"visitOutcome"`
 	VisitCount           int        `json:"visitCount"`
 }
 

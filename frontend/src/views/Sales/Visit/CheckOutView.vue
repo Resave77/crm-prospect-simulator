@@ -213,6 +213,8 @@ async function handleSubmit() {
         latitude: lat,
         longitude: lng,
         followUpNotes: stored?.followUpNotes ?? '',
+        visitResult: stored?.visitResult ?? '',
+        visitOutcome: stored?.visitOutcome ?? '',
       })
 
       try {

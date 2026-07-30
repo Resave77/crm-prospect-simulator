@@ -264,6 +264,7 @@ onMounted(async () => {
                 <td class="td-action">
                   <div class="row-actions">
                     <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="viewProspect(p.id)" />
+                    <Button v-if="p.status === 'WON'" icon="pi pi-arrow-right" text rounded size="small" class="act-convert" title="Convert to Customer" @click="router.push(`/admin/prospects/${p.id}/convert`)" />
                     <template v-if="p.deletionRequested">
                       <Button icon="pi pi-check" text rounded size="small" class="act-approve" title="Approve Deletion" @click="confirmApproveDeletion(p)" />
                       <Button icon="pi pi-times" text rounded size="small" class="act-reject" title="Reject Deletion" @click="executeRejectDeletion(p)" />

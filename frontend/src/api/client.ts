@@ -9,6 +9,7 @@ export const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
   headers: { Accept: 'application/json' },
+  timeout: 30000,
 })
 
 let accessToken: string | null = null

@@ -77,6 +77,8 @@ export interface ProspectVisit {
   selfieReference: string
   visitNotes: string
   followUpNotes: string
+  visitResult: string
+  visitOutcome: string
 }
 
 export interface Address {
@@ -327,6 +329,8 @@ export interface VisitMonitoringItem {
   selfieReference: string
   visitNotes: string
   followUpNotes: string
+  visitResult: string
+  visitOutcome: string
   visitCount: number
 }
 

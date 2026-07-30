@@ -73,7 +73,6 @@ async function logout() {
           <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
         </button>
         <form class="global-search" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="submit">Enter</button></form>
-        <RouterLink class="icon-control" to="/admin/prospects/won" aria-label="Won prospect notifications"><i class="pi pi-bell" /></RouterLink>
         <div class="topbar-spacer" />
         <details class="profile-menu">
           <summary>

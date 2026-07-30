@@ -11,9 +11,14 @@ import RadioButton from 'primevue/radiobutton'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
+import axios from 'axios'
 import { convertProspect, getConversionForm, searchParentCompanies } from '../../../api/crm'
 import { useCrmStore } from '../../../stores/crm'
 import type { Address, Contact, ConversionFormData, ConversionInput, ParentCompany, PeriodAssignment } from '../../../types/crm'
+
+function clone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +28,7 @@ const error = ref('')
 const submitted = ref(false)
 const saving = ref(false)
 const loading = ref(true)
+const timedOut = ref(false)
 const companySuggestions = ref<ParentCompany[]>([])
 const showConfirmDialog = ref(false)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
@@ -32,8 +38,8 @@ const blankContact = (phone = ''): Contact => ({ name: '', position: '', phone, 
 const blankAssignment = (): PeriodAssignment => ({ ownerId: '', ownerName: '', startMonth: new Date().getMonth() + 1, startYear: new Date().getFullYear(), end: 'UNTIL_NOW' })
 
 const form = reactive<ConversionInput>({
-  customerName: '', customerSegment: '', customerCategory: '', parentMethod: '', existingParentCompanyId: null,
-  parentCompanyName: '', sameAsSiteAddress: false, siteAddress: blankAddress(), companyAddress: blankAddress(),
+  customerName: '', customerSegment: 'General Trade', customerCategory: '', parentMethod: 'MATCH_CUSTOMER_NAME', existingParentCompanyId: null,
+  parentCompanyName: '', sameAsSiteAddress: true, siteAddress: blankAddress(), companyAddress: blankAddress(),
   siteContacts: [], companyContacts: [], ppn: '', idTkuNumber: '', nik: '', companyNpwpName: '',
   companyNpwpAddress: '', companyNpwpNumber: '', shipmentCost: '', invoiceType: '', bankAccount: '',
   termOfPayment: '', billToSource: '', shipToSource: '', billingAddressPreview: '', shippingAddressPreview: '',
@@ -89,6 +95,8 @@ const progressPercent = computed(() => {
   const required = sectionStatus.value.filter((s) => s.required)
   return Math.round((required.filter((s) => s.done).length / required.length) * 100)
 })
+
+const collapsedSections = reactive<Record<string, boolean>>({ 'sec-03': true, 'sec-04': true, 'sec-05': true, 'sec-06': true })
 
 const googleDataIssues = computed(() => {
   if (!data.value) return []
@@ -157,8 +165,19 @@ function selectCompanySuggestion(company: ParentCompany) {
 }
 
 onMounted(async () => {
+  console.log('[ConversionForm] mounted, loading id:', route.params.id)
+
+  const failTimer = setTimeout(() => {
+    if (!data.value && !error.value) {
+      timedOut.value = true
+      error.value = 'Conversion form took too long to load. Cek console browser (F12 > Console) untuk detail.'
+    }
+  }, 15000)
+
   try {
+    console.log('[ConversionForm] calling getConversionForm...')
     data.value = await getConversionForm(String(route.params.id))
+    console.log('[ConversionForm] getConversionForm succeeded')
     const prospect = data.value.prospect.prospect
     const detail = data.value.placeDetails
 
@@ -173,14 +192,16 @@ onMounted(async () => {
     const phone = detail?.internationalPhone || detail?.phoneNumber || prospect.phoneNumber
     form.siteContacts = phone ? [blankContact(phone)] : []
 
-    if (detail?.websiteUrl) {
-      const websiteContact = blankContact()
-      websiteContact.email = detail.websiteUrl
-      form.siteContacts.push(websiteContact)
-    }
+
 
     form.salesExecutiveId = prospect.assignedSalesExecutiveId
     autoParseAddress()
+
+    if (data.value.options.segments.includes('General Trade')) {
+      form.customerSegment = 'General Trade'
+    }
+
+    form.siteContacts = form.siteContacts.filter((c) => c.phone || c.email)
 
     if (form.customerName) {
       try {
@@ -189,15 +210,21 @@ onMounted(async () => {
         if (exactMatch) {
           form.existingParentCompanyId = exactMatch.id
           form.parentMethod = 'EXISTING_COMPANY'
-        } else if (results.length === 1 && results[0].name.toLowerCase().includes(form.customerName.toLowerCase())) {
+        } else {
           form.parentMethod = 'MATCH_CUSTOMER_NAME'
           form.parentCompanyName = form.customerName
         }
-      } catch {}
+      } catch {
+        form.parentMethod = 'MATCH_CUSTOMER_NAME'
+        form.parentCompanyName = form.customerName
+      }
     }
   } catch (caught) {
-    error.value = crm.errorMessage(caught)
+    const msg = crm.errorMessage(caught)
+    console.error('[ConversionForm] error:', caught, 'message:', msg)
+    error.value = msg
   } finally {
+    clearTimeout(failTimer)
     loading.value = false
   }
 })
@@ -230,11 +257,11 @@ watch(() => form.existingParentCompanyId, () => {
 })
 
 watch(() => form.sameAsSiteAddress, (same) => {
-  if (same && !isExistingParent.value) form.companyAddress = structuredClone(form.siteAddress)
+  if (same && !isExistingParent.value) form.companyAddress = clone(form.siteAddress)
 })
 
 watch(() => form.siteAddress, (address) => {
-  if (form.sameAsSiteAddress && !isExistingParent.value) form.companyAddress = structuredClone(address)
+  if (form.sameAsSiteAddress && !isExistingParent.value) form.companyAddress = clone(address)
 }, { deep: true })
 
 watch(() => form.parentCompanyName, (name) => suggestCompanies(name))
@@ -283,7 +310,12 @@ async function executeConvert() {
     await convertProspect(String(route.params.id), form)
     await router.push({ path: '/admin/customers', query: { converted: '1' } })
   } catch (caught) {
-    error.value = crm.errorMessage(caught)
+    const msg = crm.errorMessage(caught)
+    console.error('[ConversionForm] convert failed:', caught, 'msg:', msg)
+    if (axios.isAxiosError(caught)) {
+      console.error('[ConversionForm] response data:', caught.response?.data)
+    }
+    error.value = msg
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } finally {
     saving.value = false
@@ -340,7 +372,7 @@ async function executeConvert() {
       </div>
 
       <!-- Form -->
-      <form class="conversion-layout" @submit.prevent="confirmConvert">
+      <form novalidate class="conversion-layout" @submit.prevent="confirmConvert">
         <div class="conversion-main">
 
           <!-- 01 Customer Information -->
@@ -449,113 +481,125 @@ async function executeConvert() {
           </section>
 
           <!-- 03 Contacts -->
-          <section id="sec-03" class="form-section">
-            <div class="section-heading">
+          <section id="sec-03" class="form-section collapsible-section" :class="{ collapsed: collapsedSections['sec-03'] }">
+            <button type="button" class="section-toggle" @click="collapsedSections['sec-03'] = !collapsedSections['sec-03']">
               <span>03</span>
               <div><h2>Contact Information</h2><p>Optional repeatable contacts for Site and Company.</p></div>
-            </div>
-            <div class="dual-cards">
-              <article class="form-card">
-                <div class="card-label"><strong>Site Contacts</strong><Tag value="Optional" severity="secondary" /></div>
-                <div v-for="(contact, index) in form.siteContacts" :key="index" class="repeat-card">
-                  <div class="repeat-heading">
-                    <span>Contact {{ index + 1 }}</span>
-                    <Button icon="pi pi-trash" severity="danger" text rounded type="button" @click="form.siteContacts.splice(index, 1)" />
+              <i :class="collapsedSections['sec-03'] ? 'pi pi-chevron-down' : 'pi pi-chevron-up'" />
+            </button>
+            <div v-show="!collapsedSections['sec-03']" class="section-body">
+              <div class="dual-cards">
+                <article class="form-card">
+                  <div class="card-label"><strong>Site Contacts</strong><Tag value="Optional" severity="secondary" /></div>
+                  <div v-for="(contact, index) in form.siteContacts" :key="index" class="repeat-card">
+                    <div class="repeat-heading">
+                      <span>Contact {{ index + 1 }}</span>
+                      <Button icon="pi pi-trash" severity="danger" text rounded type="button" @click="form.siteContacts.splice(index, 1)" />
+                    </div>
+                    <div class="two-fields">
+                      <label class="field"><span>Name</span><InputText v-model="contact.name" fluid /></label>
+                      <label class="field"><span>Position</span><InputText v-model="contact.position" fluid /></label>
+                    </div>
+                    <div class="two-fields">
+                      <label class="field"><span>Phone</span><InputText v-model="contact.phone" fluid /></label>
+                      <label class="field"><span>Email</span><InputText v-model="contact.email" type="email" fluid /></label>
+                    </div>
                   </div>
-                  <div class="two-fields">
-                    <label class="field"><span>Name</span><InputText v-model="contact.name" fluid /></label>
-                    <label class="field"><span>Position</span><InputText v-model="contact.position" fluid /></label>
+                  <Button label="Add Site Contact" icon="pi pi-plus" severity="secondary" outlined type="button" @click="addContact('site')" />
+                </article>
+                <article class="form-card">
+                  <div class="card-label"><strong>Company Contacts</strong><Tag :value="isExistingParent ? 'Locked' : 'Optional'" severity="secondary" /></div>
+                  <div v-for="(contact, index) in form.companyContacts" :key="index" class="repeat-card">
+                    <div class="repeat-heading">
+                      <span>Contact {{ index + 1 }}</span>
+                      <Button v-if="!isExistingParent" icon="pi pi-trash" severity="danger" text rounded type="button" @click="form.companyContacts.splice(index, 1)" />
+                    </div>
+                    <div class="two-fields">
+                      <label class="field"><span>Name</span><InputText v-model="contact.name" :disabled="isExistingParent" fluid /></label>
+                      <label class="field"><span>Position</span><InputText v-model="contact.position" :disabled="isExistingParent" fluid /></label>
+                    </div>
+                    <div class="two-fields">
+                      <label class="field"><span>Phone</span><InputText v-model="contact.phone" :disabled="isExistingParent" fluid /></label>
+                      <label class="field"><span>Email</span><InputText v-model="contact.email" :disabled="isExistingParent" type="email" fluid /></label>
+                    </div>
                   </div>
-                  <div class="two-fields">
-                    <label class="field"><span>Phone</span><InputText v-model="contact.phone" fluid /></label>
-                    <label class="field"><span>Email</span><InputText v-model="contact.email" type="email" fluid /></label>
-                  </div>
-                </div>
-                <Button label="Add Site Contact" icon="pi pi-plus" severity="secondary" outlined type="button" @click="addContact('site')" />
-              </article>
-              <article class="form-card">
-                <div class="card-label"><strong>Company Contacts</strong><Tag :value="isExistingParent ? 'Locked' : 'Optional'" severity="secondary" /></div>
-                <div v-for="(contact, index) in form.companyContacts" :key="index" class="repeat-card">
-                  <div class="repeat-heading">
-                    <span>Contact {{ index + 1 }}</span>
-                    <Button v-if="!isExistingParent" icon="pi pi-trash" severity="danger" text rounded type="button" @click="form.companyContacts.splice(index, 1)" />
-                  </div>
-                  <div class="two-fields">
-                    <label class="field"><span>Name</span><InputText v-model="contact.name" :disabled="isExistingParent" fluid /></label>
-                    <label class="field"><span>Position</span><InputText v-model="contact.position" :disabled="isExistingParent" fluid /></label>
-                  </div>
-                  <div class="two-fields">
-                    <label class="field"><span>Phone</span><InputText v-model="contact.phone" :disabled="isExistingParent" fluid /></label>
-                    <label class="field"><span>Email</span><InputText v-model="contact.email" :disabled="isExistingParent" type="email" fluid /></label>
-                  </div>
-                </div>
-                <Button v-if="!isExistingParent" label="Add Company Contact" icon="pi pi-plus" severity="secondary" outlined type="button" @click="addContact('company')" />
-              </article>
+                  <Button v-if="!isExistingParent" label="Add Company Contact" icon="pi pi-plus" severity="secondary" outlined type="button" @click="addContact('company')" />
+                </article>
+              </div>
             </div>
           </section>
 
           <!-- 04 Tax -->
-          <section id="sec-04" class="form-section">
-            <div class="section-heading">
+          <section id="sec-04" class="form-section collapsible-section" :class="{ collapsed: collapsedSections['sec-04'] }">
+            <button type="button" class="section-toggle" @click="collapsedSections['sec-04'] = !collapsedSections['sec-04']">
               <span>04</span>
               <div><h2>Tax Information</h2><p>Optional; never sourced from Google Places.</p></div>
-            </div>
-            <div class="dual-cards">
-              <article class="form-card">
-                <div class="card-label"><strong>Site Tax</strong><Tag value="Optional" severity="secondary" /></div>
-                <label class="field"><span>PPN</span><Select v-model="form.ppn" :options="['PKP', 'Non-PKP']" show-clear fluid /></label>
-                <label class="field"><span>ID TKU Number</span><InputText v-model="form.idTkuNumber" fluid /></label>
-                <label class="field"><span>NIK</span><InputText v-model="form.nik" fluid /></label>
-              </article>
-              <article class="form-card">
-                <div class="card-label"><strong>Company Tax</strong><Tag :value="isExistingParent ? 'Synced' : 'Optional'" severity="secondary" /></div>
-                <label class="field"><span>NPWP Name</span><InputText v-model="form.companyNpwpName" :disabled="isExistingParent" fluid /></label>
-                <label class="field"><span>NPWP Address</span><Textarea v-model="form.companyNpwpAddress" :disabled="isExistingParent" rows="2" fluid /></label>
-                <label class="field"><span>NPWP Number</span><InputText v-model="form.companyNpwpNumber" :disabled="isExistingParent" fluid /></label>
-              </article>
+              <i :class="collapsedSections['sec-04'] ? 'pi pi-chevron-down' : 'pi pi-chevron-up'" />
+            </button>
+            <div v-show="!collapsedSections['sec-04']" class="section-body">
+              <div class="dual-cards">
+                <article class="form-card">
+                  <div class="card-label"><strong>Site Tax</strong><Tag value="Optional" severity="secondary" /></div>
+                  <label class="field"><span>PPN</span><Select v-model="form.ppn" :options="['PKP', 'Non-PKP']" show-clear fluid /></label>
+                  <label class="field"><span>ID TKU Number</span><InputText v-model="form.idTkuNumber" fluid /></label>
+                  <label class="field"><span>NIK</span><InputText v-model="form.nik" fluid /></label>
+                </article>
+                <article class="form-card">
+                  <div class="card-label"><strong>Company Tax</strong><Tag :value="isExistingParent ? 'Synced' : 'Optional'" severity="secondary" /></div>
+                  <label class="field"><span>NPWP Name</span><InputText v-model="form.companyNpwpName" :disabled="isExistingParent" fluid /></label>
+                  <label class="field"><span>NPWP Address</span><Textarea v-model="form.companyNpwpAddress" :disabled="isExistingParent" rows="2" fluid /></label>
+                  <label class="field"><span>NPWP Number</span><InputText v-model="form.companyNpwpNumber" :disabled="isExistingParent" fluid /></label>
+                </article>
+              </div>
             </div>
           </section>
 
           <!-- 05 Master Data -->
-          <section id="sec-05" class="form-section">
-            <div class="section-heading">
+          <section id="sec-05" class="form-section collapsible-section" :class="{ collapsed: collapsedSections['sec-05'] }">
+            <button type="button" class="section-toggle" @click="collapsedSections['sec-05'] = !collapsedSections['sec-05']">
               <span>05</span>
               <div><h2>Other Master Data</h2><p>Local options simulate ERP master selections.</p></div>
-            </div>
-            <div class="dual-cards">
-              <article class="form-card">
-                <div class="card-label"><strong>Customer Site</strong><Tag value="Optional" severity="secondary" /></div>
-                <label class="field"><span>Shipment Cost</span><Select v-model="form.shipmentCost" :options="data.options.shipmentCosts" show-clear fluid /></label>
-                <label class="field"><span>Invoice Type</span><Select v-model="form.invoiceType" :options="data.options.invoiceTypes" show-clear fluid /></label>
-                <label class="field"><span>Bank Account</span><InputText v-model="form.bankAccount" placeholder="Simulation reference" fluid /></label>
-              </article>
-              <article class="form-card">
-                <div class="card-label"><strong>Company</strong><Tag :value="isExistingParent ? 'Synced' : 'Optional'" severity="secondary" /></div>
-                <label class="field"><span>Term of Payment</span><Select v-model="form.termOfPayment" :options="data.options.termsOfPayment" :disabled="isExistingParent" show-clear fluid /></label>
-              </article>
+              <i :class="collapsedSections['sec-05'] ? 'pi pi-chevron-down' : 'pi pi-chevron-up'" />
+            </button>
+            <div v-show="!collapsedSections['sec-05']" class="section-body">
+              <div class="dual-cards">
+                <article class="form-card">
+                  <div class="card-label"><strong>Customer Site</strong><Tag value="Optional" severity="secondary" /></div>
+                  <label class="field"><span>Shipment Cost</span><Select v-model="form.shipmentCost" :options="data.options.shipmentCosts" show-clear fluid /></label>
+                  <label class="field"><span>Invoice Type</span><Select v-model="form.invoiceType" :options="data.options.invoiceTypes" show-clear fluid /></label>
+                  <label class="field"><span>Bank Account</span><InputText v-model="form.bankAccount" placeholder="Simulation reference" fluid /></label>
+                </article>
+                <article class="form-card">
+                  <div class="card-label"><strong>Company</strong><Tag :value="isExistingParent ? 'Synced' : 'Optional'" severity="secondary" /></div>
+                  <label class="field"><span>Term of Payment</span><Select v-model="form.termOfPayment" :options="data.options.termsOfPayment" :disabled="isExistingParent" show-clear fluid /></label>
+                </article>
+              </div>
             </div>
           </section>
 
           <!-- 06 Billing -->
-          <section id="sec-06" class="form-section">
-            <div class="section-heading">
+          <section id="sec-06" class="form-section collapsible-section" :class="{ collapsed: collapsedSections['sec-06'] }">
+            <button type="button" class="section-toggle" @click="collapsedSections['sec-06'] = !collapsedSections['sec-06']">
               <span>06</span>
               <div><h2>Billing & Shipment</h2><p>Optional Document Header preview.</p></div>
+              <i :class="collapsedSections['sec-06'] ? 'pi pi-chevron-down' : 'pi pi-chevron-up'" />
+            </button>
+            <div v-show="!collapsedSections['sec-06']" class="section-body">
+              <article class="form-card">
+                <div class="document-header">
+                  <div><span>Seller Identity</span><strong>{{ data.sellerIdentity }}</strong></div>
+                  <div><span>Customer ID</span><strong>{{ customerCodePreview }}</strong></div>
+                </div>
+                <div class="two-fields">
+                  <label class="field"><span>Bill To Source</span><Select v-model="form.billToSource" :options="documentSources" show-clear fluid /></label>
+                  <label class="field"><span>Ship To Source</span><Select v-model="form.shipToSource" :options="documentSources" show-clear fluid /></label>
+                </div>
+                <div class="dual-preview">
+                  <div><span>Billing address</span><p>{{ billPreview }}</p></div>
+                  <div><span>Shipment address</span><p>{{ shipPreview }}</p></div>
+                </div>
+              </article>
             </div>
-            <article class="form-card">
-              <div class="document-header">
-                <div><span>Seller Identity</span><strong>{{ data.sellerIdentity }}</strong></div>
-                <div><span>Customer ID</span><strong>{{ customerCodePreview }}</strong></div>
-              </div>
-              <div class="two-fields">
-                <label class="field"><span>Bill To Source</span><Select v-model="form.billToSource" :options="documentSources" show-clear fluid /></label>
-                <label class="field"><span>Ship To Source</span><Select v-model="form.shipToSource" :options="documentSources" show-clear fluid /></label>
-              </div>
-              <div class="dual-preview">
-                <div><span>Billing address</span><p>{{ billPreview }}</p></div>
-                <div><span>Shipment address</span><p>{{ shipPreview }}</p></div>
-              </div>
-            </article>
           </section>
 
           <!-- 07 Sales Assignment -->
@@ -814,6 +858,25 @@ async function executeConvert() {
 .suggestion-item span { display: block; color: var(--text-muted); font-size: 0.6rem; margin-top: 0.1rem; }
 
 /* Responsive */
+/* Collapsible sections */
+.collapsible-section { padding: 0; overflow: hidden; }
+.section-toggle {
+  display: flex; width: 100%; gap: 0.75rem; align-items: center; padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  border: 0; background: transparent; cursor: pointer; text-align: left;
+  font: inherit; color: inherit;
+}
+.section-toggle > span {
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  display: grid; place-items: center; border-radius: var(--radius-sm);
+  color: #fff; background: var(--brand-blue);
+  font-size: 0.65rem; font-weight: 800;
+}
+.section-toggle div { flex: 1; }
+.section-toggle h2 { margin: 0; font-size: 1rem; letter-spacing: -0.02em; font-weight: 700; }
+.section-toggle p { margin: 0.15rem 0 0; color: var(--text-muted); font-size: 0.75rem; }
+.section-toggle i { font-size: 0.8rem; color: var(--text-muted); transition: transform var(--transition-fast); }
+.section-body { padding: 0 clamp(1.25rem, 2.5vw, 1.75rem) clamp(1.25rem, 2.5vw, 1.75rem); border-top: 1px solid var(--border-light); }
+
 @media (max-width: 900px) {
   .conversion-layout { grid-template-columns: 1fr; }
   .scope-panel { position: static; order: -1; }

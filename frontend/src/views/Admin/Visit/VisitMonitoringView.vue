@@ -42,6 +42,8 @@ const detailError = ref('')
 const deleteModalItem = ref<VisitMonitoringItem | null>(null)
 const showDeleteModal = ref(false)
 const deleteBusy = ref(false)
+const showVisitResultModal = ref(false)
+const visitResultItem = ref<VisitMonitoringItem | null>(null)
 
 const filters = ref<VisitMonitoringFilters>({
   dateFrom: '',
@@ -223,6 +225,11 @@ function makeVisitItem(visit: ProspectVisit): VisitMonitoringItem {
 
 function openSelfie(item: VisitMonitoringItem) {
   selfieModalItem.value = item
+}
+
+function openVisitResult(item: VisitMonitoringItem) {
+  visitResultItem.value = item
+  showVisitResultModal.value = true
 }
 
 function goToProspect(item: GroupedVisitRow | VisitMonitoringItem) {
@@ -430,6 +437,39 @@ onMounted(() => {
       </template>
     </Dialog>
 
+    <!-- Visit Result Modal -->
+    <Dialog v-model:visible="showVisitResultModal" modal header="Visit Result" :style="{ width: 'min(100%, 420px)' }" :closable="true">
+      <template v-if="visitResultItem">
+        <div class="result-modal-body">
+          <div class="result-customer">
+            <strong>{{ visitResultItem.customerName }}</strong>
+            <span>{{ visitResultItem.salesExecutiveName }} · {{ formatDateShort(visitResultItem.checkInAt) }}</span>
+          </div>
+          <div class="result-fields">
+            <div class="result-field">
+              <span class="result-label">Visit Result</span>
+              <span class="result-value" :class="{ 'result-empty': !visitResultItem.visitResult }">{{ visitResultItem.visitResult || '—' }}</span>
+            </div>
+            <div class="result-field">
+              <span class="result-label">Visit Outcome</span>
+              <span class="result-value" :class="{ 'result-empty': !visitResultItem.visitOutcome }">{{ visitResultItem.visitOutcome || '—' }}</span>
+            </div>
+            <div class="result-field" v-if="visitResultItem.visitNotes">
+              <span class="result-label">Visit Notes</span>
+              <span class="result-value">{{ visitResultItem.visitNotes }}</span>
+            </div>
+            <div class="result-field" v-if="visitResultItem.followUpNotes">
+              <span class="result-label">Follow-up Notes</span>
+              <span class="result-value">{{ visitResultItem.followUpNotes }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <Button label="Close" severity="secondary" outlined @click="showVisitResultModal = false" />
+      </template>
+    </Dialog>
+
     <!-- Visit Detail Modal -->
     <Dialog v-model:visible="showDetailModal" modal :header="'Visit Details - ' + detailProspectName" :style="{ width: 'min(100%, 700px)' }" :closable="true">
       <template v-if="prospectVisitsLoading">
@@ -464,6 +504,8 @@ onMounted(() => {
                 <div class="detail-row"><span class="detail-label">Check In</span><strong>{{ formatDateShort(pv.checkInAt) }} {{ formatTime(pv.checkInAt) }}</strong></div>
                 <div class="detail-row" v-if="pv.checkOutAt"><span class="detail-label">Check Out</span><strong>{{ formatDateShort(pv.checkOutAt) }} {{ formatTime(pv.checkOutAt) }}</strong></div>
                 <div class="detail-row"><span class="detail-label">Sales Executive</span><strong>{{ pv.salesExecutiveName }}</strong></div>
+                <div class="detail-row" v-if="pv.visitResult"><span class="detail-label">Visit Result</span><strong>{{ pv.visitResult }}</strong></div>
+                <div class="detail-row" v-if="pv.visitOutcome"><span class="detail-label">Visit Outcome</span><strong>{{ pv.visitOutcome }}</strong></div>
                 <div class="detail-row" v-if="pv.visitNotes"><span class="detail-label">Visit Notes</span><strong>{{ pv.visitNotes }}</strong></div>
                 <div class="detail-row" v-if="pv.followUpNotes"><span class="detail-label">Follow-up Notes</span><strong>{{ pv.followUpNotes }}</strong></div>
               </div>
@@ -599,6 +641,18 @@ onMounted(() => {
 .act-map:hover { background: #fff7ed !important; }
 .act-delete { color: #dc2626 !important; }
 .act-delete:hover { background: #fef2f2 !important; }
+.act-result { color: #059669 !important; }
+.act-result:hover { background: #ecfdf5 !important; }
+
+.result-modal-body { display: grid; gap: 1rem; }
+.result-customer { padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-light); }
+.result-customer strong { display: block; font-size: 1rem; }
+.result-customer span { color: var(--text-muted); font-size: 0.78rem; }
+.result-fields { display: grid; gap: 0.75rem; }
+.result-field { display: grid; gap: 0.15rem; }
+.result-label { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.result-value { font-size: 0.88rem; color: var(--text-primary); line-height: 1.5; white-space: pre-wrap; }
+.result-empty { color: var(--text-muted); font-style: italic; }
 .act-detail { color: #0d9488 !important; }
 .act-detail:hover { background: #f0fdfa !important; }
 

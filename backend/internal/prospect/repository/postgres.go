@@ -119,7 +119,8 @@ func (r *PostgresRepository) FindReview(ctx context.Context, id uuid.UUID) (mode
 		SELECT v.id, v.prospect_id, v.sales_executive_id, u.full_name,
 		       v.check_in_at, v.check_in_latitude, v.check_in_longitude,
 		       v.check_out_at, v.check_out_latitude, v.check_out_longitude,
-		       v.selfie_reference, v.visit_notes, v.follow_up_notes
+		       v.selfie_reference, v.visit_notes, v.follow_up_notes,
+		       v.visit_result, v.visit_outcome
 		FROM prospect_visits v JOIN users u ON u.id = v.sales_executive_id
 		WHERE v.prospect_id = $1 ORDER BY v.check_in_at DESC`, id)
 	if err != nil {
@@ -232,10 +233,10 @@ func (r *PostgresRepository) CheckIn(ctx context.Context, prospectID, salesExecu
 
 func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, salesExecutiveID uuid.UUID, input model.CheckOutInput) (model.Visit, error) {
 	command, err := r.pool.Exec(ctx, `
-		UPDATE prospect_visits v SET check_out_at=now(), check_out_latitude=$4, check_out_longitude=$5, follow_up_notes=$6, updated_at=now()
+		UPDATE prospect_visits v SET check_out_at=now(), check_out_latitude=$4, check_out_longitude=$5, follow_up_notes=$6, visit_result=$7, visit_outcome=$8, updated_at=now()
 		FROM prospects p WHERE v.id=$2 AND v.prospect_id=$1 AND p.id=v.prospect_id
 		AND v.sales_executive_id=$3 AND p.assigned_sales_executive_id=$3 AND v.check_out_at IS NULL`,
-		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes)
+		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome)
 	if err != nil {
 		return model.Visit{}, fmt.Errorf("check out prospect visit: %w", err)
 	}
@@ -291,7 +292,8 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 		       ELSE 'UNKNOWN' END AS radius_status,
 		       p.status::text AS prospect_status,
 		       v.selfie_reference, v.visit_notes, v.follow_up_notes,
-		       (SELECT COUNT(*)::int FROM prospect_visits pv WHERE pv.prospect_id = v.prospect_id) AS visit_count
+		       (SELECT COUNT(*)::int FROM prospect_visits pv WHERE pv.prospect_id = v.prospect_id) AS visit_count,
+		       v.visit_result, v.visit_outcome
 		FROM prospect_visits v
 		JOIN users u ON u.id = v.sales_executive_id
 		JOIN prospects p ON p.id = v.prospect_id`
@@ -358,7 +360,7 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 			&item.CheckOutLatitude, &item.CheckOutLongitude,
 			&item.DistanceMeters, &item.DurationSeconds, &item.RadiusStatus,
 			&item.ProspectStatus, &item.SelfieReference, &item.VisitNotes, &item.FollowUpNotes,
-			&item.VisitCount,
+			&item.VisitCount, &item.VisitResult, &item.VisitOutcome,
 		); err != nil {
 			return nil, fmt.Errorf("scan visit monitoring: %w", err)
 		}
@@ -386,7 +388,8 @@ func (r *PostgresRepository) ListProspectVisits(ctx context.Context, prospectID 
 		SELECT v.id, v.prospect_id, v.sales_executive_id, u.full_name,
 		       v.check_in_at, v.check_in_latitude, v.check_in_longitude,
 		       v.check_out_at, v.check_out_latitude, v.check_out_longitude,
-		       v.selfie_reference, v.visit_notes, v.follow_up_notes
+		       v.selfie_reference, v.visit_notes, v.follow_up_notes,
+		       v.visit_result, v.visit_outcome
 		FROM prospect_visits v JOIN users u ON u.id = v.sales_executive_id
 		WHERE v.prospect_id = $1 ORDER BY v.check_in_at DESC`, prospectID)
 	if err != nil {
@@ -526,12 +529,12 @@ func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID u
 }
 
 func (r *PostgresRepository) findVisit(ctx context.Context, id uuid.UUID) (model.Visit, error) {
-	return scanVisit(r.pool.QueryRow(ctx, `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id WHERE v.id=$1`, id))
+	return scanVisit(r.pool.QueryRow(ctx, `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes,v.visit_result,v.visit_outcome FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id WHERE v.id=$1`, id))
 }
 
 func scanVisit(row rowScanner) (model.Visit, error) {
 	var item model.Visit
-	err := row.Scan(&item.ID, &item.ProspectID, &item.SalesExecutiveID, &item.SalesExecutiveName, &item.CheckInAt, &item.CheckInLatitude, &item.CheckInLongitude, &item.CheckOutAt, &item.CheckOutLatitude, &item.CheckOutLongitude, &item.SelfieReference, &item.VisitNotes, &item.FollowUpNotes)
+	err := row.Scan(&item.ID, &item.ProspectID, &item.SalesExecutiveID, &item.SalesExecutiveName, &item.CheckInAt, &item.CheckInLatitude, &item.CheckInLongitude, &item.CheckOutAt, &item.CheckOutLatitude, &item.CheckOutLongitude, &item.SelfieReference, &item.VisitNotes, &item.FollowUpNotes, &item.VisitResult, &item.VisitOutcome)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Visit{}, ErrNotFound
 	}

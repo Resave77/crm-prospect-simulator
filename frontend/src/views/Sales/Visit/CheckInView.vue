@@ -157,8 +157,17 @@ async function initialize() {
 
   try {
     if (resolvedEntityType.value === 'prospect') {
-      const { entity: ctx } = await fetchProspectVisitData(resolvedEntityId.value)
+      const { entity: ctx, review } = await fetchProspectVisitData(resolvedEntityId.value)
       entity.value = ctx
+
+      const openVisit = review.visits.find((v) => !v.checkOutAt)
+      if (openVisit) {
+        router.replace({
+          name: 'SalesProspectVisitResult',
+          params: { id: resolvedEntityId.value },
+        })
+        return
+      }
     } else {
       const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx

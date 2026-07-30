@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"strconv"
 
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
@@ -247,6 +248,7 @@ func writeError(c *fiber.Ctx, err error) error {
 	case errors.Is(err, repository.ErrNotFound), errors.Is(err, prospectrepository.ErrNotFound):
 		return response.Error(c, fiber.StatusNotFound, "RECORD_NOT_FOUND", "The requested record was not found.")
 	default:
-		return err
+		slog.Error("unhandled error", "error", err)
+		return response.Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
 	}
 }

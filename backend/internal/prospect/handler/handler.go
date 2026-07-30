@@ -411,6 +411,7 @@ func writeError(c *fiber.Ctx, err error) error {
 	case errors.Is(err, repository.ErrVisitClosed):
 		return response.Error(c, fiber.StatusConflict, "VISIT_ALREADY_CLOSED", "This visit is already checked out.")
 	default:
-		return err
+		slog.Error("unhandled error", "error", err)
+		return response.Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
 	}
 }

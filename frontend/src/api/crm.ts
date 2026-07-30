@@ -19,7 +19,7 @@ export async function checkInProspect(id: string, input: { latitude: number; lon
   if (input.selfie) form.append('selfie', input.selfie)
   return (await api.post<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/check-in`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data
 }
-export async function checkOutProspect(id: string, visitId: string, input: { latitude: number; longitude: number; followUpNotes: string }) {
+export async function checkOutProspect(id: string, visitId: string, input: { latitude: number; longitude: number; followUpNotes: string; visitResult: string; visitOutcome: string }) {
   return (await api.patch<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/${visitId}/check-out`, input)).data.data
 }
 export async function getPipeline() { return (await api.get<ApiEnvelope<Prospect[]>>('/admin/prospects/pipeline')).data.data }
@@ -41,9 +41,6 @@ export async function searchPlaces(params: { keyword: string; categories: string
 export async function getPlaceDetails(googlePlaceId: string) { return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/prospect-finder/place-details/${googlePlaceId}`)).data.data }
 export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
 
-export async function getWonProspects() {
-  return (await api.get<ApiEnvelope<Prospect[]>>('/admin/prospects/won')).data.data
-}
 
 export async function getProspectReview(id: string) {
   return (await api.get<ApiEnvelope<ProspectReview>>(`/admin/prospects/${id}`)).data.data

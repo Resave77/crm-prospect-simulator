@@ -314,7 +314,6 @@ async function executeDelete() {
         <p class="muted">Manage customer sites, corporate hierarchies, and master data configurations.</p>
       </div>
       <div class="page-heading-actions">
-        <Button label="Review Won Prospect" icon="pi pi-check-circle" severity="success" outlined size="small" @click="router.push('/admin/prospects/won')" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
         <Button
           :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'"

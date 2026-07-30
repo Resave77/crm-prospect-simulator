@@ -116,6 +116,8 @@ type Visit struct {
 	SelfieReference    string     `json:"selfieReference"`
 	VisitNotes         string     `json:"visitNotes"`
 	FollowUpNotes      string     `json:"followUpNotes"`
+	VisitResult        string     `json:"visitResult"`
+	VisitOutcome       string     `json:"visitOutcome"`
 }
 
 type CheckInInput struct {
@@ -129,6 +131,8 @@ type CheckOutInput struct {
 	Latitude      float64 `json:"latitude"`
 	Longitude     float64 `json:"longitude"`
 	FollowUpNotes string  `json:"followUpNotes"`
+	VisitResult   string  `json:"visitResult"`
+	VisitOutcome  string  `json:"visitOutcome"`
 }
 
 type PlacePhoto struct {

@@ -181,6 +181,17 @@ function viewGps() {
           </div>
         </div>
 
+        <div v-if="item.visitResult || item.visitOutcome" class="info-section">
+          <div class="info-section-header">Visit Result</div>
+          <div v-if="item.visitResult" class="note-block">
+            <span class="info-label">Result</span>
+            <p>{{ item.visitResult }}</p>
+          </div>
+          <div v-if="item.visitOutcome" class="note-block">
+            <span class="info-label">Outcome</span>
+            <p>{{ item.visitOutcome }}</p>
+          </div>
+        </div>
         <div v-if="item.visitNotes || item.followUpNotes" class="info-section">
           <div class="info-section-header">Notes</div>
           <div v-if="item.visitNotes" class="note-block">

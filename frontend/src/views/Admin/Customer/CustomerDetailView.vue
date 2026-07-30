@@ -420,8 +420,13 @@ onMounted(async () => {
             <span>{{ (contact.name || 'U').charAt(0).toUpperCase() }}</span>
           </div>
           <div class="contact-info">
+<<<<<<< HEAD
             <h4>{{ contact.name || 'Unnamed Contact' }}</h4>
             <span class="contact-position" v-if="contact.position">{{ contact.position }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
+=======
+            <h4>{{ contact.name || detail.customer.name }}</h4>
+            <span class="contact-position" v-if="contact.position">{{ contact.position }}</span>
+>>>>>>> 50549f7 (modified visit)
             <div class="contact-details">
               <span v-if="contact.phone"><i class="pi pi-phone" /> {{ contact.phone }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
               <span v-if="contact.email"><i class="pi pi-envelope" /> {{ contact.email }} <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>
@@ -444,6 +449,10 @@ onMounted(async () => {
             <div class="info-item">
               <span class="info-label">Parent Code <span v-if="getFieldSource('companyCode')" class="fs-badge" :class="'fs-' + getFieldSource('companyCode')!.source" :title="getFieldSource('companyCode')!.tooltip">{{ fsLabels[getFieldSource('companyCode')!.source] }}</span></span>
               <code class="code-tag">{{ detail.parentCompany.parentCode }}</code>
+            </div>
+            <div class="info-item full" v-if="detail.parentCompany.address.previewAddress">
+              <span class="info-label">Company Address</span>
+              <strong>{{ detail.parentCompany.address.previewAddress }}</strong>
             </div>
             <div class="info-item" v-if="detail.parentCompany.npwpNumber">
               <span class="info-label">NPWP Number <span class="fs-badge fs-manual" title="Entered manually by the administrator.">MANUAL</span></span>

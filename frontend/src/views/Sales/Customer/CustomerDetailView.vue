@@ -34,7 +34,7 @@ const displayEmail = computed(() => {
 })
 
 const displayContactName = computed(() => {
-  return customer.value?.contacts?.[0]?.name ?? ''
+  return customer.value?.contacts?.[0]?.name || customer.value?.name || ''
 })
 
 const displayContactPosition = computed(() => {

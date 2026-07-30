@@ -7,7 +7,6 @@ import type { CustomerSite, CustomerDetail, Prospect, ProspectStatus } from '../
 
 export const useCrmStore = defineStore('crm', () => {
   const myProspects = ref<Prospect[]>([])
-  const wonProspects = ref<Prospect[]>([])
   const adminCustomers = ref<CustomerSite[]>([])
   const myCustomers = ref<CustomerSite[]>([])
   const pipeline = ref<Prospect[]>([])
@@ -42,10 +41,6 @@ export const useCrmStore = defineStore('crm', () => {
 
   async function loadPipeline() { pipeline.value = await run(crmApi.getPipeline) }
 
-  async function loadWonProspects() {
-    wonProspects.value = await run(crmApi.getWonProspects)
-  }
-
   async function loadAdminCustomers() {
     adminCustomers.value = await run(crmApi.getAdminCustomers)
   }
@@ -65,5 +60,5 @@ export const useCrmStore = defineStore('crm', () => {
     return error instanceof Error ? error.message : 'An unexpected CRM error occurred.'
   }
 
-  return { myProspects, wonProspects, adminCustomers, myCustomers, pipeline, loading, loadMyProspects, transition, loadPipeline, loadWonProspects, loadAdminCustomers, loadMyCustomers, loadAdminCustomer, errorMessage }
+  return { myProspects, adminCustomers, myCustomers, pipeline, loading, loadMyProspects, transition, loadPipeline, loadAdminCustomers, loadMyCustomers, loadAdminCustomer, errorMessage }
 })
