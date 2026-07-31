@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -68,6 +69,7 @@ async function logout() {
       <div v-show="!sidebarCollapsed" class="sidebar-note"><i class="pi pi-arrow-up-right" /><strong>Team performance</strong><span>Pipeline activity updates from real CRM records.</span></div>
     </aside>
     <div class="admin-workspace">
+      <Toast position="top-right" />
       <header class="admin-topbar">
         <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle navigation">
           <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />

@@ -119,8 +119,7 @@ func (c *GooglePlacesClient) Search(ctx context.Context, input prospectmodel.Pla
 		body["textQuery"] = strings.TrimSpace(input.Keyword)
 		delete(body, "locationRestriction")
 		body["locationBias"] = map[string]any{"circle": map[string]any{"center": map[string]float64{"latitude": input.Latitude, "longitude": input.Longitude}, "radius": input.Radius}}
-	}
-	if types := categoryTypes(input.Categories); len(types) > 0 {
+	} else if types := categoryTypes(input.Categories); len(types) > 0 {
 		body["includedTypes"] = types
 	}
 	encoded, _ := json.Marshal(body)

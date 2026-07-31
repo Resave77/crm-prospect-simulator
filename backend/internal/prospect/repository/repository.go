@@ -30,10 +30,10 @@ type Repository interface {
 	ListVisitMonitoring(context.Context, model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error)
 	ListMyVisits(context.Context, uuid.UUID, model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error)
 	ListProspectVisits(context.Context, uuid.UUID) ([]model.Visit, error)
-	DeleteVisit(context.Context, uuid.UUID, uuid.UUID) error
-	DeleteProspect(context.Context, uuid.UUID) error
+	DeleteVisit(context.Context, uuid.UUID, uuid.UUID) (model.Visit, error)
+	DeleteProspect(context.Context, uuid.UUID) ([]string, error)
 	RequestDeletion(context.Context, uuid.UUID, uuid.UUID) error
-	ApproveDeletion(context.Context, uuid.UUID) error
+	ApproveDeletion(context.Context, uuid.UUID) ([]string, error)
 	RejectDeletion(context.Context, uuid.UUID) error
 	ListComments(context.Context, uuid.UUID) ([]model.ProspectComment, error)
 	CreateComment(context.Context, uuid.UUID, uuid.UUID, string) (model.ProspectComment, error)

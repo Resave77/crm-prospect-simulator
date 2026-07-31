@@ -427,52 +427,69 @@ func (r *PostgresRepository) ListProspectVisits(ctx context.Context, prospectID 
 	return items, rows.Err()
 }
 
-func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID, salesExecutiveID uuid.UUID) error {
+func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID, salesExecutiveID uuid.UUID) (model.Visit, error) {
 	var (
-		tag pgconn.CommandTag
-		err error
+		visit model.Visit
+		err   error
 	)
 	if salesExecutiveID == uuid.Nil {
-		tag, err = r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID)
+		visit, err = r.findVisit(ctx, visitID)
 	} else {
-		tag, err = r.pool.Exec(ctx, `
-			DELETE FROM prospect_visits
-			WHERE id = $1 AND sales_executive_id = $2`,
-			visitID, salesExecutiveID)
+		visit, err = r.findVisitOwnedBy(ctx, visitID, salesExecutiveID)
 	}
 	if err != nil {
-		return fmt.Errorf("delete visit: %w", err)
+		return model.Visit{}, err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+	if _, err := r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID); err != nil {
+		return model.Visit{}, fmt.Errorf("delete visit: %w", err)
 	}
-	return nil
+	return visit, nil
 }
 
-func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) error {
+func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT selfie_reference FROM prospect_visits WHERE prospect_id = $1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("list prospect visit selfies: %w", err)
+	}
+	defer rows.Close()
+	selfies := make([]string, 0)
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			return nil, fmt.Errorf("scan prospect visit selfie: %w", err)
+		}
+		selfies = append(selfies, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list prospect visit selfies: %w", err)
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
 	if _, err := tx.Exec(ctx, `DELETE FROM prospect_comments WHERE prospect_id = $1`, id); err != nil {
-		return fmt.Errorf("delete prospect comments: %w", err)
+		return nil, fmt.Errorf("delete prospect comments: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM prospect_visits WHERE prospect_id = $1`, id); err != nil {
-		return fmt.Errorf("delete prospect visits: %w", err)
+		return nil, fmt.Errorf("delete prospect visits: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM prospect_status_history WHERE prospect_id = $1`, id); err != nil {
-		return fmt.Errorf("delete prospect status history: %w", err)
+		return nil, fmt.Errorf("delete prospect status history: %w", err)
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM prospects WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("delete prospect: %w", err)
+		return nil, fmt.Errorf("delete prospect: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return selfies, nil
 }
 
 func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, salesExecID uuid.UUID) error {
@@ -488,7 +505,7 @@ func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, sa
 	return nil
 }
 
-func (r *PostgresRepository) ApproveDeletion(ctx context.Context, prospectID uuid.UUID) error {
+func (r *PostgresRepository) ApproveDeletion(ctx context.Context, prospectID uuid.UUID) ([]string, error) {
 	return r.DeleteProspect(ctx, prospectID)
 }
 
@@ -559,8 +576,14 @@ func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID u
 	return ownerID, nil
 }
 
+const visitSelect = `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes,v.visit_result,v.visit_outcome FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id`
+
 func (r *PostgresRepository) findVisit(ctx context.Context, id uuid.UUID) (model.Visit, error) {
-	return scanVisit(r.pool.QueryRow(ctx, `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes,v.visit_result,v.visit_outcome FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id WHERE v.id=$1`, id))
+	return scanVisit(r.pool.QueryRow(ctx, visitSelect+` WHERE v.id=$1`, id))
+}
+
+func (r *PostgresRepository) findVisitOwnedBy(ctx context.Context, id, salesExecutiveID uuid.UUID) (model.Visit, error) {
+	return scanVisit(r.pool.QueryRow(ctx, visitSelect+` WHERE v.id=$1 AND v.sales_executive_id=$2`, id, salesExecutiveID))
 }
 
 func scanVisit(row rowScanner) (model.Visit, error) {

@@ -304,9 +304,11 @@ func (h *Handler) DeleteVisit(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 400, "VISIT_ID_INVALID", "Visit ID is invalid.")
 	}
-	if err := h.service.DeleteVisit(c.UserContext(), actor(c), visitID); err != nil {
+	visit, err := h.service.DeleteVisit(c.UserContext(), actor(c), visitID)
+	if err != nil {
 		return writeError(c, err)
 	}
+	removeSelfieFiles(visit.SelfieReference)
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
@@ -315,9 +317,11 @@ func (h *Handler) DeleteProspect(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
-	if err := h.service.DeleteProspect(c.UserContext(), actor(c), id); err != nil {
+	selfies, err := h.service.DeleteProspect(c.UserContext(), actor(c), id)
+	if err != nil {
 		return writeError(c, err)
 	}
+	removeSelfieFiles(selfies...)
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
@@ -337,9 +341,11 @@ func (h *Handler) ApproveDeletion(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
-	if err := h.service.ApproveDeletion(c.UserContext(), actor(c), id); err != nil {
+	selfies, err := h.service.ApproveDeletion(c.UserContext(), actor(c), id)
+	if err != nil {
 		return writeError(c, err)
 	}
+	removeSelfieFiles(selfies...)
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
@@ -416,6 +422,21 @@ func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
 	return service.Actor{UserID: principal.UserID, Role: principal.Role}
+}
+
+func removeSelfieFiles(references ...string) {
+	for _, reference := range references {
+		if reference == "" || strings.HasPrefix(reference, "SIMULATED_") {
+			continue
+		}
+		rel := filepath.FromSlash(strings.TrimPrefix(reference, "/"))
+		if !strings.HasPrefix(filepath.Clean(rel), "uploads"+string(os.PathSeparator)) {
+			continue
+		}
+		if err := os.Remove(rel); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("failed to remove selfie file", "reference", reference, "error", err)
+		}
+	}
 }
 
 func writeError(c *fiber.Ctx, err error) error {

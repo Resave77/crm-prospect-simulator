@@ -100,19 +100,19 @@ func (f *fakeProspectRepository) ListProspectVisits(_ context.Context, _ uuid.UU
 	return []prospectmodel.Visit{}, nil
 }
 
-func (f *fakeProspectRepository) DeleteVisit(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
-	return nil
+func (f *fakeProspectRepository) DeleteVisit(_ context.Context, _ uuid.UUID, _ uuid.UUID) (prospectmodel.Visit, error) {
+	return prospectmodel.Visit{}, nil
 }
 
-func (f *fakeProspectRepository) DeleteProspect(_ context.Context, _ uuid.UUID) error {
-	return nil
+func (f *fakeProspectRepository) DeleteProspect(_ context.Context, _ uuid.UUID) ([]string, error) {
+	return nil, nil
 }
 
 func (f *fakeProspectRepository) RequestDeletion(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return nil
 }
-func (f *fakeProspectRepository) ApproveDeletion(_ context.Context, _ uuid.UUID) error {
-	return nil
+func (f *fakeProspectRepository) ApproveDeletion(_ context.Context, _ uuid.UUID) ([]string, error) {
+	return nil, nil
 }
 func (f *fakeProspectRepository) RejectDeletion(_ context.Context, _ uuid.UUID) error {
 	return nil

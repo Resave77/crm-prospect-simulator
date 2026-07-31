@@ -244,19 +244,19 @@ func (s *Service) ListProspectVisits(ctx context.Context, prospectID uuid.UUID) 
 	return s.repository.ListProspectVisits(ctx, prospectID)
 }
 
-func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) error {
+func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) (prospectmodel.Visit, error) {
 	if actor.Role == authmodel.RoleAdministrator {
 		return s.repository.DeleteVisit(ctx, visitID, uuid.Nil)
 	}
 	if actor.Role != authmodel.RoleSalesExecutive {
-		return ErrForbidden
+		return prospectmodel.Visit{}, ErrForbidden
 	}
 	return s.repository.DeleteVisit(ctx, visitID, actor.UserID)
 }
 
-func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID) error {
+func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID) ([]string, error) {
 	if actor.Role != authmodel.RoleAdministrator {
-		return ErrForbidden
+		return nil, ErrForbidden
 	}
 	return s.repository.DeleteProspect(ctx, id)
 }
@@ -275,9 +275,9 @@ func (s *Service) RequestDeletion(ctx context.Context, actor Actor, id uuid.UUID
 	return s.repository.RequestDeletion(ctx, id, actor.UserID)
 }
 
-func (s *Service) ApproveDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
+func (s *Service) ApproveDeletion(ctx context.Context, actor Actor, id uuid.UUID) ([]string, error) {
 	if actor.Role != authmodel.RoleAdministrator {
-		return ErrForbidden
+		return nil, ErrForbidden
 	}
 	return s.repository.ApproveDeletion(ctx, id)
 }

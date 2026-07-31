@@ -11,8 +11,11 @@ import Select from 'primevue/select'
 import Slider from 'primevue/slider'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
+import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
 import type { PlaceDetails, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
+
+const toast = useToast()
 
 const categoryOptions = [
   ['food_drink', 'Food & Drink'], ['business', 'Business'], ['culture', 'Culture'], ['education', 'Education'],
@@ -160,6 +163,7 @@ async function search() {
     renderMarkers()
   } catch (caught) {
     error.value = crmError(caught)
+    toast.add({ severity: 'error', summary: 'Search failed', detail: error.value, life: 6000 })
   } finally {
     loading.value = false
   }
@@ -181,16 +185,21 @@ function useGPS() {
 }
 
 async function save() {
-  if (!selected.value || !salesExecutiveId.value || !industryGroup.value) { error.value = 'Select a Place, Industry Group, and Sales Executive before saving.'; return }
+  if (!selected.value || !salesExecutiveId.value || !industryGroup.value) {
+    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select a Place, Industry Group, and Sales Executive before saving.', life: 4000 })
+    return
+  }
   error.value = ''
   success.value = ''
   saving.value = true
   try {
     const item = await crmApi.saveProspect(selected.value, industryGroup.value, salesExecutiveId.value)
     success.value = `${item.placeName} saved as NEW_LEAD and assigned successfully.`
+    toast.add({ severity: 'success', summary: 'Prospect saved', detail: `${item.placeName} was saved as NEW_LEAD and assigned successfully.`, life: 5000 })
     detailOpen.value = false
   } catch (caught) {
     error.value = crmError(caught)
+    toast.add({ severity: 'error', summary: 'Save failed', detail: error.value, life: 6000 })
   } finally {
     saving.value = false
   }
