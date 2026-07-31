@@ -1,10 +1,14 @@
-export type UserRole = 'ADMINISTRATOR' | 'SALES_EXECUTIVE'
+export type UserRole = 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 
 export interface AuthUser {
   id: string
   email: string
   fullName: string
+  employeeId?: string
+  phone?: string
   role: UserRole
+  mustChangePassword?: boolean
+  managerId?: string
 }
 
 export interface AuthPayload {

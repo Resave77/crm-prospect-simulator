@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"crm-prospect-simulator/backend/config"
+	adminrepository "crm-prospect-simulator/backend/internal/admin/repository"
+	adminservice "crm-prospect-simulator/backend/internal/admin/service"
 	"crm-prospect-simulator/backend/internal/auth/repository"
 	"crm-prospect-simulator/backend/internal/auth/service"
 	customerrepository "crm-prospect-simulator/backend/internal/customer/repository"
@@ -39,5 +41,7 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	prospectService := prospectservice.New(prospectRepo, placesClient)
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)
-	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService), Pool: pool}, cfg, nil
+	adminRepo := adminrepository.NewPostgresRepository(pool)
+	adminService := adminservice.New(adminRepo)
+	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService), Pool: pool}, cfg, nil
 }

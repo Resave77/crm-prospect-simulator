@@ -47,7 +47,10 @@ func NewAuthService(users repository.UserRepository, sessions repository.Session
 
 func (s *AuthService) Login(ctx context.Context, email, password string, client ClientContext) (AuthResult, error) {
 	user, err := s.users.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+	if err != nil {
+		return AuthResult{}, ErrInvalidCredentials
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return AuthResult{}, ErrInvalidCredentials
 	}
 	if user.Status != model.UserActive {

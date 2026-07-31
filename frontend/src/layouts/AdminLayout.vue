@@ -29,7 +29,9 @@ async function logout() {
     <aside class="admin-sidebar" :class="{ 'sidebar-open': sidebarOpen, collapsed: sidebarCollapsed }" :style="{ width: sidebarWidth }">
       <div class="sidebar-header">
         <div class="shell-logo">
-          <span class="logo-mark">Y</span>
+          <span class="logo-mark">
+            <img src="/yummy-logo.png" alt="Yummy Dairy" />
+          </span>
           <div v-show="!sidebarCollapsed" class="logo-text">Yummy Food<small>Field Sales CRM</small></div>
         </div>
         <button class="collapse-btn" @click="toggleCollapse" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
@@ -43,6 +45,9 @@ async function logout() {
         </RouterLink>
         <RouterLink to="/admin/sales-executives" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Executive' : ''">
           <i class="pi pi-user" /> <span v-show="!sidebarCollapsed">Sales Executive</span>
+        </RouterLink>
+        <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
+          <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Accounts</span>
         </RouterLink>
         <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
           <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
@@ -147,16 +152,21 @@ async function logout() {
 }
 
 .logo-mark {
-  width: 2rem;
+  width: 3.25rem;
   height: 2rem;
   display: inline-grid;
   place-items: center;
+  padding: 0.2rem;
   border-radius: var(--radius-sm);
-  font-weight: 900;
-  background: linear-gradient(135deg, var(--brand-blue), #6366f1);
-  color: #fff;
-  font-size: 0.85rem;
+  background: #fff;
+  border: 1px solid var(--border-light);
   flex-shrink: 0;
+}
+
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo-text { display: grid; }

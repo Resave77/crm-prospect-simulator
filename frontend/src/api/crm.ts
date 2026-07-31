@@ -132,17 +132,17 @@ export async function updateParentCompany(id: string, input: UpdateParentCompany
   return (await api.patch<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`, input)).data.data
 }
 
-export async function getProspectComments(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+export async function getProspectComments(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
   const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
   return (await api.get<ApiEnvelope<ProspectComment[]>>(`${base}/prospects/${prospectId}/comments`)).data.data
 }
 
-export async function addProspectComment(prospectId: string, content: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+export async function addProspectComment(prospectId: string, content: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
   const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
   return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, { content })).data.data
 }
 
-export async function getProspectPlaceDetails(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_EXECUTIVE') {
+export async function getProspectPlaceDetails(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
   const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
   return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/place-details`)).data.data
 }

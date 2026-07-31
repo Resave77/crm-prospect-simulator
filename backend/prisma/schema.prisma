@@ -5,6 +5,7 @@ datasource db {
 
 enum UserRole {
   ADMINISTRATOR
+  SALES_MANAGER
   SALES_EXECUTIVE
 }
 
@@ -30,10 +31,22 @@ model User {
   email           String           @unique
   passwordHash    String           @map("password_hash")
   fullName        String           @map("full_name")
+  employeeId      String?          @unique @map("employee_id")
+  phone           String?          @default("")
   role            UserRole
   status          UserStatus       @default(ACTIVE)
   tokenVersion    Int              @default(1) @map("token_version")
   lastLoginAt     DateTime?        @map("last_login_at") @db.Timestamptz(6)
+  mustChangePassword Boolean       @default(false) @map("must_change_password")
+  managerId       String?          @map("manager_id") @db.Uuid
+  manager         User?            @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates    User[]           @relation("UserManager")
+  createdBy       String?          @map("created_by") @db.Uuid
+  createdByUser   User?            @relation("UserCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAccounts User[]           @relation("UserCreatedBy")
+  updatedBy       String?          @map("updated_by") @db.Uuid
+  updatedByUser   User?            @relation("UserUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  updatedAccounts User[]           @relation("UserUpdatedBy")
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   refreshSessions RefreshSession[]

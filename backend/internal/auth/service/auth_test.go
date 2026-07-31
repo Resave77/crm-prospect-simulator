@@ -83,6 +83,33 @@ func TestLoginUsesBcryptAndIssuesSession(t *testing.T) {
 	}
 }
 
+func TestLoginHandlesNullableUserProfileFields(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := model.User{
+		ID: uuid.New(), Email: "manager@yummy.test", PasswordHash: string(hash),
+		FullName: "Sales Manager", Role: model.RoleSalesManager, Status: model.UserActive, TokenVersion: 1,
+		EmployeeID: "", Phone: "", ManagerID: nil, CreatedBy: nil, UpdatedBy: nil, LastLoginAt: nil,
+	}
+	users := &userRepositoryStub{user: user}
+	sessions := &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}
+	tokens := NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute)
+	auth := NewAuthService(users, sessions, tokens, time.Hour)
+
+	result, err := auth.Login(context.Background(), user.Email, "password123", ClientContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.User.Role != model.RoleSalesManager {
+		t.Fatalf("role=%s, want %s", result.User.Role, model.RoleSalesManager)
+	}
+	if result.User.EmployeeID != "" || result.User.Phone != "" || result.User.ManagerID != nil || result.User.MustChangePassword {
+		t.Fatalf("unexpected public nullable fields: %+v", result.User)
+	}
+}
+
 func TestLoginRejectsIncorrectBcryptPassword(t *testing.T) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
 	users := &userRepositoryStub{user: model.User{

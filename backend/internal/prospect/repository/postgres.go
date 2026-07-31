@@ -184,8 +184,8 @@ func (r *PostgresRepository) Create(ctx context.Context, input model.SaveProspec
 	_, err = r.pool.Exec(ctx, `
 		WITH inserted AS (
 			INSERT INTO prospects (id, google_place_id, place_name, formatted_address, latitude, longitude,
-				place_category, industry_group, place_types, phone_number, website_url, google_maps_url, assigned_sales_executive_id, status)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'NEW_LEAD') RETURNING id
+				place_category, industry_group, place_types, phone_number, website_url, google_maps_url, assigned_sales_executive_id, status, updated_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'NEW_LEAD',now()) RETURNING id
 		)
 		INSERT INTO prospect_status_history (id, prospect_id, from_status, to_status, changed_by_user_id, notes)
 		SELECT $14, id, NULL, 'NEW_LEAD', $15, 'Saved from Prospect Finder and assigned' FROM inserted`,

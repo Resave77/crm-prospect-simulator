@@ -22,7 +22,7 @@ async function submit() {
     const intended = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
       ? route.query.redirect
       : null
-    const roleHome = user.role === 'ADMINISTRATOR' ? '/admin/dashboard' : '/sales/dashboard'
+    const roleHome = user.role === 'ADMINISTRATOR' ? '/admin/dashboard' : user.role === 'SALES_MANAGER' ? '/forbidden' : '/sales/dashboard'
     await router.replace(intended ?? roleHome)
   } catch (caught) {
     error.value = auth.errorMessage(caught)
@@ -35,7 +35,9 @@ async function submit() {
     <div class="login-center">
       <form class="login-card" @submit.prevent="submit">
         <div class="header-group">
-          <div class="brand-mark">Y</div>
+          <div class="brand-mark">
+            <img src="/yummy-logo.png" alt="Yummy Dairy" />
+          </div>
 
           <div>
             <h2>Welcome back</h2>
@@ -134,17 +136,22 @@ async function submit() {
 }
 
 .brand-mark {
-  width: 52px;
+  width: 72px;
   height: 52px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  padding: 0.35rem;
   border-radius: 14px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 1.45rem;
-  font-weight: 800;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .header-group h2 {
@@ -262,10 +269,9 @@ async function submit() {
   }
 
   .brand-mark {
-    width: 46px;
+    width: 66px;
     height: 46px;
     border-radius: 12px;
-    font-size: 1.25rem;
   }
 
   .header-group h2 {

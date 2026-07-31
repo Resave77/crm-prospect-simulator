@@ -2,10 +2,13 @@ package server
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"time"
 
 	"crm-prospect-simulator/backend/config"
+	adminhandler "crm-prospect-simulator/backend/internal/admin/handler"
+	adminservice "crm-prospect-simulator/backend/internal/admin/service"
 	authhandler "crm-prospect-simulator/backend/internal/auth/handler"
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	"crm-prospect-simulator/backend/internal/auth/model"
@@ -21,7 +24,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
-func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service) *fiber.App {
+func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "Yummy CRM API",
 		ReadTimeout:  15 * time.Second,
@@ -51,6 +54,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	authMiddleware := authmiddleware.New(authService)
 	prospectHandler := prospecthandler.New(prospectService, customerService)
 	customerHandler := customerhandler.New(customerService, prospectService)
+	adminHandler := adminhandler.New(adminService)
 
 	health := func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"status": "ok"})
@@ -122,6 +126,14 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
 	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
 
+	admin.Get("/users", adminHandler.ListUsers)
+	admin.Get("/users/options/managers", adminHandler.ListManagers)
+	admin.Post("/users", adminHandler.CreateUser)
+	admin.Get("/users/:id", adminHandler.GetUser)
+	admin.Patch("/users/:id", adminHandler.UpdateUser)
+	admin.Patch("/users/:id/status", adminHandler.UpdateStatus)
+	admin.Post("/users/:id/reset-password", adminHandler.ResetPassword)
+
 	app.Use(func(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "ROUTE_NOT_FOUND", "The requested API route does not exist.")
 	})
@@ -133,5 +145,6 @@ func jsonErrorHandler(c *fiber.Ctx, err error) error {
 	if errors.As(err, &fiberError) {
 		return response.Error(c, fiberError.Code, "HTTP_ERROR", fiberError.Message)
 	}
+	slog.Error("request failed", "path", c.Path(), "error", err)
 	return response.Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
 }

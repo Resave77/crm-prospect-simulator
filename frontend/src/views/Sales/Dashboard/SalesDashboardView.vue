@@ -94,7 +94,9 @@ onMounted(async () => {
     <!-- Greeting -->
     <header class="sales-dash-header">
       <RouterLink class="sales-identity" to="/sales/profile">
-        <span class="sales-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
+        <span class="sales-avatar">
+          <img src="/yummy-logo.png" alt="Yummy Dairy" />
+        </span>
         <div class="sales-identity-text">
           <strong>{{ greeting }}, {{ firstName }}</strong>
           <small>{{ formattedDate }}</small>
@@ -230,10 +232,18 @@ onMounted(async () => {
   display: flex; gap: 0.75rem; align-items: center; color: #0f172a; text-decoration: none;
 }
 .sales-avatar {
-  width: 44px; height: 44px; display: grid; place-items: center;
-  border-radius: 16px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: #ffffff; font-weight: 800; font-size: 1.05rem; flex-shrink: 0;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24);
+  width: 58px; height: 42px; display: grid; place-items: center;
+  padding: 0.25rem;
+  border-radius: 16px; background: #ffffff;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.sales-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .sales-identity-text { display: flex; flex-direction: column; }
 .sales-identity-text strong { font-size: 1rem; font-weight: 800; color: #0f172a; line-height: 1.2; }

@@ -4,7 +4,9 @@
     <aside class="sales-sidebar">
       <div class="sidebar-header">
         <RouterLink to="/sales/dashboard" class="sidebar-brand">
-          <span class="sidebar-logo">Y</span>
+          <span class="sidebar-logo">
+            <img src="/yummy-logo.png" alt="Yummy Dairy" />
+          </span>
           <span class="sidebar-brand-text">Yummy CRM</span>
         </RouterLink>
       </div>
@@ -84,6 +86,7 @@ const initials = computed(() => {
 
 const roleLabel = computed(() => {
   if (auth.user?.role === 'ADMINISTRATOR') return 'Administrator'
+  if (auth.user?.role === 'SALES_MANAGER') return 'Sales Manager'
   if (auth.user?.role === 'SALES_EXECUTIVE') return 'Sales Executive'
   return auth.user?.role ?? '—'
 })
@@ -270,16 +273,21 @@ async function logout() {
 }
 
 .sidebar-logo {
-  width: 36px;
+  width: 52px;
   height: 36px;
   display: grid;
   place-items: center;
+  padding: 0.25rem;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--brand-blue), #1d4ed8);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1rem;
+  background: #fff;
+  border: 1px solid var(--border-light);
   flex-shrink: 0;
+}
+
+.sidebar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .sidebar-brand-text {

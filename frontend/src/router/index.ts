@@ -16,11 +16,16 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/login' },
     { path: '/login', name: 'Login', component: () => import('../views/Login/LoginView.vue'), meta: { public: true } },
+    { path: '/forbidden', name: 'Forbidden', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
     {
       path: '/admin', component: () => import('../layouts/AdminLayout.vue'), meta: { role: 'ADMINISTRATOR' },
       children: [
         { path: '', redirect: '/admin/dashboard' },
         { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/Admin/Dashboard/AdminDashboardView.vue') },
+        { path: 'accounts', name: 'AdminAccounts', component: () => import('../views/Admin/Accounts/AdminAccountsView.vue'), meta: { role: 'ADMINISTRATOR' } },
+        { path: 'accounts/create', name: 'AdminAccountCreate', component: () => import('../views/Admin/Accounts/AdminAccountCreateView.vue'), meta: { role: 'ADMINISTRATOR' } },
+        { path: 'accounts/:id', name: 'AdminAccountDetail', component: () => import('../views/Admin/Accounts/AdminAccountDetailView.vue'), meta: { role: 'ADMINISTRATOR' } },
+        { path: 'accounts/:id/edit', name: 'AdminAccountEdit', component: () => import('../views/Admin/Accounts/AdminAccountEditView.vue'), meta: { role: 'ADMINISTRATOR' } },
         { path: 'prospect-finder', name: 'AdminProspectFinder', component: () => import('../views/Admin/Prospect/ProspectFinderView.vue') },
         { path: 'prospects/pipeline', name: 'AdminProspectPipeline', component: () => import('../views/Admin/Prospect/ProspectPipelineView.vue') },
         { path: 'prospects/list', name: 'AdminProspectList', component: () => import('../views/Admin/Prospect/ProspectListView.vue') },
@@ -70,14 +75,16 @@ const router = createRouter({
 })
 
 function homeFor(role: UserRole) {
-  return role === 'ADMINISTRATOR' ? '/admin/dashboard' : '/sales/dashboard'
+  if (role === 'ADMINISTRATOR') return '/admin/dashboard'
+  if (role === 'SALES_MANAGER') return '/forbidden'
+  return '/sales/dashboard'
 }
 
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const auth = useAuthStore(pinia)
   await auth.bootstrap()
 
-  if (to.name === 'Login' && auth.role) return homeFor(auth.role)
+  if (to.name === 'Login' && auth.role && auth.role !== 'SALES_MANAGER') return homeFor(auth.role)
   if (to.meta.public) return true
   if (!auth.authenticated) return { name: 'Login', query: { redirect: to.fullPath } }
   if (to.meta.role && to.meta.role !== auth.role) return homeFor(auth.role!)

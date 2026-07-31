@@ -28,17 +28,19 @@ func main() {
 		log.Fatal(err)
 	}
 	repo := repository.NewPostgresRepository(pool)
+	managerID := uuid.New()
 	users := []model.User{
-		{ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash), FullName: "Yummy Administrator", Role: model.RoleAdministrator, Status: model.UserActive},
-		{ID: uuid.New(), Email: "sales@yummy.test", PasswordHash: string(hash), FullName: "Nurdin Pratama", Role: model.RoleSalesExecutive, Status: model.UserActive},
-		{ID: uuid.New(), Email: "sales2@yummy.test", PasswordHash: string(hash), FullName: "Alicia Ramadhan", Role: model.RoleSalesExecutive, Status: model.UserActive},
-		{ID: uuid.New(), Email: "sales3@yummy.test", PasswordHash: string(hash), FullName: "Rizky Ananda", Role: model.RoleSalesExecutive, Status: model.UserActive},
+		{ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash), FullName: "Yummy Administrator", EmployeeID: "ADM-0001", Role: model.RoleAdministrator, Status: model.UserActive},
+		{ID: managerID, Email: "manager@yummy.test", PasswordHash: string(hash), FullName: "Budi Santoso", EmployeeID: "SM-0001", Role: model.RoleSalesManager, Status: model.UserActive},
+		{ID: uuid.New(), Email: "sales@yummy.test", PasswordHash: string(hash), FullName: "Nurdin Pratama", EmployeeID: "SE-0001", Role: model.RoleSalesExecutive, Status: model.UserActive, ManagerID: &managerID},
+		{ID: uuid.New(), Email: "sales2@yummy.test", PasswordHash: string(hash), FullName: "Alicia Ramadhan", EmployeeID: "SE-0002", Role: model.RoleSalesExecutive, Status: model.UserActive, ManagerID: &managerID},
+		{ID: uuid.New(), Email: "sales3@yummy.test", PasswordHash: string(hash), FullName: "Rizky Ananda", EmployeeID: "SE-0003", Role: model.RoleSalesExecutive, Status: model.UserActive, ManagerID: &managerID},
 	}
 	for _, user := range users {
 		if err := repo.UpsertSeed(ctx, user); err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("seeded account %s", user.Role)
+		log.Printf("seeded account %s (%s)", user.Role, user.EmployeeID)
 	}
 	// Historical simulator records use these immutable IDs and Google Place IDs.
 	// Delete only those records; independently created Prospect Finder data is never matched.

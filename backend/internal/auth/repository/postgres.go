@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type PostgresRepository struct {
@@ -23,27 +24,42 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (model.User, error) {
 	return r.scanUser(r.pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, full_name, role::text, status::text,
-		       token_version, last_login_at, created_at, updated_at
+		SELECT id, email, password_hash, full_name, employee_id, phone,
+		       role::text, status::text, token_version, last_login_at,
+		       must_change_password, manager_id, created_by, updated_by,
+		       created_at, updated_at
 		FROM users WHERE email = $1`, email))
 }
 
 func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
 	return r.scanUser(r.pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, full_name, role::text, status::text,
-		       token_version, last_login_at, created_at, updated_at
+		SELECT id, email, password_hash, full_name, employee_id, phone,
+		       role::text, status::text, token_version, last_login_at,
+		       must_change_password, manager_id, created_by, updated_by,
+		       created_at, updated_at
 		FROM users WHERE id = $1`, id))
 }
 
 func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	var user model.User
-	err := row.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.FullName, &user.Role,
-		&user.Status, &user.TokenVersion, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt)
+	var employeeID pgtype.Text
+	var phone pgtype.Text
+	err := row.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.FullName,
+		&employeeID, &phone,
+		&user.Role, &user.Status, &user.TokenVersion, &user.LastLoginAt,
+		&user.MustChangePassword, &user.ManagerID, &user.CreatedBy, &user.UpdatedBy,
+		&user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.User{}, ErrNotFound
 	}
 	if err != nil {
 		return model.User{}, fmt.Errorf("scan user: %w", err)
+	}
+	if employeeID.Valid {
+		user.EmployeeID = employeeID.String
+	}
+	if phone.Valid {
+		user.Phone = phone.String
 	}
 	return user, nil
 }
@@ -58,15 +74,18 @@ func (r *PostgresRepository) RecordLogin(ctx context.Context, userID uuid.UUID, 
 
 func (r *PostgresRepository) UpsertSeed(ctx context.Context, user model.User) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO users (id, email, password_hash, full_name, role, status, token_version)
-		VALUES ($1, $2, $3, $4, $5, $6, 1)
+		INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, role, status, token_version, must_change_password, manager_id, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, false, $9, now())
 		ON CONFLICT (email) DO UPDATE SET
 			password_hash = EXCLUDED.password_hash,
 			full_name = EXCLUDED.full_name,
+			employee_id = COALESCE(EXCLUDED.employee_id, users.employee_id),
+			phone = COALESCE(EXCLUDED.phone, users.phone),
 			role = EXCLUDED.role,
 			status = EXCLUDED.status,
+			manager_id = EXCLUDED.manager_id,
 			updated_at = now()`,
-		user.ID, user.Email, user.PasswordHash, user.FullName, user.Role, user.Status)
+		user.ID, user.Email, user.PasswordHash, user.FullName, user.EmployeeID, user.Phone, user.Role, user.Status, user.ManagerID)
 	if err != nil {
 		return fmt.Errorf("seed user: %w", err)
 	}
@@ -76,8 +95,8 @@ func (r *PostgresRepository) UpsertSeed(ctx context.Context, user model.User) er
 func (r *PostgresRepository) Create(ctx context.Context, session model.RefreshSession) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO refresh_sessions
-			(id, user_id, token_hash, user_agent, ip_address, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, session.ID, session.UserID,
+			(id, user_id, token_hash, user_agent, ip_address, expires_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())`, session.ID, session.UserID,
 		session.TokenHash, session.UserAgent, session.IPAddress, session.ExpiresAt)
 	return databaseError("create refresh session", err)
 }
@@ -119,9 +138,9 @@ func (r *PostgresRepository) Rotate(ctx context.Context, oldID uuid.UUID, replac
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO refresh_sessions
-			(id, user_id, token_hash, user_agent, ip_address, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, replacement.ID, replacement.UserID,
-		replacement.TokenHash, replacement.UserAgent, replacement.IPAddress, replacement.ExpiresAt)
+			(id, user_id, token_hash, user_agent, ip_address, expires_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, replacement.ID, replacement.UserID,
+		replacement.TokenHash, replacement.UserAgent, replacement.IPAddress, replacement.ExpiresAt, at)
 	if err != nil {
 		return databaseError("insert rotated session", err)
 	}

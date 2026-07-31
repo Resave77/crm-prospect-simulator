@@ -23,6 +23,7 @@ const initials = computed(() => {
 
 const roleLabel = computed(() => {
   if (auth.user?.role === 'ADMINISTRATOR') return 'Administrator'
+  if (auth.user?.role === 'SALES_MANAGER') return 'Sales Manager'
   if (auth.user?.role === 'SALES_EXECUTIVE') return 'Sales Executive'
   return auth.user?.role ?? '—'
 })
@@ -121,7 +122,7 @@ onMounted(loadStats)
         <div class="profile-card-strip">
           <div class="strip-item">
             <span class="strip-label">Employee ID</span>
-            <span class="strip-value" :title="auth.user?.id ?? ''">{{ auth.user?.id ?? '—' }}</span>
+            <span class="strip-value" :title="auth.user?.employeeId ?? ''">{{ auth.user?.employeeId ?? '—' }}</span>
           </div>
           <div class="strip-item">
             <span class="strip-label">Email</span>
@@ -129,7 +130,7 @@ onMounted(loadStats)
           </div>
           <div class="strip-item">
             <span class="strip-label">Phone</span>
-            <span class="strip-value">&mdash;</span>
+            <span class="strip-value">{{ auth.user?.phone ?? '—' }}</span>
           </div>
         </div>
       </div>
