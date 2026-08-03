@@ -16,6 +16,15 @@ function runSearch() { router.push({ path: '/admin/prospects/list', query: searc
 function closeSidebar() { sidebarOpen.value = false }
 function toggleCollapse() { sidebarCollapsed.value = !sidebarCollapsed.value }
 
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/admin/dashboard')
+}
+
+function refreshPage() {
+  window.location.reload()
+}
+
 async function logout() {
   closeSidebar()
   await auth.logout()
@@ -43,9 +52,6 @@ async function logout() {
         <RouterLink to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
           <i class="pi pi-home" /> <span v-show="!sidebarCollapsed">Dashboard</span>
         </RouterLink>
-        <RouterLink to="/admin/sales-executives" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Executive' : ''">
-          <i class="pi pi-user" /> <span v-show="!sidebarCollapsed">Sales Executive</span>
-        </RouterLink>
         <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
           <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Accounts</span>
         </RouterLink>
@@ -57,9 +63,6 @@ async function logout() {
         </RouterLink>
         <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
           <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
-        </RouterLink>
-        <RouterLink to="/admin/customer-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Assignment' : ''">
-          <i class="pi pi-directions-alt" /> <span v-show="!sidebarCollapsed">Customer Assignment</span>
         </RouterLink>
         <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
           <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
@@ -73,9 +76,6 @@ async function logout() {
         <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
           <i class="pi pi-sitemap" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
         </RouterLink>
-        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Assignment' : ''">
-          <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Prospect Assignment</span>
-        </RouterLink>
         <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
           <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
         </RouterLink>
@@ -86,6 +86,12 @@ async function logout() {
       <header class="admin-topbar">
         <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle navigation">
           <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
+        </button>
+        <button class="topbar-icon-btn" @click="goBack" title="Back" aria-label="Back to previous page">
+          <i class="pi pi-arrow-left" />
+        </button>
+        <button class="topbar-icon-btn" @click="refreshPage" title="Refresh" aria-label="Refresh page">
+          <i class="pi pi-refresh" />
         </button>
         <form class="global-search" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="submit">Enter</button></form>
         <div class="topbar-spacer" />
@@ -137,14 +143,10 @@ async function logout() {
   color: #1e293b;
   background: #ffffff;
   border-right: 1px solid #edf1f6;
-  overflow-y: auto;
   overflow-x: hidden;
+  overflow-y: hidden;
   transition: width 0.25s ease;
 }
-
-.admin-sidebar::-webkit-scrollbar { width: 4px; }
-.admin-sidebar::-webkit-scrollbar-track { background: transparent; }
-.admin-sidebar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
 
 .admin-sidebar.collapsed {
   padding: 1.1rem 0.5rem;
@@ -247,8 +249,17 @@ async function logout() {
   display: grid;
   gap: 2px;
   flex: 1;
+  min-height: 0;
   width: 100%;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
 }
+
+.admin-sidebar nav::-webkit-scrollbar { width: 4px; }
+.admin-sidebar nav::-webkit-scrollbar-track { background: transparent; }
+.admin-sidebar nav::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 999px; }
 
 .admin-sidebar nav a,
 .nav-placeholder {
@@ -262,6 +273,7 @@ async function logout() {
   font-size: 0.75rem;
   font-weight: 550;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: color 150ms ease, background 150ms ease, padding 150ms ease;
 }
 
@@ -519,6 +531,28 @@ async function logout() {
   transition: background 150ms ease;
 }
 .hamburger-btn:hover { background: #f8fafc; }
+
+.topbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid #edf1f6;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.topbar-icon-btn:hover {
+  background: #f8fafc;
+  color: #2563eb;
+  border-color: #e2e8f0;
+}
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
