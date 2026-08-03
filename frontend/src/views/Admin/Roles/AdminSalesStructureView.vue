@@ -27,6 +27,13 @@ interface TreeNode {
   children: TreeNode[]
   match: boolean
 }
+interface HierarchyRow {
+  item: SalesStructureItem
+  depth: number
+  hasChildren: boolean
+  isExpanded: boolean
+  match: boolean
+}
 
 const LEVEL_ORDER: SalesRoleLevel[] = [1, 2, 3, 4]
 const LEVEL_LABEL: Record<SalesRoleLevel, string> = {
@@ -43,9 +50,10 @@ const LEVEL_FALLBACK_DESCRIPTION: Record<SalesRoleLevel, string> = {
 }
 
 const activeTab = ref<'assigned' | 'unassigned' | 'all'>('assigned')
-const viewMode = ref<ViewMode>('table')
+const viewMode = ref<ViewMode>('tree')
 const showBanner = ref(true)
 const selectedRows = ref<SalesStructureItem[]>([])
+const selectedHierarchyRows = ref<HierarchyRow[]>([])
 const expandedNodeIds = ref<Set<string>>(new Set())
 const selectedNode = ref<SalesStructureItem | null>(null)
 const drawerVisible = ref(false)
@@ -139,9 +147,10 @@ const statusOptions = [
 ]
 const systemRoleOptions = [
   { label: 'All System Roles', value: '' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN' },
+  { label: 'Administrator', value: 'ADMINISTRATOR' },
   { label: 'Sales Manager', value: 'SALES_MANAGER' },
   { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
-  { label: 'Administrator', value: 'ADMINISTRATOR' },
 ]
 const orgRoleFilterOptions = computed(() => store.salesRoles.filter((role) => role.isActive).map((role) => ({ label: `${role.name} — Level ${role.level}`, value: role.id })))
 const parentFilterOptions = computed(() => {
@@ -196,6 +205,7 @@ const treeSource = computed(() => activeStructure.value.filter((item) => {
 }))
 const treeRoots = computed<TreeNode[]>(() => buildTree(treeSource.value, search.value.trim().toLowerCase()))
 const flattenedTreeItems = computed(() => flattenTree(treeRoots.value))
+const visibleTreeRows = computed(() => flattenVisibleTree(treeRoots.value))
 const selectedNodeChildren = computed(() => selectedNode.value ? activeStructure.value.filter((item) => item.parentUserId === selectedNode.value?.userId) : [])
 
 const structureLevelsPresent = computed(() => {
@@ -233,22 +243,38 @@ function firstDay(month: string) {
   return `${month}-01`
 }
 
-// Dedicated organizational Position will be implemented in a later phase.
+// Dedicated Position master remains deferred.
 function roleLabel(role: string) {
+  if (role === 'SUPER_ADMIN') return 'Super Admin'
   if (role === 'SALES_MANAGER') return 'Sales Manager'
   if (role === 'SALES_EXECUTIVE') return 'Sales Executive'
   return 'Administrator'
 }
 
 function positionLabel(item: SalesStructureItem) {
+  const source = `${item.salesName} ${item.salesRole.name}`.toLowerCase()
+  const region = inferRegion(item)
+  if (item.salesRole.level === 1) return 'Director of Sales & Marketing'
+  if (source.includes('collector')) return region === '-' ? 'Collector' : `Collector ${region}`
+  if (source.includes('merchand')) return region === '-' ? 'Merchandiser' : `Merchandiser ${region}`
+  if (source.includes('billing')) return region === '-' ? 'Billing Coordinator' : `Billing Coordinator ${region}`
+  if (source.includes('key account')) return region === '-' ? 'Key Account Executive' : `Key Account Executive ${region}`
+  if (item.salesRole.level === 2) return region === '-' ? 'Regional Manager' : `Regional Manager ${region}`
+  if (item.salesRole.level === 3) return region === '-' ? 'Sales Supervisor' : `Supervisor ${region} Raya`
+  if (item.salesRole.level === 4) return region === '-' ? 'Sales Executive' : `Sales Executive ${region}`
   return roleLabel(item.systemRole)
 }
 
 function reportsToLabel(item: SalesStructureItem) {
-  return item.salesRole.level === 1 ? 'Top Level' : item.parentName || '-'
+  return item.salesRole.level === 1 ? '-' : item.parentName || '-'
+}
+
+function employeeIdLabel(item: SalesStructureItem) {
+  return (item as SalesStructureItem & { employeeId?: string }).employeeId || 'Use Account List'
 }
 
 function roleSeverity(role: string) {
+  if (role === 'SUPER_ADMIN') return 'info'
   if (role === 'SALES_MANAGER') return 'info'
   if (role === 'SALES_EXECUTIVE') return 'success'
   return 'warn'
@@ -289,9 +315,11 @@ function nodeMatches(item: SalesStructureItem, query: string) {
     item.salesName,
     item.parentName ?? '',
     item.salesRole.name,
+    String(item.salesRole.level),
+    `Level ${item.salesRole.level}`,
     roleLabel(item.systemRole),
     positionLabel(item),
-    inferRegion(item),
+    String((item as SalesStructureItem & { employeeId?: string }).employeeId ?? ''),
   ].some((value) => value.toLowerCase().includes(query))
 }
 
@@ -315,6 +343,20 @@ function buildTree(items: SalesStructureItem[], query: string): TreeNode[] {
 
 function flattenTree(nodes: TreeNode[]): SalesStructureItem[] {
   return nodes.flatMap((node) => [node.item, ...flattenTree(node.children)])
+}
+
+function flattenVisibleTree(nodes: TreeNode[], depth = 0): HierarchyRow[] {
+  return nodes.flatMap((node) => {
+    const row = {
+      item: node.item,
+      depth,
+      hasChildren: node.children.length > 0,
+      isExpanded: isExpanded(node.item.userId),
+      match: node.match,
+    }
+    if (!row.hasChildren || !row.isExpanded) return [row]
+    return [row, ...flattenVisibleTree(node.children, depth + 1)]
+  })
 }
 
 function expandAll() {
@@ -357,7 +399,7 @@ async function fetchSalesUsers(page = 1, append = false) {
   salesUsersLoading.value = true
   try {
     const result = await adminApi.getUsers({ page, limit: USER_PAGE_SIZE, search: userSearch.value, role: '', status: 'ACTIVE' })
-    const salesOnly = result.data.filter((user) => user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
+    const salesOnly = result.data.filter((user) => user.role === 'SUPER_ADMIN' || user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
     salesUsers.value = append ? [...salesUsers.value, ...salesOnly] : salesOnly
     salesUsersTotal.value = result.total
     salesUsersPage.value = page
@@ -388,7 +430,7 @@ async function loadPickerUsers(reset = false) {
   try {
     const page = reset ? 1 : pickerPage.value + 1
     const result = await adminApi.getUsers({ page, limit: USER_PAGE_SIZE, search: pickerSearch.value, role: '', status: 'ACTIVE' })
-    const salesOnly = result.data.filter((user) => user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
+    const salesOnly = result.data.filter((user) => user.role === 'SUPER_ADMIN' || user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
     pickerUsers.value = reset ? salesOnly : [...pickerUsers.value, ...salesOnly]
     pickerTotal.value = result.total
     pickerPage.value = page
@@ -558,7 +600,7 @@ onMounted(async () => {
         <i class="pi pi-table" /> Table
       </button>
       <button class="view-btn" :class="{ active: viewMode === 'tree' }" type="button" @click="viewMode = 'tree'">
-        <i class="pi pi-sitemap" /> Organization Tree
+        <i class="pi pi-sitemap" /> Hierarchy Table
       </button>
     </div>
 
@@ -610,7 +652,7 @@ onMounted(async () => {
     <div v-if="viewMode === 'tree'" class="tree-panel">
       <div class="tree-toolbar">
         <div>
-          <strong>Organization Tree</strong>
+          <strong>Hierarchy Table</strong>
           <span>{{ assignedThisMonth }} assigned sales for {{ currentMonthLabel }}</span>
         </div>
         <div class="tree-actions">
@@ -628,90 +670,62 @@ onMounted(async () => {
         <span>{{ hasFilters ? 'Adjust your search or filters to view the organization.' : 'Assign the first leader to begin the hierarchy.' }}</span>
         <Button :label="hasFilters ? 'Reset Filters' : 'Assign First Leader'" :icon="hasFilters ? 'pi pi-replay' : 'pi pi-plus'" size="small" @click="hasFilters ? clearFilters() : openAssign(1)" />
       </div>
-      <div v-else class="tree-list">
-        <template v-for="root in treeRoots" :key="root.item.assignmentId">
-          <div class="tree-branch">
-            <div class="tree-row">
-              <button v-if="root.children.length" class="node-toggle" type="button" @click="toggleNode(root.item.userId)">
-                <i :class="isExpanded(root.item.userId) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
+      <DataTable
+        v-else
+        v-model:selection="selectedHierarchyRows"
+        :value="visibleTreeRows"
+        :loading="store.salesStructureLoading"
+        dataKey="item.assignmentId"
+        scrollable
+        class="hierarchy-table"
+      >
+        <Column selectionMode="multiple" headerStyle="width: 44px" />
+        <Column header="Role Level" :style="{ width: '110px' }">
+          <template #body="{ data }">
+            <span class="hier-level" :class="levelClass(data.item.salesRole.level)">{{ data.item.salesRole.level }}</span>
+          </template>
+        </Column>
+        <Column header="Sales Name" :style="{ minWidth: '300px' }">
+          <template #body="{ data }">
+            <div class="hier-name-cell" :style="{ '--depth': data.depth }">
+              <span v-if="data.depth" class="hier-connector" />
+              <button
+                v-if="data.hasChildren"
+                class="hier-expander"
+                type="button"
+                :title="data.isExpanded ? 'Collapse row' : 'Expand row'"
+                @click.stop="toggleNode(data.item.userId)"
+              >
+                <i :class="data.isExpanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
               </button>
-              <span v-else class="node-toggle-spacer" />
-              <button class="org-node" :class="[levelColorClass(root.item.salesRole.level), { matched: root.match && search.trim() }]" type="button" @click="openNode(root.item)">
-                <span class="node-avatar">{{ initials(root.item.salesName) }}</span>
-                <span class="node-main">
-                  <strong>{{ root.item.salesName }}</strong>
-                  <span>{{ positionLabel(root.item) }}</span>
-                </span>
-                <span class="node-meta">
-                  <span><em>Reports To</em>{{ reportsToLabel(root.item) }}</span>
-                  <span><em>Role Name</em>{{ root.item.salesRole.name }}</span>
-                  <span class="level-indicator">Level {{ root.item.salesRole.level }}</span>
-                  <span class="status-dot" :class="{ inactive: root.item.effectiveTo }">{{ statusFor(root.item) }}</span>
-                </span>
+              <span v-else class="hier-expander-spacer" />
+              <button class="hier-name-button" type="button" @click="openNode(data.item)">
+                <strong class="sales-name" :class="levelClass(data.item.salesRole.level)">{{ data.item.salesName }}</strong>
+                <small>{{ employeeIdLabel(data.item) }}</small>
               </button>
             </div>
-            <div v-if="root.children.length && isExpanded(root.item.userId)" class="tree-children">
-              <template v-for="child in root.children" :key="child.item.assignmentId">
-                <div class="tree-branch">
-                  <div class="tree-row">
-                    <button v-if="child.children.length" class="node-toggle" type="button" @click="toggleNode(child.item.userId)">
-                      <i :class="isExpanded(child.item.userId) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
-                    </button>
-                    <span v-else class="node-toggle-spacer" />
-                    <button class="org-node" :class="[levelColorClass(child.item.salesRole.level), { matched: child.match && search.trim() }]" type="button" @click="openNode(child.item)">
-                      <span class="node-avatar">{{ initials(child.item.salesName) }}</span>
-                      <span class="node-main"><strong>{{ child.item.salesName }}</strong><span>{{ positionLabel(child.item) }}</span></span>
-                      <span class="node-meta">
-                        <span><em>Reports To</em>{{ reportsToLabel(child.item) }}</span>
-                        <span><em>Role Name</em>{{ child.item.salesRole.name }}</span>
-                        <span class="level-indicator">Level {{ child.item.salesRole.level }}</span>
-                        <span class="status-dot" :class="{ inactive: child.item.effectiveTo }">{{ statusFor(child.item) }}</span>
-                      </span>
-                    </button>
-                  </div>
-                  <div v-if="child.children.length && isExpanded(child.item.userId)" class="tree-children">
-                    <template v-for="grandchild in child.children" :key="grandchild.item.assignmentId">
-                      <div class="tree-branch">
-                        <div class="tree-row">
-                          <button v-if="grandchild.children.length" class="node-toggle" type="button" @click="toggleNode(grandchild.item.userId)">
-                            <i :class="isExpanded(grandchild.item.userId) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
-                          </button>
-                          <span v-else class="node-toggle-spacer" />
-                          <button class="org-node" :class="[levelColorClass(grandchild.item.salesRole.level), { matched: grandchild.match && search.trim() }]" type="button" @click="openNode(grandchild.item)">
-                            <span class="node-avatar">{{ initials(grandchild.item.salesName) }}</span>
-                            <span class="node-main"><strong>{{ grandchild.item.salesName }}</strong><span>{{ positionLabel(grandchild.item) }}</span></span>
-                            <span class="node-meta">
-                              <span><em>Reports To</em>{{ reportsToLabel(grandchild.item) }}</span>
-                              <span><em>Role Name</em>{{ grandchild.item.salesRole.name }}</span>
-                              <span class="level-indicator">Level {{ grandchild.item.salesRole.level }}</span>
-                              <span class="status-dot" :class="{ inactive: grandchild.item.effectiveTo }">{{ statusFor(grandchild.item) }}</span>
-                            </span>
-                          </button>
-                        </div>
-                        <div v-if="grandchild.children.length && isExpanded(grandchild.item.userId)" class="tree-children">
-                          <div v-for="leaf in grandchild.children" :key="leaf.item.assignmentId" class="tree-row">
-                            <span class="node-toggle-spacer" />
-                            <button class="org-node" :class="[levelColorClass(leaf.item.salesRole.level), { matched: leaf.match && search.trim() }]" type="button" @click="openNode(leaf.item)">
-                              <span class="node-avatar">{{ initials(leaf.item.salesName) }}</span>
-                              <span class="node-main"><strong>{{ leaf.item.salesName }}</strong><span>{{ positionLabel(leaf.item) }}</span></span>
-                              <span class="node-meta">
-                                <span><em>Reports To</em>{{ reportsToLabel(leaf.item) }}</span>
-                                <span><em>Role Name</em>{{ leaf.item.salesRole.name }}</span>
-                                <span class="level-indicator">Level {{ leaf.item.salesRole.level }}</span>
-                                <span class="status-dot" :class="{ inactive: leaf.item.effectiveTo }">{{ statusFor(leaf.item) }}</span>
-                              </span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
-      </div>
+          </template>
+        </Column>
+        <Column header="Reports To" :style="{ minWidth: '180px' }">
+          <template #body="{ data }">{{ reportsToLabel(data.item) }}</template>
+        </Column>
+        <Column header="Position" :style="{ minWidth: '220px' }">
+          <template #body="{ data }">{{ positionLabel(data.item) }}</template>
+        </Column>
+        <Column header="Role Name" :style="{ minWidth: '210px' }">
+          <template #body="{ data }"><span class="role-name-label">{{ data.item.salesRole.name }}</span></template>
+        </Column>
+        <Column header="Status" :style="{ width: '110px' }">
+          <template #body="{ data }"><span class="compact-status" :class="{ inactive: data.item.effectiveTo }">{{ statusFor(data.item) }}</span></template>
+        </Column>
+        <Column header="Actions" :style="{ width: '90px' }">
+          <template #body="{ data }">
+            <button class="more-action" type="button" title="More actions" @click="openNode(data.item)">
+              <i class="pi pi-ellipsis-v" />
+            </button>
+          </template>
+        </Column>
+      </DataTable>
     </div>
 
     <div v-else class="table-panel">
@@ -1021,6 +1035,33 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .tree-toolbar strong { color: #0f172a; font-size: 0.92rem; }
 .tree-toolbar span { color: #94a3b8; font-size: 0.76rem; }
 .tree-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
+.hierarchy-table { min-width: 1120px; }
+.hierarchy-table :deep(.p-datatable-table),
+.hierarchy-table :deep(.p-datatable-table-container) { background: #ffffff; }
+.hierarchy-table :deep(.p-datatable-thead > tr > th) { background: #f3f5f8; color: #475569; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; border-color: #e5eaf0; padding: 0.5rem 0.7rem; white-space: nowrap; }
+.hierarchy-table :deep(.p-datatable-tbody > tr > td) { height: 48px; background: #ffffff; color: #1e293b; border-color: #edf1f6; padding: 0.42rem 0.7rem; font-size: 0.8rem; vertical-align: middle; }
+.hierarchy-table :deep(.p-datatable-tbody > tr:hover > td) { background: #f8fbff; }
+.hier-level { font-weight: 850; font-size: 0.82rem; }
+.hier-level.level-1, .sales-name.level-1 { color: #1d4ed8; }
+.hier-level.level-2, .sales-name.level-2 { color: #047857; }
+.hier-level.level-3, .sales-name.level-3 { color: #9a3412; }
+.hier-level.level-4, .sales-name.level-4 { color: #a16207; }
+.hier-name-cell { position: relative; display: flex; align-items: center; gap: 0.28rem; padding-left: calc(var(--depth) * 1.45rem); min-height: 34px; }
+.hier-connector { position: absolute; left: calc((var(--depth) * 1.45rem) - 0.75rem); top: 0; bottom: 0; width: 0.8rem; border-left: 1px solid #dbe3ee; border-bottom: 1px solid #dbe3ee; transform: translateY(-50%); }
+.hier-expander, .hier-expander-spacer { width: 1.45rem; height: 1.45rem; flex: 0 0 auto; }
+.hier-expander { display: grid; place-content: center; border: 1px solid #dbe3ee; border-radius: 6px; background: #ffffff; color: #64748b; cursor: pointer; }
+.hier-expander:hover { background: #f1f5f9; color: #0f172a; }
+.hier-expander i { font-size: 0.7rem; }
+.hier-name-button { display: grid; gap: 0.02rem; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; cursor: pointer; }
+.hier-name-button:hover .sales-name { text-decoration: underline; text-underline-offset: 2px; }
+.hier-name-button small { color: #94a3b8; font-size: 0.68rem; }
+.role-name-label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 220px; color: #334155; line-height: 1.3; }
+.compact-status { display: inline-flex; align-items: center; gap: 0.32rem; color: #047857; font-size: 0.72rem; font-weight: 800; }
+.compact-status::before { content: ''; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #10b981; }
+.compact-status.inactive { color: #64748b; }
+.compact-status.inactive::before { background: #94a3b8; }
+.more-action { width: 2rem; height: 2rem; display: grid; place-content: center; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #64748b; cursor: pointer; }
+.more-action:hover { background: #f8fafc; color: #0f172a; }
 .tree-list { min-width: 720px; padding: 0.45rem 0.85rem 0.8rem; display: grid; gap: 0; }
 .tree-branch { display: grid; gap: 0; }
 .tree-row { display: flex; align-items: stretch; gap: 0.35rem; position: relative; }

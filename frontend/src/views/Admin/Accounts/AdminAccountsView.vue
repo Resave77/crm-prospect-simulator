@@ -27,6 +27,7 @@ const resetPasswordTarget = ref<AdminUserListItem | null>(null)
 
 const roleOptions = [
   { label: 'All Roles', value: '' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN' },
   { label: 'Administrator', value: 'ADMINISTRATOR' },
   { label: 'Sales Manager', value: 'SALES_MANAGER' },
   { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
@@ -83,6 +84,7 @@ function onPage(event: { first: number; rows: number; page: number }) {
 
 function roleLabel(role: string) {
   switch (role) {
+    case 'SUPER_ADMIN': return 'Super Admin'
     case 'ADMINISTRATOR': return 'Administrator'
     case 'SALES_MANAGER': return 'Sales Manager'
     default: return 'Sales Executive'
@@ -91,6 +93,7 @@ function roleLabel(role: string) {
 
 function roleSeverity(role: string) {
   switch (role) {
+    case 'SUPER_ADMIN': return 'info'
     case 'ADMINISTRATOR': return 'warn'
     case 'SALES_MANAGER': return 'info'
     default: return 'success'
@@ -98,6 +101,23 @@ function roleSeverity(role: string) {
 }
 
 const isSelf = (id: string) => id === auth.user?.id
+
+function fallback(value?: string | null) {
+  return value?.trim() || '-'
+}
+
+function organizationalRoleLabel(user: AdminUserListItem) {
+  if (user.role === 'SUPER_ADMIN') return 'Super Admin'
+  return fallback(user.organizationalRole)
+}
+
+function teamLabel(user: AdminUserListItem & Record<string, unknown>) {
+  return fallback(String(user.teamName || user.managerName || user.parentName || user.regionName || ''))
+}
+
+function reportsToLabel(user: AdminUserListItem & Record<string, unknown>) {
+  return fallback(String(user.parentName || user.managerName || user.reportsToName || ''))
+}
 
 function openResetPassword(user: AdminUserListItem) {
   resetPasswordTarget.value = user
@@ -213,47 +233,44 @@ onMounted(() => { load() })
           </div>
         </template>
 
-        <Column header="Employee ID" :style="{ width: '160px' }">
+        <Column header="Employee" :style="{ minWidth: '250px' }">
           <template #body="{ data }">
-            <code class="code-tag code-blue">{{ data.employeeId || '—' }}</code>
-          </template>
-        </Column>
-        <Column header="Name" :style="{ minWidth: '220px' }">
-          <template #body="{ data }">
-            <div class="cell-stack">
+            <div class="employee-cell">
+              <code class="employee-id">{{ data.employeeId || '-' }}</code>
               <span class="cell-primary">{{ data.fullName }}</span>
+              <span class="cell-muted">{{ data.email }}</span>
               <span v-if="data.mustChangePassword" class="cell-warn">
                 <i class="pi pi-key" /> Password change required
               </span>
             </div>
           </template>
         </Column>
-        <Column header="Email" :style="{ minWidth: '200px' }">
+        <Column header="System Role" :style="{ minWidth: '150px' }">
           <template #body="{ data }">
-            <span class="cell-text">{{ data.email }}</span>
+            <span class="cell-text">{{ roleLabel(data.role) }}</span>
           </template>
         </Column>
-        <Column header="Phone" :style="{ minWidth: '140px' }">
+        <Column header="Team" :style="{ minWidth: '170px' }">
           <template #body="{ data }">
-            <span class="cell-text">{{ data.phone || '—' }}</span>
+            <span class="cell-text">{{ teamLabel(data) }}</span>
           </template>
         </Column>
-        <Column header="Role" :style="{ width: '150px' }">
+        <Column header="Organizational Role" :style="{ minWidth: '170px' }">
           <template #body="{ data }">
-            <Tag :value="roleLabel(data.role)" :severity="roleSeverity(data.role)" />
+            <Tag :value="organizationalRoleLabel(data)" :severity="roleSeverity(data.role)" class="soft-tag" />
           </template>
         </Column> 
-        <Column header="Manager" :style="{ minWidth: '180px' }">
+        <Column header="Reports To" :style="{ minWidth: '160px' }">
           <template #body="{ data }">
-            <span class="cell-text">{{ data.managerName || '—' }}</span>
+            <span class="cell-text">{{ reportsToLabel(data) }}</span>
           </template>
         </Column>
         <Column header="Status" :style="{ width: '110px' }">
           <template #body="{ data }">
-            <Tag :value="data.status" :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" size="small" />
+            <Tag :value="data.status === 'ACTIVE' ? 'Active' : 'Inactive'" :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" size="small" class="soft-tag" />
           </template>
         </Column>
-        <Column header="Actions" :style="{ width: '260px' }">
+        <Column header="Actions" :style="{ width: '190px' }">
           <template #body="{ data }">
             <div class="row-actions">
               <Button icon="pi pi-eye" text rounded size="small" title="View account" @click="router.push(`/admin/accounts/${data.id}`)" />
@@ -312,10 +329,10 @@ onMounted(() => { load() })
 .admin-page {
   display: flex;
   flex-direction: column;
-  gap: 1.35rem;
-  padding: 1.75rem 2rem;
+  gap: 1rem;
+  padding: 1.35rem 1.6rem;
   min-height: 100vh;
-  background: #f7f9fb;
+  background: #ffffff;
 }
 
 /* ── PAGE HEADER ──────────────────────────────────────────────────── */
@@ -368,12 +385,12 @@ onMounted(() => { load() })
 .filter-panel {
   background: #ffffff;
   border: 1px solid #edf1f6;
-  border-radius: 16px;
-  padding: 1.15rem 1.3rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 20px -12px rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 .search-row {
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.65rem;
 }
 .search-field {
   display: flex;
@@ -441,8 +458,8 @@ onMounted(() => { load() })
 .table-panel {
   background: #ffffff;
   border: 1px solid #edf1f6;
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 20px -12px rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
   overflow: hidden;
 }
 
@@ -462,7 +479,7 @@ onMounted(() => { load() })
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-color: #edf1f6;
-  padding: 0.85rem 1rem;
+  padding: 0.58rem 0.75rem;
 }
 .table-panel :deep(.p-datatable-tbody > tr) {
   background: #ffffff;
@@ -472,8 +489,8 @@ onMounted(() => { load() })
   background: transparent;
   color: #1e293b;
   border-color: #f1f4f8;
-  padding: 0.8rem 1rem;
-  font-size: 0.84rem;
+  padding: 0.52rem 0.75rem;
+  font-size: 0.8rem;
 }
 .table-panel :deep(.p-datatable-tbody > tr:hover) {
   background: #f8fafc;
@@ -484,7 +501,7 @@ onMounted(() => { load() })
 .table-panel :deep(.p-paginator) {
   background: #ffffff;
   border-color: #edf1f6;
-  padding: 0.65rem 0.9rem;
+  padding: 0.5rem 0.75rem;
 }
 .table-panel :deep(.p-paginator .p-paginator-current) {
   color: #7c8798;
@@ -541,29 +558,36 @@ onMounted(() => { load() })
 }
 
 /* ── TABLE CELLS ──────────────────────────────────────────────────── */
-.code-tag {
+.code-tag,
+.employee-id {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  padding: 0.18rem 0.55rem;
+  padding: 0.12rem 0.42rem;
   border-radius: 6px;
-  background: #f1f5f9;
-  color: #475569;
+  background: #eef4fb;
+  color: #35628f;
 }
 .code-blue {
   background: #eff6ff;
   color: #2563eb;
 }
 
-.cell-stack {
+.cell-stack,
+.employee-cell {
   display: flex;
   flex-direction: column;
+  gap: 0.08rem;
 }
 .cell-primary {
   font-weight: 650;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: #0f172a;
+}
+.cell-muted {
+  color: #94a3b8;
+  font-size: 0.72rem;
 }
 .cell-warn {
   display: inline-flex;
@@ -575,16 +599,23 @@ onMounted(() => { load() })
   color: #b45309;
 }
 .cell-text {
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   color: #475569;
+}
+.soft-tag {
+  font-size: 0.68rem;
+  border-radius: 999px;
 }
 
 /* ── ROW ACTIONS ──────────────────────────────────────────────────── */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.05rem;
+  white-space: nowrap;
 }
+.row-actions :deep(.p-button) { width: 2rem; height: 2rem; padding: 0; }
+.row-actions :deep(.p-button-label) { display: none; }
 .row-actions :deep(.p-button) {
   transition: transform 140ms ease, background 140ms ease;
 }

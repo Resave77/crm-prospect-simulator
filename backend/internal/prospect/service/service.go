@@ -138,14 +138,14 @@ func validCoordinates(latitude, longitude float64) bool {
 }
 
 func (s *Service) WonQueue(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListWon(ctx)
 }
 
 func (s *Service) Review(ctx context.Context, actor Actor, id uuid.UUID) (prospectmodel.Review, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return prospectmodel.Review{}, ErrForbidden
 	}
 	return s.repository.FindReview(ctx, id)
@@ -166,21 +166,21 @@ func (s *Service) MyProspect(ctx context.Context, actor Actor, id uuid.UUID) (pr
 }
 
 func (s *Service) Pipeline(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListAll(ctx)
 }
 
 func (s *Service) SalesExecutives(ctx context.Context, actor Actor) ([]prospectmodel.SalesExecutive, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListSalesExecutives(ctx)
 }
 
 func (s *Service) SearchPlaces(ctx context.Context, actor Actor, input prospectmodel.PlaceSearchInput) ([]prospectmodel.PlaceResult, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	if input.Radius < 500 || input.Radius > 50000 || input.Latitude < -90 || input.Latitude > 90 || input.Longitude < -180 || input.Longitude > 180 {
@@ -193,7 +193,7 @@ func (s *Service) SearchPlaces(ctx context.Context, actor Actor, input prospectm
 }
 
 func (s *Service) PlaceDetail(ctx context.Context, actor Actor, placeID string) (prospectmodel.PlaceResult, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return prospectmodel.PlaceResult{}, ErrForbidden
 	}
 	if strings.TrimSpace(placeID) == "" {
@@ -216,7 +216,7 @@ func (s *Service) PlaceDetailFull(ctx context.Context, placeID string) (prospect
 }
 
 func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.SaveProspectInput) (prospectmodel.Prospect, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return prospectmodel.Prospect{}, ErrForbidden
 	}
 	input.IndustryGroup = strings.TrimSpace(input.IndustryGroup)
@@ -227,7 +227,7 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 }
 
 func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListVisitMonitoring(ctx, filter)
@@ -245,7 +245,7 @@ func (s *Service) ListProspectVisits(ctx context.Context, prospectID uuid.UUID) 
 }
 
 func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUID) (prospectmodel.Visit, error) {
-	if actor.Role == authmodel.RoleAdministrator {
+	if actor.Role.IsAdminRole() {
 		return s.repository.DeleteVisit(ctx, visitID, uuid.Nil)
 	}
 	if actor.Role != authmodel.RoleSalesExecutive {
@@ -255,7 +255,7 @@ func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUI
 }
 
 func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID) ([]string, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.DeleteProspect(ctx, id)
@@ -276,14 +276,14 @@ func (s *Service) RequestDeletion(ctx context.Context, actor Actor, id uuid.UUID
 }
 
 func (s *Service) ApproveDeletion(ctx context.Context, actor Actor, id uuid.UUID) ([]string, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ApproveDeletion(ctx, id)
 }
 
 func (s *Service) RejectDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return ErrForbidden
 	}
 	return s.repository.RejectDeletion(ctx, id)
@@ -308,7 +308,7 @@ func (s *Service) CreateComment(ctx context.Context, actor Actor, prospectID uui
 }
 
 func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {
-	if actor.Role == authmodel.RoleAdministrator {
+	if actor.Role.IsAdminRole() {
 		_, err := s.repository.FindProspectOwner(ctx, prospectID)
 		return err
 	}

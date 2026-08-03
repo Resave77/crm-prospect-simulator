@@ -30,7 +30,7 @@ type Actor struct {
 
 type ConversionForm struct {
 	Prospect            prospectmodel.Review          `json:"prospect"`
-	PlaceDetails        *prospectmodel.PlaceDetails    `json:"placeDetails,omitempty"`
+	PlaceDetails        *prospectmodel.PlaceDetails   `json:"placeDetails,omitempty"`
 	ParentCompanies     []customermodel.ParentCompany `json:"parentCompanies"`
 	SalesExecutives     []customermodel.UserOption    `json:"salesExecutives"`
 	ParentCodePreview   string                        `json:"parentCodePreview"`
@@ -49,7 +49,7 @@ func New(repo repository.Repository, prospects *prospectservice.Service) *Servic
 }
 
 func (s *Service) ConversionForm(ctx context.Context, actor Actor, prospectID uuid.UUID) (ConversionForm, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return ConversionForm{}, ErrForbidden
 	}
 	review, err := s.prospects.Review(ctx, prospectservice.Actor{UserID: actor.UserID, Role: actor.Role}, prospectID)
@@ -84,14 +84,14 @@ func (s *Service) ConversionForm(ctx context.Context, actor Actor, prospectID uu
 }
 
 func (s *Service) SearchParentCompanies(ctx context.Context, actor Actor, search string) ([]customermodel.ParentCompany, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.SearchParentCompanies(ctx, strings.TrimSpace(search))
 }
 
 func (s *Service) Convert(ctx context.Context, actor Actor, prospectID uuid.UUID, input customermodel.ConversionInput) (customermodel.CustomerSite, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.CustomerSite{}, ErrForbidden
 	}
 	normalize(&input)
@@ -102,21 +102,21 @@ func (s *Service) Convert(ctx context.Context, actor Actor, prospectID uuid.UUID
 }
 
 func (s *Service) AdminCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListCustomers(ctx)
 }
 
 func (s *Service) AdminCustomersList(ctx context.Context, actor Actor, params customermodel.CustomerListParams) (customermodel.CustomerListResult, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.CustomerListResult{}, ErrForbidden
 	}
 	return s.repository.ListCustomersPaged(ctx, params)
 }
 
 func (s *Service) CustomerFilterOptions(ctx context.Context, actor Actor) (customermodel.ListFilterOptions, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.ListFilterOptions{}, ErrForbidden
 	}
 	return s.repository.ListFilterOptions(ctx)
@@ -137,7 +137,7 @@ func (s *Service) MyCustomer(ctx context.Context, actor Actor, id uuid.UUID) (cu
 }
 
 func (s *Service) AdminCustomer(ctx context.Context, actor Actor, id uuid.UUID) (customermodel.CustomerDetail, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.CustomerDetail{}, ErrForbidden
 	}
 	return s.repository.FindCustomer(ctx, id)
@@ -148,21 +148,21 @@ func (s *Service) AutoConvert(ctx context.Context, prospectID uuid.UUID) (custom
 }
 
 func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID) error {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return ErrForbidden
 	}
 	return s.repository.DeleteCustomer(ctx, id)
 }
 
 func (s *Service) FindParentCompanyByCode(ctx context.Context, actor Actor, code string) (customermodel.ParentCompany, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.ParentCompany{}, ErrForbidden
 	}
 	return s.repository.FindParentCompanyByCode(ctx, code)
 }
 
 func (s *Service) UpdateParentCompany(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.UpdateParentCompanyInput) (customermodel.ParentCompany, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return customermodel.ParentCompany{}, ErrForbidden
 	}
 	input.Name = strings.TrimSpace(input.Name)

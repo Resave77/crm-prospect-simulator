@@ -28,6 +28,8 @@ type UserListItem struct {
 	Status             authmodel.UserStatus `json:"status"`
 	ManagerID          *uuid.UUID          `json:"managerId"`
 	ManagerName        string              `json:"managerName"`
+	OrganizationalRole string              `json:"organizationalRole"`
+	OrganizationalRoleLevel *int           `json:"organizationalRoleLevel,omitempty"`
 	MustChangePassword bool                `json:"mustChangePassword"`
 	CreatedAt          time.Time           `json:"createdAt"`
 	UpdatedAt          time.Time           `json:"updatedAt"`

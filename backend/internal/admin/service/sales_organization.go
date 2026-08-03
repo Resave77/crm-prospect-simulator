@@ -9,7 +9,6 @@ import (
 
 	"crm-prospect-simulator/backend/internal/admin/model"
 	"crm-prospect-simulator/backend/internal/admin/repository"
-	authmodel "crm-prospect-simulator/backend/internal/auth/model"
 	"github.com/google/uuid"
 )
 
@@ -24,22 +23,33 @@ var (
 	ErrAssignmentOverlap     = errors.New("sales assignment overlaps")
 )
 
+var defaultSalesRoleIDs = map[uuid.UUID]bool{
+	uuid.MustParse("00000000-0000-0000-0000-000000000101"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000102"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000103"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000104"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000105"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000106"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000107"): true,
+	uuid.MustParse("00000000-0000-0000-0000-000000000108"): true,
+}
+
 func (s *Service) ListSalesRoles(ctx context.Context, actor Actor) ([]model.SalesRole, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repo.ListSalesRoles(ctx)
 }
 
 func (s *Service) GetSalesRole(ctx context.Context, actor Actor, id uuid.UUID) (model.SalesRole, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesRole{}, ErrForbidden
 	}
 	return s.repo.FindSalesRole(ctx, id)
 }
 
 func (s *Service) CreateSalesRole(ctx context.Context, actor Actor, input model.CreateSalesRoleInput) (model.SalesRole, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesRole{}, ErrForbidden
 	}
 	if err := s.validateSalesRole(ctx, input.Name, input.Level, nil); err != nil {
@@ -53,7 +63,7 @@ func (s *Service) CreateSalesRole(ctx context.Context, actor Actor, input model.
 }
 
 func (s *Service) UpdateSalesRole(ctx context.Context, actor Actor, id uuid.UUID, input model.UpdateSalesRoleInput) (model.SalesRole, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesRole{}, ErrForbidden
 	}
 	current, err := s.repo.FindSalesRole(ctx, id)
@@ -87,7 +97,7 @@ func (s *Service) UpdateSalesRole(ctx context.Context, actor Actor, id uuid.UUID
 }
 
 func (s *Service) UpdateSalesRoleStatus(ctx context.Context, actor Actor, id uuid.UUID, isActive bool) (model.SalesRole, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesRole{}, ErrForbidden
 	}
 	if _, err := s.repo.FindSalesRole(ctx, id); err != nil {
@@ -99,8 +109,28 @@ func (s *Service) UpdateSalesRoleStatus(ctx context.Context, actor Actor, id uui
 	return s.repo.FindSalesRole(ctx, id)
 }
 
+func (s *Service) DeleteSalesRole(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	if _, err := s.repo.FindSalesRole(ctx, id); err != nil {
+		return err
+	}
+	if defaultSalesRoleIDs[id] {
+		return ErrSalesRoleInUse
+	}
+	inUse, err := s.repo.SalesRoleHasAssignments(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inUse {
+		return ErrSalesRoleInUse
+	}
+	return s.repo.DeleteSalesRole(ctx, id)
+}
+
 func (s *Service) CreateSalesAssignment(ctx context.Context, actor Actor, input model.CreateAssignmentInput) (model.SalesStructureAssignment, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesStructureAssignment{}, ErrForbidden
 	}
 	if err := s.validateAssignment(ctx, input.UserID, input.SalesRoleID, input.ParentUserID, input.EffectiveFrom.Time, nil); err != nil {
@@ -114,7 +144,7 @@ func (s *Service) CreateSalesAssignment(ctx context.Context, actor Actor, input 
 }
 
 func (s *Service) MoveSalesAssignment(ctx context.Context, actor Actor, currentID uuid.UUID, input model.MoveAssignmentInput) (model.SalesStructureAssignment, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.SalesStructureAssignment{}, ErrForbidden
 	}
 	current, err := s.repo.FindSalesAssignment(ctx, currentID)
@@ -135,14 +165,14 @@ func (s *Service) MoveSalesAssignment(ctx context.Context, actor Actor, currentI
 }
 
 func (s *Service) ListSalesStructure(ctx context.Context, actor Actor, effectiveDate time.Time) ([]model.SalesStructureItem, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repo.ListSalesStructure(ctx, truncateDate(effectiveDate))
 }
 
 func (s *Service) ListSalesAssignmentHistory(ctx context.Context, actor Actor, userID uuid.UUID) ([]model.AssignmentHistoryItem, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	exists, err := s.repo.UserExists(ctx, userID)

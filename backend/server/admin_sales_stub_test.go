@@ -24,6 +24,9 @@ func (r *adminRepoStub) UpdateSalesRole(_ context.Context, _ uuid.UUID, _ adminm
 func (r *adminRepoStub) UpdateSalesRoleStatus(_ context.Context, _ uuid.UUID, _ bool, _ uuid.UUID) error {
 	return nil
 }
+func (r *adminRepoStub) DeleteSalesRole(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 func (r *adminRepoStub) SalesRoleNameExists(_ context.Context, _ string, _ *uuid.UUID) (bool, error) {
 	return false, nil
 }
@@ -66,6 +69,9 @@ func (r *patchAdminRepo) UpdateSalesRole(_ context.Context, _ uuid.UUID, _ admin
 	return nil
 }
 func (r *patchAdminRepo) UpdateSalesRoleStatus(_ context.Context, _ uuid.UUID, _ bool, _ uuid.UUID) error {
+	return nil
+}
+func (r *patchAdminRepo) DeleteSalesRole(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
 func (r *patchAdminRepo) SalesRoleNameExists(_ context.Context, _ string, _ *uuid.UUID) (bool, error) {

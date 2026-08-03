@@ -57,6 +57,10 @@ func (r *salesRepo) UpdateSalesRoleStatus(_ context.Context, id uuid.UUID, activ
 	r.roles[id] = role
 	return nil
 }
+func (r *salesRepo) DeleteSalesRole(_ context.Context, id uuid.UUID) error {
+	delete(r.roles, id)
+	return nil
+}
 func (r *salesRepo) UserExists(_ context.Context, id uuid.UUID) (bool, error) {
 	_, ok := r.users[id]
 	return ok, nil

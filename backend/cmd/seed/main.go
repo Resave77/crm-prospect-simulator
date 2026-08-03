@@ -29,8 +29,12 @@ func main() {
 	}
 	repo := repository.NewPostgresRepository(pool)
 	managerID := uuid.New()
+	var existingManagerID uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE email = 'manager@yummy.test'`).Scan(&existingManagerID); err == nil {
+		managerID = existingManagerID
+	}
 	users := []model.User{
-		{ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash), FullName: "Yummy Administrator", EmployeeID: "ADM-0001", Role: model.RoleAdministrator, Status: model.UserActive},
+		{ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash), FullName: "Yummy Super Admin", EmployeeID: "ADM-0001", Role: model.RoleSuperAdmin, Status: model.UserActive},
 		{ID: managerID, Email: "manager@yummy.test", PasswordHash: string(hash), FullName: "Budi Santoso", EmployeeID: "SM-0001", Role: model.RoleSalesManager, Status: model.UserActive},
 		{ID: uuid.New(), Email: "sales@yummy.test", PasswordHash: string(hash), FullName: "Nurdin Pratama", EmployeeID: "SE-0001", Role: model.RoleSalesExecutive, Status: model.UserActive, ManagerID: &managerID},
 		{ID: uuid.New(), Email: "sales2@yummy.test", PasswordHash: string(hash), FullName: "Alicia Ramadhan", EmployeeID: "SE-0002", Role: model.RoleSalesExecutive, Status: model.UserActive, ManagerID: &managerID},

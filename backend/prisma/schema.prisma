@@ -4,6 +4,7 @@ datasource db {
 }
 
 enum UserRole {
+  SUPER_ADMIN
   ADMINISTRATOR
   SALES_MANAGER
   SALES_EXECUTIVE

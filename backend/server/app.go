@@ -73,7 +73,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	auth.Post("/change-password", authMiddleware.Authenticate, authHandler.ChangePassword)
 
 	dashboard := api.Group("/dashboard", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
-	dashboard.Get("/admin", authMiddleware.RequireRole(model.RoleAdministrator), func(c *fiber.Ctx) error {
+	dashboard.Get("/admin", authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator), func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "administrator"})
 	})
 	dashboard.Get("/sales", authMiddleware.RequireRole(model.RoleSalesExecutive), func(c *fiber.Ctx) error {
@@ -97,7 +97,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/customers/:id", customerHandler.MyCustomer)
 	sales.Get("/customers/:id/place-details", customerHandler.MyCustomerPlaceDetails)
 
-	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleAdministrator))
+	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator))
 	admin.Get("/prospects/won", prospectHandler.WonQueue)
 	admin.Get("/prospects/pipeline", prospectHandler.Pipeline)
 	admin.Get("/sales-executives", prospectHandler.SalesExecutives)
@@ -132,6 +132,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/sales-roles/:id", adminHandler.GetSalesRole)
 	admin.Patch("/sales-roles/:id", adminHandler.UpdateSalesRole)
 	admin.Patch("/sales-roles/:id/status", adminHandler.UpdateSalesRoleStatus)
+	admin.Delete("/sales-roles/:id", adminHandler.DeleteSalesRole)
 	admin.Get("/sales-structure", adminHandler.ListSalesStructure)
 	admin.Post("/sales-structure/assignments", adminHandler.CreateSalesAssignment)
 	admin.Post("/sales-structure/assignments/:id/move", adminHandler.MoveSalesAssignment)

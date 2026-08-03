@@ -72,6 +72,10 @@ export async function updateSalesRoleStatus(id: string, isActive: boolean) {
   return (await api.patch<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}/status`, { isActive })).data.data
 }
 
+export async function deleteSalesRole(id: string) {
+  await api.delete(`/admin/sales-roles/${id}`)
+}
+
 export async function getSalesStructure(effectiveDate: string) {
   const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-structure', { params: { effectiveDate } })
   return asArray<SalesStructureItem>(response.data.data, 'Unable to load sales structure.')

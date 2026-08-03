@@ -9,13 +9,18 @@ import (
 type Role string
 
 const (
+	RoleSuperAdmin     Role = "SUPER_ADMIN"
 	RoleAdministrator  Role = "ADMINISTRATOR"
 	RoleSalesManager   Role = "SALES_MANAGER"
 	RoleSalesExecutive Role = "SALES_EXECUTIVE"
 )
 
 func (r Role) Valid() bool {
-	return r == RoleAdministrator || r == RoleSalesManager || r == RoleSalesExecutive
+	return r == RoleSuperAdmin || r == RoleAdministrator || r == RoleSalesManager || r == RoleSalesExecutive
+}
+
+func (r Role) IsAdminRole() bool {
+	return r == RoleSuperAdmin || r == RoleAdministrator
 }
 
 type UserStatus string

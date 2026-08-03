@@ -82,6 +82,17 @@ func (r *PostgresRepository) UpdateSalesRoleStatus(ctx context.Context, id uuid.
 	return nil
 }
 
+func (r *PostgresRepository) DeleteSalesRole(ctx context.Context, id uuid.UUID) error {
+	cmd, err := r.pool.Exec(ctx, `DELETE FROM sales_roles WHERE id=$1`, id)
+	if err != nil {
+		return mapError(err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *PostgresRepository) SalesRoleNameExists(ctx context.Context, normalizedName string, excludeID *uuid.UUID) (bool, error) {
 	var exists bool
 	var err error

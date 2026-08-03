@@ -52,6 +52,16 @@ const LEVEL_FALLBACK_DESCRIPTION: Record<SalesRoleLevel, string> = {
   3: 'Supervisor who oversees Level 4 sales members in their own team.',
   4: 'Individual sales member who sees and manages their own activity.',
 }
+const DEFAULT_ROLE_IDS = new Set([
+  '00000000-0000-0000-0000-000000000101',
+  '00000000-0000-0000-0000-000000000102',
+  '00000000-0000-0000-0000-000000000103',
+  '00000000-0000-0000-0000-000000000104',
+  '00000000-0000-0000-0000-000000000105',
+  '00000000-0000-0000-0000-000000000106',
+  '00000000-0000-0000-0000-000000000107',
+  '00000000-0000-0000-0000-000000000108',
+])
 
 const roleList = computed(() => Array.isArray(store.salesRoles) ? store.salesRoles : [])
 const levelOptions = LEVEL_ORDER.map((level) => ({ label: `Level ${level} — ${LEVEL_GUIDE[level]}`, value: level }))
@@ -76,6 +86,7 @@ const filteredRoles = computed(() => {
     return matchesSearch && matchesLevel && matchesStatus
   })
 })
+const groupedRoles = computed(() => [...filteredRoles.value].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name)))
 const hasFilters = computed(() => Boolean(search.value.trim() || levelFilter.value || statusFilter.value))
 const canSubmit = computed(() => Boolean(form.name.trim() && form.level && form.level >= 1 && form.level <= 4))
 const selectedLevelPreview = computed(() => (form.level ? LEVEL_PREVIEW[form.level] : ''))
@@ -101,7 +112,7 @@ function isDemoRole(role: SalesRole) {
 }
 
 function isSystemDefaultRole(role: SalesRole) {
-  return /^Sales Level [1-4]$/.test(role.name)
+  return DEFAULT_ROLE_IDS.has(role.id)
 }
 
 function hasDuplicateName(role: SalesRole) {
@@ -155,6 +166,17 @@ async function toggleStatus(role: SalesRole) {
   try {
     await store.setSalesRoleStatus(role.id, nextActive)
     toast.add({ severity: 'success', summary: nextActive ? 'Role Activated' : 'Role Deactivated', detail: `${role.name} is now ${nextActive ? 'active' : 'inactive'}.`, life: 3000 })
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  }
+}
+
+async function deleteRole(role: SalesRole) {
+  if (isSystemDefaultRole(role) || store.savingSalesRole) return
+  error.value = ''
+  try {
+    await store.deleteSalesRole(role.id)
+    toast.add({ severity: 'success', summary: 'Role Deleted', detail: `${role.name} has been deleted.`, life: 3000 })
   } catch (e) {
     error.value = store.errorMessage(e)
   }
@@ -255,7 +277,20 @@ onMounted(load)
       <div v-if="store.salesRolesLoading && !roleList.length" class="skeleton-area">
         <Skeleton v-for="n in 6" :key="n" class="skeleton-row" />
       </div>
-      <DataTable v-else :value="filteredRoles" :loading="store.salesRolesLoading" dataKey="id" scrollable>
+      <DataTable
+        v-else
+        :value="groupedRoles"
+        :loading="store.salesRolesLoading"
+        dataKey="id"
+        scrollable
+        rowGroupMode="subheader"
+        groupRowsBy="level"
+        sortField="level"
+        :sortOrder="1"
+      >
+        <template #groupheader="{ data }">
+          <span class="level-group-title">Level {{ data.level }}</span>
+        </template>
         <template #empty>
           <div class="empty-state">
             <div class="empty-icon"><i class="pi pi-id-card" /></div>
@@ -264,31 +299,35 @@ onMounted(load)
             <Button v-if="!hasFilters" label="Create Role" icon="pi pi-plus" size="small" @click="openCreate" />
           </div>
         </template>
-        <Column field="name" header="Role Name" :style="{ minWidth: '200px' }">
+        <Column field="level" header="Level" :style="{ width: '120px' }">
+          <template #body="{ data }">
+            <span class="level-chip" :class="`level-chip-${data.level}`">Level {{ data.level }}</span>
+          </template>
+        </Column>
+        <Column field="name" header="Role Name" :style="{ minWidth: '220px' }">
           <template #body="{ data }">
             <div class="role-name-cell">
               <strong class="role-name">{{ data.name }}</strong>
               <Tag v-if="isSystemDefaultRole(data)" value="System Default" severity="info" size="small" class="template-tag" />
               <Tag v-if="isDemoRole(data)" value="Demo" severity="warn" size="small" class="template-tag" />
-              <span v-if="hasDuplicateName(data)" class="warning-chip"><i class="pi pi-exclamation-triangle" /> Name not unique</span>
+              <span v-if="hasDuplicateName(data)" class="warning-chip" title="Duplicate display name"><i class="pi pi-exclamation-triangle" /></span>
             </div>
           </template>
         </Column>
-        <Column header="Level" :style="{ width: '130px' }"><template #body="{ data }"><Tag :value="`Level ${data.level}`" :severity="levelSeverity(data.level)" /></template></Column>
-        <Column header="Description" :style="{ minWidth: '280px' }">
+        <Column header="Description" :style="{ minWidth: '300px' }">
           <template #body="{ data }">
             <template v-if="data.description">
-              <span class="cell-text">{{ data.description }}</span>
+              <span class="cell-text clamp-2">{{ data.description }}</span>
             </template>
             <template v-else>
-              <div class="cell-text">{{ roleDisplayDescription(data) }}</div>
+              <div class="cell-text clamp-2">{{ roleDisplayDescription(data) }}</div>
               <span class="cell-hint">Edit this role to customize the name and description.</span>
             </template>
           </template>
         </Column>
-        <Column header="Status" :style="{ width: '120px' }"><template #body="{ data }"><Tag :value="data.isActive ? 'Active' : 'Inactive'" :severity="data.isActive ? 'success' : 'secondary'" /></template></Column>
-        <Column header="Updated At" :style="{ width: '150px' }"><template #body="{ data }">{{ formatDate(data.updatedAt) }}</template></Column>
-        <Column header="Actions" :style="{ width: '230px' }">
+        <Column header="Status" :style="{ width: '110px' }"><template #body="{ data }"><Tag :value="data.isActive ? 'Active' : 'Inactive'" :severity="data.isActive ? 'success' : 'secondary'" size="small" class="soft-tag" /></template></Column>
+        <Column header="Updated At" :style="{ width: '140px' }"><template #body="{ data }"><span class="date-text">{{ formatDate(data.updatedAt) }}</span></template></Column>
+        <Column header="Actions" :style="{ width: '110px' }">
           <template #body="{ data }">
             <details class="action-menu">
               <summary><i class="pi pi-ellipsis-v" /><span class="sr-only">Actions</span></summary>
@@ -296,6 +335,9 @@ onMounted(load)
                 <button type="button" @click="openEdit(data)"><i class="pi pi-pencil" /> Edit</button>
                 <button type="button" :class="{ danger: data.isActive, success: !data.isActive }" :disabled="store.savingSalesRole" @click="toggleStatus(data)">
                   <i :class="data.isActive ? 'pi pi-ban' : 'pi pi-check-circle'" /> {{ data.isActive ? 'Deactivate' : 'Activate' }}
+                </button>
+                <button type="button" class="danger" :disabled="isSystemDefaultRole(data) || store.savingSalesRole" :title="isSystemDefaultRole(data) ? 'Default role cannot be deleted' : 'Delete role'" @click="deleteRole(data)">
+                  <i class="pi pi-trash" /> Delete
                 </button>
               </div>
             </details>
@@ -328,17 +370,17 @@ onMounted(load)
 </template>
 
 <style scoped>
-.admin-page { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.75rem 2rem; min-height: 100vh; background: #f7f9fb; }
+.admin-page { display: flex; flex-direction: column; gap: 0.95rem; padding: 1.35rem 1.6rem; min-height: 100vh; background: #ffffff; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .page-title-wrapper .eyebrow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #0b7766; }
 h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
 .muted { margin: 0; color: #7c8798; font-size: 0.85rem; }
-.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.85rem; }
-.summary-card, .filter-panel, .table-panel, .info-section, .guidance-banner { background: #fff; border: 1px solid #edf1f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
-.summary-card { padding: 1rem; display: grid; gap: 0.25rem; }
-.summary-card span { color: #64748b; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; }
-.summary-card strong { color: #0f172a; font-size: 1.25rem; }
-.level-breakdown { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.summary-card, .filter-panel, .table-panel, .info-section, .guidance-banner { background: #fff; border: 1px solid #edf1f6; border-radius: 10px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
+.summary-card { padding: 0.68rem 0.8rem; display: grid; gap: 0.12rem; }
+.summary-card span { color: #64748b; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
+.summary-card strong { color: #0f172a; font-size: 1.08rem; }
+.level-breakdown { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .guidance-banner { display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.85rem 1rem; background: #fffbeb; border-color: #fde68a; }
 .guidance-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-content: center; border-radius: 10px; background: #fef3c7; color: #b45309; }
 .guidance-banner div:nth-child(2) { display: grid; gap: 0.2rem; flex: 1; }
@@ -353,7 +395,7 @@ h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
 .hier-card { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.8rem; border: 1px solid #edf1f6; border-radius: 10px; background: #f8fafc; }
 .hier-level { font-weight: 750; color: #0f172a; font-size: 0.8rem; }
 .hier-desc { color: #64748b; font-size: 0.74rem; line-height: 1.4; }
-.filter-panel { display: grid; grid-template-columns: minmax(260px, 1fr) 200px 160px auto; gap: 0.75rem; align-items: end; padding: 1rem; }
+.filter-panel { display: grid; grid-template-columns: minmax(260px, 1fr) 200px 160px auto; gap: 0.65rem; align-items: end; padding: 0.8rem; }
 .search-field { display: flex; align-items: center; gap: 0.6rem; min-height: 2.55rem; padding: 0 0.75rem; background: #fff; border: 1px solid #dbe3ee; border-radius: 8px; }
 .search-field i { color: #94a3b8; }
 .search-field :deep(.p-inputtext) { flex: 1; border: 0; padding-inline: 0; box-shadow: none; }
@@ -362,16 +404,27 @@ h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
 .optional-label { font-weight: 500; text-transform: none; color: #94a3b8; }
 .table-panel { overflow-x: auto; }
 .table-panel :deep(.p-datatable), .table-panel :deep(.p-datatable-table), .table-panel :deep(.p-datatable-table-container) { background: #ffffff; color: #0f172a; }
-.table-panel :deep(.p-datatable-thead > tr > th) { background: #f8fafc; color: #475569; font-size: 0.68rem; text-transform: uppercase; border-color: #edf1f6; }
+.table-panel :deep(.p-datatable-thead > tr > th) { background: #f8fafc; color: #475569; font-size: 0.66rem; text-transform: uppercase; border-color: #edf1f6; padding: 0.55rem 0.75rem; }
 .table-panel :deep(.p-datatable-tbody > tr), .table-panel :deep(.p-datatable-tbody > tr > td) { background: #ffffff; color: #1e293b; border-color: #f1f4f8; }
+.table-panel :deep(.p-datatable-tbody > tr > td) { padding: 0.52rem 0.75rem; font-size: 0.8rem; }
 .table-panel :deep(.p-datatable-tbody > tr:hover > td) { background: #f8fafc; }
+.table-panel :deep(.p-rowgroup-header > td) { background: #f1f5f9 !important; padding: 0.42rem 0.75rem !important; border-color: #e2e8f0 !important; }
 .table-panel :deep(.p-datatable-loading-overlay) { background: rgba(255, 255, 255, 0.72); }
 .role-name { color: #0f172a; font-weight: 750; }
 .role-name-cell { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
 .template-tag { opacity: 0.85; }
-.warning-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.12rem 0.45rem; border-radius: 999px; background: #fef2f2; color: #b91c1c; font-size: 0.68rem; font-weight: 800; }
-.cell-text { color: #475569; }
+.warning-chip { display: inline-grid; place-content: center; width: 1.35rem; height: 1.35rem; border-radius: 999px; background: #fff7ed; color: #b45309; font-size: 0.68rem; }
+.level-group-title { color: #334155; font-size: 0.68rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+.level-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 4.4rem; padding: 0.18rem 0.48rem; border-radius: 999px; font-size: 0.7rem; font-weight: 800; border: 1px solid transparent; }
+.level-chip-1 { background: #eff6ff; color: #1d4ed8; border-color: #dbeafe; }
+.level-chip-2 { background: #ecfdf5; color: #047857; border-color: #d1fae5; }
+.level-chip-3 { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.level-chip-4 { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
+.cell-text { color: #475569; line-height: 1.35; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .cell-hint { display: block; margin-top: 0.2rem; color: #94a3b8; font-size: 0.72rem; }
+.date-text { color: #64748b; font-size: 0.78rem; }
+.soft-tag { font-size: 0.68rem; border-radius: 999px; }
 .action-menu { position: relative; width: fit-content; }
 .action-menu summary { width: 2rem; height: 2rem; display: grid; place-content: center; list-style: none; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #64748b; cursor: pointer; }
 .action-menu summary::-webkit-details-marker { display: none; }

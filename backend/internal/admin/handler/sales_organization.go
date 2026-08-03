@@ -76,6 +76,17 @@ func (h *Handler) UpdateSalesRoleStatus(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, role)
 }
 
+func (h *Handler) DeleteSalesRole(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "SALES_ROLE_ID_INVALID", "Sales role ID is invalid.")
+	}
+	if err := h.svc.DeleteSalesRole(c.UserContext(), actor(c), id); err != nil {
+		return writeSalesError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func (h *Handler) ListSalesStructure(c *fiber.Ctx) error {
 	date := time.Now()
 	if raw := c.Query("effectiveDate"); raw != "" {

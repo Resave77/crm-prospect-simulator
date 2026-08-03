@@ -19,14 +19,14 @@ import (
 )
 
 var (
-	ErrForbidden                    = errors.New("admin operation forbidden")
-	ErrValidation                   = errors.New("validation failed")
-	ErrSelfDeactivate               = errors.New("cannot deactivate yourself")
-	ErrInvalidManager               = errors.New("invalid manager")
-	ErrLastAdmin                    = errors.New("cannot deactivate last active administrator")
-	ErrInvalidResetMode             = errors.New("invalid reset mode")
-	ErrTemporaryPasswordRequired    = errors.New("temporary password required")
-	ErrWeakTemporaryPassword        = errors.New("weak temporary password")
+	ErrForbidden                 = errors.New("admin operation forbidden")
+	ErrValidation                = errors.New("validation failed")
+	ErrSelfDeactivate            = errors.New("cannot deactivate yourself")
+	ErrInvalidManager            = errors.New("invalid manager")
+	ErrLastAdmin                 = errors.New("cannot deactivate last active administrator")
+	ErrInvalidResetMode          = errors.New("invalid reset mode")
+	ErrTemporaryPasswordRequired = errors.New("temporary password required")
+	ErrWeakTemporaryPassword     = errors.New("weak temporary password")
 )
 
 type Service struct {
@@ -43,21 +43,21 @@ type Actor struct {
 }
 
 func (s *Service) ListUsers(ctx context.Context, actor Actor, filter model.ListFilter) (model.UserListResult, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.UserListResult{}, ErrForbidden
 	}
 	return s.repo.ListUsers(ctx, filter)
 }
 
 func (s *Service) GetUserDetail(ctx context.Context, actor Actor, id uuid.UUID) (model.UserDetail, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
 	}
 	return s.repo.FindUserDetail(ctx, id)
 }
 
 func (s *Service) CreateUser(ctx context.Context, actor Actor, input model.CreateUserInput) (model.UserDetail, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
 	}
 	if err := s.validateCreate(ctx, input); err != nil {
@@ -75,7 +75,7 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input model.Creat
 }
 
 func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, input model.UpdateUserInput) (model.UserDetail, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
 	}
 	if err := s.validateUpdate(ctx, id, &input); err != nil {
@@ -88,7 +88,7 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, actor Actor, id uuid.UUID, status authmodel.UserStatus) (model.UserDetail, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
 	}
 	if id == actor.UserID {
@@ -103,7 +103,7 @@ func (s *Service) UpdateStatus(ctx context.Context, actor Actor, id uuid.UUID, s
 		if err != nil {
 			return model.UserDetail{}, err
 		}
-		if target.Role == authmodel.RoleAdministrator && count <= 1 {
+		if target.Role.IsAdminRole() && count <= 1 {
 			return model.UserDetail{}, ErrLastAdmin
 		}
 	}
@@ -114,14 +114,14 @@ func (s *Service) UpdateStatus(ctx context.Context, actor Actor, id uuid.UUID, s
 }
 
 func (s *Service) ListManagers(ctx context.Context, actor Actor) ([]model.ManagerOption, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repo.ListActiveManagers(ctx)
 }
 
 func (s *Service) ResetPassword(ctx context.Context, actor Actor, targetID uuid.UUID, input model.ResetPasswordInput) (model.ResetPasswordResult, error) {
-	if actor.Role != authmodel.RoleAdministrator {
+	if !actor.Role.IsAdminRole() {
 		return model.ResetPasswordResult{}, ErrForbidden
 	}
 
@@ -267,7 +267,7 @@ func (s *Service) validateUpdate(ctx context.Context, id uuid.UUID, input *model
 		}
 
 		switch effectiveRole {
-		case authmodel.RoleAdministrator, authmodel.RoleSalesManager:
+		case authmodel.RoleSuperAdmin, authmodel.RoleAdministrator, authmodel.RoleSalesManager:
 			// These roles must not have a manager.
 			if input.ManagerID.Present && input.ManagerID.Value != nil {
 				return fmt.Errorf("%w: %s cannot have a manager", ErrValidation, effectiveRole)
@@ -301,7 +301,7 @@ func (s *Service) validateUpdate(ctx context.Context, id uuid.UUID, input *model
 
 func (s *Service) validateManagerRule(role authmodel.Role, managerID *uuid.UUID) error {
 	switch role {
-	case authmodel.RoleAdministrator, authmodel.RoleSalesManager:
+	case authmodel.RoleSuperAdmin, authmodel.RoleAdministrator, authmodel.RoleSalesManager:
 		if managerID != nil {
 			return fmt.Errorf("%w: %s cannot have a manager", ErrValidation, role)
 		}
@@ -342,11 +342,11 @@ func (s *Service) ensureManagerActive(ctx context.Context, managerID *uuid.UUID)
 // (upper, lower, digit, symbol) and shuffling with crypto/rand.
 func generateTemporaryPassword() (string, error) {
 	const (
-		upperChars = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-		lowerChars = "abcdefghijkmnopqrstuvwxyz"
-		digitChars = "23456789"
+		upperChars  = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+		lowerChars  = "abcdefghijkmnopqrstuvwxyz"
+		digitChars  = "23456789"
 		symbolChars = "!@#$%&*"
-		fillLength = 8
+		fillLength  = 8
 	)
 
 	groups := []string{upperChars, lowerChars, digitChars, symbolChars}

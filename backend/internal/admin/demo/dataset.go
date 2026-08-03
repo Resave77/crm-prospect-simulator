@@ -59,14 +59,14 @@ type Dataset struct {
 
 func BuildDataset() Dataset {
 	roles := []Role{
-		role("level-1", "Sales Level 1", 1, "National sales leadership responsible for strategic direction and all-region performance governance."),
+		role("level-1", "Super Admin", 1, "Top-level sales organization role for Super Admin."),
 		role("level-2-collector", "Sales Level 2 + Collector", 2, "Regional leadership with collector coordination for account settlement and route productivity."),
-		role("level-3-billing", "Sales Level 3 + Billing", 3, "Supervisor layer coordinating billing follow-up, field coaching, and regional execution quality."),
+		role("level-3-collector", "Sales Level 3 + Collector", 3, "Supervisor layer coordinating collector follow-up, field coaching, and regional execution quality."),
+		role("billing", "Billing", 4, "Billing role for outlet billing follow-up and account settlement support."),
 		role("level-4", "Sales Level 4", 4, "Core field sales role for outlet coverage, prospect follow-up, and daily route execution."),
 		role("level-4-collector", "Sales Level 4 + Collector", 4, "Field sales role with additional collection responsibility for assigned customer routes."),
 		role("level-4-merchandising", "Sales Level 4 + Merchandising", 4, "Field execution role focused on outlet merchandising, planogram compliance, and product visibility."),
 		role("level-4-collector-billing", "Sales Level 4 + Collector + Billing", 4, "Field role combining route execution, collection coordination, and billing follow-up."),
-		role("admin-sales", "Admin Sales", 4, "Sales administration support for order coordination, documentation, and reporting assistance."),
 	}
 
 	users := []User{
@@ -156,10 +156,10 @@ func buildAssignments(level4 []struct{ key, employeeID, name, email, phone, mana
 			continue
 		}
 		assignments = append(assignments,
-			assignment("jul-"+s.key, s.key, "level-3-billing", s.parent, JulyStart, nil, "same"),
+			assignment("jul-"+s.key, s.key, "level-3-collector", s.parent, JulyStart, nil, "same"),
 		)
 	}
-	roleCycle := []string{"level-4", "level-4-collector", "level-4-merchandising", "level-4-collector-billing", "admin-sales"}
+	roleCycle := []string{"billing", "level-4", "level-4-collector", "level-4-merchandising", "level-4-collector-billing"}
 	promotionOldParents := map[string]string{
 		"spv-malang":   "spv-surabaya",
 		"spv-medan":    "spv-semarang",
@@ -204,7 +204,7 @@ func buildAssignments(level4 []struct{ key, employeeID, name, email, phone, mana
 	for _, p := range promotions {
 		assignments = append(assignments,
 			assignment("jul-promo-"+p.user, p.user, "level-4", p.oldParent, JulyStart, &JulyEnd, "promoted"),
-			assignment("aug-promo-"+p.user, p.user, "level-3-billing", p.newParent, AugustStart, nil, "promoted"),
+			assignment("aug-promo-"+p.user, p.user, "level-3-collector", p.newParent, AugustStart, nil, "promoted"),
 		)
 	}
 	return assignments

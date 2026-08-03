@@ -78,9 +78,14 @@ const router = createRouter({
 })
 
 function homeFor(role: UserRole) {
-  if (role === 'ADMINISTRATOR') return '/admin/dashboard'
+  if (role === 'SUPER_ADMIN' || role === 'ADMINISTRATOR') return '/admin/dashboard'
   if (role === 'SALES_MANAGER') return '/forbidden'
   return '/sales/dashboard'
+}
+
+function roleAllowed(required: UserRole, actual: UserRole) {
+  if (required === 'ADMINISTRATOR') return actual === 'SUPER_ADMIN' || actual === 'ADMINISTRATOR'
+  return required === actual
 }
 
 router.beforeEach(async (to: RouteLocationNormalized) => {
@@ -90,7 +95,7 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
   if (to.name === 'Login' && auth.role && auth.role !== 'SALES_MANAGER') return homeFor(auth.role)
   if (to.meta.public) return true
   if (!auth.authenticated) return { name: 'Login', query: { redirect: to.fullPath } }
-  if (to.meta.role && to.meta.role !== auth.role) return homeFor(auth.role!)
+  if (to.meta.role && !roleAllowed(to.meta.role, auth.role!)) return homeFor(auth.role!)
   return true
 })
 

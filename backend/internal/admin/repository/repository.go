@@ -35,6 +35,7 @@ type Repository interface {
 	CreateSalesRole(ctx context.Context, id uuid.UUID, input model.CreateSalesRoleInput, actorID uuid.UUID) error
 	UpdateSalesRole(ctx context.Context, id uuid.UUID, input model.UpdateSalesRoleInput, actorID uuid.UUID) error
 	UpdateSalesRoleStatus(ctx context.Context, id uuid.UUID, isActive bool, actorID uuid.UUID) error
+	DeleteSalesRole(ctx context.Context, id uuid.UUID) error
 	SalesRoleNameExists(ctx context.Context, normalizedName string, excludeID *uuid.UUID) (bool, error)
 	SalesRoleHasAssignments(ctx context.Context, id uuid.UUID) (bool, error)
 	CreateSalesAssignment(ctx context.Context, id uuid.UUID, input model.CreateAssignmentInput, actorID uuid.UUID) error

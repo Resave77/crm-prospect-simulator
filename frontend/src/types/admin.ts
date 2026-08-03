@@ -1,4 +1,4 @@
-export type AdminUserRole = 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
+export type AdminUserRole = 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 export type AdminUserStatus = 'ACTIVE' | 'INACTIVE'
 export type SalesRoleLevel = 1 | 2 | 3 | 4
 
@@ -12,6 +12,8 @@ export interface AdminUserListItem {
   status: AdminUserStatus
   managerId: string | null
   managerName: string
+  organizationalRole?: string
+  organizationalRoleLevel?: SalesRoleLevel
   mustChangePassword: boolean
   createdAt: string
   updatedAt: string

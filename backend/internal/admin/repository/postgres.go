@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgresRepository struct {
@@ -26,6 +26,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 const listColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
+	COALESCE(sr.name, CASE WHEN u.role::text = 'SUPER_ADMIN' THEN 'Super Admin' ELSE '' END), sr.level,
 	u.created_at, u.updated_at`
 
 const detailColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
@@ -34,7 +35,17 @@ const detailColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.created_by, u.updated_by,
 	u.created_at, u.updated_at`
 
-const userJoin = `FROM users u LEFT JOIN users m ON m.id = u.manager_id`
+const userJoin = `FROM users u LEFT JOIN users m ON m.id = u.manager_id
+	LEFT JOIN LATERAL (
+		SELECT r.name, r.level
+		FROM sales_structure_assignments a
+		JOIN sales_roles r ON r.id = a.sales_role_id
+		WHERE a.user_id = u.id
+		  AND a.effective_from <= CURRENT_DATE
+		  AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+		ORDER BY a.effective_from DESC
+		LIMIT 1
+	) sr ON true`
 
 func (r *PostgresRepository) ListUsers(ctx context.Context, filter model.ListFilter) (model.UserListResult, error) {
 	if filter.Page < 1 {
@@ -307,7 +318,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (au
 
 func (r *PostgresRepository) CountActiveAdministrators(ctx context.Context) (int, error) {
 	var count int
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'ADMINISTRATOR' AND status = 'ACTIVE'`).Scan(&count)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role IN ('SUPER_ADMIN', 'ADMINISTRATOR') AND status = 'ACTIVE'`).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count active administrators: %w", err)
 	}
@@ -370,11 +381,13 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	var item model.UserListItem
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var orgRoleLevel pgtype.Int2
 	var managerID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
+		&item.OrganizationalRole, &orgRoleLevel,
 		&item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return model.UserListItem{}, fmt.Errorf("scan user list item: %w", err)
@@ -384,6 +397,10 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	}
 	if phone.Valid {
 		item.Phone = phone.String
+	}
+	if orgRoleLevel.Valid {
+		level := int(orgRoleLevel.Int16)
+		item.OrganizationalRoleLevel = &level
 	}
 	item.ManagerID = managerID
 	return item, nil

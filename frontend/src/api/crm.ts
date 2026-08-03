@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ApiEnvelope } from '../types/auth'
+import type { ApiEnvelope, UserRole } from '../types/auth'
 import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
@@ -132,17 +132,21 @@ export async function updateParentCompany(id: string, input: UpdateParentCompany
   return (await api.patch<ApiEnvelope<ParentCompany>>(`/admin/companies/${id}`, input)).data.data
 }
 
-export async function getProspectComments(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
-  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+function crmBaseForRole(role: UserRole) {
+  return role === 'SUPER_ADMIN' || role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+}
+
+export async function getProspectComments(prospectId: string, role: UserRole) {
+  const base = crmBaseForRole(role)
   return (await api.get<ApiEnvelope<ProspectComment[]>>(`${base}/prospects/${prospectId}/comments`)).data.data
 }
 
-export async function addProspectComment(prospectId: string, content: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
-  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+export async function addProspectComment(prospectId: string, content: string, role: UserRole) {
+  const base = crmBaseForRole(role)
   return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, { content })).data.data
 }
 
-export async function getProspectPlaceDetails(prospectId: string, role: 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE') {
-  const base = role === 'ADMINISTRATOR' ? '/admin' : '/sales'
+export async function getProspectPlaceDetails(prospectId: string, role: UserRole) {
+  const base = crmBaseForRole(role)
   return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/place-details`)).data.data
 }

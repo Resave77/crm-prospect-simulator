@@ -176,6 +176,16 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function deleteSalesRole(id: string) {
+    savingSalesRole.value = true
+    try {
+      await adminApi.deleteSalesRole(id)
+      await fetchSalesRoles()
+    } finally {
+      savingSalesRole.value = false
+    }
+  }
+
   async function fetchSalesStructure(effectiveDate: string) {
     salesStructureLoading.value = true
     try {
@@ -209,7 +219,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchUsers, fetchManagers, createUser, updateStatus,
     fetchUserById, updateUser, clearSelectedUser, resetPassword,
     setParam, setPage, resetFilters,
-    fetchSalesRoles, createSalesRole, updateSalesRole, setSalesRoleStatus,
+    fetchSalesRoles, createSalesRole, updateSalesRole, setSalesRoleStatus, deleteSalesRole,
     fetchSalesStructure, createSalesAssignment, errorMessage,
   }
 })

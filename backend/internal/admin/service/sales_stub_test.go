@@ -22,6 +22,9 @@ func (r *repoStub) UpdateSalesRole(_ context.Context, _ uuid.UUID, _ model.Updat
 func (r *repoStub) UpdateSalesRoleStatus(_ context.Context, _ uuid.UUID, _ bool, _ uuid.UUID) error {
 	return nil
 }
+func (r *repoStub) DeleteSalesRole(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 func (r *repoStub) SalesRoleNameExists(_ context.Context, _ string, _ *uuid.UUID) (bool, error) {
 	return false, nil
 }
