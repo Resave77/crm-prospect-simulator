@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import Dialog from 'primevue/dialog'
+import { useToast } from 'primevue/usetoast'
 import { useCrmStore } from '../../../stores/crm'
-import { getAdminCustomerPlaceDetails } from '../../../api/crm'
+import { deleteCustomer, getAdminCustomerPlaceDetails } from '../../../api/crm'
 import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
 import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
 
@@ -32,12 +34,15 @@ const fsLabels: Record<string, string> = { google: 'GOOGLE', manual: 'MANUAL', s
 const route = useRoute()
 const router = useRouter()
 const crm = useCrmStore()
+const toast = useToast()
 const error = ref('')
 const detail = ref<CustomerDetail | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
 const activeTab = ref('overview')
 const activePhotoIdx = ref(0)
 const showAllHours = ref(false)
+const deleteDialogVisible = ref(false)
+const deleting = ref(false)
 
 const tabs = [
   { key: 'overview', label: 'Overview', icon: 'pi pi-id-card' },
@@ -79,6 +84,25 @@ onMounted(async () => {
     error.value = crm.errorMessage(e)
   }
 })
+
+function confirmDelete() {
+  deleteDialogVisible.value = true
+}
+
+async function executeDelete() {
+  if (!detail.value) return
+  deleting.value = true
+  try {
+    await deleteCustomer(detail.value.customer.id)
+    toast.add({ severity: 'success', summary: 'Customer deleted', detail: `${detail.value.customer.name} has been removed.`, life: 3000 })
+    router.push('/admin/customers')
+  } catch (e) {
+    error.value = crm.errorMessage(e)
+    deleteDialogVisible.value = false
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -109,7 +133,7 @@ onMounted(async () => {
         </div>
         <div class="page-heading-actions">
           <Button label="Edit" icon="pi pi-pencil" size="small" @click="router.push(`/admin/customers/${route.params.id}/edit`)" />
-          <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" />
+          <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" @click="confirmDelete" />
         </div>
       </header>
 
@@ -572,6 +596,14 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
+    <Dialog v-model:visible="deleteDialogVisible" header="Delete Customer" modal :style="{ width: '400px' }">
+      <p>Are you sure you want to delete <strong>{{ detail?.customer.name }}</strong>? This action cannot be undone.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
+      </template>
+    </Dialog>
   </section>
 </template>
 

@@ -17,6 +17,8 @@ const deleteDialogVisible = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const deleting = ref(false)
+const companyDeleteDialogVisible = ref(false)
+const companyDeleteTarget = ref<{ id: string; name: string; sites: number } | null>(null)
 
 const tabs = [
   { key: 'site', label: 'Customer Site', icon: 'pi pi-map-marker' },
@@ -297,6 +299,32 @@ async function executeDelete() {
     deleteDialogVisible.value = false
   } catch (e) {
     error.value = store.errorMessage(e)
+  } finally {
+    deleting.value = false
+  }
+}
+
+function confirmDeleteCompany(company: { id: string; name: string; sites: number }) {
+  companyDeleteTarget.value = company
+  companyDeleteDialogVisible.value = true
+}
+
+async function executeDeleteCompany() {
+  if (!companyDeleteTarget.value) return
+  deleting.value = true
+  try {
+    const companyId = companyDeleteTarget.value.id
+    const companySites = store.allCustomers.filter((c) => c.parentCode === companyId)
+    for (const site of companySites) {
+      await deleteCustomer(site.id)
+    }
+    store.allCustomers = store.allCustomers.filter((c) => c.parentCode !== companyId)
+    store.items = store.items.filter((c) => c.parentCode !== companyId)
+    store.total = store.allCustomers.length
+    companyDeleteDialogVisible.value = false
+  } catch (e) {
+    error.value = store.errorMessage(e)
+    companyDeleteDialogVisible.value = false
   } finally {
     deleting.value = false
   }

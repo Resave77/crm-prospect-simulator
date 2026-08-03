@@ -4,14 +4,20 @@ import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import Dialog from 'primevue/dialog'
+import { useToast } from 'primevue/usetoast'
 import { useCustomerListStore } from '../../../stores/customerList'
+import { deleteCustomer } from '../../../api/crm'
 
 const route = useRoute()
 const router = useRouter()
 const store = useCustomerListStore()
+const toast = useToast()
 const error = ref('')
 const loading = ref(true)
 const activeTab = ref('sites')
+const deleteDialogVisible = ref(false)
+const deleting = ref(false)
 
 const tabs = [
   { key: 'sites', label: 'Sites', icon: 'pi pi-map-marker' },
@@ -48,6 +54,27 @@ onMounted(async () => {
   } catch (e) { error.value = store.errorMessage(e) }
   finally { loading.value = false }
 })
+
+function confirmDelete() {
+  deleteDialogVisible.value = true
+}
+
+async function executeDelete() {
+  deleting.value = true
+  try {
+    for (const site of sites.value) {
+      await deleteCustomer(site.id)
+    }
+    store.allCustomers = store.allCustomers.filter((c) => c.parentCode !== code.value)
+    toast.add({ severity: 'success', summary: 'Company deleted', detail: `${companyName.value} and its ${sites.value.length} site(s) have been removed.`, life: 3000 })
+    router.push('/admin/customers')
+  } catch (e) {
+    error.value = store.errorMessage(e)
+    deleteDialogVisible.value = false
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -75,7 +102,7 @@ onMounted(async () => {
         </div>
         <div class="page-heading-actions">
           <Button label="Edit" icon="pi pi-pencil" size="small" @click="router.push(`/admin/companies/${code}/edit`)" />
-          <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" />
+          <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" @click="confirmDelete" />
         </div>
       </header>
 
@@ -230,6 +257,14 @@ onMounted(async () => {
       <strong>Company not found</strong>
       <span class="muted">The requested company could not be located.</span>
     </div>
+
+    <Dialog v-model:visible="deleteDialogVisible" header="Delete Company" modal :style="{ width: '400px' }">
+      <p>Are you sure you want to delete <strong>{{ companyName }}</strong> and all <strong>{{ totalSites }}</strong> of its site(s)? This action cannot be undone.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
+      </template>
+    </Dialog>
   </section>
 </template>
 
