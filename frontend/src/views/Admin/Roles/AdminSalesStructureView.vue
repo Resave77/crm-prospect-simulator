@@ -197,7 +197,6 @@ const treeSource = computed(() => activeStructure.value.filter((item) => {
 const treeRoots = computed<TreeNode[]>(() => buildTree(treeSource.value, search.value.trim().toLowerCase()))
 const flattenedTreeItems = computed(() => flattenTree(treeRoots.value))
 const selectedNodeChildren = computed(() => selectedNode.value ? activeStructure.value.filter((item) => item.parentUserId === selectedNode.value?.userId) : [])
-const selectedNodeParent = computed(() => selectedNode.value?.parentUserId ? activeStructure.value.find((item) => item.userId === selectedNode.value?.parentUserId) ?? null : null)
 
 const structureLevelsPresent = computed(() => {
   const present = new Set<number>()
@@ -282,15 +281,6 @@ function inferRegion(item: SalesStructureItem) {
   const source = `${item.salesName} ${item.parentName ?? ''}`
   const regions = ['Jakarta', 'Bandung', 'Surabaya', 'Semarang', 'Medan', 'Makassar', 'Malang']
   return regions.find((region) => source.toLowerCase().includes(region.toLowerCase())) ?? '-'
-}
-
-function teamSize(userId: string) {
-  return countDescendants(userId)
-}
-
-function countDescendants(userId: string): number {
-  const children = activeStructure.value.filter((item) => item.parentUserId === userId)
-  return children.length + children.reduce((total, child) => total + countDescendants(child.userId), 0)
 }
 
 function nodeMatches(item: SalesStructureItem, query: string) {
@@ -542,12 +532,12 @@ onMounted(async () => {
 
     <div class="summary-grid">
       <button class="summary-card clickable" type="button" @click="activeTab = 'all'">
-        <span>Total Active Sales Accounts</span>
+        <span>Total Sales</span>
         <strong>{{ totalActiveSales }}</strong>
         <small v-if="usersTruncated">First {{ totalActiveSales }} of {{ salesUsersTotal }} loaded — use search to narrow.</small>
       </button>
       <button class="summary-card clickable" type="button" @click="activeTab = 'assigned'">
-        <span>Assigned This Month</span>
+        <span>Assigned</span>
         <strong>{{ assignedThisMonth }}</strong>
         <small>{{ formatMonth(store.selectedEffectiveMonth) }}</small>
       </button>
@@ -561,11 +551,6 @@ onMounted(async () => {
         <strong>{{ item.count }}</strong>
         <small>{{ LEVEL_LABEL[item.level] }}</small>
       </button>
-      <div class="summary-card">
-        <span>Current Effective Month</span>
-        <strong>{{ currentMonthLabel }}</strong>
-        <small>Tree and table use this month</small>
-      </div>
     </div>
 
     <div class="view-switcher" aria-label="Sales structure view mode">
@@ -626,7 +611,7 @@ onMounted(async () => {
       <div class="tree-toolbar">
         <div>
           <strong>Organization Tree</strong>
-          <span>{{ flattenedTreeItems.length }} visible assignments</span>
+          <span>{{ assignedThisMonth }} assigned sales for {{ currentMonthLabel }}</span>
         </div>
         <div class="tree-actions">
           <Button label="Expand All" icon="pi pi-plus-circle" severity="secondary" text size="small" @click="expandAll" />
@@ -852,23 +837,21 @@ onMounted(async () => {
           <span class="drawer-avatar">{{ initials(selectedNode.salesName) }}</span>
           <div>
             <strong>{{ selectedNode.salesName }}</strong>
-            <span>{{ selectedNode.salesRole.name }}</span>
+            <span>{{ positionLabel(selectedNode) }}</span>
           </div>
         </div>
         <div class="detail-grid">
-          <div><span>Employee</span><strong>{{ selectedNode.salesName }}</strong></div>
           <div><span>Employee ID</span><strong>Use Account List</strong></div>
-          <div><span>Role</span><strong>{{ roleLabel(selectedNode.systemRole) }}</strong></div>
-          <div><span>Position</span><strong>{{ positionLabel(selectedNode) }}</strong></div>
-          <div><span>Reports To</span><strong>{{ selectedNodeParent?.salesName || '-' }}</strong></div>
-          <div><span>Children Count</span><strong>{{ selectedNodeChildren.length }}</strong></div>
+          <div><span>Organizational Role</span><strong>{{ selectedNode.salesRole.name }}</strong></div>
+          <div><span>Role Level</span><strong>Level {{ selectedNode.salesRole.level }}</strong></div>
+          <div><span>Reports To</span><strong>{{ reportsToLabel(selectedNode) }}</strong></div>
+          <div><span>Direct Reports</span><strong>{{ selectedNodeChildren.length }}</strong></div>
           <div><span>Effective Month</span><strong>{{ currentMonthLabel }}</strong></div>
-          <div><span>Current Assignment</span><strong>{{ selectedNode.salesRole.name }} / Level {{ selectedNode.salesRole.level }}</strong></div>
           <div><span>Status</span><strong>{{ statusFor(selectedNode) }}</strong></div>
         </div>
         <div class="drawer-actions">
           <Button label="Move Assignment" icon="pi pi-arrow-right-arrow-left" disabled />
-          <Button label="History" icon="pi pi-history" severity="secondary" disabled />
+          <Button label="View History" icon="pi pi-history" severity="secondary" disabled />
         </div>
       </div>
     </Drawer>
@@ -994,18 +977,18 @@ h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
 .banner-steps { margin: 0; padding-left: 1.1rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem 0.8rem; color: #1e40af; font-size: 0.78rem; line-height: 1.45; }
 .banner-steps li::marker { color: #2563eb; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.85rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 0.65rem; }
 .summary-card, .filter-panel, .table-panel, .toolbar-panel, .tree-panel { background: #fff; border: 1px solid #edf1f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
-.summary-card { padding: 1rem; display: grid; gap: 0.25rem; text-align: left; font: inherit; cursor: pointer; transition: border-color 140ms ease, box-shadow 140ms ease; }
-.summary-card:hover { border-color: #bfdbfe; box-shadow: 0 6px 18px -8px rgba(37, 99, 235, 0.25); }
-.summary-card span { color: #64748b; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; }
-.summary-card strong { color: #0f172a; font-size: 1.25rem; }
-.summary-card small { color: #94a3b8; font-size: 0.72rem; line-height: 1.4; }
+.summary-card { padding: 0.72rem 0.8rem; display: grid; gap: 0.12rem; text-align: left; font: inherit; cursor: pointer; transition: border-color 140ms ease, background 140ms ease; }
+.summary-card:hover { border-color: #bfdbfe; background: #fbfdff; }
+.summary-card span { color: #64748b; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
+.summary-card strong { color: #0f172a; font-size: 1.1rem; }
+.summary-card small { color: #94a3b8; font-size: 0.68rem; line-height: 1.3; }
 
 .view-switcher { display: inline-flex; width: fit-content; padding: 0.25rem; gap: 0.2rem; background: #ffffff; border: 1px solid #edf1f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
 .view-btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.85rem; border: 0; border-radius: 9px; background: transparent; color: #64748b; font: inherit; font-size: 0.82rem; font-weight: 750; cursor: pointer; }
 .view-btn:hover { background: #f8fafc; color: #0f172a; }
-.view-btn.active { background: #0f172a; color: #ffffff; }
+.view-btn.active { background: #eaf5f2; color: #0b7766; }
 
 .tab-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .tab-btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 1rem; border: 1px solid #edf1f6; border-radius: 10px; background: #fff; color: #64748b; font: inherit; font-size: 0.82rem; font-weight: 650; cursor: pointer; transition: background 140ms ease, color 140ms ease, border-color 140ms ease; }
@@ -1033,31 +1016,42 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .table-panel :deep(.p-paginator-current) { color: #64748b; }
 .table-panel :deep(.p-datatable-loading-overlay) { background: rgba(255, 255, 255, 0.72); }
 .tree-panel { overflow-x: auto; }
-.tree-toolbar { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 1rem; border-bottom: 1px solid #edf1f6; }
+.tree-toolbar { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 0.75rem 0.9rem; border-bottom: 1px solid #edf1f6; }
 .tree-toolbar > div:first-child { display: grid; gap: 0.15rem; }
 .tree-toolbar strong { color: #0f172a; font-size: 0.92rem; }
 .tree-toolbar span { color: #94a3b8; font-size: 0.76rem; }
 .tree-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
-.tree-list { min-width: 760px; padding: 1rem; display: grid; gap: 0.55rem; }
-.tree-branch { display: grid; gap: 0.4rem; }
-.tree-row { display: flex; align-items: stretch; gap: 0.45rem; position: relative; }
-.tree-children { margin-left: 2rem; padding-left: 1rem; border-left: 1px solid #dbe3ee; display: grid; gap: 0.45rem; }
-.node-toggle, .node-toggle-spacer { width: 1.55rem; height: 1.55rem; margin-top: 0.9rem; flex: 0 0 auto; }
-.node-toggle { display: grid; place-content: center; border: 1px solid #dbe3ee; border-radius: 8px; background: #ffffff; color: #64748b; cursor: pointer; }
+.tree-list { min-width: 720px; padding: 0.45rem 0.85rem 0.8rem; display: grid; gap: 0; }
+.tree-branch { display: grid; gap: 0; }
+.tree-row { display: flex; align-items: stretch; gap: 0.35rem; position: relative; }
+.tree-row::before { content: ''; width: 0.75rem; height: 1px; background: #dbe3ee; position: absolute; left: 1.75rem; top: 50%; }
+.tree-children { margin-left: 1.45rem; padding-left: 1.05rem; border-left: 1px solid #dbe3ee; display: grid; gap: 0; }
+.node-toggle, .node-toggle-spacer { width: 1.25rem; height: 1.25rem; margin-top: 0.76rem; flex: 0 0 auto; z-index: 1; }
+.node-toggle { display: grid; place-content: center; border: 1px solid #dbe3ee; border-radius: 6px; background: #ffffff; color: #64748b; cursor: pointer; }
 .node-toggle:hover { background: #f8fafc; color: #0f172a; }
-.org-node { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(180px, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.72rem 0.85rem; border: 1px solid #e2e8f0; border-left-width: 4px; border-radius: 10px; background: #ffffff; text-align: left; font: inherit; cursor: pointer; transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
-.org-node:hover { background: #f8fafc; box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.25); }
-.org-node.matched { background: #fffbeb; border-color: #f59e0b; }
+.org-node { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(190px, 1fr) minmax(340px, auto); gap: 0.7rem; align-items: center; padding: 0.48rem 0.7rem; border: 0; border-bottom: 1px solid #edf1f6; border-left: 3px solid #dbe3ee; background: #ffffff; text-align: left; font: inherit; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
+.org-node:hover { background: #f8fafc; }
+.org-node.matched { background: #fff7ed; }
 .tree-level-1 { border-left-color: #1e3a8a; }
-.tree-level-2 { border-left-color: #2563eb; }
-.tree-level-3 { border-left-color: #ea580c; }
-.tree-level-4 { border-left-color: #059669; }
-.node-avatar { width: 2.35rem; height: 2.35rem; display: grid; place-content: center; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 0.78rem; font-weight: 850; }
-.node-main { display: grid; gap: 0.15rem; min-width: 0; }
-.node-main strong { color: #0f172a; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-main span { color: #64748b; font-size: 0.74rem; }
-.node-meta { display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem; flex-wrap: wrap; }
-.node-region, .node-team { display: inline-flex; align-items: center; gap: 0.25rem; color: #64748b; font-size: 0.72rem; font-weight: 700; background: #f8fafc; border: 1px solid #edf1f6; border-radius: 999px; padding: 0.18rem 0.5rem; }
+.tree-level-2 { border-left-color: #4f9f77; }
+.tree-level-3 { border-left-color: #b45309; }
+.tree-level-4 { border-left-color: #d6a11d; }
+.node-avatar { width: 1.9rem; height: 1.9rem; display: grid; place-content: center; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.68rem; font-weight: 850; }
+.node-main { display: grid; gap: 0.08rem; min-width: 0; }
+.node-main strong { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-level-1 .node-main strong { color: #1d4ed8; }
+.tree-level-2 .node-main strong { color: #047857; }
+.tree-level-3 .node-main strong { color: #9a3412; }
+.tree-level-4 .node-main strong { color: #a16207; }
+.node-main span { color: #64748b; font-size: 0.72rem; }
+.node-meta { display: grid; grid-template-columns: minmax(120px, 1.1fr) minmax(120px, 1fr) auto auto; align-items: center; gap: 0.7rem; color: #334155; font-size: 0.74rem; }
+.node-meta > span:not(.level-indicator):not(.status-dot) { display: grid; gap: 0.06rem; min-width: 0; }
+.node-meta em { color: #94a3b8; font-style: normal; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
+.level-indicator { display: inline-flex; justify-content: center; min-width: 4rem; padding: 0.14rem 0.45rem; border-radius: 999px; background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; font-size: 0.68rem; font-weight: 800; }
+.status-dot { display: inline-flex; align-items: center; gap: 0.3rem; color: #047857; font-size: 0.7rem; font-weight: 800; }
+.status-dot::before { content: ''; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #10b981; }
+.status-dot.inactive { color: #64748b; }
+.status-dot.inactive::before { background: #94a3b8; }
 .sales-name { font-weight: 750; }
 .sales-name.level-1 { color: #2563eb; }
 .sales-name.level-2 { color: #059669; }
@@ -1100,14 +1094,16 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .preview-sub { color: #94a3b8; font-weight: 500; text-transform: none; }
 .detail-drawer :deep(.p-drawer) { background: #ffffff; color: #0f172a; width: min(420px, 94vw); }
 .detail-drawer :deep(.p-drawer-header), .detail-drawer :deep(.p-drawer-content) { background: #ffffff; color: #0f172a; }
+.detail-drawer :deep(.p-drawer-header) { border-bottom: 1px solid #edf1f6; padding: 0.9rem 1rem; }
 .drawer-content { display: grid; gap: 1rem; }
-.drawer-person { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem; border: 1px solid #edf1f6; border-radius: 12px; background: #f8fafc; }
-.drawer-avatar { width: 2.8rem; height: 2.8rem; display: grid; place-content: center; border-radius: 999px; background: #0f172a; color: #fff; font-weight: 850; }
+.drawer-person { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid #edf1f6; }
+.drawer-avatar { width: 2.45rem; height: 2.45rem; display: grid; place-content: center; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-weight: 850; }
 .drawer-person div { display: grid; gap: 0.15rem; }
 .drawer-person strong { color: #0f172a; }
 .drawer-person span { color: #64748b; font-size: 0.78rem; }
-.detail-grid { display: grid; gap: 0.65rem; }
-.detail-grid > div { display: grid; gap: 0.2rem; padding-bottom: 0.65rem; border-bottom: 1px solid #f1f4f8; }
+.detail-grid { display: grid; gap: 0; border: 1px solid #edf1f6; border-radius: 10px; overflow: hidden; }
+.detail-grid > div { display: grid; grid-template-columns: 130px 1fr; gap: 0.65rem; align-items: center; padding: 0.65rem 0.75rem; border-bottom: 1px solid #f1f4f8; }
+.detail-grid > div:last-child { border-bottom: 0; }
 .detail-grid span { color: #64748b; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
 .detail-grid strong { color: #0f172a; font-size: 0.86rem; }
 .drawer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
@@ -1118,6 +1114,6 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 :deep(.p-select-overlay), :deep(.p-select-list), :deep(.p-select-option) { background: #ffffff; color: #0f172a; }
 :deep(.p-select-option.p-select-option-selected), :deep(.p-select-option:hover) { background: #f1f5f9; color: #0f172a; }
 @media (max-width: 1100px) { .toolbar-panel { grid-template-columns: 1fr 1fr; } .search-field { grid-column: 1 / -1; } .banner-steps { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 900px) { .org-node { grid-template-columns: auto minmax(180px, 1fr); } .node-meta { grid-column: 2; justify-content: flex-start; } }
-@media (max-width: 768px) { .admin-page { padding: 1rem; } .toolbar-panel { grid-template-columns: 1fr; } .banner-steps { grid-template-columns: 1fr; } .view-switcher { width: 100%; } .view-btn { flex: 1; justify-content: center; } }
+@media (max-width: 900px) { .tree-list { min-width: 0; } .tree-children { margin-left: 0.85rem; padding-left: 0.75rem; } .org-node { grid-template-columns: auto minmax(0, 1fr); } .node-meta { grid-column: 2; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.65rem; } }
+@media (max-width: 768px) { .admin-page { padding: 1rem; } .toolbar-panel { grid-template-columns: 1fr; } .banner-steps { grid-template-columns: 1fr; } .view-switcher { width: 100%; } .view-btn { flex: 1; justify-content: center; } .detail-grid > div { grid-template-columns: 1fr; gap: 0.2rem; } }
 </style>

@@ -23,7 +23,7 @@ const formError = ref('')
 const showGuidance = ref(true)
 const search = ref('')
 const levelFilter = ref<SalesRoleLevel | ''>('')
-const statusFilter = ref<'ACTIVE' | 'INACTIVE' | ''>('')
+const statusFilter = ref<'ACTIVE' | 'INACTIVE' | ''>('ACTIVE')
 
 const form = reactive<{ name: string; level: SalesRoleLevel | null; description: string }>({ name: '', level: null, description: '' })
 
@@ -57,9 +57,9 @@ const roleList = computed(() => Array.isArray(store.salesRoles) ? store.salesRol
 const levelOptions = LEVEL_ORDER.map((level) => ({ label: `Level ${level} — ${LEVEL_GUIDE[level]}`, value: level }))
 const levelFilterOptions = [{ label: 'All Levels', value: '' }, ...levelOptions]
 const statusOptions = [
-  { label: 'All Status', value: '' },
-  { label: 'Active', value: 'ACTIVE' },
-  { label: 'Inactive', value: 'INACTIVE' },
+  { label: 'Active Roles', value: 'ACTIVE' },
+  { label: 'Inactive Roles', value: 'INACTIVE' },
+  { label: 'All Roles', value: '' },
 ]
 const totalRoles = computed(() => roleList.value.length)
 const activeRoles = computed(() => roleList.value.filter((role) => role.isActive).length)
@@ -176,7 +176,7 @@ function levelSeverity(level: SalesRoleLevel) {
 function clearFilters() {
   search.value = ''
   levelFilter.value = ''
-  statusFilter.value = ''
+  statusFilter.value = 'ACTIVE'
 }
 
 onMounted(load)
@@ -245,7 +245,7 @@ onMounted(load)
         <Select v-model="levelFilter" :options="levelFilterOptions" optionLabel="label" optionValue="value" />
       </div>
       <div class="filter-field">
-        <label>Status</label>
+        <label>Role View</label>
         <Select v-model="statusFilter" :options="statusOptions" optionLabel="label" optionValue="value" />
       </div>
       <Button label="Reset" icon="pi pi-replay" severity="secondary" text size="small" @click="clearFilters" />
