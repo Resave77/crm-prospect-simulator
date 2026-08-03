@@ -52,6 +52,9 @@ async function logout() {
         <RouterLink to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
           <i class="pi pi-home" /> <span v-show="!sidebarCollapsed">Dashboard</span>
         </RouterLink>
+        <RouterLink to="/admin/sales-executives" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Executive' : ''">
+          <i class="pi pi-user" /> <span v-show="!sidebarCollapsed">Sales Executive</span>
+        </RouterLink>
         <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
           <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Accounts</span>
         </RouterLink>
@@ -64,6 +67,9 @@ async function logout() {
         <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
           <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
         </RouterLink>
+        <RouterLink to="/admin/customer-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Assignment' : ''">
+          <i class="pi pi-directions-alt" /> <span v-show="!sidebarCollapsed">Customer Assignment</span>
+        </RouterLink>
         <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
           <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
         </RouterLink>
@@ -75,6 +81,9 @@ async function logout() {
         </RouterLink>
         <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
           <i class="pi pi-sitemap" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Assignment' : ''">
+          <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Prospect Assignment</span>
         </RouterLink>
         <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
           <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
