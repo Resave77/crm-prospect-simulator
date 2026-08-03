@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	_ = godotenv.Overload()
+	loadDotenv()
 
 	accessTTL, err := duration("ACCESS_TOKEN_TTL", 15*time.Minute)
 	if err != nil {
@@ -62,6 +63,23 @@ func Load() (Config, error) {
 		return Config{}, errors.New("JWT_SECRET must contain at least 32 characters")
 	}
 	return cfg, nil
+}
+
+func loadDotenv() {
+	candidates := []string{".env"}
+	if cwd, err := os.Getwd(); err == nil {
+		switch filepath.Base(cwd) {
+		case "backend":
+			candidates = append(candidates, filepath.Join("..", ".env"))
+		default:
+			candidates = append(candidates, filepath.Join("backend", ".env"))
+		}
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			_ = godotenv.Load(candidate)
+		}
+	}
 }
 
 func duration(name string, fallback time.Duration) (time.Duration, error) {
