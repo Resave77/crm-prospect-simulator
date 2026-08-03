@@ -19,6 +19,7 @@ type UserRepository interface {
 	FindUserByID(context.Context, uuid.UUID) (model.User, error)
 	RecordLogin(context.Context, uuid.UUID, time.Time) error
 	UpsertSeed(context.Context, model.User) error
+	ChangePassword(context.Context, uuid.UUID, string, string, time.Time) (int, error)
 }
 
 type SessionRepository interface {

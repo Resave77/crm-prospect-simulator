@@ -242,7 +242,7 @@ onMounted(() => { load() })
           <template #body="{ data }">
             <Tag :value="roleLabel(data.role)" :severity="roleSeverity(data.role)" />
           </template>
-        </Column>
+        </Column> 
         <Column header="Manager" :style="{ minWidth: '180px' }">
           <template #body="{ data }">
             <span class="cell-text">{{ data.managerName || '—' }}</span>
@@ -304,13 +304,18 @@ onMounted(() => { load() })
 </template>
 
 <style scoped>
+/* ════════════════════════════════════════════════════════════════
+   ADMIN — ACCOUNT LIST — professional, white-surface visual pass
+   ════════════════════════════════════════════════════════════════ */
+
 /* ── PAGE ─────────────────────────────────────────────────────────── */
 .admin-page {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.35rem;
   padding: 1.75rem 2rem;
   min-height: 100vh;
+  background: #f7f9fb;
 }
 
 /* ── PAGE HEADER ──────────────────────────────────────────────────── */
@@ -334,16 +339,16 @@ onMounted(() => { load() })
   margin-bottom: 0.35rem;
 }
 .page-title-wrapper h1 {
-  font-size: 1.65rem;
+  font-size: 1.6rem;
   font-weight: 800;
-  color: var(--text-primary);
-  margin: 0 0 0.2rem;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
   letter-spacing: -0.03em;
   line-height: 1.15;
 }
 .page-title-wrapper .muted {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.84rem;
+  color: #7c8798;
   max-width: 520px;
   line-height: 1.55;
 }
@@ -353,14 +358,19 @@ onMounted(() => { load() })
   align-items: center;
   padding-top: 0.15rem;
 }
+.page-heading-actions :deep(.p-button) {
+  border-radius: 10px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.4);
+}
 
 /* ── FILTER PANEL ─────────────────────────────────────────────────── */
 .filter-panel {
-  background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 1.1rem 1.25rem;
-  box-shadow: var(--shadow-xs);
+  background: #ffffff;
+  border: 1px solid #edf1f6;
+  border-radius: 16px;
+  padding: 1.15rem 1.3rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 20px -12px rgba(15, 23, 42, 0.08);
 }
 .search-row {
   margin-bottom: 0.9rem;
@@ -369,19 +379,19 @@ onMounted(() => { load() })
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.6rem 0.9rem;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  padding: 0.62rem 0.95rem;
+  background: #f8fafc;
+  border: 1px solid #e6eaf0;
+  border-radius: 11px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 .search-field:focus-within {
-  background: var(--surface-card);
-  border-color: var(--brand-blue);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  background: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.09);
 }
 .search-field i {
-  color: var(--text-faint);
+  color: #a3adba;
   font-size: 0.9rem;
 }
 .search-field input {
@@ -390,29 +400,37 @@ onMounted(() => { load() })
   outline: none;
   background: transparent;
   font-size: 0.87rem;
-  color: var(--text-primary);
+  color: #0f172a;
 }
 .search-field input::placeholder {
-  color: var(--text-faint);
+  color: #a3adba;
 }
 
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr) auto;
-  gap: 0.75rem;
+  gap: 0.8rem;
   align-items: end;
 }
 .filter-field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.32rem;
 }
 .filter-field label {
-  font-size: 0.68rem;
+  font-size: 0.67rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  color: #8492a6;
+}
+.filter-field :deep(.p-select) {
+  border-radius: 11px;
+  border-color: #e6eaf0;
+}
+.filter-field :deep(.p-select:not(.p-disabled).p-focus) {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.09);
 }
 .filter-action {
   justify-content: flex-end;
@@ -421,21 +439,75 @@ onMounted(() => { load() })
 
 /* ── TABLE PANEL ──────────────────────────────────────────────────── */
 .table-panel {
-  background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  background: #ffffff;
+  border: 1px solid #edf1f6;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 20px -12px rgba(15, 23, 42, 0.08);
   overflow: hidden;
+}
+
+/* Force a clean white surface for the PrimeVue DataTable regardless of theme */
+.table-panel :deep(.p-datatable) {
+  background: #ffffff;
+  color: #1e293b;
+}
+.table-panel :deep(.p-datatable-table) {
+  background: #ffffff;
+}
+.table-panel :deep(.p-datatable-thead > tr > th) {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-color: #edf1f6;
+  padding: 0.85rem 1rem;
+}
+.table-panel :deep(.p-datatable-tbody > tr) {
+  background: #ffffff;
+  transition: background 140ms ease;
+}
+.table-panel :deep(.p-datatable-tbody > tr > td) {
+  background: transparent;
+  color: #1e293b;
+  border-color: #f1f4f8;
+  padding: 0.8rem 1rem;
+  font-size: 0.84rem;
+}
+.table-panel :deep(.p-datatable-tbody > tr:hover) {
+  background: #f8fafc;
+}
+.table-panel :deep(.p-datatable-tbody > tr:hover > td) {
+  background: #f8fafc;
+}
+.table-panel :deep(.p-paginator) {
+  background: #ffffff;
+  border-color: #edf1f6;
+  padding: 0.65rem 0.9rem;
+}
+.table-panel :deep(.p-paginator .p-paginator-current) {
+  color: #7c8798;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+.table-panel :deep(.p-paginator-page.p-highlight) {
+  background: #2563eb;
+  color: #ffffff;
+  border-radius: 8px;
+}
+.table-panel :deep(.p-datatable-loading-overlay) {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* ── SKELETON LOADING ─────────────────────────────────────────────── */
 .skeleton-area {
-  padding: 0.25rem 1rem 0.75rem;
+  padding: 0.3rem 1.1rem 0.85rem;
 }
 .skeleton-row {
   height: 3.2rem;
   margin-top: 0.75rem;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
 }
 
 /* ── EMPTY STATE ──────────────────────────────────────────────────── */
@@ -448,23 +520,23 @@ onMounted(() => { load() })
   gap: 0.4rem;
   padding: 2rem;
   text-align: center;
-  color: var(--text-muted);
+  color: #8492a6;
 }
 .empty-icon {
   width: 56px;
   height: 56px;
-  border-radius: var(--radius-lg);
-  background: var(--surface-subtle);
+  border-radius: 14px;
+  background: #f8fafc;
   display: grid;
   place-content: center;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
 }
 .empty-icon i {
   font-size: 1.4rem;
-  color: var(--text-faint);
+  color: #a3adba;
 }
 .empty-state strong {
-  color: var(--text-primary);
+  color: #0f172a;
   font-size: 0.95rem;
 }
 
@@ -472,12 +544,12 @@ onMounted(() => { load() })
 .code-tag {
   display: inline-block;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
   background: #f1f5f9;
-  color: var(--text-secondary);
+  color: #475569;
 }
 .code-blue {
   background: #eff6ff;
@@ -489,29 +561,35 @@ onMounted(() => { load() })
   flex-direction: column;
 }
 .cell-primary {
-  font-weight: 600;
+  font-weight: 650;
   font-size: 0.85rem;
-  color: var(--text-primary);
+  color: #0f172a;
 }
 .cell-warn {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  margin-top: 0.1rem;
-  font-size: 0.68rem;
+  margin-top: 0.15rem;
+  font-size: 0.67rem;
   font-weight: 600;
   color: #b45309;
 }
 .cell-text {
   font-size: 0.84rem;
-  color: var(--text-secondary);
+  color: #475569;
 }
 
 /* ── ROW ACTIONS ──────────────────────────────────────────────────── */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.2rem;
+}
+.row-actions :deep(.p-button) {
+  transition: transform 140ms ease, background 140ms ease;
+}
+.row-actions :deep(.p-button:hover) {
+  transform: translateY(-1px);
 }
 .act-activate {
   color: #059669 !important;

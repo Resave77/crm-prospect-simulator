@@ -742,3 +742,10 @@ model ActivityLog {
 | 7 — Activity Log | 4A | 3–4 days |
 | 8 — Final Polish | All above | 2–3 days |
 | 9 — Final Testing | 8 | 2–3 days |
+
+## Phase 6C-2 � Backend Forced Password Change Guard
+
+> **Status: Complete (2026-07-31).** `AuthenticateAccess` stores DB-backed `must_change_password` in the principal; `RequirePasswordChanged` blocks `/dashboard`, `/sales`, and `/admin` groups with 403 `PASSWORD_CHANGE_REQUIRED`. Auth change-password/logout/logout-all/me and refresh remain available; no frontend redirect marked complete.
+
+### Phase 7A-Lite Status
+Backend foundation complete: admin sales-role CRUD, monthly sales-structure assignment/move APIs, flat effective-date structure query, and user assignment history endpoint are implemented for API/Postman testing.

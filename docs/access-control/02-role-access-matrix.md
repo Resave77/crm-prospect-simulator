@@ -476,3 +476,6 @@ A `/forbidden` route should be added:
 ```
 
 And the `beforeEach` guard should redirect to `/forbidden` (not the user's home) when role mismatch occurs.
+
+### Phase 7A-Lite Sales Organization Note
+System roles (`ADMINISTRATOR`, `SALES_MANAGER`, `SALES_EXECUTIVE`) remain the authorization keys. Sales organizational roles are configurable labels with numeric Levels 1-4; future team visibility is level-based and team-descendant scoped, not name-based.

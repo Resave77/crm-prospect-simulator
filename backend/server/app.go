@@ -70,8 +70,9 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	auth.Post("/logout", authHandler.Logout)
 	auth.Get("/me", authMiddleware.Authenticate, authHandler.Me)
 	auth.Post("/logout-all", authMiddleware.Authenticate, authHandler.LogoutAll)
+	auth.Post("/change-password", authMiddleware.Authenticate, authHandler.ChangePassword)
 
-	dashboard := api.Group("/dashboard", authMiddleware.Authenticate)
+	dashboard := api.Group("/dashboard", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
 	dashboard.Get("/admin", authMiddleware.RequireRole(model.RoleAdministrator), func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "administrator"})
 	})
@@ -79,7 +80,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "sales-executive"})
 	})
 
-	sales := api.Group("/sales", authMiddleware.Authenticate, authMiddleware.RequireRole(model.RoleSalesExecutive))
+	sales := api.Group("/sales", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleSalesExecutive))
 	sales.Get("/prospects", prospectHandler.MyProspects)
 	sales.Get("/prospects/:id", prospectHandler.MyProspect)
 	sales.Patch("/prospects/:id/transition", prospectHandler.Decide)
@@ -96,7 +97,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/customers/:id", customerHandler.MyCustomer)
 	sales.Get("/customers/:id/place-details", customerHandler.MyCustomerPlaceDetails)
 
-	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequireRole(model.RoleAdministrator))
+	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleAdministrator))
 	admin.Get("/prospects/won", prospectHandler.WonQueue)
 	admin.Get("/prospects/pipeline", prospectHandler.Pipeline)
 	admin.Get("/sales-executives", prospectHandler.SalesExecutives)
@@ -125,6 +126,16 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
 	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
 	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
+
+	admin.Get("/sales-roles", adminHandler.ListSalesRoles)
+	admin.Post("/sales-roles", adminHandler.CreateSalesRole)
+	admin.Get("/sales-roles/:id", adminHandler.GetSalesRole)
+	admin.Patch("/sales-roles/:id", adminHandler.UpdateSalesRole)
+	admin.Patch("/sales-roles/:id/status", adminHandler.UpdateSalesRoleStatus)
+	admin.Get("/sales-structure", adminHandler.ListSalesStructure)
+	admin.Post("/sales-structure/assignments", adminHandler.CreateSalesAssignment)
+	admin.Post("/sales-structure/assignments/:id/move", adminHandler.MoveSalesAssignment)
+	admin.Get("/sales-structure/users/:userId/history", adminHandler.SalesAssignmentHistory)
 
 	admin.Get("/users", adminHandler.ListUsers)
 	admin.Get("/users/options/managers", adminHandler.ListManagers)

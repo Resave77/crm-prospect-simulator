@@ -384,3 +384,7 @@ DELETE FROM refresh_sessions
 WHERE expires_at < NOW() - INTERVAL '90 days'
    OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '90 days');
 ```
+
+## 8.1 Restricted Authenticated State
+
+When `must_change_password=true`, `Authenticate` still accepts a valid current token, but protected CRM route groups require `RequirePasswordChanged` and return 403 `PASSWORD_CHANGE_REQUIRED`. Allowed restricted endpoints are `POST /api/v1/auth/change-password`, `POST /api/v1/auth/logout`, `POST /api/v1/auth/logout-all`, `GET /api/v1/auth/me`, and refresh for token maintenance.

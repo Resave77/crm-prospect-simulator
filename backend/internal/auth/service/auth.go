@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"crm-prospect-simulator/backend/internal/auth/model"
 	"crm-prospect-simulator/backend/internal/auth/repository"
@@ -26,11 +27,19 @@ type AuthResult struct {
 	User             model.PublicUser `json:"user"`
 }
 
+type ChangePasswordResult struct {
+	PasswordChanged          bool `json:"passwordChanged"`
+	MustChangePassword       bool `json:"mustChangePassword"`
+	SessionsRevoked          int  `json:"sessionsRevoked"`
+	ReauthenticationRequired bool `json:"reauthenticationRequired"`
+}
+
 type Principal struct {
-	UserID       uuid.UUID
-	Role         model.Role
-	SessionID    uuid.UUID
-	TokenVersion int
+	UserID             uuid.UUID
+	Role               model.Role
+	SessionID          uuid.UUID
+	TokenVersion       int
+	MustChangePassword bool
 }
 
 type AuthService struct {
@@ -134,7 +143,13 @@ func (s *AuthService) AuthenticateAccess(ctx context.Context, rawToken string) (
 	if err != nil || user.Status != model.UserActive || user.Role != claims.Role || user.TokenVersion != claims.TokenVersion {
 		return Principal{}, ErrInvalidToken
 	}
-	return Principal{UserID: user.ID, Role: user.Role, SessionID: claims.SessionID, TokenVersion: user.TokenVersion}, nil
+	return Principal{
+		UserID:             user.ID,
+		Role:               user.Role,
+		SessionID:          claims.SessionID,
+		TokenVersion:       user.TokenVersion,
+		MustChangePassword: user.MustChangePassword,
+	}, nil
 }
 
 func (s *AuthService) Me(ctx context.Context, principal Principal) (model.PublicUser, error) {
@@ -155,6 +170,59 @@ func (s *AuthService) Logout(ctx context.Context, rawRefresh string) error {
 
 func (s *AuthService) LogoutAll(ctx context.Context, principal Principal) error {
 	return s.sessions.RevokeAllForUser(ctx, principal.UserID, "LOGOUT_ALL", s.now().UTC())
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, principal Principal, currentPassword, newPassword, confirmPassword string) (ChangePasswordResult, error) {
+	if currentPassword == "" || newPassword == "" || confirmPassword == "" {
+		return ChangePasswordResult{}, ErrMissingFields
+	}
+	if newPassword != confirmPassword {
+		return ChangePasswordResult{}, ErrPasswordMismatch
+	}
+	if !strongPassword(newPassword) {
+		return ChangePasswordResult{}, ErrPasswordTooWeak
+	}
+
+	user, err := s.users.FindUserByID(ctx, principal.UserID)
+	if err != nil || user.Status != model.UserActive {
+		return ChangePasswordResult{}, ErrInvalidToken
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)) != nil {
+		return ChangePasswordResult{}, ErrInvalidCredentials
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(newPassword)) == nil {
+		return ChangePasswordResult{}, ErrPasswordSame
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return ChangePasswordResult{}, fmt.Errorf("hash new password: %w", err)
+	}
+	revoked, err := s.users.ChangePassword(ctx, user.ID, string(newHash), "PASSWORD_CHANGED", s.now().UTC())
+	if err != nil {
+		return ChangePasswordResult{}, err
+	}
+	return ChangePasswordResult{
+		PasswordChanged: true, MustChangePassword: false, SessionsRevoked: revoked, ReauthenticationRequired: true,
+	}, nil
+}
+
+func strongPassword(password string) bool {
+	if len(password) < 8 {
+		return false
+	}
+	var upper, lower, digit bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			upper = true
+		case unicode.IsLower(r):
+			lower = true
+		case unicode.IsDigit(r):
+			digit = true
+		}
+	}
+	return upper && lower && digit
 }
 
 func IsClientAuthError(err error) bool {

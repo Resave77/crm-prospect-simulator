@@ -16,9 +16,9 @@ import (
 	adminservice "crm-prospect-simulator/backend/internal/admin/service"
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
 	authrepo "crm-prospect-simulator/backend/internal/auth/repository"
-	authservice 	"crm-prospect-simulator/backend/internal/auth/service"
-	"github.com/google/uuid"
+	authservice "crm-prospect-simulator/backend/internal/auth/service"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,6 +37,9 @@ func (r *stubUserRepo) RecordLogin(_ context.Context, _ uuid.UUID, _ time.Time) 
 }
 func (r *stubUserRepo) UpsertSeed(_ context.Context, _ authmodel.User) error {
 	return nil
+}
+func (r *stubUserRepo) ChangePassword(_ context.Context, _ uuid.UUID, _ string, _ string, _ time.Time) (int, error) {
+	return 0, nil
 }
 
 type stubSessionRepo struct{}

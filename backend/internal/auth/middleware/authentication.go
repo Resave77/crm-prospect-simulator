@@ -47,6 +47,16 @@ func (m *Middleware) RequireRole(roles ...model.Role) fiber.Handler {
 	}
 }
 
+func (m *Middleware) RequirePasswordChanged(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, fiber.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication is required.")
+	}
+	if principal.MustChangePassword {
+		return response.Error(c, fiber.StatusForbidden, "PASSWORD_CHANGE_REQUIRED", "You must change your password before accessing this resource.")
+	}
+	return c.Next()
+}
 func Principal(c *fiber.Ctx) (service.Principal, bool) {
 	principal, ok := c.Locals(principalKey).(service.Principal)
 	return principal, ok

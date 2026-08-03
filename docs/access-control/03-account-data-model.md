@@ -287,3 +287,6 @@ users := []model.User{
 | 5 | Rizky Ananda | SALES_EXECUTIVE | Budi Santoso (SM) | ACTIVE |
 
 This gives the system one manager with three SEs for immediate testing.
+
+### Phase 7A-Lite Sales Organization Tables
+`sales_roles` stores editable organizational labels, active state, and numeric Level 1-4. `sales_structure_assignments` stores monthly effective user-to-role and parent-user assignments, preserving history with `effective_from` and `effective_to`.

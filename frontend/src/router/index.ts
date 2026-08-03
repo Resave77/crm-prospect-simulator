@@ -16,6 +16,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/login' },
     { path: '/login', name: 'Login', component: () => import('../views/Login/LoginView.vue'), meta: { public: true } },
+    { path: '/change-password', name: 'ChangePassword', component: () => import('../views/Auth/ChangePasswordView.vue') },
     { path: '/forbidden', name: 'Forbidden', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
     {
       path: '/admin', component: () => import('../layouts/AdminLayout.vue'), meta: { role: 'ADMINISTRATOR' },
@@ -26,6 +27,8 @@ const router = createRouter({
         { path: 'accounts/create', name: 'AdminAccountCreate', component: () => import('../views/Admin/Accounts/AdminAccountCreateView.vue'), meta: { role: 'ADMINISTRATOR' } },
         { path: 'accounts/:id', name: 'AdminAccountDetail', component: () => import('../views/Admin/Accounts/AdminAccountDetailView.vue'), meta: { role: 'ADMINISTRATOR' } },
         { path: 'accounts/:id/edit', name: 'AdminAccountEdit', component: () => import('../views/Admin/Accounts/AdminAccountEditView.vue'), meta: { role: 'ADMINISTRATOR' } },
+        { path: 'role-management', name: 'AdminRoleManagement', component: () => import('../views/Admin/Roles/AdminRoleManagementView.vue'), meta: { role: 'ADMINISTRATOR' } },
+        { path: 'sales-structure', name: 'AdminSalesStructure', component: () => import('../views/Admin/Roles/AdminSalesStructureView.vue'), meta: { role: 'ADMINISTRATOR' } },
         { path: 'prospect-finder', name: 'AdminProspectFinder', component: () => import('../views/Admin/Prospect/ProspectFinderView.vue') },
         { path: 'prospects/pipeline', name: 'AdminProspectPipeline', component: () => import('../views/Admin/Prospect/ProspectPipelineView.vue') },
         { path: 'prospects/list', name: 'AdminProspectList', component: () => import('../views/Admin/Prospect/ProspectListView.vue') },
@@ -92,3 +95,6 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
 })
 
 export default router
+
+
+

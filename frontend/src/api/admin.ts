@@ -10,7 +10,18 @@ import type {
   AdminUserListParams,
   AdminUserListResult,
   AdminUserStatus,
+  CreateSalesAssignmentPayload,
+  CreateSalesRolePayload,
+  SalesRole,
+  SalesStructureAssignment,
+  SalesStructureItem,
+  UpdateSalesRolePayload,
 } from '../types/admin'
+
+function asArray<T>(value: unknown, fallbackMessage: string): T[] {
+  if (Array.isArray(value)) return value as T[]
+  throw new Error(fallbackMessage)
+}
 
 export async function getUsers(params: AdminUserListParams) {
   return (await api.get<ApiEnvelope<AdminUserListResult>>('/admin/users', { params })).data.data
@@ -38,4 +49,34 @@ export async function resetUserPassword(userId: string, payload: AdminResetPassw
 
 export async function getManagerOptions() {
   return (await api.get<ApiEnvelope<AdminManagerOption[]>>('/admin/users/options/managers')).data.data
+}
+
+export async function getSalesRoles() {
+  const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-roles')
+  return asArray<SalesRole>(response.data.data, 'Unable to load sales roles.')
+}
+
+export async function getSalesRole(id: string) {
+  return (await api.get<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}`)).data.data
+}
+
+export async function createSalesRole(payload: CreateSalesRolePayload) {
+  return (await api.post<ApiEnvelope<SalesRole>>('/admin/sales-roles', payload)).data.data
+}
+
+export async function updateSalesRole(id: string, payload: UpdateSalesRolePayload) {
+  return (await api.patch<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}`, payload)).data.data
+}
+
+export async function updateSalesRoleStatus(id: string, isActive: boolean) {
+  return (await api.patch<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}/status`, { isActive })).data.data
+}
+
+export async function getSalesStructure(effectiveDate: string) {
+  const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-structure', { params: { effectiveDate } })
+  return asArray<SalesStructureItem>(response.data.data, 'Unable to load sales structure.')
+}
+
+export async function createSalesAssignment(payload: CreateSalesAssignmentPayload) {
+  return (await api.post<ApiEnvelope<SalesStructureAssignment>>('/admin/sales-structure/assignments', payload)).data.data
 }

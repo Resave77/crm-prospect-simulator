@@ -226,3 +226,12 @@ pre-reset access token is rejected after `token_version` is bumped.
 
 ---
 
+
+# Phase 6C-2 — Backend Forced Password Change Guard
+
+> **Status:** Complete (2026-07-31). Backend-only; no migration and no frontend changes.
+
+`AuthenticateAccess` now carries DB-backed `must_change_password` into the authenticated principal. `RequirePasswordChanged` blocks protected CRM groups (`/dashboard`, `/sales`, `/admin`) with 403 `PASSWORD_CHANGE_REQUIRED` while leaving change-password, logout/logout-all, auth-me, and refresh available for the restricted flow.
+
+### Phase 7A-Lite Result
+Implemented separate sales organizational roles and monthly hierarchy assignments without changing auth roles or CRM visibility. History uses the current role label when read. The reference `Approved By` column remains pending clarification; no approval workflow was inferred.

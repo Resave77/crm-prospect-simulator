@@ -8,4 +8,8 @@ var (
 	ErrSessionExpired     = errors.New("session expired")
 	ErrUserInactive       = errors.New("user inactive")
 	ErrForbidden          = errors.New("forbidden")
+	ErrPasswordTooWeak    = errors.New("password too weak")
+	ErrPasswordMismatch   = errors.New("password confirmation mismatch")
+	ErrPasswordSame       = errors.New("new password must differ from current password")
+	ErrMissingFields      = errors.New("missing required fields")
 )

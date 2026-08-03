@@ -27,6 +27,12 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+	ConfirmPassword string `json:"confirmPassword"`
+}
+
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var request loginRequest
 	if err := c.BodyParser(&request); err != nil {
@@ -78,6 +84,33 @@ func (h *Handler) LogoutAll(c *fiber.Ctx) error {
 	}
 	h.clearRefreshCookie(c)
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *Handler) ChangePassword(c *fiber.Ctx) error {
+	principal, ok := authmiddleware.Principal(c)
+	if !ok {
+		return response.Error(c, fiber.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication is required.")
+	}
+	var request changePasswordRequest
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	result, err := h.auth.ChangePassword(c.UserContext(), principal, request.CurrentPassword, request.NewPassword, request.ConfirmPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidCredentials):
+			return response.Error(c, fiber.StatusUnauthorized, "INVALID_CREDENTIALS", "The current password is incorrect.")
+		case errors.Is(err, service.ErrMissingFields), errors.Is(err, service.ErrPasswordMismatch),
+			errors.Is(err, service.ErrPasswordTooWeak), errors.Is(err, service.ErrPasswordSame):
+			return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", "The password change request is invalid.")
+		case service.IsClientAuthError(err):
+			return response.Error(c, fiber.StatusUnauthorized, "ACCESS_TOKEN_INVALID", "The access token is invalid or expired.")
+		default:
+			return err
+		}
+	}
+	h.clearRefreshCookie(c)
+	return response.Data(c, fiber.StatusOK, result)
 }
 
 func (h *Handler) Me(c *fiber.Ctx) error {

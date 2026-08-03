@@ -1,14 +1,24 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import axios, { AxiosError } from 'axios'
+import { changePassword as changePasswordRequest } from '../api/auth'
 import { api, observeSession, refreshSession, setAccessToken } from '../api/client'
-import type { ApiEnvelope, ApiErrorEnvelope, AuthPayload, AuthUser, UserRole } from '../types/auth'
+import type {
+  ApiEnvelope,
+  ApiErrorEnvelope,
+  AuthPayload,
+  AuthUser,
+  ChangePasswordPayload,
+  ChangePasswordResult,
+  UserRole,
+} from '../types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const accessExpiresAt = ref<string | null>(null)
   const bootstrapped = ref(false)
   const loading = ref(false)
+  const changingPassword = ref(false)
 
   const authenticated = computed(() => user.value !== null)
   const role = computed<UserRole | null>(() => user.value?.role ?? null)
@@ -53,6 +63,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResult> {
+    if (changingPassword.value) {
+      throw new Error('Password change already in progress.')
+    }
+
+    changingPassword.value = true
+    try {
+      const result = await changePasswordRequest(payload)
+      applySession(null)
+      bootstrapped.value = true
+      return result
+    } finally {
+      changingPassword.value = false
+    }
+  }
+
   function errorMessage(error: unknown) {
     if (axios.isAxiosError<ApiErrorEnvelope>(error)) {
       return error.response?.data?.error?.message ?? 'Unable to connect to the CRM service.'
@@ -60,5 +86,21 @@ export const useAuthStore = defineStore('auth', () => {
     return error instanceof Error ? error.message : 'An unexpected error occurred.'
   }
 
-  return { user, accessExpiresAt, bootstrapped, loading, authenticated, role, bootstrap, login, logout, errorMessage }
+  return {
+    user,
+    accessExpiresAt,
+    bootstrapped,
+    loading,
+    changingPassword,
+    authenticated,
+    role,
+    bootstrap,
+    login,
+    logout,
+    changePassword,
+    errorMessage,
+  }
 })
+
+
+

@@ -1,5 +1,6 @@
 export type AdminUserRole = 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 export type AdminUserStatus = 'ACTIVE' | 'INACTIVE'
+export type SalesRoleLevel = 1 | 2 | 3 | 4
 
 export interface AdminUserListItem {
   id: string
@@ -75,4 +76,60 @@ export interface AdminResetPasswordResult {
   temporaryPassword: string
   mustChangePassword: boolean
   sessionsRevoked: number
+}
+
+export interface SalesRole {
+  id: string
+  name: string
+  level: SalesRoleLevel
+  description: string
+  isActive: boolean
+  createdBy?: string | null
+  updatedBy?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSalesRolePayload {
+  name: string
+  level: SalesRoleLevel
+  description?: string
+}
+
+export interface UpdateSalesRolePayload {
+  name?: string
+  level?: SalesRoleLevel
+  description?: string | null
+}
+
+export interface SalesStructureAssignment {
+  assignmentId: string
+  userId: string
+  salesRoleId: string
+  parentUserId?: string | null
+  effectiveFrom: string
+  effectiveTo?: string | null
+}
+
+export interface SalesStructureItem {
+  assignmentId: string
+  userId: string
+  salesName: string
+  systemRole: AdminUserRole
+  salesRole: {
+    id: string
+    name: string
+    level: SalesRoleLevel
+  }
+  parentUserId?: string | null
+  parentName?: string | null
+  effectiveFrom: string
+  effectiveTo?: string | null
+}
+
+export interface CreateSalesAssignmentPayload {
+  userId: string
+  salesRoleId: string
+  parentUserId?: string | null
+  effectiveFrom: string
 }

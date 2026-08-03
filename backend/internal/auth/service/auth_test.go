@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,7 +13,11 @@ import (
 )
 
 type userRepositoryStub struct {
-	user model.User
+	user              model.User
+	changePasswordErr error
+	changedHash       string
+	changedUserID     uuid.UUID
+	revoked           int
 }
 
 func (r *userRepositoryStub) FindByEmail(context.Context, string) (model.User, error) {
@@ -23,6 +28,14 @@ func (r *userRepositoryStub) FindUserByID(context.Context, uuid.UUID) (model.Use
 }
 func (r *userRepositoryStub) RecordLogin(context.Context, uuid.UUID, time.Time) error { return nil }
 func (r *userRepositoryStub) UpsertSeed(context.Context, model.User) error            { return nil }
+func (r *userRepositoryStub) ChangePassword(_ context.Context, userID uuid.UUID, hash string, _ string, _ time.Time) (int, error) {
+	if r.changePasswordErr != nil {
+		return 0, r.changePasswordErr
+	}
+	r.changedUserID = userID
+	r.changedHash = hash
+	return r.revoked, nil
+}
 
 type sessionRepositoryStub struct {
 	sessions map[uuid.UUID]model.RefreshSession
@@ -121,5 +134,221 @@ func TestLoginRejectsIncorrectBcryptPassword(t *testing.T) {
 
 	if _, err := auth.Login(context.Background(), users.user.Email, "wrong-password", ClientContext{}); err != ErrInvalidCredentials {
 		t.Fatalf("err=%v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestChangePasswordSuccess(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{
+		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
+		Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1, MustChangePassword: true,
+	}
+	users := &userRepositoryStub{user: user, revoked: 2}
+	sessions := &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}
+	auth := NewAuthService(users, sessions, NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	res, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "NewPass456", "NewPass456")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.PasswordChanged || res.MustChangePassword || !res.ReauthenticationRequired {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if res.SessionsRevoked != 2 {
+		t.Fatalf("sessionsRevoked=%d, want 2", res.SessionsRevoked)
+	}
+}
+
+func TestChangePasswordIncorrectCurrent(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{
+		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
+		Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1,
+	}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "WrongPass123", "NewPass456", "NewPass456")
+	if err != ErrInvalidCredentials {
+		t.Fatalf("err=%v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestChangePasswordWeak(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{
+		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
+		Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1,
+	}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	// too short, or missing upper/lower/digit
+	for _, weak := range []string{"short1", "nouppercase1", "NOLOWERCASE1", "NoDigitAtAll"} {
+		_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", weak, weak)
+		if err == nil {
+			t.Fatalf("expected error for weak password %q", weak)
+		}
+	}
+}
+
+func TestChangePasswordMismatch(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{
+		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
+		Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1,
+	}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "NewPass456", "Different789")
+	if err == nil {
+		t.Fatalf("expected error for password mismatch")
+	}
+}
+
+func TestChangePasswordSame(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{
+		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
+		Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1,
+	}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "OldPass123", "OldPass123")
+	if err == nil {
+		t.Fatalf("expected error when new password equals current password")
+	}
+}
+
+func TestChangePasswordMissingFields(t *testing.T) {
+	auth := NewAuthService(&userRepositoryStub{}, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	cases := [][3]string{
+		{"", "NewPass456", "NewPass456"},
+		{"OldPass123", "", "NewPass456"},
+		{"OldPass123", "NewPass456", ""},
+	}
+	for _, tc := range cases {
+		_, err := auth.ChangePassword(context.Background(), Principal{UserID: uuid.New()}, tc[0], tc[1], tc[2])
+		if err != ErrMissingFields {
+			t.Fatalf("err=%v, want ErrMissingFields", err)
+		}
+	}
+}
+
+func TestChangePasswordStoresBcryptHashForNewPassword(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{ID: uuid.New(), PasswordHash: string(hash), Role: model.RoleSalesExecutive, Status: model.UserActive}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "NewPass456", "NewPass456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if users.changedHash == "NewPass456" {
+		t.Fatal("stored raw password, want bcrypt hash")
+	}
+	if bcrypt.CompareHashAndPassword([]byte(users.changedHash), []byte("NewPass456")) != nil {
+		t.Fatal("stored hash does not match new password")
+	}
+}
+
+func TestChangePasswordAllowsEveryRole(t *testing.T) {
+	for _, role := range []model.Role{model.RoleAdministrator, model.RoleSalesManager, model.RoleSalesExecutive} {
+		hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+		user := model.User{ID: uuid.New(), PasswordHash: string(hash), Role: role, Status: model.UserActive}
+		users := &userRepositoryStub{user: user}
+		auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+			NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+		if _, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: role}, "OldPass123", "NewPass456", "NewPass456"); err != nil {
+			t.Fatalf("role %s err=%v, want nil", role, err)
+		}
+	}
+}
+
+func TestChangePasswordRollbackBehaviorSurfacesRepositoryFailure(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{ID: uuid.New(), PasswordHash: string(hash), Role: model.RoleAdministrator, Status: model.UserActive}
+	persistErr := errors.New("rollback")
+	users := &userRepositoryStub{user: user, changePasswordErr: persistErr}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	result, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "NewPass456", "NewPass456")
+	if !errors.Is(err, persistErr) {
+		t.Fatalf("err=%v, want repository failure", err)
+	}
+	if result.PasswordChanged {
+		t.Fatalf("passwordChanged=%v, want false", result.PasswordChanged)
+	}
+}
+func TestAuthenticateAccessIncludesMustChangePasswordFromUserRow(t *testing.T) {
+	user := model.User{ID: uuid.New(), Email: "admin@yummy.test", Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1, MustChangePassword: true}
+	users := &userRepositoryStub{user: user}
+	tokens := NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute)
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}, tokens, time.Hour)
+	access, _, err := tokens.IssueAccess(user, uuid.New(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	principal, err := auth.AuthenticateAccess(context.Background(), access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !principal.MustChangePassword {
+		t.Fatal("principal.MustChangePassword=false, want true")
+	}
+}
+
+func TestLoginAndRefreshReturnMustChangePassword(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := model.User{ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash), FullName: "Administrator", Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1, MustChangePassword: true}
+	users := &userRepositoryStub{user: user}
+	sessions := &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}
+	tokens := NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute)
+	auth := NewAuthService(users, sessions, tokens, time.Hour)
+
+	login, err := auth.Login(context.Background(), user.Email, "password123", ClientContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !login.User.MustChangePassword {
+		t.Fatal("login mustChangePassword=false, want true")
+	}
+	refreshed, err := auth.Refresh(context.Background(), login.RefreshToken, ClientContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !refreshed.User.MustChangePassword {
+		t.Fatal("refresh mustChangePassword=false, want true")
+	}
+}
+
+func TestAuthenticateAccessRejectsInactiveUserBeforePasswordChangeGuard(t *testing.T) {
+	user := model.User{ID: uuid.New(), Email: "inactive@yummy.test", Role: model.RoleAdministrator, Status: model.UserActive, TokenVersion: 1, MustChangePassword: true}
+	tokens := NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute)
+	access, _, err := tokens.IssueAccess(user, uuid.New(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	user.Status = model.UserInactive
+	auth := NewAuthService(&userRepositoryStub{user: user}, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}, tokens, time.Hour)
+
+	if _, err := auth.AuthenticateAccess(context.Background(), access); err != ErrInvalidToken {
+		t.Fatalf("err=%v, want ErrInvalidToken", err)
 	}
 }

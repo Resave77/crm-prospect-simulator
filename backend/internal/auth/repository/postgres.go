@@ -164,6 +164,42 @@ func (r *PostgresRepository) RevokeAllForUser(ctx context.Context, userID uuid.U
 	return databaseError("revoke user sessions", err)
 }
 
+func (r *PostgresRepository) ChangePassword(ctx context.Context, userID uuid.UUID, newPasswordHash string, revokeReason string, at time.Time) (int, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("begin change password txn: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	cmdUser, err := tx.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $2,
+		    must_change_password = false,
+		    token_version = token_version + 1,
+		    updated_at = $3
+		WHERE id = $1`, userID, newPasswordHash, at)
+	if err != nil {
+		return 0, fmt.Errorf("update user password: %w", err)
+	}
+	if cmdUser.RowsAffected() != 1 {
+		return 0, ErrNotFound
+	}
+
+	cmdSessions, err := tx.Exec(ctx, `
+		UPDATE refresh_sessions
+		SET revoked_at = $2, revoke_reason = $3
+		WHERE user_id = $1 AND revoked_at IS NULL`, userID, at, revokeReason)
+	if err != nil {
+		return 0, fmt.Errorf("revoke user sessions: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit change password: %w", err)
+	}
+
+	return int(cmdSessions.RowsAffected()), nil
+}
+
 func databaseError(operation string, err error) error {
 	if err == nil {
 		return nil

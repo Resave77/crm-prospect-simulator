@@ -17,6 +17,19 @@ export interface AuthPayload {
   user: AuthUser
 }
 
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export interface ChangePasswordResult {
+  passwordChanged: boolean
+  mustChangePassword: boolean
+  sessionsRevoked: number
+  reauthenticationRequired: boolean
+}
+
 export interface ApiEnvelope<T> {
   data: T
   meta: { requestId?: string }
@@ -30,3 +43,4 @@ export interface ApiErrorEnvelope {
     requestId?: string
   }
 }
+

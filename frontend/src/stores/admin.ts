@@ -12,6 +12,11 @@ import type {
   AdminUserListItem,
   AdminUserListParams,
   AdminUserStatus,
+  CreateSalesAssignmentPayload,
+  CreateSalesRolePayload,
+  SalesRole,
+  SalesStructureItem,
+  UpdateSalesRolePayload,
 } from '../types/admin'
 
 const defaultParams: AdminUserListParams = {
@@ -35,6 +40,13 @@ export const useAdminStore = defineStore('admin', () => {
   const detailLoading = ref(false)
   const saving = ref(false)
   const resettingPassword = ref(false)
+  const salesRoles = ref<SalesRole[]>([])
+  const salesRolesLoading = ref(false)
+  const salesStructure = ref<SalesStructureItem[]>([])
+  const salesStructureLoading = ref(false)
+  const selectedEffectiveMonth = ref(new Date().toISOString().slice(0, 7))
+  const savingSalesRole = ref(false)
+  const savingSalesAssignment = ref(false)
 
   async function fetchUsers() {
     loading.value = true
@@ -121,6 +133,68 @@ export const useAdminStore = defineStore('admin', () => {
     page.value = 1
   }
 
+
+  async function fetchSalesRoles() {
+    salesRolesLoading.value = true
+    try {
+      salesRoles.value = await adminApi.getSalesRoles()
+    } finally {
+      salesRolesLoading.value = false
+    }
+  }
+
+  async function createSalesRole(payload: CreateSalesRolePayload) {
+    savingSalesRole.value = true
+    try {
+      const role = await adminApi.createSalesRole(payload)
+      await fetchSalesRoles()
+      return role
+    } finally {
+      savingSalesRole.value = false
+    }
+  }
+
+  async function updateSalesRole(id: string, payload: UpdateSalesRolePayload) {
+    savingSalesRole.value = true
+    try {
+      const role = await adminApi.updateSalesRole(id, payload)
+      await fetchSalesRoles()
+      return role
+    } finally {
+      savingSalesRole.value = false
+    }
+  }
+
+  async function setSalesRoleStatus(id: string, isActive: boolean) {
+    savingSalesRole.value = true
+    try {
+      const role = await adminApi.updateSalesRoleStatus(id, isActive)
+      await fetchSalesRoles()
+      return role
+    } finally {
+      savingSalesRole.value = false
+    }
+  }
+
+  async function fetchSalesStructure(effectiveDate: string) {
+    salesStructureLoading.value = true
+    try {
+      salesStructure.value = await adminApi.getSalesStructure(effectiveDate)
+    } finally {
+      salesStructureLoading.value = false
+    }
+  }
+
+  async function createSalesAssignment(payload: CreateSalesAssignmentPayload) {
+    savingSalesAssignment.value = true
+    try {
+      const assignment = await adminApi.createSalesAssignment(payload)
+      await fetchSalesStructure(payload.effectiveFrom)
+      return assignment
+    } finally {
+      savingSalesAssignment.value = false
+    }
+  }
   function errorMessage(error: unknown) {
     if (axios.isAxiosError<ApiErrorEnvelope>(error)) {
       return error.response?.data?.error?.message ?? 'Account service is unavailable.'
@@ -131,8 +205,12 @@ export const useAdminStore = defineStore('admin', () => {
   return {
     users, total, page, limit, pages, loading, managerOptions, params,
     selectedUser, detailLoading, saving, resettingPassword,
+    salesRoles, salesRolesLoading, salesStructure, salesStructureLoading, selectedEffectiveMonth, savingSalesRole, savingSalesAssignment,
     fetchUsers, fetchManagers, createUser, updateStatus,
     fetchUserById, updateUser, clearSelectedUser, resetPassword,
-    setParam, setPage, resetFilters, errorMessage,
+    setParam, setPage, resetFilters,
+    fetchSalesRoles, createSalesRole, updateSalesRole, setSalesRoleStatus,
+    fetchSalesStructure, createSalesAssignment, errorMessage,
   }
 })
+
