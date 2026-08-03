@@ -13,6 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func decodeAttachments(raw []byte) ([]model.CommentAttachment, error) {
+	items := make([]model.CommentAttachment, 0)
+	if len(raw) == 0 {
+		return items, nil
+	}
+	return items, json.Unmarshal(raw, &items)
+}
+
 type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
@@ -61,6 +69,23 @@ func (r *PostgresRepository) ListSalesExecutives(ctx context.Context) ([]model.S
 		ORDER BY u.full_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list sales executives: %w", err)
+	}
+	defer rows.Close()
+	items := make([]model.SalesExecutive, 0)
+	for rows.Next() {
+		var item model.SalesExecutive
+		if err := rows.Scan(&item.ID, &item.FullName, &item.ActiveProspectCount); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *PostgresRepository) ListMentionUsers(ctx context.Context) ([]model.SalesExecutive, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, full_name, 0 FROM users WHERE status='ACTIVE' ORDER BY full_name`)
+	if err != nil {
+		return nil, fmt.Errorf("list mention users: %w", err)
 	}
 	defer rows.Close()
 	items := make([]model.SalesExecutive, 0)
@@ -524,7 +549,7 @@ func (r *PostgresRepository) RejectDeletion(ctx context.Context, prospectID uuid
 
 func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.UUID) ([]model.ProspectComment, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.created_at, c.updated_at
+		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.attachments, c.created_at, c.updated_at
 		FROM prospect_comments c
 		JOIN users u ON u.id = c.user_id
 		WHERE c.prospect_id = $1
@@ -536,32 +561,62 @@ func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.U
 	items := make([]model.ProspectComment, 0)
 	for rows.Next() {
 		var item model.ProspectComment
-		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		var raw []byte
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &raw, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan prospect comment: %w", err)
+		}
+		if item.Attachments, err = decodeAttachments(raw); err != nil {
+			return nil, fmt.Errorf("decode comment attachments: %w", err)
 		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
 }
 
-func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, userID uuid.UUID, content string) (model.ProspectComment, error) {
+func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, userID uuid.UUID, content string, attachments []model.CommentAttachment) (model.ProspectComment, error) {
 	id := uuid.New()
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO prospect_comments (id, prospect_id, user_id, content, updated_at)
-		VALUES ($1, $2, $3, $4, now())`, id, prospectID, userID, content)
+	raw, err := json.Marshal(attachments)
+	if err != nil {
+		return model.ProspectComment{}, fmt.Errorf("encode comment attachments: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO prospect_comments (id, prospect_id, user_id, content, attachments, updated_at)
+		VALUES ($1, $2, $3, $4, $5, now())`, id, prospectID, userID, content, raw)
 	if err != nil {
 		return model.ProspectComment{}, fmt.Errorf("create prospect comment: %w", err)
 	}
 	var item model.ProspectComment
 	err = r.pool.QueryRow(ctx, `
-		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.created_at, c.updated_at
+		SELECT c.id, c.prospect_id, c.user_id, u.full_name, c.content, c.attachments, c.created_at, c.updated_at
 		FROM prospect_comments c
 		JOIN users u ON u.id = c.user_id
-		WHERE c.id = $1`, id).Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &item.CreatedAt, &item.UpdatedAt)
+		WHERE c.id = $1`, id).Scan(&item.ID, &item.ProspectID, &item.UserID, &item.UserName, &item.Content, &raw, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return model.ProspectComment{}, fmt.Errorf("read created comment: %w", err)
 	}
-	return item, nil
+	item.Attachments, err = decodeAttachments(raw)
+	return item, err
+}
+
+func (r *PostgresRepository) FindCommentAttachment(ctx context.Context, prospectID, attachmentID uuid.UUID) (model.CommentAttachment, error) {
+	var raw []byte
+	err := r.pool.QueryRow(ctx, `SELECT attachments FROM prospect_comments WHERE prospect_id=$1 AND attachments @> $2::jsonb LIMIT 1`, prospectID, fmt.Sprintf(`[{"id":"%s"}]`, attachmentID)).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.CommentAttachment{}, ErrNotFound
+	}
+	if err != nil {
+		return model.CommentAttachment{}, fmt.Errorf("find comment attachment: %w", err)
+	}
+	items, err := decodeAttachments(raw)
+	if err != nil {
+		return model.CommentAttachment{}, err
+	}
+	for _, item := range items {
+		if item.ID == attachmentID {
+			return item, nil
+		}
+	}
+	return model.CommentAttachment{}, ErrNotFound
 }
 
 func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID uuid.UUID) (uuid.UUID, error) {

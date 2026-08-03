@@ -30,7 +30,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
-		BodyLimit:    2 * 1024 * 1024,
+		BodyLimit:    26 * 1024 * 1024,
 		ErrorHandler: jsonErrorHandler,
 	})
 
@@ -89,6 +89,8 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Patch("/prospects/:id/visits/:visitId/check-out", prospectHandler.CheckOut)
 	sales.Get("/prospects/:id/comments", prospectHandler.ListComments)
 	sales.Post("/prospects/:id/comments", prospectHandler.CreateComment)
+	sales.Get("/prospects/:id/comments/attachments/:attachmentId", prospectHandler.CommentAttachment)
+	sales.Get("/mention-users", prospectHandler.MentionUsers)
 	sales.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	sales.Post("/prospects/:id/request-deletion", prospectHandler.RequestDeletion)
 	sales.Get("/visits", prospectHandler.ListMyVisits)
@@ -108,7 +110,9 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Delete("/prospects/:id", prospectHandler.DeleteProspect)
 	admin.Get("/prospects/:id", prospectHandler.Review)
 	admin.Get("/prospects/:id/comments", prospectHandler.ListComments)
+	admin.Get("/mention-users", prospectHandler.MentionUsers)
 	admin.Post("/prospects/:id/comments", prospectHandler.CreateComment)
+	admin.Get("/prospects/:id/comments/attachments/:attachmentId", prospectHandler.CommentAttachment)
 	admin.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
 	admin.Get("/prospects/:prospectId/visits", prospectHandler.ListProspectVisits)

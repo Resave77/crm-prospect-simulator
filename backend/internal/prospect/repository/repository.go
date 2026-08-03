@@ -22,6 +22,7 @@ type Repository interface {
 	ListWon(context.Context) ([]model.Prospect, error)
 	ListAll(context.Context) ([]model.Prospect, error)
 	ListSalesExecutives(context.Context) ([]model.SalesExecutive, error)
+	ListMentionUsers(context.Context) ([]model.SalesExecutive, error)
 	FindReview(context.Context, uuid.UUID) (model.Review, error)
 	Transition(context.Context, uuid.UUID, uuid.UUID, model.Status, model.Status, string) (model.Prospect, error)
 	Create(context.Context, model.SaveProspectInput, uuid.UUID) (model.Prospect, error)
@@ -36,6 +37,7 @@ type Repository interface {
 	ApproveDeletion(context.Context, uuid.UUID) ([]string, error)
 	RejectDeletion(context.Context, uuid.UUID) error
 	ListComments(context.Context, uuid.UUID) ([]model.ProspectComment, error)
-	CreateComment(context.Context, uuid.UUID, uuid.UUID, string) (model.ProspectComment, error)
+	CreateComment(context.Context, uuid.UUID, uuid.UUID, string, []model.CommentAttachment) (model.ProspectComment, error)
+	FindCommentAttachment(context.Context, uuid.UUID, uuid.UUID) (model.CommentAttachment, error)
 	FindProspectOwner(context.Context, uuid.UUID) (uuid.UUID, error)
 }

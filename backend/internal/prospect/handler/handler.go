@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -372,20 +374,99 @@ func (h *Handler) ListComments(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) MentionUsers(c *fiber.Ctx) error {
+	items, err := h.service.MentionUsers(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func (h *Handler) CreateComment(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
-	var request createCommentRequest
-	if err := c.BodyParser(&request); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	request := createCommentRequest{Content: c.FormValue("content")}
+	attachments := make([]prospectmodel.CommentAttachment, 0)
+	if strings.HasPrefix(c.Get(fiber.HeaderContentType), fiber.MIMEApplicationJSON) {
+		if err := c.BodyParser(&request); err != nil {
+			return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
+		}
+	} else if form, err := c.MultipartForm(); err == nil {
+		files := form.File["files"]
+		if len(files) > 5 {
+			return response.Error(c, 422, "TOO_MANY_FILES", "A comment can contain up to 5 files.")
+		}
+		dir := filepath.Join("private_uploads", "ticketing", id.String())
+		if len(files) > 0 {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return response.Error(c, 500, "UPLOAD_FAILED", "Unable to prepare attachment storage.")
+			}
+		}
+		for _, file := range files {
+			if file.Size > 5*1024*1024 {
+				removeCommentFiles(attachments)
+				return response.Error(c, 422, "FILE_TOO_LARGE", "Each attachment must be 5 MB or smaller.")
+			}
+			src, err := file.Open()
+			if err != nil {
+				removeCommentFiles(attachments)
+				return response.Error(c, 422, "FILE_INVALID", "Unable to read attachment.")
+			}
+			head := make([]byte, 512)
+			n, readErr := src.Read(head)
+			_ = src.Close()
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				removeCommentFiles(attachments)
+				return response.Error(c, 422, "FILE_INVALID", "Unable to read attachment.")
+			}
+			contentType := http.DetectContentType(head[:n])
+			ext := strings.ToLower(filepath.Ext(filepath.Base(file.Filename)))
+			allowed := (contentType == "image/jpeg" && (ext == ".jpg" || ext == ".jpeg")) || (contentType == "image/png" && ext == ".png") || (contentType == "application/pdf" && ext == ".pdf") || ((contentType == "application/zip" || contentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document") && ext == ".docx") || ((contentType == "application/zip" || contentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") && ext == ".xlsx")
+			if !allowed {
+				removeCommentFiles(attachments)
+				return response.Error(c, 422, "FILE_TYPE_INVALID", "Only JPG, PNG, PDF, DOCX, and XLSX files are allowed.")
+			}
+			attachmentID := uuid.New()
+			path := filepath.Join(dir, attachmentID.String()+ext)
+			if err := c.SaveFile(file, path); err != nil {
+				removeCommentFiles(attachments)
+				return response.Error(c, 500, "UPLOAD_FAILED", "Unable to save attachment.")
+			}
+			attachments = append(attachments, prospectmodel.CommentAttachment{ID: attachmentID, Name: filepath.Base(file.Filename), ContentType: contentType, Size: file.Size, Path: filepath.ToSlash(path)})
+		}
 	}
-	item, err := h.service.CreateComment(c.UserContext(), actor(c), id, request.Content)
+	item, err := h.service.CreateComment(c.UserContext(), actor(c), id, request.Content, attachments)
 	if err != nil {
+		removeCommentFiles(attachments)
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusCreated, item)
+}
+
+func (h *Handler) CommentAttachment(c *fiber.Ctx) error {
+	prospectID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	attachmentID, err := uuid.Parse(c.Params("attachmentId"))
+	if err != nil {
+		return response.Error(c, 400, "ATTACHMENT_ID_INVALID", "Attachment ID is invalid.")
+	}
+	item, err := h.service.CommentAttachment(c.UserContext(), actor(c), prospectID, attachmentID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf(`attachment; filename="%s"`, strings.ReplaceAll(item.Name, `"`, "")))
+	c.Type(filepath.Ext(item.Name))
+	return c.SendFile(item.Path)
+}
+
+func removeCommentFiles(items []prospectmodel.CommentAttachment) {
+	for _, item := range items {
+		_ = os.Remove(item.Path)
+	}
 }
 
 func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {

@@ -49,6 +49,9 @@ func (f *fakeProspectRepository) ListAll(context.Context) ([]prospectmodel.Prosp
 func (f *fakeProspectRepository) ListSalesExecutives(context.Context) ([]prospectmodel.SalesExecutive, error) {
 	return []prospectmodel.SalesExecutive{}, nil
 }
+func (f *fakeProspectRepository) ListMentionUsers(context.Context) ([]prospectmodel.SalesExecutive, error) {
+	return []prospectmodel.SalesExecutive{}, nil
+}
 func (f *fakeProspectRepository) Create(_ context.Context, _ prospectmodel.SaveProspectInput, _ uuid.UUID) (prospectmodel.Prospect, error) {
 	return f.prospect, nil
 }
@@ -120,8 +123,11 @@ func (f *fakeProspectRepository) RejectDeletion(_ context.Context, _ uuid.UUID) 
 func (f *fakeProspectRepository) ListComments(_ context.Context, _ uuid.UUID) ([]prospectmodel.ProspectComment, error) {
 	return []prospectmodel.ProspectComment{}, nil
 }
-func (f *fakeProspectRepository) CreateComment(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (prospectmodel.ProspectComment, error) {
+func (f *fakeProspectRepository) CreateComment(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string, _ []prospectmodel.CommentAttachment) (prospectmodel.ProspectComment, error) {
 	return prospectmodel.ProspectComment{}, nil
+}
+func (f *fakeProspectRepository) FindCommentAttachment(_ context.Context, _ uuid.UUID, _ uuid.UUID) (prospectmodel.CommentAttachment, error) {
+	return prospectmodel.CommentAttachment{}, nil
 }
 func (f *fakeProspectRepository) FindProspectOwner(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.Nil, nil
