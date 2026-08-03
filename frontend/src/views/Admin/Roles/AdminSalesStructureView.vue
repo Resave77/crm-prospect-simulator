@@ -214,9 +214,9 @@ const nextGuidance = computed(() => {
 })
 
 const searchInput = computed({
-  get: () => (activeTab.value === 'assigned' ? search.value : userSearchInput.value),
+  get: () => (viewMode.value === 'tree' || activeTab.value === 'assigned' ? search.value : userSearchInput.value),
   set: (val: string) => {
-    if (activeTab.value === 'assigned') search.value = val
+    if (viewMode.value === 'tree' || activeTab.value === 'assigned') search.value = val
     else onUserSearch(val)
   },
 })
@@ -243,6 +243,10 @@ function roleLabel(role: string) {
 
 function positionLabel(item: SalesStructureItem) {
   return roleLabel(item.systemRole)
+}
+
+function reportsToLabel(item: SalesStructureItem) {
+  return item.salesRole.level === 1 ? 'Top Level' : item.parentName || '-'
 }
 
 function roleSeverity(role: string) {
@@ -654,11 +658,10 @@ onMounted(async () => {
                   <span>{{ positionLabel(root.item) }}</span>
                 </span>
                 <span class="node-meta">
-                  <Tag :value="root.item.salesRole.name" severity="secondary" />
-                  <Tag :value="`Level ${root.item.salesRole.level}`" :severity="root.item.salesRole.level === 1 ? 'info' : root.item.salesRole.level === 2 ? 'info' : root.item.salesRole.level === 3 ? 'warn' : 'success'" />
-                  <Tag :value="statusFor(root.item)" :severity="root.item.effectiveTo ? 'secondary' : 'success'" />
-                  <span class="node-region"><i class="pi pi-map-marker" /> {{ inferRegion(root.item) }}</span>
-                  <span class="node-team"><i class="pi pi-users" /> {{ teamSize(root.item.userId) }}</span>
+                  <span><em>Reports To</em>{{ reportsToLabel(root.item) }}</span>
+                  <span><em>Role Name</em>{{ root.item.salesRole.name }}</span>
+                  <span class="level-indicator">Level {{ root.item.salesRole.level }}</span>
+                  <span class="status-dot" :class="{ inactive: root.item.effectiveTo }">{{ statusFor(root.item) }}</span>
                 </span>
               </button>
             </div>
@@ -674,11 +677,10 @@ onMounted(async () => {
                       <span class="node-avatar">{{ initials(child.item.salesName) }}</span>
                       <span class="node-main"><strong>{{ child.item.salesName }}</strong><span>{{ positionLabel(child.item) }}</span></span>
                       <span class="node-meta">
-                        <Tag :value="child.item.salesRole.name" severity="secondary" />
-                        <Tag :value="`Level ${child.item.salesRole.level}`" :severity="child.item.salesRole.level === 3 ? 'warn' : child.item.salesRole.level === 4 ? 'success' : 'info'" />
-                        <Tag :value="statusFor(child.item)" :severity="child.item.effectiveTo ? 'secondary' : 'success'" />
-                        <span class="node-region"><i class="pi pi-map-marker" /> {{ inferRegion(child.item) }}</span>
-                        <span class="node-team"><i class="pi pi-users" /> {{ teamSize(child.item.userId) }}</span>
+                        <span><em>Reports To</em>{{ reportsToLabel(child.item) }}</span>
+                        <span><em>Role Name</em>{{ child.item.salesRole.name }}</span>
+                        <span class="level-indicator">Level {{ child.item.salesRole.level }}</span>
+                        <span class="status-dot" :class="{ inactive: child.item.effectiveTo }">{{ statusFor(child.item) }}</span>
                       </span>
                     </button>
                   </div>
@@ -694,11 +696,10 @@ onMounted(async () => {
                             <span class="node-avatar">{{ initials(grandchild.item.salesName) }}</span>
                             <span class="node-main"><strong>{{ grandchild.item.salesName }}</strong><span>{{ positionLabel(grandchild.item) }}</span></span>
                             <span class="node-meta">
-                              <Tag :value="grandchild.item.salesRole.name" severity="secondary" />
-                              <Tag :value="`Level ${grandchild.item.salesRole.level}`" :severity="grandchild.item.salesRole.level === 4 ? 'success' : 'warn'" />
-                              <Tag :value="statusFor(grandchild.item)" :severity="grandchild.item.effectiveTo ? 'secondary' : 'success'" />
-                              <span class="node-region"><i class="pi pi-map-marker" /> {{ inferRegion(grandchild.item) }}</span>
-                              <span class="node-team"><i class="pi pi-users" /> {{ teamSize(grandchild.item.userId) }}</span>
+                              <span><em>Reports To</em>{{ reportsToLabel(grandchild.item) }}</span>
+                              <span><em>Role Name</em>{{ grandchild.item.salesRole.name }}</span>
+                              <span class="level-indicator">Level {{ grandchild.item.salesRole.level }}</span>
+                              <span class="status-dot" :class="{ inactive: grandchild.item.effectiveTo }">{{ statusFor(grandchild.item) }}</span>
                             </span>
                           </button>
                         </div>
@@ -709,11 +710,10 @@ onMounted(async () => {
                               <span class="node-avatar">{{ initials(leaf.item.salesName) }}</span>
                               <span class="node-main"><strong>{{ leaf.item.salesName }}</strong><span>{{ positionLabel(leaf.item) }}</span></span>
                               <span class="node-meta">
-                                <Tag :value="leaf.item.salesRole.name" severity="secondary" />
-                                <Tag :value="`Level ${leaf.item.salesRole.level}`" severity="success" />
-                                <Tag :value="statusFor(leaf.item)" :severity="leaf.item.effectiveTo ? 'secondary' : 'success'" />
-                                <span class="node-region"><i class="pi pi-map-marker" /> {{ inferRegion(leaf.item) }}</span>
-                                <span class="node-team"><i class="pi pi-users" /> {{ teamSize(leaf.item.userId) }}</span>
+                                <span><em>Reports To</em>{{ reportsToLabel(leaf.item) }}</span>
+                                <span><em>Role Name</em>{{ leaf.item.salesRole.name }}</span>
+                                <span class="level-indicator">Level {{ leaf.item.salesRole.level }}</span>
+                                <span class="status-dot" :class="{ inactive: leaf.item.effectiveTo }">{{ statusFor(leaf.item) }}</span>
                               </span>
                             </button>
                           </div>
