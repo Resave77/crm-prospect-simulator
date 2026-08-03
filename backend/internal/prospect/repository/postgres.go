@@ -207,8 +207,8 @@ func (r *PostgresRepository) CheckIn(ctx context.Context, prospectID, salesExecu
 	selfie := input.SelfieReference
 	id := uuid.New()
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO prospect_visits (id, prospect_id, sales_executive_id, check_in_at, check_in_latitude, check_in_longitude, selfie_reference, visit_notes)
-		SELECT $1, p.id, $3, now(), $4, $5, $6, $7 FROM prospects p
+		INSERT INTO prospect_visits (id, prospect_id, sales_executive_id, check_in_at, check_in_latitude, check_in_longitude, selfie_reference, visit_notes, updated_at)
+		SELECT $1, p.id, $3, now(), $4, $5, $6, $7, now() FROM prospects p
 		WHERE p.id = $2
 		  AND (
 			p.assigned_sales_executive_id = $3
@@ -547,8 +547,8 @@ func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.U
 func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, userID uuid.UUID, content string) (model.ProspectComment, error) {
 	id := uuid.New()
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO prospect_comments (id, prospect_id, user_id, content)
-		VALUES ($1, $2, $3, $4)`, id, prospectID, userID, content)
+		INSERT INTO prospect_comments (id, prospect_id, user_id, content, updated_at)
+		VALUES ($1, $2, $3, $4, now())`, id, prospectID, userID, content)
 	if err != nil {
 		return model.ProspectComment{}, fmt.Errorf("create prospect comment: %w", err)
 	}
