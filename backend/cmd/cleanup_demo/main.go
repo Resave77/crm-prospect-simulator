@@ -105,6 +105,10 @@ func deleteDemoRoles(ctx context.Context, tx pgx.Tx) (int64, int, error) {
 	deleted := int64(0)
 	skipped := 0
 	for _, role := range ds.Roles {
+		if isOfficialSalesRole(role.Name) {
+			skipped++
+			continue
+		}
 		var referenced bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM sales_structure_assignments WHERE sales_role_id = $1)`, role.ID).Scan(&referenced); err != nil {
 			return deleted, skipped, err
@@ -120,6 +124,22 @@ func deleteDemoRoles(ctx context.Context, tx pgx.Tx) (int64, int, error) {
 		deleted += tag.RowsAffected()
 	}
 	return deleted, skipped, nil
+}
+
+func isOfficialSalesRole(name string) bool {
+	switch demo.NormalizeRoleName(name) {
+	case "super admin",
+		"sales level 2 + collector",
+		"sales level 3 + collector",
+		"billing",
+		"sales level 4",
+		"sales level 4 + collector",
+		"sales level 4 + merchandising",
+		"sales level 4 + collector + billing":
+		return true
+	default:
+		return false
+	}
 }
 
 func isLocalDatabase(raw string) bool {

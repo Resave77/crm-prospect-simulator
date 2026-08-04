@@ -106,6 +106,18 @@ func (h *Handler) UpdateStatus(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, user)
 }
 
+func (h *Handler) DeleteUser(c *fiber.Ctx) error {
+	actor := actor(c)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.")
+	}
+	if err := h.svc.DeleteUser(c.UserContext(), actor, id); err != nil {
+		return writeError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func (h *Handler) ListManagers(c *fiber.Ctx) error {
 	actor := actor(c)
 	managers, err := h.svc.ListManagers(c.UserContext(), actor)
@@ -153,12 +165,16 @@ func writeError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
+	case errors.Is(err, service.ErrProtectedSuperAdmin):
+		return response.Error(c, fiber.StatusForbidden, "PROTECTED_SUPER_ADMIN", "Yummy Super Admin cannot be changed by this action.")
 	case errors.Is(err, service.ErrInvalidResetMode):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_RESET_MODE", err.Error())
 	case errors.Is(err, service.ErrTemporaryPasswordRequired):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "TEMPORARY_PASSWORD_REQUIRED", err.Error())
 	case errors.Is(err, service.ErrWeakTemporaryPassword):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "WEAK_TEMPORARY_PASSWORD", err.Error())
+	case errors.Is(err, service.ErrInvalidOrganizationalRole):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_ORGANIZATIONAL_ROLE", err.Error())
 	case errors.Is(err, service.ErrValidation):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrSelfDeactivate):
@@ -170,7 +186,7 @@ func writeError(c *fiber.Ctx, err error) error {
 	case errors.Is(err, repository.ErrNotFound):
 		return response.Error(c, fiber.StatusNotFound, "USER_NOT_FOUND", "User not found.")
 	case errors.Is(err, repository.ErrConflict):
-		return response.Error(c, fiber.StatusConflict, "RECORD_CONFLICT", "A record with the same email or employee ID already exists.")
+		return response.Error(c, fiber.StatusConflict, "RECORD_CONFLICT", "Account cannot be deleted because it is still referenced by existing records.")
 	default:
 		slog.Error("admin handler error", "error", err)
 		return response.Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")

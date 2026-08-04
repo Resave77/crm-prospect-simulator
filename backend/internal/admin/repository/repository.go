@@ -22,7 +22,9 @@ type Repository interface {
 	FindUserDetail(ctx context.Context, id uuid.UUID) (model.UserDetail, error)
 	CreateUser(ctx context.Context, id uuid.UUID, input model.CreateUserInput, passwordHash string, actorID uuid.UUID) error
 	UpdateUser(ctx context.Context, id uuid.UUID, input model.UpdateUserInput, actorID uuid.UUID) error
+	SetCurrentSalesAssignment(ctx context.Context, userID uuid.UUID, salesRoleID *uuid.UUID, parentUserID *uuid.UUID, actorID uuid.UUID) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status authmodel.UserStatus, actorID uuid.UUID) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 	ListActiveManagers(ctx context.Context) ([]model.ManagerOption, error)
 	ExistsByEmail(ctx context.Context, email string, excludeID *uuid.UUID) (bool, error)
 	ExistsByEmployeeID(ctx context.Context, employeeID string, excludeID *uuid.UUID) (bool, error)
@@ -30,6 +32,10 @@ type Repository interface {
 	CountActiveAdministrators(ctx context.Context) (int, error)
 	FindUserByID(ctx context.Context, id uuid.UUID) (authmodel.User, error)
 	ResetPassword(ctx context.Context, targetUserID uuid.UUID, actorUserID uuid.UUID, passwordHash string) (int64, error)
+	ListPermissions(ctx context.Context, search string) ([]model.Permission, error)
+	FindPermissionByKey(ctx context.Context, key string) (model.Permission, error)
+	FindPermissionsByKeys(ctx context.Context, keys []string) ([]model.Permission, error)
+	ListRolePermissions(ctx context.Context, roleID uuid.UUID) ([]model.Permission, error)
 	ListSalesRoles(ctx context.Context) ([]model.SalesRole, error)
 	FindSalesRole(ctx context.Context, id uuid.UUID) (model.SalesRole, error)
 	CreateSalesRole(ctx context.Context, id uuid.UUID, input model.CreateSalesRoleInput, actorID uuid.UUID) error
@@ -43,6 +49,8 @@ type Repository interface {
 	FindSalesAssignment(ctx context.Context, id uuid.UUID) (model.SalesStructureAssignment, error)
 	FindEffectiveSalesAssignment(ctx context.Context, userID uuid.UUID, effectiveDate time.Time) (model.SalesStructureAssignment, model.SalesRole, error)
 	SalesAssignmentOverlaps(ctx context.Context, userID uuid.UUID, from time.Time, to *time.Time, excludeID *uuid.UUID) (bool, error)
+	HasIncompatibleCurrentChildren(ctx context.Context, userID uuid.UUID, parentLevel int, effectiveDate time.Time) (bool, error)
+	CountEffectiveLevel1Roots(ctx context.Context, effectiveDate time.Time, excludeAssignmentID *uuid.UUID) (int, error)
 	UserExists(ctx context.Context, id uuid.UUID) (bool, error)
 	ListSalesStructure(ctx context.Context, effectiveDate time.Time) ([]model.SalesStructureItem, error)
 	ListSalesAssignmentHistory(ctx context.Context, userID uuid.UUID) ([]model.AssignmentHistoryItem, error)

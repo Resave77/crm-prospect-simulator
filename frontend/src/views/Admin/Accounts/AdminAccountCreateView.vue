@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
@@ -10,7 +10,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
-import type { AdminUserRole } from '../../../types/admin'
+import type { SalesRole } from '../../../types/admin'
 
 const router = useRouter()
 const store = useAdminStore()
@@ -18,78 +18,58 @@ const toast = useToast()
 const error = ref('')
 const saving = ref(false)
 
-const roleOptions = [
-  { label: 'Select role', value: '' },
-  { label: 'Administrator', value: 'ADMINISTRATOR' },
-  { label: 'Sales Manager', value: 'SALES_MANAGER' },
-  { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
-]
-
 const managerOptions = computed(() => {
   const managers = store.managerOptions ?? []
   return [{ label: 'Select manager', value: '' }, ...managers.map((m) => ({ label: m.name, value: m.id }))]
 })
+
+const organizationalRoleOptions = computed(() =>
+  store.salesRoles.filter((role) => role.isActive).map((role) => ({
+    label: role.name,
+    value: role.id,
+    role,
+    searchText: `${role.name} level ${role.level} ${landingLabel(role.landingPage)} ${role.permissionCount ?? 0} permissions`,
+  })),
+)
 
 const form = reactive({
   name: '',
   email: '',
   employeeId: '',
   phone: '',
-  role: '',
+  salesRoleId: '',
   managerId: '',
   temporaryPassword: '',
 })
 
-const showManager = computed(() => form.role === 'SALES_EXECUTIVE')
+const selectedOrganizationalRole = computed(() => store.salesRoles.find((role) => role.id === form.salesRoleId) ?? null)
+const showManager = computed(() => false)
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const validOrganizationalSelection = computed(() => {
+  const role = selectedOrganizationalRole.value
+  return Boolean(role?.isActive)
+})
 
 const isFormValid = computed(() => {
   if (!form.employeeId.trim()) return false
   if (!form.name.trim()) return false
   if (!emailPattern.test(form.email.trim())) return false
-  if (!form.role) return false
+  if (!validOrganizationalSelection.value) return false
   if (form.temporaryPassword.length < 8) return false
-  if (showManager.value && !form.managerId) return false
   return true
 })
 
-const roleSummary = computed(() => {
-  switch (form.role) {
-    case 'ADMINISTRATOR':
-      return {
-        title: 'Administrator',
-        scopes: [
-          'Can manage accounts',
-          'Can manage CRM',
-          'ALL scope',
-        ],
-      }
-    case 'SALES_MANAGER':
-      return {
-        title: 'Sales Manager',
-        scopes: [
-          'TEAM scope',
-          'Read only',
-        ],
-      }
-    case 'SALES_EXECUTIVE':
-      return {
-        title: 'Sales Executive',
-        scopes: [
-          'OWN scope',
-          'Operational only',
-        ],
-      }
-    default:
-      return {
-        title: 'No role selected',
-        scopes: ['Select a role to see the account scope and permissions.'],
-      }
-  }
+watch(() => form.salesRoleId, () => {
+  if (!showManager.value) form.managerId = ''
 })
 
-function onRoleChange() {
-  form.managerId = ''
+function landingLabel(path?: string | null) {
+  if (!path) return '-'
+  return path.split('/').filter(Boolean).map((part) => part.replace(/-/g, ' ')).join(' / ') || path
+}
+
+function roleOptionMeta(role: SalesRole) {
+  return `Level ${role.level} · ${role.permissionCount ?? 0} permissions · Landing: ${landingLabel(role.landingPage)}`
 }
 
 async function handleSubmit() {
@@ -102,11 +82,12 @@ async function handleSubmit() {
       email: form.email.trim(),
       employeeId: form.employeeId.trim(),
       phone: form.phone.trim(),
-      role: form.role as AdminUserRole,
-      managerId: showManager.value ? form.managerId : null,
+      salesRoleId: form.salesRoleId || null,
+      managerId: null,
       temporaryPassword: form.temporaryPassword,
     })
     toast.add({ severity: 'success', summary: 'Account Created', detail: `Account for ${user.fullName} has been created and is active.`, life: 4000 })
+    await new Promise((resolve) => setTimeout(resolve, 800))
     await router.push('/admin/accounts')
   } catch (e) {
     error.value = store.errorMessage(e)
@@ -121,7 +102,7 @@ function managerName(id: string) {
 
 onMounted(async () => {
   try {
-    await store.fetchManagers()
+    await Promise.all([store.fetchManagers(), store.fetchSalesRoles()])
   } catch { /* optional */ }
 })
 </script>
@@ -184,13 +165,36 @@ onMounted(async () => {
             <div class="form-card-icon si-violet"><i class="pi pi-lock" /></div>
             <div>
               <h3>Role &amp; Access</h3>
-              <p>Choose the role and sign-in credentials for this account.</p>
+              <p>Choose the account role from Role Management.</p>
             </div>
           </div>
           <div class="form-grid">
-            <div class="form-field">
+            <div class="form-field full">
               <label>Role <span class="required">*</span></label>
-              <Select v-model="form.role" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="Select role" @change="onRoleChange" />
+              <Select
+                v-model="form.salesRoleId"
+                :options="organizationalRoleOptions"
+                optionLabel="label"
+                optionValue="value"
+                filter
+                :filterFields="['label', 'searchText']"
+                placeholder="Search active roles"
+                :loading="store.salesRolesLoading"
+              >
+                <template #option="{ option }">
+                  <div class="role-option">
+                    <strong>{{ option.role.name }}</strong>
+                    <span>{{ roleOptionMeta(option.role) }}</span>
+                  </div>
+                </template>
+              </Select>
+            </div>
+            <div class="access-preview full">
+              <strong>{{ selectedOrganizationalRole?.name || 'No organizational role selected' }}</strong>
+              <span>Level {{ selectedOrganizationalRole?.level ?? '-' }}</span>
+              <span>Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</span>
+              <span>{{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</span>
+              <p>{{ selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' }}</p>
             </div>
             <div class="form-field">
               <label>Temporary Password <span class="required">*</span></label>
@@ -205,13 +209,13 @@ onMounted(async () => {
               <div class="readonly-value"><Tag value="Yes" severity="warn" icon="pi pi-key" /></div>
             </div>
             <div v-if="showManager" class="form-field">
-              <label>Manager <span class="required">*</span></label>
+              <label>Reports To / Manager <span class="required">*</span></label>
               <Select v-model="form.managerId" :options="managerOptions" optionLabel="label" optionValue="value" placeholder="Select manager" />
             </div>
             <div v-if="showManager" class="form-field form-note-field">
               <div class="field-note">
                 <i class="pi pi-info-circle" />
-                <span>Sales executives must be assigned to an active Sales Manager.</span>
+                <span>Manager represents the current direct manager; monthly history is unchanged in this phase.</span>
               </div>
             </div>
           </div>
@@ -225,13 +229,13 @@ onMounted(async () => {
       <!-- RIGHT COLUMN: SIDEBAR -->
       <aside class="form-sidebar">
         <div class="sidebar-card">
-          <h4>Role Scope</h4>
+          <h4>Role Preview</h4>
           <div class="role-scope">
-            <span class="role-title">{{ roleSummary.title }}</span>
+            <span class="role-title">{{ selectedOrganizationalRole?.name || 'No role selected' }}</span>
             <ul>
-              <li v-for="(scope, idx) in roleSummary.scopes" :key="idx">
-                <i class="pi pi-check-circle" /> {{ scope }}
-              </li>
+              <li><i class="pi pi-check-circle" /> Level {{ selectedOrganizationalRole?.level ?? '-' }}</li>
+              <li><i class="pi pi-check-circle" /> {{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</li>
+              <li><i class="pi pi-check-circle" /> Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</li>
             </ul>
           </div>
         </div>
@@ -252,7 +256,7 @@ onMounted(async () => {
             </div>
             <div class="summary-row">
               <span>Role</span>
-              <strong>{{ form.role ? roleSummary.title : '—' }}</strong>
+              <strong>{{ selectedOrganizationalRole?.name || '—' }}</strong>
             </div>
             <div class="summary-row">
               <span>Manager</span>
@@ -365,6 +369,7 @@ onMounted(async () => {
 }
 .si-blue { background: #eff6ff; color: #2563eb; }
 .si-violet { background: #eef2ff; color: #6366f1; }
+.si-green { background: #ecfdf5; color: #059669; }
 
 .form-card-header h3 {
   margin: 0;
@@ -429,6 +434,45 @@ onMounted(async () => {
 .field-note i {
   flex-shrink: 0;
   font-size: 0.85rem;
+}
+
+.role-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.role-option strong {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+.role-option span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.access-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #dbeafe;
+  border-radius: var(--radius-sm);
+  background: #f8fbff;
+}
+.access-preview strong,
+.access-preview p {
+  grid-column: 1 / -1;
+}
+.access-preview strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+.access-preview span,
+.access-preview p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .must-change-note {

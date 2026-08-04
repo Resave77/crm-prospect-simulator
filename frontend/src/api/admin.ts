@@ -3,6 +3,7 @@ import type { ApiEnvelope } from '../types/auth'
 import type {
   AdminCreateUserInput,
   AdminManagerOption,
+  AdminPermission,
   AdminResetPasswordPayload,
   AdminResetPasswordResult,
   AdminUpdateUserInput,
@@ -39,6 +40,10 @@ export async function updateUser(id: string, input: AdminUpdateUserInput) {
   return (await api.patch<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}`, input)).data.data
 }
 
+export async function deleteUser(id: string) {
+  await api.delete(`/admin/users/${id}`)
+}
+
 export async function updateStatus(id: string, status: AdminUserStatus) {
   return (await api.patch<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}/status`, { status })).data.data
 }
@@ -58,6 +63,11 @@ export async function getSalesRoles() {
 
 export async function getSalesRole(id: string) {
   return (await api.get<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}`)).data.data
+}
+
+export async function getPermissions(search?: string) {
+  const response = await api.get<ApiEnvelope<unknown>>('/admin/permissions', { params: search ? { search } : undefined })
+  return asArray<AdminPermission>(response.data.data, 'Unable to load permissions.')
 }
 
 export async function createSalesRole(payload: CreateSalesRolePayload) {

@@ -48,6 +48,12 @@ func (r *adminRepoStub) FindEffectiveSalesAssignment(_ context.Context, _ uuid.U
 func (r *adminRepoStub) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID, _ time.Time, _ *time.Time, _ *uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (r *adminRepoStub) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (r *adminRepoStub) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {
+	return 0, nil
+}
 func (r *adminRepoStub) UserExists(_ context.Context, _ uuid.UUID) (bool, error) { return true, nil }
 func (r *adminRepoStub) ListSalesStructure(_ context.Context, _ time.Time) ([]adminmodel.SalesStructureItem, error) {
 	return []adminmodel.SalesStructureItem{}, nil
@@ -95,10 +101,40 @@ func (r *patchAdminRepo) FindEffectiveSalesAssignment(_ context.Context, _ uuid.
 func (r *patchAdminRepo) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID, _ time.Time, _ *time.Time, _ *uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (r *patchAdminRepo) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (r *patchAdminRepo) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {
+	return 0, nil
+}
 func (r *patchAdminRepo) UserExists(_ context.Context, _ uuid.UUID) (bool, error) { return true, nil }
 func (r *patchAdminRepo) ListSalesStructure(_ context.Context, _ time.Time) ([]adminmodel.SalesStructureItem, error) {
 	return []adminmodel.SalesStructureItem{}, nil
 }
 func (r *patchAdminRepo) ListSalesAssignmentHistory(_ context.Context, _ uuid.UUID) ([]adminmodel.AssignmentHistoryItem, error) {
 	return []adminmodel.AssignmentHistoryItem{}, nil
+}
+func (r *adminRepoStub) ListPermissions(_ context.Context, _ string) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
+}
+func (r *adminRepoStub) FindPermissionByKey(_ context.Context, _ string) (adminmodel.Permission, error) {
+	return adminmodel.Permission{}, adminrepo.ErrNotFound
+}
+func (r *adminRepoStub) FindPermissionsByKeys(_ context.Context, _ []string) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
+}
+func (r *adminRepoStub) ListRolePermissions(_ context.Context, _ uuid.UUID) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
+}
+func (r *patchAdminRepo) ListPermissions(_ context.Context, _ string) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
+}
+func (r *patchAdminRepo) FindPermissionByKey(_ context.Context, _ string) (adminmodel.Permission, error) {
+	return adminmodel.Permission{}, adminrepo.ErrNotFound
+}
+func (r *patchAdminRepo) FindPermissionsByKeys(_ context.Context, _ []string) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
+}
+func (r *patchAdminRepo) ListRolePermissions(_ context.Context, _ uuid.UUID) ([]adminmodel.Permission, error) {
+	return []adminmodel.Permission{}, nil
 }

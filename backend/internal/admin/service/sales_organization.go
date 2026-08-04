@@ -9,6 +9,7 @@ import (
 
 	"crm-prospect-simulator/backend/internal/admin/model"
 	"crm-prospect-simulator/backend/internal/admin/repository"
+	authmodel "crm-prospect-simulator/backend/internal/auth/model"
 	"github.com/google/uuid"
 )
 
@@ -18,9 +19,12 @@ var (
 	ErrSalesRoleNameExists   = errors.New("sales role name exists")
 	ErrSalesRoleInUse        = errors.New("sales role in use")
 	ErrSalesRoleInactive     = errors.New("sales role inactive")
+	ErrSalesUserInactive     = errors.New("sales user inactive")
 	ErrInvalidHierarchy      = errors.New("invalid sales hierarchy")
 	ErrInvalidEffectiveDate  = errors.New("invalid effective date")
 	ErrAssignmentOverlap     = errors.New("sales assignment overlaps")
+	ErrIncompatibleChildren  = errors.New("assignment has incompatible children")
+	ErrSuperAdminRoot        = errors.New("super admin root protected")
 )
 
 var defaultSalesRoleIDs = map[uuid.UUID]bool{
@@ -45,7 +49,11 @@ func (s *Service) GetSalesRole(ctx context.Context, actor Actor, id uuid.UUID) (
 	if !actor.Role.IsAdminRole() {
 		return model.SalesRole{}, ErrForbidden
 	}
-	return s.repo.FindSalesRole(ctx, id)
+	role, err := s.repo.FindSalesRole(ctx, id)
+	if err != nil {
+		return model.SalesRole{}, err
+	}
+	return s.roleWithPermissions(ctx, role)
 }
 
 func (s *Service) CreateSalesRole(ctx context.Context, actor Actor, input model.CreateSalesRoleInput) (model.SalesRole, error) {
@@ -55,11 +63,20 @@ func (s *Service) CreateSalesRole(ctx context.Context, actor Actor, input model.
 	if err := s.validateSalesRole(ctx, input.Name, input.Level, nil); err != nil {
 		return model.SalesRole{}, err
 	}
+	keys, err := s.validateRolePermissionsForCreate(ctx, &input)
+	if err != nil {
+		return model.SalesRole{}, err
+	}
+	input.PermissionKeys = keys
 	id := uuid.New()
 	if err := s.repo.CreateSalesRole(ctx, id, input, actor.UserID); err != nil {
 		return model.SalesRole{}, err
 	}
-	return s.repo.FindSalesRole(ctx, id)
+	role, err := s.repo.FindSalesRole(ctx, id)
+	if err != nil {
+		return model.SalesRole{}, err
+	}
+	return s.roleWithPermissions(ctx, role)
 }
 
 func (s *Service) UpdateSalesRole(ctx context.Context, actor Actor, id uuid.UUID, input model.UpdateSalesRoleInput) (model.SalesRole, error) {
@@ -80,6 +97,13 @@ func (s *Service) UpdateSalesRole(ctx context.Context, actor Actor, id uuid.UUID
 	}
 	if err := s.validateSalesRole(ctx, name, level, &id); err != nil {
 		return model.SalesRole{}, err
+	}
+	keys, replacePermissions, err := s.validateRolePermissionsForUpdate(ctx, current, &input)
+	if err != nil {
+		return model.SalesRole{}, err
+	}
+	if replacePermissions {
+		input.PermissionKeys = keys
 	}
 	if input.Level != nil && *input.Level != current.Level {
 		inUse, err := s.repo.SalesRoleHasAssignments(ctx, id)
@@ -210,12 +234,12 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if parentID != nil && *parentID == userID {
 		return ErrInvalidHierarchy
 	}
-	exists, err := s.repo.UserExists(ctx, userID)
+	user, err := s.repo.FindUserByID(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if !exists {
-		return repository.ErrNotFound
+	if user.Status != authmodel.UserActive {
+		return ErrSalesUserInactive
 	}
 	role, err := s.repo.FindSalesRole(ctx, roleID)
 	if err != nil {
@@ -224,20 +248,30 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if !role.IsActive {
 		return ErrSalesRoleInactive
 	}
+	if err := s.ensureCompatibleChildren(ctx, userID, role.Level, date); err != nil {
+		return err
+	}
 	if role.Level == 1 {
 		if parentID != nil {
 			return ErrInvalidHierarchy
+		}
+		count, err := s.repo.CountEffectiveLevel1Roots(ctx, date, excludeID)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrSuperAdminRoot
 		}
 	} else {
 		if parentID == nil {
 			return ErrInvalidHierarchy
 		}
-		parentExists, err := s.repo.UserExists(ctx, *parentID)
+		parent, err := s.repo.FindUserByID(ctx, *parentID)
 		if err != nil {
 			return err
 		}
-		if !parentExists {
-			return repository.ErrNotFound
+		if parent.Status != authmodel.UserActive {
+			return ErrSalesUserInactive
 		}
 		_, parentRole, err := s.repo.FindEffectiveSalesAssignment(ctx, *parentID, date)
 		if err != nil {
@@ -249,6 +283,24 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 		if err := s.ensureNoCycle(ctx, userID, *parentID, date); err != nil {
 			return err
 		}
+		if excludeID != nil {
+			current, err := s.repo.FindSalesAssignment(ctx, *excludeID)
+			if err == nil && current.UserID == userID {
+				currentRole, err := s.repo.FindSalesRole(ctx, current.SalesRoleID)
+				if err != nil {
+					return err
+				}
+				if currentRoleWouldLoseOnlyRoot(currentRole.Level, role.Level) {
+					count, err := s.repo.CountEffectiveLevel1Roots(ctx, date, excludeID)
+					if err != nil {
+						return err
+					}
+					if count == 0 {
+						return ErrSuperAdminRoot
+					}
+				}
+			}
+		}
 	}
 	overlaps, err := s.repo.SalesAssignmentOverlaps(ctx, userID, date, nil, excludeID)
 	if err != nil {
@@ -258,6 +310,21 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 		return ErrAssignmentOverlap
 	}
 	return nil
+}
+
+func (s *Service) ensureCompatibleChildren(ctx context.Context, userID uuid.UUID, level int, date time.Time) error {
+	hasIncompatible, err := s.repo.HasIncompatibleCurrentChildren(ctx, userID, level, date)
+	if err != nil {
+		return err
+	}
+	if hasIncompatible {
+		return ErrIncompatibleChildren
+	}
+	return nil
+}
+
+func currentRoleWouldLoseOnlyRoot(currentLevel, nextLevel int) bool {
+	return currentLevel == 1 && nextLevel != 1
 }
 
 func (s *Service) ensureNoCycle(ctx context.Context, userID, parentID uuid.UUID, date time.Time) error {

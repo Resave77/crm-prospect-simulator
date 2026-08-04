@@ -1,6 +1,20 @@
 export type AdminUserRole = 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 export type AdminUserStatus = 'ACTIVE' | 'INACTIVE'
 export type SalesRoleLevel = 1 | 2 | 3 | 4
+export type PermissionNodeType = 'GROUP' | 'MENU' | 'ACTION'
+
+export interface AdminPermission {
+  id: string
+  key: string
+  name: string
+  description?: string
+  groupKey: string
+  parentKey?: string | null
+  nodeType: PermissionNodeType
+  routePath?: string | null
+  isActive: boolean
+  sortOrder: number
+}
 
 export interface AdminUserListItem {
   id: string
@@ -12,11 +26,20 @@ export interface AdminUserListItem {
   status: AdminUserStatus
   managerId: string | null
   managerName: string
-  organizationalRole?: string
-  organizationalRoleLevel?: SalesRoleLevel
+  organizationalRole: AdminOrganizationalRoleSummary | null
   mustChangePassword: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface AdminOrganizationalRoleSummary {
+  id: string
+  name: string
+  level: SalesRoleLevel
+  landingPage?: string | null
+  permissionCount: number
+  isActive: boolean
+  description?: string
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
@@ -52,7 +75,7 @@ export interface AdminCreateUserInput {
   name: string
   email: string
   phone: string
-  role: AdminUserRole
+  salesRoleId: string | null
   managerId: string | null
   temporaryPassword: string
 }
@@ -62,7 +85,7 @@ export interface AdminUpdateUserInput {
   name?: string
   email?: string
   phone?: string
-  role?: AdminUserRole
+  salesRoleId?: string | null
   managerId?: string | null
 }
 
@@ -86,6 +109,9 @@ export interface SalesRole {
   level: SalesRoleLevel
   description: string
   isActive: boolean
+  landingPage?: string | null
+  permissionCount?: number
+  permissions?: AdminPermission[]
   createdBy?: string | null
   updatedBy?: string | null
   createdAt: string
@@ -96,12 +122,16 @@ export interface CreateSalesRolePayload {
   name: string
   level: SalesRoleLevel
   description?: string
+  landingPage: string
+  permissionKeys: string[]
 }
 
 export interface UpdateSalesRolePayload {
   name?: string
   level?: SalesRoleLevel
   description?: string | null
+  landingPage: string
+  permissionKeys: string[]
 }
 
 export interface SalesStructureAssignment {

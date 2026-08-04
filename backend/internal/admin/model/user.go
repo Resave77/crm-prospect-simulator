@@ -19,20 +19,19 @@ type ListFilter struct {
 }
 
 type UserListItem struct {
-	ID                 uuid.UUID           `json:"id"`
-	EmployeeID         string              `json:"employeeId"`
-	FullName           string              `json:"fullName"`
-	Email              string              `json:"email"`
-	Phone              string              `json:"phone"`
-	Role               authmodel.Role      `json:"role"`
-	Status             authmodel.UserStatus `json:"status"`
-	ManagerID          *uuid.UUID          `json:"managerId"`
-	ManagerName        string              `json:"managerName"`
-	OrganizationalRole string              `json:"organizationalRole"`
-	OrganizationalRoleLevel *int           `json:"organizationalRoleLevel,omitempty"`
-	MustChangePassword bool                `json:"mustChangePassword"`
-	CreatedAt          time.Time           `json:"createdAt"`
-	UpdatedAt          time.Time           `json:"updatedAt"`
+	ID                 uuid.UUID                  `json:"id"`
+	EmployeeID         string                     `json:"employeeId"`
+	FullName           string                     `json:"fullName"`
+	Email              string                     `json:"email"`
+	Phone              string                     `json:"phone"`
+	Role               authmodel.Role             `json:"role"`
+	Status             authmodel.UserStatus       `json:"status"`
+	ManagerID          *uuid.UUID                 `json:"managerId"`
+	ManagerName        string                     `json:"managerName"`
+	OrganizationalRole *OrganizationalRoleSummary `json:"organizationalRole"`
+	MustChangePassword bool                       `json:"mustChangePassword"`
+	CreatedAt          time.Time                  `json:"createdAt"`
+	UpdatedAt          time.Time                  `json:"updatedAt"`
 }
 
 type UserListResult struct {
@@ -44,20 +43,31 @@ type UserListResult struct {
 }
 
 type UserDetail struct {
-	ID                 uuid.UUID           `json:"id"`
-	EmployeeID         string              `json:"employeeId"`
-	FullName           string              `json:"fullName"`
-	Email              string              `json:"email"`
-	Phone              string              `json:"phone"`
-	Role               authmodel.Role      `json:"role"`
-	Status             authmodel.UserStatus `json:"status"`
-	ManagerID          *uuid.UUID          `json:"managerId"`
-	ManagerName        string              `json:"managerName"`
-	MustChangePassword bool                `json:"mustChangePassword"`
-	CreatedBy          *uuid.UUID          `json:"createdBy"`
-	UpdatedBy          *uuid.UUID          `json:"updatedBy"`
-	CreatedAt          time.Time           `json:"createdAt"`
-	UpdatedAt          time.Time           `json:"updatedAt"`
+	ID                 uuid.UUID                  `json:"id"`
+	EmployeeID         string                     `json:"employeeId"`
+	FullName           string                     `json:"fullName"`
+	Email              string                     `json:"email"`
+	Phone              string                     `json:"phone"`
+	Role               authmodel.Role             `json:"role"`
+	Status             authmodel.UserStatus       `json:"status"`
+	ManagerID          *uuid.UUID                 `json:"managerId"`
+	ManagerName        string                     `json:"managerName"`
+	OrganizationalRole *OrganizationalRoleSummary `json:"organizationalRole"`
+	MustChangePassword bool                       `json:"mustChangePassword"`
+	CreatedBy          *uuid.UUID                 `json:"createdBy"`
+	UpdatedBy          *uuid.UUID                 `json:"updatedBy"`
+	CreatedAt          time.Time                  `json:"createdAt"`
+	UpdatedAt          time.Time                  `json:"updatedAt"`
+}
+
+type OrganizationalRoleSummary struct {
+	ID              uuid.UUID `json:"id"`
+	Name            string    `json:"name"`
+	Level           int       `json:"level"`
+	LandingPage     *string   `json:"landingPage"`
+	PermissionCount int       `json:"permissionCount"`
+	IsActive        bool      `json:"isActive"`
+	Description     string    `json:"description,omitempty"`
 }
 
 type ManagerOption struct {
@@ -73,6 +83,7 @@ type CreateUserInput struct {
 	Email             string         `json:"email"`
 	Phone             string         `json:"phone"`
 	Role              authmodel.Role `json:"role"`
+	SalesRoleID       *uuid.UUID     `json:"salesRoleId"`
 	ManagerID         *uuid.UUID     `json:"managerId"`
 	TemporaryPassword string         `json:"temporaryPassword"`
 }
@@ -92,11 +103,11 @@ func (o *OptionalUUID) UnmarshalJSON(data []byte) error {
 	}
 	var raw string
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("managerId must be a UUID or null")
+		return fmt.Errorf("value must be a UUID or null")
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("managerId must be a valid UUID or null")
+		return fmt.Errorf("value must be a valid UUID or null")
 	}
 	o.Value = &id
 	return nil
@@ -110,12 +121,13 @@ func (o OptionalUUID) MarshalJSON() ([]byte, error) {
 }
 
 type UpdateUserInput struct {
-	EmployeeID *string         `json:"employeeId"`
-	FullName   *string         `json:"name"`
-	Email      *string         `json:"email"`
-	Phone      *string         `json:"phone"`
-	Role       *authmodel.Role `json:"role"`
-	ManagerID  OptionalUUID    `json:"managerId"`
+	EmployeeID  *string         `json:"employeeId"`
+	FullName    *string         `json:"name"`
+	Email       *string         `json:"email"`
+	Phone       *string         `json:"phone"`
+	Role        *authmodel.Role `json:"role"`
+	SalesRoleID OptionalUUID    `json:"salesRoleId"`
+	ManagerID   OptionalUUID    `json:"managerId"`
 }
 
 type UpdateStatusInput struct {

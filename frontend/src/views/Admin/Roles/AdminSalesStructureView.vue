@@ -5,12 +5,11 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
-import Dialog from 'primevue/dialog'
 import Drawer from 'primevue/drawer'
-import Skeleton from 'primevue/skeleton'
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
 import * as adminApi from '../../../api/admin'
+import AssignSalesDialog from '../../../components/admin/sales-structure/AssignSalesDialog.vue'
+import SalesStructureFlatTable from '../../../components/admin/sales-structure/SalesStructureFlatTable.vue'
+import SalesStructureHierarchyTable from '../../../components/admin/sales-structure/SalesStructureHierarchyTable.vue'
 import { useAdminStore } from '../../../stores/admin'
 import type { AdminUserListItem, SalesRoleLevel, SalesStructureItem } from '../../../types/admin'
 
@@ -93,13 +92,29 @@ const form = reactive<{ user: AdminUserListItem | null; salesRoleId: string; par
 
 const effectiveDate = computed(() => `${store.selectedEffectiveMonth}-01`)
 const dialogEffectiveDate = computed(() => `${form.effectiveMonth}-01`)
-const activeRoleOptions = computed(() => store.salesRoles.filter((role) => role.isActive).map((role) => ({
-  label: `${role.name} — Level ${role.level}`,
-  value: role.id,
-  level: role.level as SalesRoleLevel,
-  description: role.description || LEVEL_FALLBACK_DESCRIPTION[role.level as SalesRoleLevel],
-})))
+const hasProtectedRoot = computed(() =>
+  dialogStructure.value.some(
+    (item) =>
+      !item.effectiveTo &&
+      item.systemRole === 'SUPER_ADMIN' &&
+      item.salesRole.level === 1,
+  ),
+)
+
+const activeRoleOptions = computed(() =>
+  store.salesRoles
+    .filter((role) => role.isActive && !(role.level === 1 && hasProtectedRoot.value))
+    .map((role) => ({
+      label: `${role.name} — Level ${role.level}`,
+      value: role.id,
+      level: role.level as SalesRoleLevel,
+      description:
+        role.description ||
+        LEVEL_FALLBACK_DESCRIPTION[role.level as SalesRoleLevel],
+    })),
+)
 const selectedRole = computed(() => store.salesRoles.find((role) => role.id === form.salesRoleId) ?? null)
+const selectedRoleLabel = computed(() => selectedRole.value ? `${selectedRole.value.name} — Level ${selectedRole.value.level}` : '')
 const selectedLevel = computed(() => selectedRole.value?.level ?? null)
 const requiredParentLevel = computed<SalesRoleLevel | null>(() => (selectedLevel.value && selectedLevel.value > 1 ? (selectedLevel.value - 1) as SalesRoleLevel : null))
 const dialogAssignedUserIds = computed(() => new Set(dialogStructure.value.map((item) => item.userId)))
@@ -116,17 +131,24 @@ const pickerUserOptions = computed(() => pickerUsers.value.map((user) => {
   return {
     label: `${user.fullName} — ${user.employeeId || user.email}`,
     value: user,
+    user,
     disabled: already,
     alreadyAssigned: already,
   }
 }))
 const hasMorePickerUsers = computed(() => pickerUsers.value.length < pickerTotal.value)
 const canSubmit = computed(() => {
-  if (!form.user || !form.salesRoleId || !form.effectiveMonth) return false
+  if (!form.user || !form.salesRoleId || !form.effectiveMonth || !selectedRole.value) return false
   if (dialogAssignedUserIds.value.has(form.user.id)) return false
-  if (selectedLevel.value === 1) return true
+  if (form.user.role === 'SUPER_ADMIN') return false
+  if (selectedLevel.value === 1) return !hasProtectedRoot.value
   if (!selectedLevel.value) return false
-  return Boolean(form.parentUserId && form.parentUserId !== form.user.id && !parentUnavailable.value)
+
+  return Boolean(
+    form.parentUserId &&
+      form.parentUserId !== form.user.id &&
+      !parentUnavailable.value,
+  )
 })
 const previewParent = computed(() => {
   if (selectedLevel.value === 1 || !form.parentUserId) return null
@@ -388,6 +410,93 @@ function openNode(item: SalesStructureItem) {
   drawerVisible.value = true
 }
 
+function isProtectedAssignment(item: SalesStructureItem): boolean {
+  return item.systemRole === 'SUPER_ADMIN' && item.salesRole.level === 1
+}
+
+function openMoveAssignment(item: SalesStructureItem) {
+  if (isProtectedAssignment(item)) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Protected assignment',
+      detail: 'The Super Admin root assignment cannot be moved.',
+      life: 3500,
+    })
+    return
+  }
+
+  selectedNode.value = item
+  drawerVisible.value = true
+  toast.add({
+    severity: 'info',
+    summary: 'Move Assignment',
+    detail: 'Select Move Assignment from the detail panel to continue.',
+    life: 3000,
+  })
+}
+
+function openPromotion(item: SalesStructureItem) {
+  if (isProtectedAssignment(item)) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Protected assignment',
+      detail: 'The Super Admin root assignment cannot be promoted.',
+      life: 3500,
+    })
+    return
+  }
+
+  if (item.salesRole.level <= 1) {
+    toast.add({
+      severity: 'info',
+      summary: 'Highest level',
+      detail: 'This assignment is already at the highest hierarchy level.',
+      life: 3000,
+    })
+    return
+  }
+
+  selectedNode.value = item
+  drawerVisible.value = true
+  toast.add({
+    severity: 'info',
+    summary: 'Promotion',
+    detail: `Prepare a monthly move from Level ${item.salesRole.level} to Level ${item.salesRole.level - 1}.`,
+    life: 3500,
+  })
+}
+
+function openDemotion(item: SalesStructureItem) {
+  if (isProtectedAssignment(item)) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Protected assignment',
+      detail: 'The Super Admin root assignment cannot be demoted.',
+      life: 3500,
+    })
+    return
+  }
+
+  if (item.salesRole.level >= 4) {
+    toast.add({
+      severity: 'info',
+      summary: 'Lowest level',
+      detail: 'A Level 4 assignment cannot be demoted further.',
+      life: 3000,
+    })
+    return
+  }
+
+  selectedNode.value = item
+  drawerVisible.value = true
+  toast.add({
+    severity: 'info',
+    summary: 'Demotion',
+    detail: `Prepare a monthly move from Level ${item.salesRole.level} to Level ${item.salesRole.level + 1}.`,
+    life: 3500,
+  })
+}
+
 function loadStructure() {
   error.value = ''
   selectedRows.value = []
@@ -399,7 +508,7 @@ async function fetchSalesUsers(page = 1, append = false) {
   salesUsersLoading.value = true
   try {
     const result = await adminApi.getUsers({ page, limit: USER_PAGE_SIZE, search: userSearch.value, role: '', status: 'ACTIVE' })
-    const salesOnly = result.data.filter((user) => user.role === 'SUPER_ADMIN' || user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
+    const salesOnly = result.data.filter((user) => user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
     salesUsers.value = append ? [...salesUsers.value, ...salesOnly] : salesOnly
     salesUsersTotal.value = result.total
     salesUsersPage.value = page
@@ -430,7 +539,7 @@ async function loadPickerUsers(reset = false) {
   try {
     const page = reset ? 1 : pickerPage.value + 1
     const result = await adminApi.getUsers({ page, limit: USER_PAGE_SIZE, search: pickerSearch.value, role: '', status: 'ACTIVE' })
-    const salesOnly = result.data.filter((user) => user.role === 'SUPER_ADMIN' || user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
+    const salesOnly = result.data.filter((user) => user.role === 'SALES_MANAGER' || user.role === 'SALES_EXECUTIVE')
     pickerUsers.value = reset ? salesOnly : [...pickerUsers.value, ...salesOnly]
     pickerTotal.value = result.total
     pickerPage.value = page
@@ -439,6 +548,7 @@ async function loadPickerUsers(reset = false) {
       pendingAssignUser.value = null
       if (!pickerUsers.value.some((user) => user.id === target.id)) pickerUsers.value.unshift(target)
       form.user = target
+      if (target.organizationalRole?.id) form.salesRoleId = target.organizationalRole.id
     }
   } catch (e) {
     formError.value = store.errorMessage(e)
@@ -472,42 +582,82 @@ async function loadDialogStructure() {
 }
 
 function openAssign(level?: SalesRoleLevel) {
+  const protectedRootExists = activeStructure.value.some(isProtectedAssignment)
+
+  if (level === 1 && protectedRootExists) {
+    toast.add({
+      severity: 'info',
+      summary: 'Level 1 already assigned',
+      detail: 'Yummy Super Admin is the protected Level 1 root. Continue with a Level 2 assignment.',
+      life: 4000,
+    })
+    return
+  }
+
   form.user = null
   form.salesRoleId = ''
   form.parentUserId = null
   form.effectiveMonth = store.selectedEffectiveMonth
   formError.value = ''
+
   if (level) {
-    const match = store.salesRoles.find((role) => role.isActive && role.level === level)
-    if (match) form.salesRoleId = match.id
+    const match = activeRoleOptions.value.find((role) => role.level === level)
+    if (match) form.salesRoleId = match.value
   }
+
   dialogVisible.value = true
   void loadPickerUsers(true)
   void loadDialogStructure()
 }
 
 function assignUnassignedUser(user: AdminUserListItem) {
-  openAssign()
+  // Set the pending user before opening the dialog so the async picker load
+  // can reliably restore the selection when its response arrives.
   pendingAssignUser.value = user
+  openAssign()
+}
+
+function selectAssignUser(user: AdminUserListItem | null) {
+  form.user = user
+  if (user?.organizationalRole?.id) form.salesRoleId = user.organizationalRole.id
 }
 
 async function submitAssignment() {
   if (!canSubmit.value || !selectedRole.value || !form.user) return
   formError.value = ''
   try {
+    const assignedMonth = form.effectiveMonth
     await store.createSalesAssignment({
       userId: form.user.id,
       salesRoleId: form.salesRoleId,
       parentUserId: selectedRole.value.level === 1 ? null : form.parentUserId,
-      effectiveFrom: firstDay(form.effectiveMonth),
+      effectiveFrom: firstDay(assignedMonth),
     })
-    if (form.effectiveMonth !== store.selectedEffectiveMonth) {
-      void store.fetchSalesStructure(effectiveDate.value)
+
+    // Keep the page and all assignment-dependent lists synchronized with the
+    // month that was just assigned. The store action may already refresh the
+    // structure, but this explicit refresh keeps this view correct regardless
+    // of store implementation details.
+    if (store.selectedEffectiveMonth !== assignedMonth) {
+      store.selectedEffectiveMonth = assignedMonth
     }
+    await Promise.all([
+      store.fetchSalesStructure(firstDay(assignedMonth)),
+      fetchSalesUsers(1, false),
+    ])
+
     toast.add({ severity: 'success', summary: 'Assignment Created', detail: 'Sales structure has been refreshed.', life: 3000 })
     dialogVisible.value = false
   } catch (e) {
-    formError.value = store.errorMessage(e)
+    const message = store.errorMessage(e)
+
+    if (message.toLowerCase().includes('root protected')) {
+      formError.value =
+        'Yummy Super Admin is already the protected Level 1 root. Select a Level 2, Level 3, or Level 4 role.'
+      return
+    }
+
+    formError.value = message
   }
 }
 
@@ -536,8 +686,7 @@ watch(() => form.effectiveMonth, () => {
 })
 
 onMounted(async () => {
-  const savedMode = typeof localStorage !== 'undefined' ? localStorage.getItem('adminSalesStructureViewMode') : null
-  if (savedMode === 'tree' || savedMode === 'table') viewMode.value = savedMode
+  viewMode.value = 'tree'
   error.value = ''
   const results = await Promise.allSettled([store.fetchSalesRoles(), store.fetchSalesStructure(effectiveDate.value), fetchSalesUsers(1)])
   const failed = results.find((result) => result.status === 'rejected')
@@ -557,20 +706,6 @@ onMounted(async () => {
     </header>
 
     <Message v-if="error" severity="error">{{ error }}</Message>
-
-    <div v-if="showBanner" class="banner-panel">
-      <div class="banner-icon"><i class="pi pi-sitemap" /></div>
-      <div class="banner-content">
-        <strong>Build the hierarchy from top to bottom</strong>
-        <ol class="banner-steps">
-          <li>Assign Level 1</li>
-          <li>Assign Level 2 under Level 1</li>
-          <li>Assign Level 3 under Level 2</li>
-          <li>Assign Level 4 under Level 3</li>
-        </ol>
-      </div>
-      <Button icon="pi pi-times" text rounded size="small" aria-label="Dismiss banner" @click="showBanner = false" />
-    </div>
 
     <div class="summary-grid">
       <button class="summary-card clickable" type="button" @click="activeTab = 'all'">
@@ -596,11 +731,11 @@ onMounted(async () => {
     </div>
 
     <div class="view-switcher" aria-label="Sales structure view mode">
-      <button class="view-btn" :class="{ active: viewMode === 'table' }" type="button" @click="viewMode = 'table'">
-        <i class="pi pi-table" /> Table
-      </button>
       <button class="view-btn" :class="{ active: viewMode === 'tree' }" type="button" @click="viewMode = 'tree'">
         <i class="pi pi-sitemap" /> Hierarchy Table
+      </button>
+      <button class="view-btn" :class="{ active: viewMode === 'table' }" type="button" @click="viewMode = 'table'">
+        <i class="pi pi-table" /> Table
       </button>
     </div>
 
@@ -649,202 +784,58 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="viewMode === 'tree'" class="tree-panel">
-      <div class="tree-toolbar">
-        <div>
-          <strong>Hierarchy Table</strong>
-          <span>{{ assignedThisMonth }} assigned sales for {{ currentMonthLabel }}</span>
-        </div>
-        <div class="tree-actions">
-          <Button label="Expand All" icon="pi pi-plus-circle" severity="secondary" text size="small" @click="expandAll" />
-          <Button label="Collapse All" icon="pi pi-minus-circle" severity="secondary" text size="small" @click="collapseAll" />
-        </div>
-      </div>
+    <SalesStructureHierarchyTable
+      v-if="viewMode === 'tree'"
+      v-model:selection="selectedHierarchyRows"
+      :rows="visibleTreeRows"
+      :loading="store.salesStructureLoading"
+      :assigned-count="assignedThisMonth"
+      :month-label="currentMonthLabel"
+      :has-filters="hasFilters"
+      :level-class="levelClass"
+      :employee-id-label="employeeIdLabel"
+      :reports-to-label="reportsToLabel"
+      :position-label="positionLabel"
+      :status-for="statusFor"
+      :is-protected="isProtectedAssignment"
+      :can-end-assignment="false"
+      @expand-all="expandAll"
+      @collapse-all="collapseAll"
+      @toggle-node="toggleNode"
+      @open-node="openNode"
+      @assign-first="openAssign()"
+      @reset-filters="clearFilters"
+      @move-assignment="openMoveAssignment"
+      @promote-assignment="openPromotion"
+      @demote-assignment="openDemotion"
+    />
 
-      <div v-if="store.salesStructureLoading && !store.salesStructure.length" class="skeleton-area">
-        <Skeleton v-for="n in 6" :key="n" class="skeleton-row" />
-      </div>
-      <div v-else-if="!treeRoots.length" class="empty-state">
-        <div class="empty-icon"><i class="pi pi-sitemap" /></div>
-        <strong>No assignments for this month</strong>
-        <span>{{ hasFilters ? 'Adjust your search or filters to view the organization.' : 'Assign the first leader to begin the hierarchy.' }}</span>
-        <Button :label="hasFilters ? 'Reset Filters' : 'Assign First Leader'" :icon="hasFilters ? 'pi pi-replay' : 'pi pi-plus'" size="small" @click="hasFilters ? clearFilters() : openAssign(1)" />
-      </div>
-      <DataTable
-        v-else
-        v-model:selection="selectedHierarchyRows"
-        :value="visibleTreeRows"
-        :loading="store.salesStructureLoading"
-        dataKey="item.assignmentId"
-        scrollable
-        class="hierarchy-table"
-      >
-        <Column selectionMode="multiple" headerStyle="width: 44px" />
-        <Column header="Role Level" :style="{ width: '110px' }">
-          <template #body="{ data }">
-            <span class="hier-level" :class="levelClass(data.item.salesRole.level)">{{ data.item.salesRole.level }}</span>
-          </template>
-        </Column>
-        <Column header="Sales Name" :style="{ minWidth: '300px' }">
-          <template #body="{ data }">
-            <div class="hier-name-cell" :style="{ '--depth': data.depth }">
-              <span v-if="data.depth" class="hier-connector" />
-              <button
-                v-if="data.hasChildren"
-                class="hier-expander"
-                type="button"
-                :title="data.isExpanded ? 'Collapse row' : 'Expand row'"
-                @click.stop="toggleNode(data.item.userId)"
-              >
-                <i :class="data.isExpanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
-              </button>
-              <span v-else class="hier-expander-spacer" />
-              <button class="hier-name-button" type="button" @click="openNode(data.item)">
-                <strong class="sales-name" :class="levelClass(data.item.salesRole.level)">{{ data.item.salesName }}</strong>
-                <small>{{ employeeIdLabel(data.item) }}</small>
-              </button>
-            </div>
-          </template>
-        </Column>
-        <Column header="Reports To" :style="{ minWidth: '180px' }">
-          <template #body="{ data }">{{ reportsToLabel(data.item) }}</template>
-        </Column>
-        <Column header="Position" :style="{ minWidth: '220px' }">
-          <template #body="{ data }">{{ positionLabel(data.item) }}</template>
-        </Column>
-        <Column header="Role Name" :style="{ minWidth: '210px' }">
-          <template #body="{ data }"><span class="role-name-label">{{ data.item.salesRole.name }}</span></template>
-        </Column>
-        <Column header="Status" :style="{ width: '110px' }">
-          <template #body="{ data }"><span class="compact-status" :class="{ inactive: data.item.effectiveTo }">{{ statusFor(data.item) }}</span></template>
-        </Column>
-        <Column header="Actions" :style="{ width: '90px' }">
-          <template #body="{ data }">
-            <button class="more-action" type="button" title="More actions" @click="openNode(data.item)">
-              <i class="pi pi-ellipsis-v" />
-            </button>
-          </template>
-        </Column>
-      </DataTable>
-    </div>
-
-    <div v-else class="table-panel">
-      <div v-if="store.salesStructureLoading && !store.salesStructure.length" class="skeleton-area">
-        <Skeleton v-for="n in 8" :key="n" class="skeleton-row" />
-      </div>
-
-      <DataTable
-        v-else-if="activeTab === 'assigned'"
-        v-model:selection="selectedRows"
-        :value="filteredStructure"
-        :loading="store.salesStructureLoading"
-        dataKey="assignmentId"
-        scrollable
-        paginator
-        :rows="20"
-        :rowsPerPageOptions="[20, 50, 100]"
-        sortMode="multiple"
-        paginatorTemplate="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-        currentPageReportTemplate="Showing {first} to {last} of {totalRecords} assignments"
-      >
-        <template #empty>
-          <div class="empty-state">
-            <div v-if="hasFilters" class="empty-body">
-              <div class="empty-icon"><i class="pi pi-filter" /></div>
-              <strong>No assignments match your filters</strong>
-              <span>Adjust your filters to view assignments.</span>
-              <Button label="Reset Filters" icon="pi pi-replay" severity="secondary" text size="small" @click="clearFilters" />
-            </div>
-            <template v-else>
-              <div class="empty-icon"><i class="pi pi-sitemap" /></div>
-              <template v-if="nextGuidance">
-                <strong>{{ nextGuidance.title }}</strong>
-                <span>Build the hierarchy from the top down to unlock higher levels.</span>
-                <Button :label="nextGuidance.button" icon="pi pi-plus" size="small" @click="openAssign(nextGuidance.level)" />
-              </template>
-              <template v-else>
-                <strong>No assignments for this month</strong>
-                <span>Create an assignment for the selected month.</span>
-                <Button label="Assign First Leader" icon="pi pi-plus" size="small" @click="openAssign(1)" />
-              </template>
-            </template>
-          </div>
-        </template>
-        <Column selectionMode="multiple" headerStyle="width: 3rem" />
-        <Column field="salesRole.level" header="Role Level" sortable :style="{ width: '130px' }">
-          <template #body="{ data }"><Tag :value="`Level ${data.salesRole.level}`" severity="info" /></template>
-        </Column>
-        <Column field="salesName" header="Sales Name" sortable :style="{ minWidth: '220px' }">
-          <template #body="{ data }"><span class="sales-name" :class="levelClass(data.salesRole.level)">{{ data.salesName }}</span></template>
-        </Column>
-        <Column field="parentName" header="Reports To" sortable :style="{ minWidth: '180px' }">
-          <template #body="{ data }">{{ data.parentName || '-' }}</template>
-        </Column>
-        <Column field="systemRole" header="Position" sortable :style="{ minWidth: '160px' }">
-          <template #body="{ data }">{{ positionLabel(data) }}</template>
-        </Column>
-        <Column field="salesRole.name" header="Role Name" sortable :style="{ minWidth: '190px' }">
-          <template #body="{ data }">{{ data.salesRole.name }}</template>
-        </Column>
-        <Column header="Status" sortable sortField="effectiveTo" :style="{ width: '120px' }">
-          <template #body="{ data }"><Tag :value="statusFor(data)" :severity="data.effectiveTo ? 'secondary' : 'success'" /></template>
-        </Column>
-        <Column header="Actions" :style="{ width: '120px' }">
-          <template #body>
-            <Button icon="pi pi-ellipsis-h" text rounded size="small" disabled title="Assignment movement is deferred" />
-          </template>
-        </Column>
-      </DataTable>
-
-      <DataTable
-        v-else
-        :value="activeTab === 'unassigned' ? unassignedUsers : salesUsers"
-        :loading="salesUsersLoading"
-        dataKey="id"
-        scrollable
-      >
-        <template #empty>
-          <div class="empty-state">
-            <div class="empty-icon"><i class="pi pi-users" /></div>
-            <strong v-if="activeTab === 'unassigned'">All active sales users are assigned for this month.</strong>
-            <strong v-else>No active sales users found.</strong>
-            <span v-if="userSearch || activeTab === 'all'">Adjust your search to view results.</span>
-          </div>
-        </template>
-        <Column header="Employee ID" :style="{ width: '160px' }">
-          <template #body="{ data }"><code class="code-tag">{{ data.employeeId || '—' }}</code></template>
-        </Column>
-        <Column field="fullName" header="Sales Name" sortable :style="{ minWidth: '220px' }">
-          <template #body="{ data }"><span class="sales-name">{{ data.fullName }}</span></template>
-        </Column>
-        <Column field="email" header="Email" sortable :style="{ minWidth: '220px' }">
-          <template #body="{ data }"><span class="cell-text">{{ data.email }}</span></template>
-        </Column>
-        <Column field="role" header="System Role" sortable :style="{ width: '160px' }">
-          <template #body="{ data }"><Tag :value="roleLabel(data.role)" :severity="roleSeverity(data.role)" /></template>
-        </Column>
-        <Column field="status" header="Status" sortable :style="{ width: '110px' }">
-          <template #body="{ data }"><Tag :value="data.status" :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" /></template>
-        </Column>
-        <Column v-if="activeTab === 'all'" header="Assignment" :style="{ width: '140px' }">
-          <template #body="{ data }">
-            <Tag :value="assignedUserIds.has(data.id) ? 'Assigned' : 'Unassigned'" :severity="assignedUserIds.has(data.id) ? 'info' : 'secondary'" />
-          </template>
-        </Column>
-        <Column header="Action" :style="{ width: '130px' }">
-          <template #body="{ data }">
-            <Button v-if="!assignedUserIds.has(data.id)" label="Assign" icon="pi pi-user-plus" text rounded size="small" @click="assignUnassignedUser(data)" />
-            <span v-else class="cell-hint">Assigned</span>
-          </template>
-        </Column>
-      </DataTable>
-
-      <div v-if="activeTab !== 'assigned' && hasMoreUsers" class="load-more-row">
-        <span class="cell-hint">Showing {{ salesUsers.length }} of {{ salesUsersTotal }} active accounts.</span>
-        <Button label="Load more" icon="pi pi-chevron-down" severity="secondary" text size="small" :loading="salesUsersLoading" @click="loadMoreUsers" />
-      </div>
-    </div>
-
+    <SalesStructureFlatTable
+      v-else
+      v-model:selection="selectedRows"
+      :active-tab="activeTab"
+      :assigned-rows="filteredStructure"
+      :sales-users="salesUsers"
+      :unassigned-users="unassignedUsers"
+      :sales-structure-loading="store.salesStructureLoading"
+      :sales-users-loading="salesUsersLoading"
+      :sales-structure-empty="!store.salesStructure.length"
+      :assigned-user-ids="assignedUserIds"
+      :has-filters="hasFilters"
+      :user-search="userSearch"
+      :has-more-users="hasMoreUsers"
+      :sales-users-total="salesUsersTotal"
+      :next-guidance="nextGuidance"
+      :level-class="levelClass"
+      :position-label="positionLabel"
+      :status-for="statusFor"
+      :role-label="roleLabel"
+      :role-severity="roleSeverity"
+      @assign-user="assignUnassignedUser"
+      @assign-first="openAssign"
+      @load-more="loadMoreUsers"
+      @reset-filters="clearFilters"
+    />
     <Drawer v-model:visible="drawerVisible" position="right" header="Assignment Detail" class="detail-drawer">
       <div v-if="selectedNode" class="drawer-content">
         <div class="drawer-person">
@@ -864,121 +855,57 @@ onMounted(async () => {
           <div><span>Status</span><strong>{{ statusFor(selectedNode) }}</strong></div>
         </div>
         <div class="drawer-actions">
-          <Button label="Move Assignment" icon="pi pi-arrow-right-arrow-left" disabled />
+          <Button
+            label="Move Assignment"
+            icon="pi pi-arrow-right-arrow-left"
+            :disabled="isProtectedAssignment(selectedNode) || Boolean(selectedNode.effectiveTo)"
+            @click="openMoveAssignment(selectedNode)"
+          />
           <Button label="View History" icon="pi pi-history" severity="secondary" disabled />
         </div>
       </div>
     </Drawer>
 
-    <Dialog v-model:visible="dialogVisible" header="Assign Sales to Team" modal :style="{ width: 'min(620px, 94vw)' }">
-      <div class="dialog-form">
-        <Message v-if="formError" severity="error">{{ formError }}</Message>
-
-        <div class="assign-section">
-          <div class="assign-section-title"><span class="assign-step">1</span>Select Sales User</div>
-          <Select
-            v-model="form.user"
-            :options="pickerUserOptions"
-            optionLabel="label"
-            :optionDisabled="(opt) => opt.disabled"
-            :loading="pickerLoading"
-            filter
-            filterPlaceholder="Search by name, employee ID, or email"
-            placeholder="Search active sales user"
-            @filter="onPickerFilter"
-          >
-            <template #option="{ option }">
-              <div class="user-option" :class="{ 'is-disabled': option.disabled }">
-                <div class="user-option-main">
-                  <span class="user-option-name">{{ option.user.fullName }}</span>
-                  <Tag :value="roleLabel(option.user.role)" :severity="roleSeverity(option.user.role)" size="small" />
-                </div>
-                <div class="user-option-sub">
-                  <span v-if="option.user.employeeId">{{ option.user.employeeId }}</span>
-                  <span>{{ option.user.email }}</span>
-                </div>
-                <span v-if="option.alreadyAssigned" class="already-chip"><i class="pi pi-check-circle" /> Already assigned this month</span>
-              </div>
-            </template>
-            <template #footer>
-              <div class="picker-footer">
-                <span v-if="pickerTotal" class="cell-hint">{{ pickerUsers.length }} of {{ pickerTotal }} active accounts</span>
-                <Button v-if="hasMorePickerUsers" label="Load more" icon="pi pi-chevron-down" text size="small" :loading="pickerLoading" @click="loadPickerUsers(false)" />
-              </div>
-            </template>
-            <template #emptyfilter>
-              <div class="picker-empty">No matching active sales users.</div>
-            </template>
-          </Select>
-          <span class="section-note">Only active sales accounts can be assigned. Users already assigned in the selected month are disabled.</span>
-        </div>
-
-        <div class="assign-section">
-          <div class="assign-section-title"><span class="assign-step">2</span>Select Organizational Role</div>
-          <Select v-model="form.salesRoleId" :options="activeRoleOptions" optionLabel="label" optionValue="value" filter placeholder="Select an active role">
-            <template #option="{ option }">
-              <div class="role-option">
-                <span class="role-option-name">{{ option.label }}</span>
-                <span class="role-option-desc">{{ option.description }}</span>
-              </div>
-            </template>
-          </Select>
-          <span class="section-note">Only active roles can be assigned.</span>
-        </div>
-
-        <div class="assign-section">
-          <div class="assign-section-title"><span class="assign-step">3</span>Select Reporting Parent</div>
-          <div v-if="selectedLevel === 1" class="parent-info">
-            <i class="pi pi-info-circle" />
-            <span>Level 1 is the top-level role and does not require an approver/parent.</span>
-          </div>
-          <template v-else-if="selectedLevel">
-            <Select
-              v-model="form.parentUserId"
-              :options="parentOptions"
-              optionLabel="label"
-              optionValue="value"
-              filter
-              :loading="dialogStructureLoading"
-              :placeholder="`Select parent from Level ${requiredParentLevel}...`"
-            />
-            <Message v-if="parentUnavailable" severity="warn">No eligible Level {{ requiredParentLevel }} parent exists for {{ previewMonthLabel || form.effectiveMonth }}. Assign the required upper level first.</Message>
-            <span class="section-note">A Level {{ selectedLevel }} user must report to an active Level {{ requiredParentLevel }} user in the same month.</span>
-          </template>
-          <div v-else class="parent-info muted">
-            <i class="pi pi-info-circle" />
-            <span>Select an organizational role first to see eligible parents.</span>
-          </div>
-        </div>
-
-        <div class="assign-section">
-          <div class="assign-section-title"><span class="assign-step">4</span>Effective Month</div>
-          <div class="form-field">
-            <input v-model="form.effectiveMonth" type="month" />
-          </div>
-          <span class="section-note">Changes apply from the first day of that month ({{ dialogEffectiveDate }}).</span>
-        </div>
-
-        <div class="assign-section">
-          <div class="assign-section-title"><span class="assign-step">5</span>Assignment Preview</div>
-          <div class="preview-card">
-            <div class="preview-row"><span>Sales</span><strong>{{ form.user?.fullName || '—' }}<template v-if="form.user?.employeeId"><span class="preview-sub"> · {{ form.user.employeeId }}</span></template></strong></div>
-            <div class="preview-row"><span>Organizational Role</span><strong>{{ selectedRole ? `${selectedRole.name} — Level ${selectedRole.level}` : '—' }}</strong></div>
-            <div class="preview-row"><span>Reports To</span><strong>{{ previewParentLabel }}</strong></div>
-            <div class="preview-row"><span>Effective From</span><strong>{{ previewMonthLabel || '—' }}</strong></div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <Button label="Cancel" severity="secondary" text @click="dialogVisible = false" :disabled="store.savingSalesAssignment" />
-        <Button label="Assign" icon="pi pi-check" :loading="store.savingSalesAssignment" :disabled="!canSubmit || store.savingSalesAssignment" @click="submitAssignment" />
-      </template>
-    </Dialog>
+    <AssignSalesDialog
+      v-model:visible="dialogVisible"
+      :user="form.user"
+      :sales-role-id="form.salesRoleId"
+      :parent-user-id="form.parentUserId"
+      :effective-month="form.effectiveMonth"
+      :picker-user-options="pickerUserOptions"
+      :role-options="activeRoleOptions"
+      :parent-options="parentOptions"
+      :picker-users-count="pickerUsers.length"
+      :picker-total="pickerTotal"
+      :has-more-picker-users="hasMorePickerUsers"
+      :picker-loading="pickerLoading"
+      :dialog-structure-loading="dialogStructureLoading"
+      :saving="store.savingSalesAssignment"
+      :error="formError"
+      :selected-role-label="selectedRoleLabel"
+      :selected-level="selectedLevel"
+      :required-parent-level="requiredParentLevel"
+      :parent-unavailable="parentUnavailable"
+      :preview-parent-label="previewParentLabel"
+      :preview-month-label="previewMonthLabel"
+      :dialog-effective-date="dialogEffectiveDate"
+      :can-submit="canSubmit"
+      :role-label="roleLabel"
+      :role-severity="roleSeverity"
+      @update:user="selectAssignUser"
+      @update:sales-role-id="form.salesRoleId = $event"
+      @update:parent-user-id="form.parentUserId = $event"
+      @update:effective-month="form.effectiveMonth = $event"
+      @filter-users="onPickerFilter"
+      @load-more-users="loadPickerUsers(false)"
+      @submit="submitAssignment"
+      @cancel="dialogVisible = false"
+    />
   </section>
 </template>
 
 <style scoped>
-.admin-page { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.75rem 2rem; min-height: 100vh; background: #f7f9fb; }
+.admin-page { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; min-width: 0; padding: 1.75rem 2rem; min-height: 100vh; overflow-x: hidden; background: #f7f9fb; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .page-title-wrapper .eyebrow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #0b7766; }
 h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
@@ -1029,75 +956,7 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .table-panel :deep(.p-paginator) { background: #ffffff; border-color: #edf1f6; color: #475569; }
 .table-panel :deep(.p-paginator-current) { color: #64748b; }
 .table-panel :deep(.p-datatable-loading-overlay) { background: rgba(255, 255, 255, 0.72); }
-.tree-panel { overflow-x: auto; }
-.tree-toolbar { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 0.75rem 0.9rem; border-bottom: 1px solid #edf1f6; }
-.tree-toolbar > div:first-child { display: grid; gap: 0.15rem; }
-.tree-toolbar strong { color: #0f172a; font-size: 0.92rem; }
-.tree-toolbar span { color: #94a3b8; font-size: 0.76rem; }
-.tree-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
-.hierarchy-table { min-width: 1120px; }
-.hierarchy-table :deep(.p-datatable-table),
-.hierarchy-table :deep(.p-datatable-table-container) { background: #ffffff; }
-.hierarchy-table :deep(.p-datatable-thead > tr > th) { background: #f3f5f8; color: #475569; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; border-color: #e5eaf0; padding: 0.5rem 0.7rem; white-space: nowrap; }
-.hierarchy-table :deep(.p-datatable-tbody > tr > td) { height: 48px; background: #ffffff; color: #1e293b; border-color: #edf1f6; padding: 0.42rem 0.7rem; font-size: 0.8rem; vertical-align: middle; }
-.hierarchy-table :deep(.p-datatable-tbody > tr:hover > td) { background: #f8fbff; }
-.hier-level { font-weight: 850; font-size: 0.82rem; }
-.hier-level.level-1, .sales-name.level-1 { color: #1d4ed8; }
-.hier-level.level-2, .sales-name.level-2 { color: #047857; }
-.hier-level.level-3, .sales-name.level-3 { color: #9a3412; }
-.hier-level.level-4, .sales-name.level-4 { color: #a16207; }
-.hier-name-cell { position: relative; display: flex; align-items: center; gap: 0.28rem; padding-left: calc(var(--depth) * 1.45rem); min-height: 34px; }
-.hier-connector { position: absolute; left: calc((var(--depth) * 1.45rem) - 0.75rem); top: 0; bottom: 0; width: 0.8rem; border-left: 1px solid #dbe3ee; border-bottom: 1px solid #dbe3ee; transform: translateY(-50%); }
-.hier-expander, .hier-expander-spacer { width: 1.45rem; height: 1.45rem; flex: 0 0 auto; }
-.hier-expander { display: grid; place-content: center; border: 1px solid #dbe3ee; border-radius: 6px; background: #ffffff; color: #64748b; cursor: pointer; }
-.hier-expander:hover { background: #f1f5f9; color: #0f172a; }
-.hier-expander i { font-size: 0.7rem; }
-.hier-name-button { display: grid; gap: 0.02rem; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; cursor: pointer; }
-.hier-name-button:hover .sales-name { text-decoration: underline; text-underline-offset: 2px; }
-.hier-name-button small { color: #94a3b8; font-size: 0.68rem; }
-.role-name-label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 220px; color: #334155; line-height: 1.3; }
-.compact-status { display: inline-flex; align-items: center; gap: 0.32rem; color: #047857; font-size: 0.72rem; font-weight: 800; }
-.compact-status::before { content: ''; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #10b981; }
-.compact-status.inactive { color: #64748b; }
-.compact-status.inactive::before { background: #94a3b8; }
-.more-action { width: 2rem; height: 2rem; display: grid; place-content: center; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #64748b; cursor: pointer; }
-.more-action:hover { background: #f8fafc; color: #0f172a; }
-.tree-list { min-width: 720px; padding: 0.45rem 0.85rem 0.8rem; display: grid; gap: 0; }
-.tree-branch { display: grid; gap: 0; }
-.tree-row { display: flex; align-items: stretch; gap: 0.35rem; position: relative; }
-.tree-row::before { content: ''; width: 0.75rem; height: 1px; background: #dbe3ee; position: absolute; left: 1.75rem; top: 50%; }
-.tree-children { margin-left: 1.45rem; padding-left: 1.05rem; border-left: 1px solid #dbe3ee; display: grid; gap: 0; }
-.node-toggle, .node-toggle-spacer { width: 1.25rem; height: 1.25rem; margin-top: 0.76rem; flex: 0 0 auto; z-index: 1; }
-.node-toggle { display: grid; place-content: center; border: 1px solid #dbe3ee; border-radius: 6px; background: #ffffff; color: #64748b; cursor: pointer; }
-.node-toggle:hover { background: #f8fafc; color: #0f172a; }
-.org-node { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(190px, 1fr) minmax(340px, auto); gap: 0.7rem; align-items: center; padding: 0.48rem 0.7rem; border: 0; border-bottom: 1px solid #edf1f6; border-left: 3px solid #dbe3ee; background: #ffffff; text-align: left; font: inherit; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
-.org-node:hover { background: #f8fafc; }
-.org-node.matched { background: #fff7ed; }
-.tree-level-1 { border-left-color: #1e3a8a; }
-.tree-level-2 { border-left-color: #4f9f77; }
-.tree-level-3 { border-left-color: #b45309; }
-.tree-level-4 { border-left-color: #d6a11d; }
-.node-avatar { width: 1.9rem; height: 1.9rem; display: grid; place-content: center; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.68rem; font-weight: 850; }
-.node-main { display: grid; gap: 0.08rem; min-width: 0; }
-.node-main strong { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-level-1 .node-main strong { color: #1d4ed8; }
-.tree-level-2 .node-main strong { color: #047857; }
-.tree-level-3 .node-main strong { color: #9a3412; }
-.tree-level-4 .node-main strong { color: #a16207; }
-.node-main span { color: #64748b; font-size: 0.72rem; }
-.node-meta { display: grid; grid-template-columns: minmax(120px, 1.1fr) minmax(120px, 1fr) auto auto; align-items: center; gap: 0.7rem; color: #334155; font-size: 0.74rem; }
-.node-meta > span:not(.level-indicator):not(.status-dot) { display: grid; gap: 0.06rem; min-width: 0; }
-.node-meta em { color: #94a3b8; font-style: normal; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
-.level-indicator { display: inline-flex; justify-content: center; min-width: 4rem; padding: 0.14rem 0.45rem; border-radius: 999px; background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; font-size: 0.68rem; font-weight: 800; }
-.status-dot { display: inline-flex; align-items: center; gap: 0.3rem; color: #047857; font-size: 0.7rem; font-weight: 800; }
-.status-dot::before { content: ''; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #10b981; }
-.status-dot.inactive { color: #64748b; }
-.status-dot.inactive::before { background: #94a3b8; }
-.sales-name { font-weight: 750; }
-.sales-name.level-1 { color: #2563eb; }
-.sales-name.level-2 { color: #059669; }
-.sales-name.level-3 { color: #ea580c; }
-.sales-name.level-4 { color: #b45309; }
+
 .skeleton-area { padding: 0.6rem 1rem 1rem; }
 .skeleton-row { height: 3rem; margin-top: 0.65rem; border-radius: 10px; }
 .empty-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; padding: 2rem; text-align: center; color: #8492a6; }
@@ -1110,7 +969,9 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .load-more-row { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 0.9rem 1rem; border-top: 1px solid #f1f4f8; }
 .load-more-row .cell-hint { margin: 0; }
 
-.dialog-form { display: grid; gap: 1.1rem; max-height: 68vh; overflow-y: auto; padding-right: 0.25rem; }
+.dialog-form { display: grid; gap: 1.1rem; max-height: min(68vh, 720px); overflow-y: auto; overscroll-behavior: contain; padding-right: 0.35rem; }
+:deep(.p-dialog) { margin: 1rem; max-height: calc(100vh - 2rem); }
+:deep(.p-dialog-content) { overflow: hidden; }
 .assign-section { display: grid; gap: 0.55rem; }
 .assign-section-title { display: flex; align-items: center; gap: 0.55rem; font-weight: 750; color: #0f172a; font-size: 0.86rem; }
 .assign-step { width: 22px; height: 22px; display: grid; place-content: center; border-radius: 999px; background: #0b7766; color: #fff; font-size: 0.7rem; font-weight: 700; }
