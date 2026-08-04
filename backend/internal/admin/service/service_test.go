@@ -22,6 +22,8 @@ type repoStub struct {
 	employeeIDs      map[string]uuid.UUID
 	activeAdminCount int
 	managers         []model.ManagerOption
+	roles            map[uuid.UUID]model.SalesRole
+	effectiveRoles   map[uuid.UUID]model.SalesRole
 	listResult       model.UserListResult
 	lastUpdate       *model.UpdateUserInput
 	createErr        error
@@ -149,6 +151,10 @@ func managerUser(id uuid.UUID, status authmodel.UserStatus) authmodel.User {
 	}
 }
 
+func activeRole(level int) model.SalesRole {
+	return model.SalesRole{ID: uuid.New(), Name: "Role", Level: level, IsActive: true}
+}
+
 func TestAdminCanListUsers(t *testing.T) {
 	stub := &repoStub{listResult: model.UserListResult{
 		Items: []model.UserListItem{{ID: uuid.New(), FullName: "A"}},
@@ -179,14 +185,19 @@ func TestManagerAndSalesGetForbidden(t *testing.T) {
 }
 
 func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
+	role := activeRole(1)
 	stub := &repoStub{
 		details: map[uuid.UUID]model.UserDetail{},
 		emails:  map[string]uuid.UUID{}, employeeIDs: map[string]uuid.UUID{},
+		roles: map[uuid.UUID]model.SalesRole{
+			role.ID: role,
+		},
 	}
 	svc := newTestService(stub)
 	input := model.CreateUserInput{
 		EmployeeID: "SM-0002", FullName: "Sari", Email: "sari@yummy.test",
 		Role: authmodel.RoleSalesManager, TemporaryPassword: "Password123",
+		SalesRoleID: &role.ID,
 	}
 	_, err := svc.CreateUser(context.Background(), adminActor(), input)
 	if err != nil {
@@ -196,11 +207,19 @@ func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
 
 func TestCreateSalesExecutiveWithActiveManagerSucceeds(t *testing.T) {
 	managerID := uuid.New()
+	managerRole := activeRole(3)
+	role := activeRole(4)
 	stub := &repoStub{
 		details: map[uuid.UUID]model.UserDetail{},
 		emails:  map[string]uuid.UUID{}, employeeIDs: map[string]uuid.UUID{},
 		users: map[uuid.UUID]authmodel.User{
 			managerID: managerUser(managerID, authmodel.UserActive),
+		},
+		roles: map[uuid.UUID]model.SalesRole{
+			role.ID: role,
+		},
+		effectiveRoles: map[uuid.UUID]model.SalesRole{
+			managerID: managerRole,
 		},
 	}
 	svc := newTestService(stub)
@@ -208,6 +227,7 @@ func TestCreateSalesExecutiveWithActiveManagerSucceeds(t *testing.T) {
 		EmployeeID: "SE-0010", FullName: "Rina", Email: "rina@yummy.test",
 		Role: authmodel.RoleSalesExecutive, ManagerID: &managerID,
 		TemporaryPassword: "Password123",
+		SalesRoleID:       &role.ID,
 	}
 	if _, err := svc.CreateUser(context.Background(), adminActor(), input); err != nil {
 		t.Fatalf("create sales executive: %v", err)
@@ -487,6 +507,30 @@ func TestUpdateSMToSEWithValidActiveManagerSucceeds(t *testing.T) {
 	}
 }
 
+func TestUpdatePrimarySuperAdminOrganizationalRolePreservesSystemRole(t *testing.T) {
+	target := mustUUID(t, "00000000-0000-0000-0000-000000000001")
+	managerID := mustUUID(t, "00000000-0000-0000-0000-00000000000a")
+	role := activeRole(1)
+	stub := updateTestStub(target, authmodel.User{
+		ID: target, Email: "admin@yummy.test", FullName: "Yummy Super Admin",
+		Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive,
+		ManagerID: &managerID,
+	}, managerID)
+	stub.roles = map[uuid.UUID]model.SalesRole{role.ID: role}
+	svc := newTestService(stub)
+
+	input := model.UpdateUserInput{SalesRoleID: model.OptionalUUID{Present: true, Value: &role.ID}}
+	if _, err := svc.UpdateUser(context.Background(), Actor{UserID: target, Role: authmodel.RoleSuperAdmin}, target, input); err != nil {
+		t.Fatalf("update primary super admin organizational role: %v", err)
+	}
+	if stub.lastUpdate == nil || stub.lastUpdate.Role == nil || *stub.lastUpdate.Role != authmodel.RoleSuperAdmin {
+		t.Fatalf("system role must stay SUPER_ADMIN, got %+v", stub.lastUpdate)
+	}
+	if !stub.lastUpdate.ManagerID.Present || stub.lastUpdate.ManagerID.Value != nil {
+		t.Fatalf("manager must be forced null, got %+v", stub.lastUpdate.ManagerID)
+	}
+}
+
 func TestUpdateSEExplicitNullManagerRejected(t *testing.T) {
 	managerA := mustUUID(t, "00000000-0000-0000-0000-00000000000a")
 	target := mustUUID(t, "00000000-0000-0000-0000-0000000000aa")
@@ -548,11 +592,19 @@ func TestLastActiveAdminCannotBeDeactivated(t *testing.T) {
 
 func TestNullableProfileFieldsPassThrough(t *testing.T) {
 	managerID := uuid.New()
+	managerRole := activeRole(3)
+	role := activeRole(4)
 	stub := &repoStub{
 		details: map[uuid.UUID]model.UserDetail{},
 		emails:  map[string]uuid.UUID{}, employeeIDs: map[string]uuid.UUID{},
 		users: map[uuid.UUID]authmodel.User{
 			managerID: managerUser(managerID, authmodel.UserActive),
+		},
+		roles: map[uuid.UUID]model.SalesRole{
+			role.ID: role,
+		},
+		effectiveRoles: map[uuid.UUID]model.SalesRole{
+			managerID: managerRole,
 		},
 	}
 	svc := newTestService(stub)
@@ -560,6 +612,7 @@ func TestNullableProfileFieldsPassThrough(t *testing.T) {
 		FullName: "NoID", Email: "noid@yummy.test",
 		Role: authmodel.RoleSalesExecutive, ManagerID: &managerID,
 		TemporaryPassword: "Password123",
+		SalesRoleID:       &role.ID,
 	}
 	if _, err := svc.CreateUser(context.Background(), adminActor(), input); err != nil {
 		t.Fatalf("create with nullable employee_id/phone: %v", err)

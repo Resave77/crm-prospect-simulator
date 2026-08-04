@@ -12,6 +12,13 @@ import (
 	"github.com/google/uuid"
 )
 
+func (h *Handler) ListPermissions(c *fiber.Ctx) error {
+	permissions, err := h.svc.ListPermissions(c.UserContext(), actor(c), c.Query("search"))
+	if err != nil {
+		return writeSalesError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, permissions)
+}
 func (h *Handler) ListSalesRoles(c *fiber.Ctx) error {
 	roles, err := h.svc.ListSalesRoles(c.UserContext(), actor(c))
 	if err != nil {
@@ -157,12 +164,28 @@ func writeSalesError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusUnprocessableEntity, "SALES_ROLE_IN_USE", err.Error())
 	case errors.Is(err, service.ErrSalesRoleInactive):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "SALES_ROLE_INACTIVE", err.Error())
+	case errors.Is(err, service.ErrSalesUserInactive):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "SALES_USER_INACTIVE", err.Error())
 	case errors.Is(err, service.ErrInvalidHierarchy):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_SALES_HIERARCHY", err.Error())
 	case errors.Is(err, service.ErrInvalidEffectiveDate):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_EFFECTIVE_DATE", err.Error())
 	case errors.Is(err, service.ErrAssignmentOverlap):
 		return response.Error(c, fiber.StatusConflict, "SALES_ASSIGNMENT_OVERLAP", err.Error())
+	case errors.Is(err, service.ErrIncompatibleChildren):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "ASSIGNMENT_HAS_INCOMPATIBLE_CHILDREN", err.Error())
+	case errors.Is(err, service.ErrSuperAdminRoot):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "SUPER_ADMIN_ROOT_PROTECTED", err.Error())
+	case errors.Is(err, service.ErrPermissionNotFound):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "PERMISSION_NOT_FOUND", err.Error())
+	case errors.Is(err, service.ErrInvalidPermissionKey):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_PERMISSION_KEY", err.Error())
+	case errors.Is(err, service.ErrInvalidLandingPage):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_LANDING_PAGE", err.Error())
+	case errors.Is(err, service.ErrLandingPagePermissionNeeded):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "LANDING_PAGE_PERMISSION_REQUIRED", err.Error())
+	case errors.Is(err, service.ErrRolePermissionUpdateFailed):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "ROLE_PERMISSION_UPDATE_FAILED", err.Error())
 	case errors.Is(err, repository.ErrNotFound):
 		return response.Error(c, fiber.StatusNotFound, "SALES_RESOURCE_NOT_FOUND", "Sales organization resource not found.")
 	case errors.Is(err, repository.ErrConflict):

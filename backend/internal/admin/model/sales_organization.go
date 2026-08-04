@@ -12,31 +12,61 @@ import (
 const DateLayout = "2006-01-02"
 
 type SalesRole struct {
-	ID          uuid.UUID  `json:"id"`
-	Name        string     `json:"name"`
-	Level       int        `json:"level"`
-	Description string     `json:"description"`
-	IsActive    bool       `json:"isActive"`
-	CreatedBy   *uuid.UUID `json:"createdBy"`
-	UpdatedBy   *uuid.UUID `json:"updatedBy"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
+	ID              uuid.UUID    `json:"id"`
+	Name            string       `json:"name"`
+	Level           int          `json:"level"`
+	Description     string       `json:"description"`
+	IsActive        bool         `json:"isActive"`
+	LandingPage     *string      `json:"landingPage"`
+	PermissionCount int          `json:"permissionCount,omitempty"`
+	Permissions     []Permission `json:"permissions,omitempty"`
+	CreatedBy       *uuid.UUID   `json:"createdBy"`
+	UpdatedBy       *uuid.UUID   `json:"updatedBy"`
+	CreatedAt       time.Time    `json:"createdAt"`
+	UpdatedAt       time.Time    `json:"updatedAt"`
 }
 
 type CreateSalesRoleInput struct {
-	Name        string `json:"name"`
-	Level       int    `json:"level"`
-	Description string `json:"description"`
+	Name           string   `json:"name"`
+	Level          int      `json:"level"`
+	Description    string   `json:"description"`
+	LandingPage    *string  `json:"landingPage"`
+	PermissionKeys []string `json:"permissionKeys"`
 }
 
 type UpdateSalesRoleInput struct {
-	Name        *string `json:"name"`
-	Level       *int    `json:"level"`
-	Description *string `json:"description"`
+	Name           *string  `json:"name"`
+	Level          *int     `json:"level"`
+	Description    *string  `json:"description"`
+	LandingPage    *string  `json:"landingPage"`
+	PermissionKeys []string `json:"permissionKeys"`
 }
 
 type UpdateSalesRoleStatusInput struct {
 	IsActive bool `json:"isActive"`
+}
+
+type PermissionNodeType string
+
+const (
+	PermissionNodeGroup  PermissionNodeType = "GROUP"
+	PermissionNodeMenu   PermissionNodeType = "MENU"
+	PermissionNodeAction PermissionNodeType = "ACTION"
+)
+
+type Permission struct {
+	ID          uuid.UUID          `json:"id"`
+	Key         string             `json:"key"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	GroupKey    string             `json:"groupKey"`
+	ParentKey   *string            `json:"parentKey"`
+	NodeType    PermissionNodeType `json:"nodeType"`
+	RoutePath   *string            `json:"routePath"`
+	IsActive    bool               `json:"isActive"`
+	SortOrder   int                `json:"sortOrder"`
+	CreatedAt   time.Time          `json:"createdAt,omitempty"`
+	UpdatedAt   time.Time          `json:"updatedAt,omitempty"`
 }
 
 type SalesStructureAssignment struct {
@@ -107,4 +137,5 @@ type AssignmentHistoryItem struct {
 	ParentName    *string      `json:"parentName"`
 	EffectiveFrom string       `json:"effectiveFrom"`
 	EffectiveTo   *string      `json:"effectiveTo"`
+	Status        string       `json:"status"`
 }

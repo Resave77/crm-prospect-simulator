@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import axios from 'axios'
@@ -11,8 +11,7 @@ import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
 import type { ApiErrorEnvelope } from '../../../types/auth'
-import type { AdminUserRole } from '../../../types/admin'
-import { adminScopeSummary } from '../../../utils/admin'
+import type { SalesRole } from '../../../types/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,21 +24,25 @@ const loaded = ref(false)
 
 const id = computed(() => String(route.params.id))
 
-const roleOptions = [
-  { label: 'Select role', value: '' },
-  { label: 'Administrator', value: 'ADMINISTRATOR' },
-  { label: 'Sales Manager', value: 'SALES_MANAGER' },
-  { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
-]
-
-const managerOptions = computed(() => {
-  const managers = store.managerOptions ?? []
-  const current = store.selectedUser
-  const options = managers.map((m) => ({ label: m.name, value: m.id }))
-  if (current?.managerId && !managers.some((m) => m.id === current.managerId)) {
-    options.unshift({ label: current.managerName || 'Current manager', value: current.managerId })
+const organizationalRoleOptions = computed(() => {
+  const currentRole = store.selectedUser?.organizationalRole
+  const options = store.salesRoles
+    .filter((role) => role.isActive || role.id === currentRole?.id)
+    .map((role) => ({
+      label: role.name,
+      value: role.id,
+      role,
+      searchText: `${role.name} level ${role.level} ${landingLabel(role.landingPage)} ${role.permissionCount ?? 0} permissions`,
+    }))
+  if (currentRole && !options.some((option) => option.value === currentRole.id)) {
+    options.unshift({
+      label: currentRole.name,
+      value: currentRole.id,
+      role: { ...currentRole, createdAt: '', updatedAt: '', permissions: [] } as SalesRole,
+      searchText: `${currentRole.name} level ${currentRole.level} ${landingLabel(currentRole.landingPage)} inactive`,
+    })
   }
-  return [{ label: 'Select manager', value: '' }, ...options]
+  return options
 })
 
 const form = reactive({
@@ -47,20 +50,28 @@ const form = reactive({
   name: '',
   email: '',
   phone: '',
-  role: '' as AdminUserRole | '',
-  managerId: '',
+  salesRoleId: '',
 })
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const showManager = computed(() => form.role === 'SALES_EXECUTIVE')
-const scope = computed(() => adminScopeSummary(form.role))
+const selectedOrganizationalRole = computed(() => {
+  const fromList = store.salesRoles.find((role) => role.id === form.salesRoleId)
+  const current = store.selectedUser?.organizationalRole
+  if (fromList) return fromList
+  if (current?.id === form.salesRoleId) return current
+  return null
+})
+const roleChanged = computed(() => Boolean(store.selectedUser?.organizationalRole?.id && form.salesRoleId && form.salesRoleId !== store.selectedUser.organizationalRole.id))
+const validOrganizationalSelection = computed(() => {
+  const role = selectedOrganizationalRole.value
+  return Boolean(role?.isActive || (store.selectedUser?.organizationalRole?.id === role?.id))
+})
 
 const isFormValid = computed(() => {
   if (!form.employeeId.trim()) return false
   if (!form.name.trim()) return false
   if (!emailPattern.test(form.email.trim())) return false
-  if (!form.role) return false
-  if (showManager.value && !form.managerId) return false
+  if (!validOrganizationalSelection.value) return false
   return true
 })
 
@@ -78,8 +89,7 @@ async function load() {
     form.name = user.fullName
     form.email = user.email
     form.phone = user.phone
-    form.role = user.role
-    form.managerId = user.managerId ?? ''
+    form.salesRoleId = user.organizationalRole?.id ?? ''
     loaded.value = true
   } catch (e) {
     notFound.value = isNotFoundError(e)
@@ -87,12 +97,13 @@ async function load() {
   }
 }
 
-function onRoleChange() {
-  form.managerId = ''
+function landingLabel(path?: string | null) {
+  if (!path) return '-'
+  return path.split('/').filter(Boolean).map((part) => part.replace(/-/g, ' ')).join(' / ') || path
 }
 
-function managerName(managerId: string) {
-  return store.managerOptions.find((m) => m.id === managerId)?.name ?? '—'
+function roleOptionMeta(role: SalesRole) {
+  return `Level ${role.level} · ${role.permissionCount ?? 0} permissions · Landing: ${landingLabel(role.landingPage)}`
 }
 
 async function handleSubmit() {
@@ -105,13 +116,19 @@ async function handleSubmit() {
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
-      role: form.role as AdminUserRole,
-      managerId: showManager.value ? form.managerId : null,
+      salesRoleId: form.salesRoleId || null,
     })
     toast.add({ severity: 'success', summary: 'Account Updated', detail: `Account for ${user.fullName} has been updated.`, life: 4000 })
+    await new Promise((resolve) => setTimeout(resolve, 800))
     await router.push(`/admin/accounts/${id.value}`)
   } catch (e) {
-    error.value = store.errorMessage(e)
+    const message = store.errorMessage(e)
+    if (message.toLowerCase().includes('sales executive must have a manager')) {
+      error.value =
+        'Role could not be updated because the backend still requires Sales Executive accounts to have a manager. The account form no longer clears or changes the existing manager.'
+    } else {
+      error.value = message
+    }
   } finally {
     saving.value = false
   }
@@ -120,7 +137,7 @@ async function handleSubmit() {
 onMounted(async () => {
   await load()
   if (!notFound.value) {
-    try { await store.fetchManagers() } catch { /* optional */ }
+    try { await Promise.all([store.fetchManagers(), store.fetchSalesRoles()]) } catch { /* optional */ }
   }
 })
 </script>
@@ -149,7 +166,7 @@ onMounted(async () => {
       </div>
 
       <template v-if="loaded">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push(`/admin/accounts/${id}`)" title="Back to account detail" />
+        <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
 
         <!-- PAGE HEADER -->
         <header class="page-heading">
@@ -206,13 +223,41 @@ onMounted(async () => {
                 <div class="form-card-icon si-violet"><i class="pi pi-lock" /></div>
                 <div>
                   <h3>Role &amp; Access</h3>
-                  <p>Adjust the role and reporting line for this account.</p>
+                  <p>Adjust the account role. The existing reporting relationship is preserved.</p>
                 </div>
               </div>
               <div class="form-grid">
-                <div class="form-field">
+                <div class="form-field full">
                   <label>Role <span class="required">*</span></label>
-                  <Select v-model="form.role" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="Select role" @change="onRoleChange" />
+                  <Select
+                    v-model="form.salesRoleId"
+                    :options="organizationalRoleOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    filter
+                    :filterFields="['label', 'searchText']"
+                    placeholder="Search active roles"
+                    :loading="store.salesRolesLoading"
+                  >
+                    <template #option="{ option }">
+                      <div class="role-option">
+                        <strong>{{ option.role.name }}</strong>
+                        <span>{{ roleOptionMeta(option.role) }}</span>
+                        <em v-if="!option.role.isActive">Inactive</em>
+                      </div>
+                    </template>
+                  </Select>
+                </div>
+                <div class="access-preview full">
+                  <strong>{{ selectedOrganizationalRole?.name || 'No organizational role selected' }}</strong>
+                  <span>Level {{ selectedOrganizationalRole?.level ?? '-' }}</span>
+                  <span>Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</span>
+                  <span>{{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</span>
+                  <p>{{ selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' }}</p>
+                </div>
+                <div v-if="roleChanged" class="must-change-note full">
+                  <i class="pi pi-exclamation-triangle" />
+                  <span>Changing this role may change available menus, landing page, allowed actions, and hierarchy level. The existing manager is not changed from this form.</span>
                 </div>
                 <div class="form-field">
                   <label>Status</label>
@@ -224,24 +269,6 @@ onMounted(async () => {
                     <Tag :value="store.selectedUser?.mustChangePassword ? 'Yes' : 'No'" :severity="store.selectedUser?.mustChangePassword ? 'warn' : 'secondary'" :icon="store.selectedUser?.mustChangePassword ? 'pi pi-key' : ''" />
                   </div>
                 </div>
-                <div v-if="showManager" class="form-field">
-                  <label>Manager <span class="required">*</span></label>
-                  <Select v-model="form.managerId" :options="managerOptions" optionLabel="label" optionValue="value" placeholder="Select manager" />
-                </div>
-                <div v-if="showManager" class="form-field form-note-field">
-                  <div class="field-note">
-                    <i class="pi pi-info-circle" />
-                    <span>Sales executives must be assigned to an active Sales Manager.</span>
-                  </div>
-                </div>
-              </div>
-              <div v-if="showManager && !store.selectedUser?.managerId" class="must-change-note">
-                <i class="pi pi-user-plus" />
-                <span>This account currently has no manager. A Sales Executive must be assigned to a manager.</span>
-              </div>
-              <div v-else-if="!showManager && store.selectedUser?.managerId" class="must-change-note">
-                <i class="pi pi-exclamation-triangle" />
-                <span>This account has a manager. Roles Administrator and Sales Manager must not have a manager.</span>
               </div>
             </div>
           </div>
@@ -249,13 +276,13 @@ onMounted(async () => {
           <!-- RIGHT COLUMN: SIDEBAR -->
           <aside class="form-sidebar">
             <div class="sidebar-card">
-              <h4>Role Scope</h4>
+              <h4>Role Preview</h4>
               <div class="role-scope">
-                <span class="role-title">{{ scope.title }}</span>
+                <span class="role-title">{{ selectedOrganizationalRole?.name || 'No role selected' }}</span>
                 <ul>
-                  <li v-for="(item, idx) in scope.scopes" :key="idx">
-                    <i class="pi pi-check-circle" /> {{ item }}
-                  </li>
+                  <li><i class="pi pi-check-circle" /> Level {{ selectedOrganizationalRole?.level ?? '-' }}</li>
+                  <li><i class="pi pi-check-circle" /> {{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</li>
+                  <li><i class="pi pi-check-circle" /> Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</li>
                 </ul>
               </div>
             </div>
@@ -276,11 +303,11 @@ onMounted(async () => {
                 </div>
                 <div class="summary-row">
                   <span>Role</span>
-                  <strong>{{ form.role ? scope.title : '—' }}</strong>
+                  <strong>{{ selectedOrganizationalRole?.name || '—' }}</strong>
                 </div>
                 <div class="summary-row">
-                  <span>Manager</span>
-                  <strong>{{ showManager ? (managerName(form.managerId) || '—') : '—' }}</strong>
+                  <span>Current Manager</span>
+                  <strong>{{ store.selectedUser?.managerName || '—' }}</strong>
                 </div>
                 <div class="summary-row">
                   <span>Status</span>
@@ -417,6 +444,10 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.3rem;
 }
+.form-field.full,
+.full {
+  grid-column: 1 / -1;
+}
 .form-field label {
   font-size: 0.72rem;
   font-weight: 700;
@@ -454,6 +485,50 @@ onMounted(async () => {
 .field-note i {
   flex-shrink: 0;
   font-size: 0.85rem;
+}
+
+.role-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.role-option strong {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+.role-option span,
+.role-option em {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.role-option em {
+  color: #b45309;
+  font-style: normal;
+  font-weight: 700;
+}
+.access-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #dbeafe;
+  border-radius: var(--radius-sm);
+  background: #f8fbff;
+}
+.access-preview strong,
+.access-preview p {
+  grid-column: 1 / -1;
+}
+.access-preview strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+.access-preview span,
+.access-preview p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .must-change-note {
@@ -624,5 +699,9 @@ onMounted(async () => {
   .admin-page { padding: 1.25rem 1rem; }
   .page-heading { flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }
+  .form-field.full,
+  .full {
+    grid-column: 1;
+  }
 }
 </style>

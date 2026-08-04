@@ -136,6 +136,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
 	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
 
+	admin.Get("/permissions", adminHandler.ListPermissions)
 	admin.Get("/sales-roles", adminHandler.ListSalesRoles)
 	admin.Post("/sales-roles", adminHandler.CreateSalesRole)
 	admin.Get("/sales-roles/:id", adminHandler.GetSalesRole)
@@ -153,6 +154,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/users/:id", adminHandler.GetUser)
 	admin.Patch("/users/:id", adminHandler.UpdateUser)
 	admin.Patch("/users/:id/status", adminHandler.UpdateStatus)
+	admin.Delete("/users/:id", adminHandler.DeleteUser)
 	admin.Post("/users/:id/reset-password", adminHandler.ResetPassword)
 
 	app.Use(func(c *fiber.Ctx) error {

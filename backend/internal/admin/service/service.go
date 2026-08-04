@@ -27,6 +27,8 @@ var (
 	ErrInvalidResetMode          = errors.New("invalid reset mode")
 	ErrTemporaryPasswordRequired = errors.New("temporary password required")
 	ErrWeakTemporaryPassword     = errors.New("weak temporary password")
+	ErrInvalidOrganizationalRole = fmt.Errorf("%w: invalid organizational role", ErrValidation)
+	ErrProtectedSuperAdmin       = errors.New("protected super admin account")
 )
 
 type Service struct {
@@ -63,6 +65,13 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input model.Creat
 	if err := s.validateCreate(ctx, input); err != nil {
 		return model.UserDetail{}, err
 	}
+	if input.SalesRoleID != nil {
+		role, err := s.repo.FindSalesRole(ctx, *input.SalesRoleID)
+		if err != nil {
+			return model.UserDetail{}, err
+		}
+		input.Role = systemRoleForSalesRole(role.Level)
+	}
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.TemporaryPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return model.UserDetail{}, fmt.Errorf("hash password: %w", err)
@@ -71,6 +80,11 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input model.Creat
 	if err := s.repo.CreateUser(ctx, userID, input, string(passwordHash), actor.UserID); err != nil {
 		return model.UserDetail{}, err
 	}
+	if input.SalesRoleID != nil {
+		if err := s.repo.SetCurrentSalesAssignment(ctx, userID, input.SalesRoleID, nil, actor.UserID); err != nil {
+			return model.UserDetail{}, err
+		}
+	}
 	return s.repo.FindUserDetail(ctx, userID)
 }
 
@@ -78,18 +92,67 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
 	}
+	if err := s.ensurePrimarySuperAdminMutable(ctx, actor, id); err != nil {
+		return model.UserDetail{}, err
+	}
 	if err := s.validateUpdate(ctx, id, &input); err != nil {
 		return model.UserDetail{}, err
 	}
+
+	// Account role changes are intentionally separated from monthly sales
+	// hierarchy assignments. Updating the account role changes its derived
+	// internal system role and access source, but it must not rewrite the
+	// reporting parent or sales-structure history.
+	if input.SalesRoleID.Present && input.SalesRoleID.Value != nil {
+		role, err := s.repo.FindSalesRole(ctx, *input.SalesRoleID.Value)
+		if err != nil {
+			return model.UserDetail{}, err
+		}
+		if !role.IsActive {
+			return model.UserDetail{}, fmt.Errorf(
+				"%w: organizational role is inactive",
+				ErrInvalidOrganizationalRole,
+			)
+		}
+
+		current, err := s.repo.FindUserByID(ctx, id)
+		if err != nil {
+			return model.UserDetail{}, err
+		}
+		if strings.EqualFold(current.Email, "admin@yummy.test") && current.Role == authmodel.RoleSuperAdmin {
+			if role.Level != 1 {
+				return model.UserDetail{}, fmt.Errorf(
+					"%w: super admin requires a level 1 role and no manager",
+					ErrInvalidOrganizationalRole,
+				)
+			}
+			preserved := authmodel.RoleSuperAdmin
+			input.Role = &preserved
+			input.ManagerID = model.OptionalUUID{Present: true, Value: nil}
+		} else if current.Role == authmodel.RoleSuperAdmin || current.Role == authmodel.RoleAdministrator {
+			preserved := current.Role
+			input.Role = &preserved
+		} else {
+			derived := systemRoleForSalesRole(role.Level)
+			input.Role = &derived
+		}
+	}
+
 	if err := s.repo.UpdateUser(ctx, id, input, actor.UserID); err != nil {
 		return model.UserDetail{}, err
 	}
+
+	// Do not call SetCurrentSalesAssignment here. Monthly role/parent changes
+	// belong to Sales Structure so existing hierarchy and history stay intact.
 	return s.repo.FindUserDetail(ctx, id)
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, actor Actor, id uuid.UUID, status authmodel.UserStatus) (model.UserDetail, error) {
 	if !actor.Role.IsAdminRole() {
 		return model.UserDetail{}, ErrForbidden
+	}
+	if err := s.ensurePrimarySuperAdminMutable(ctx, actor, id); err != nil {
+		return model.UserDetail{}, err
 	}
 	if id == actor.UserID {
 		return model.UserDetail{}, ErrSelfDeactivate
@@ -111,6 +174,46 @@ func (s *Service) UpdateStatus(ctx context.Context, actor Actor, id uuid.UUID, s
 		return model.UserDetail{}, err
 	}
 	return s.repo.FindUserDetail(ctx, id)
+}
+
+func (s *Service) DeleteUser(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	if id == actor.UserID {
+		return ErrSelfDeactivate
+	}
+	if err := s.ensurePrimarySuperAdminMutable(ctx, actor, id); err != nil {
+		return err
+	}
+	target, err := s.repo.FindUserByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if target.Role.IsAdminRole() {
+		count, err := s.repo.CountActiveAdministrators(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	return s.repo.DeleteUser(ctx, id)
+}
+
+func (s *Service) ensurePrimarySuperAdminMutable(ctx context.Context, actor Actor, targetID uuid.UUID) error {
+	if actor.Role == authmodel.RoleSuperAdmin {
+		return nil
+	}
+	target, err := s.repo.FindUserByID(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(target.Email, "admin@yummy.test") && target.Role == authmodel.RoleSuperAdmin {
+		return ErrProtectedSuperAdmin
+	}
+	return nil
 }
 
 func (s *Service) ListManagers(ctx context.Context, actor Actor) ([]model.ManagerOption, error) {
@@ -180,6 +283,12 @@ func (s *Service) validateCreate(ctx context.Context, input model.CreateUserInpu
 	if _, err := mail.ParseAddress(input.Email); err != nil {
 		return fmt.Errorf("%w: email is invalid", ErrValidation)
 	}
+	if input.SalesRoleID == nil {
+		return fmt.Errorf("%w: role is required", ErrInvalidOrganizationalRole)
+	}
+	if input.Role == "" {
+		input.Role = authmodel.RoleSalesExecutive
+	}
 	if !input.Role.Valid() {
 		return fmt.Errorf("%w: invalid role", ErrValidation)
 	}
@@ -190,10 +299,10 @@ func (s *Service) validateCreate(ctx context.Context, input model.CreateUserInpu
 		return fmt.Errorf("%w: temporary password must be at least 8 characters", ErrValidation)
 	}
 
-	if err := s.validateManagerRule(input.Role, input.ManagerID); err != nil {
+	if err := s.ensureManagerActive(ctx, input.ManagerID); err != nil {
 		return err
 	}
-	if err := s.ensureManagerActive(ctx, input.ManagerID); err != nil {
+	if err := s.validateAccountOrganizationalRole(ctx, input.Role, input.SalesRoleID, input.ManagerID); err != nil {
 		return err
 	}
 
@@ -253,7 +362,7 @@ func (s *Service) validateUpdate(ctx context.Context, id uuid.UUID, input *model
 		return fmt.Errorf("%w: name cannot be empty", ErrValidation)
 	}
 
-	if input.Role != nil || input.ManagerID.Present {
+	if input.Role != nil || input.ManagerID.Present || input.SalesRoleID.Present {
 		current, err := s.repo.FindUserByID(ctx, id)
 		if err != nil {
 			return err
@@ -265,38 +374,89 @@ func (s *Service) validateUpdate(ctx context.Context, id uuid.UUID, input *model
 				return fmt.Errorf("%w: invalid role", ErrValidation)
 			}
 		}
+		effectiveManagerID := current.ManagerID
+		if input.ManagerID.Present {
+			effectiveManagerID = input.ManagerID.Value
+		}
 
-		switch effectiveRole {
-		case authmodel.RoleSuperAdmin, authmodel.RoleAdministrator, authmodel.RoleSalesManager:
-			// These roles must not have a manager.
-			if input.ManagerID.Present && input.ManagerID.Value != nil {
-				return fmt.Errorf("%w: %s cannot have a manager", ErrValidation, effectiveRole)
+		if !input.SalesRoleID.Present {
+			switch effectiveRole {
+			case authmodel.RoleSuperAdmin, authmodel.RoleAdministrator, authmodel.RoleSalesManager:
+				if input.ManagerID.Present && input.ManagerID.Value != nil {
+					return fmt.Errorf("%w: %s cannot have a manager", ErrValidation, effectiveRole)
+				}
+				if current.ManagerID != nil && input.Role != nil {
+					input.ManagerID = model.OptionalUUID{Present: true, Value: nil}
+				}
+			case authmodel.RoleSalesExecutive:
+				if input.ManagerID.Present {
+					if input.ManagerID.Value == nil {
+						return fmt.Errorf("%w: sales executive must have a manager", ErrValidation)
+					}
+					if err := s.validateManagerActive(ctx, *input.ManagerID.Value); err != nil {
+						return err
+					}
+				} else if input.Role != nil {
+					if current.ManagerID == nil {
+						return fmt.Errorf("%w: sales executive must have a manager", ErrValidation)
+					}
+					if err := s.validateManagerActive(ctx, *current.ManagerID); err != nil {
+						return err
+					}
+				}
 			}
-			// Role invariant: clear the manager automatically on promotion even
-			// when managerId was omitted. The repository writes manager_id = NULL.
-			if current.ManagerID != nil {
-				input.ManagerID = model.OptionalUUID{Present: true, Value: nil}
+		} else {
+			// Account Edit may change the organizational role without forcing a
+			// hierarchy-parent update. Only the protected Super Admin rule still
+			// needs the current manager value to enforce "Level 1 and no manager".
+			var managerIDForValidation *uuid.UUID
+			if effectiveRole == authmodel.RoleSuperAdmin {
+				managerIDForValidation = effectiveManagerID
+				if strings.EqualFold(current.Email, "admin@yummy.test") {
+					managerIDForValidation = nil
+				}
 			}
-		case authmodel.RoleSalesExecutive:
-			if input.ManagerID.Present {
-				if input.ManagerID.Value == nil {
-					return fmt.Errorf("%w: sales executive must have a manager", ErrValidation)
-				}
-				if err := s.validateManagerActive(ctx, *input.ManagerID.Value); err != nil {
-					return err
-				}
-			} else {
-				if current.ManagerID == nil {
-					return fmt.Errorf("%w: sales executive must have a manager", ErrValidation)
-				}
-				if err := s.validateManagerActive(ctx, *current.ManagerID); err != nil {
-					return err
-				}
+
+			if err := s.validateAccountOrganizationalRole(
+				ctx,
+				effectiveRole,
+				input.SalesRoleID.Value,
+				managerIDForValidation,
+			); err != nil {
+				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+func (s *Service) validateAccountOrganizationalRole(ctx context.Context, systemRole authmodel.Role, salesRoleID *uuid.UUID, managerID *uuid.UUID) error {
+	if salesRoleID == nil {
+		return fmt.Errorf("%w: role is required", ErrInvalidOrganizationalRole)
+	}
+
+	role, err := s.repo.FindSalesRole(ctx, *salesRoleID)
+	if err != nil {
+		return err
+	}
+	if !role.IsActive {
+		return fmt.Errorf("%w: organizational role is inactive", ErrInvalidOrganizationalRole)
+	}
+
+	if systemRole == authmodel.RoleSuperAdmin {
+		if role.Level != 1 || managerID != nil {
+			return fmt.Errorf("%w: super admin requires a level 1 role and no manager", ErrInvalidOrganizationalRole)
+		}
+	}
+	return nil
+}
+
+func systemRoleForSalesRole(level int) authmodel.Role {
+	if level == 4 {
+		return authmodel.RoleSalesExecutive
+	}
+	return authmodel.RoleSalesManager
 }
 
 func (s *Service) validateManagerRule(role authmodel.Role, managerID *uuid.UUID) error {

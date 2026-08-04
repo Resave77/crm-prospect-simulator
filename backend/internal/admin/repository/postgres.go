@@ -26,24 +26,23 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 const listColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
-	COALESCE(sr.name, CASE WHEN u.role::text = 'SUPER_ADMIN' THEN 'Super Admin' ELSE '' END), sr.level,
+	sr.id, sr.name, sr.level, sr.landing_page, sr.permission_count, sr.is_active, COALESCE(sr.description, ''),
 	u.created_at, u.updated_at`
 
 const detailColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
+	sr.id, sr.name, sr.level, sr.landing_page, sr.permission_count, sr.is_active, COALESCE(sr.description, ''),
 	u.created_by, u.updated_by,
 	u.created_at, u.updated_at`
 
 const userJoin = `FROM users u LEFT JOIN users m ON m.id = u.manager_id
 	LEFT JOIN LATERAL (
-		SELECT r.name, r.level
-		FROM sales_structure_assignments a
-		JOIN sales_roles r ON r.id = a.sales_role_id
-		WHERE a.user_id = u.id
-		  AND a.effective_from <= CURRENT_DATE
-		  AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
-		ORDER BY a.effective_from DESC
+		SELECT r.id, r.name, r.level, r.landing_page, COUNT(rp.permission_id)::int AS permission_count, r.is_active, r.description
+		FROM sales_roles r
+		LEFT JOIN role_permissions rp ON rp.sales_role_id = r.id
+		WHERE r.id = u.sales_role_id
+		GROUP BY r.id
 		LIMIT 1
 	) sr ON true`
 
@@ -151,11 +150,11 @@ func (r *PostgresRepository) FindUserDetail(ctx context.Context, id uuid.UUID) (
 func (r *PostgresRepository) CreateUser(ctx context.Context, id uuid.UUID, input model.CreateUserInput, passwordHash string, actorID uuid.UUID) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, role, status,
-		                   must_change_password, manager_id, created_by, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', true, $8, $9, $9, now())`,
+		                   must_change_password, manager_id, sales_role_id, created_by, updated_by, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', true, $8, $9, $10, $10, now())`,
 		id, strings.ToLower(strings.TrimSpace(input.Email)), passwordHash,
 		strings.TrimSpace(input.FullName), strings.TrimSpace(input.EmployeeID),
-		strings.TrimSpace(input.Phone), input.Role, input.ManagerID, actorID)
+		strings.TrimSpace(input.Phone), input.Role, input.ManagerID, input.SalesRoleID, actorID)
 	if err != nil {
 		return mapError(err)
 	}
@@ -186,9 +185,16 @@ func updateSets(input model.UpdateUserInput, actorID uuid.UUID) (string, []any) 
 		add(`employee_id`, strings.TrimSpace(*input.EmployeeID))
 	}
 	if input.Role != nil {
-		sets = append(sets, `role = $`+itoa(idx)+`::UserRole`)
+		sets = append(sets, `role = $`+itoa(idx)+`::"UserRole"`)
 		args = append(args, string(*input.Role))
 		idx++
+	}
+	if input.SalesRoleID.Present {
+		if input.SalesRoleID.Value == nil {
+			sets = append(sets, `sales_role_id = NULL`)
+		} else {
+			add(`sales_role_id`, *input.SalesRoleID.Value)
+		}
 	}
 	if input.ManagerID.Present {
 		if input.ManagerID.Value == nil {
@@ -226,10 +232,25 @@ func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, input
 	return nil
 }
 
+func (r *PostgresRepository) SetCurrentSalesAssignment(ctx context.Context, userID uuid.UUID, salesRoleID *uuid.UUID, parentUserID *uuid.UUID, actorID uuid.UUID) error {
+	return nil
+}
+
 func (r *PostgresRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status authmodel.UserStatus, actorID uuid.UUID) error {
 	command, err := r.pool.Exec(ctx, `
 		UPDATE users SET status = $2, updated_by = $3, updated_at = now() WHERE id = $1`,
 		id, status, actorID)
+	if err != nil {
+		return mapError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	command, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return mapError(err)
 	}
@@ -381,13 +402,19 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	var item model.UserListItem
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var orgRoleID *uuid.UUID
+	var orgRoleName pgtype.Text
 	var orgRoleLevel pgtype.Int2
+	var orgLanding pgtype.Text
+	var orgPermissionCount pgtype.Int4
+	var orgActive pgtype.Bool
+	var orgDescription pgtype.Text
 	var managerID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
-		&item.OrganizationalRole, &orgRoleLevel,
+		&orgRoleID, &orgRoleName, &orgRoleLevel, &orgLanding, &orgPermissionCount, &orgActive, &orgDescription,
 		&item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return model.UserListItem{}, fmt.Errorf("scan user list item: %w", err)
@@ -398,9 +425,8 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	if phone.Valid {
 		item.Phone = phone.String
 	}
-	if orgRoleLevel.Valid {
-		level := int(orgRoleLevel.Int16)
-		item.OrganizationalRoleLevel = &level
+	if orgRoleID != nil {
+		item.OrganizationalRole = orgSummary(*orgRoleID, orgRoleName, orgRoleLevel, orgLanding, orgPermissionCount, orgActive, orgDescription)
 	}
 	item.ManagerID = managerID
 	return item, nil
@@ -410,11 +436,19 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 	var item model.UserDetail
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var orgRoleID *uuid.UUID
+	var orgRoleName pgtype.Text
+	var orgRoleLevel pgtype.Int2
+	var orgLanding pgtype.Text
+	var orgPermissionCount pgtype.Int4
+	var orgActive pgtype.Bool
+	var orgDescription pgtype.Text
 	var managerID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
+		&orgRoleID, &orgRoleName, &orgRoleLevel, &orgLanding, &orgPermissionCount, &orgActive, &orgDescription,
 		&item.CreatedBy, &item.UpdatedBy,
 		&item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -430,7 +464,33 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 		item.Phone = phone.String
 	}
 	item.ManagerID = managerID
+	if orgRoleID != nil {
+		item.OrganizationalRole = orgSummary(*orgRoleID, orgRoleName, orgRoleLevel, orgLanding, orgPermissionCount, orgActive, orgDescription)
+	}
 	return item, nil
+}
+
+func orgSummary(id uuid.UUID, name pgtype.Text, level pgtype.Int2, landing pgtype.Text, permissionCount pgtype.Int4, active pgtype.Bool, description pgtype.Text) *model.OrganizationalRoleSummary {
+	var landingPage *string
+	if landing.Valid {
+		landingPage = &landing.String
+	}
+	summary := &model.OrganizationalRoleSummary{
+		ID:          id,
+		Name:        name.String,
+		LandingPage: landingPage,
+		IsActive:    active.Bool,
+	}
+	if level.Valid {
+		summary.Level = int(level.Int16)
+	}
+	if permissionCount.Valid {
+		summary.PermissionCount = int(permissionCount.Int32)
+	}
+	if description.Valid {
+		summary.Description = description.String
+	}
+	return summary
 }
 
 func (r *PostgresRepository) scanUser(row pgx.Row) (authmodel.User, error) {
@@ -462,8 +522,11 @@ func mapError(err error) error {
 		return nil
 	}
 	var pgError *pgconn.PgError
-	if errors.As(err, &pgError) && pgError.Code == "23505" {
-		return ErrConflict
+	if errors.As(err, &pgError) {
+		switch pgError.Code {
+		case "23505", "23503":
+			return ErrConflict
+		}
 	}
 	return fmt.Errorf("database operation: %w", err)
 }

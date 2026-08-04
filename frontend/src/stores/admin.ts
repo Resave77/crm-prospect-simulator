@@ -6,6 +6,7 @@ import type { ApiErrorEnvelope } from '../types/auth'
 import type {
   AdminCreateUserInput,
   AdminManagerOption,
+  AdminPermission,
   AdminResetPasswordPayload,
   AdminUpdateUserInput,
   AdminUserDetail,
@@ -47,6 +48,10 @@ export const useAdminStore = defineStore('admin', () => {
   const selectedEffectiveMonth = ref(new Date().toISOString().slice(0, 7))
   const savingSalesRole = ref(false)
   const savingSalesAssignment = ref(false)
+  const permissions = ref<AdminPermission[]>([])
+  const permissionsLoading = ref(false)
+  const selectedRoleDetail = ref<SalesRole | null>(null)
+  const roleDetailLoading = ref(false)
 
   async function fetchUsers() {
     loading.value = true
@@ -78,6 +83,12 @@ export const useAdminStore = defineStore('admin', () => {
     if (selectedUser.value?.id === id) selectedUser.value = user
     await fetchUsers()
     return user
+  }
+
+  async function deleteUser(id: string) {
+    await adminApi.deleteUser(id)
+    if (selectedUser.value?.id === id) selectedUser.value = null
+    await fetchUsers()
   }
 
   async function fetchUserById(id: string) {
@@ -128,7 +139,6 @@ export const useAdminStore = defineStore('admin', () => {
   function resetFilters() {
     params.page = 1
     params.search = ''
-    params.role = ''
     params.status = ''
     page.value = 1
   }
@@ -186,6 +196,27 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function fetchPermissions(force = false) {
+    if (permissions.value.length && !force) return
+    permissionsLoading.value = true
+    try {
+      permissions.value = await adminApi.getPermissions()
+    } finally {
+      permissionsLoading.value = false
+    }
+  }
+
+  async function fetchSalesRoleDetail(id: string) {
+    roleDetailLoading.value = true
+    try {
+      const role = await adminApi.getSalesRole(id)
+      selectedRoleDetail.value = role
+      return role
+    } finally {
+      roleDetailLoading.value = false
+    }
+  }
+
   async function fetchSalesStructure(effectiveDate: string) {
     salesStructureLoading.value = true
     try {
@@ -216,11 +247,13 @@ export const useAdminStore = defineStore('admin', () => {
     users, total, page, limit, pages, loading, managerOptions, params,
     selectedUser, detailLoading, saving, resettingPassword,
     salesRoles, salesRolesLoading, salesStructure, salesStructureLoading, selectedEffectiveMonth, savingSalesRole, savingSalesAssignment,
-    fetchUsers, fetchManagers, createUser, updateStatus,
+    permissions, permissionsLoading, selectedRoleDetail, roleDetailLoading,
+    fetchUsers, fetchManagers, createUser, updateStatus, deleteUser,
     fetchUserById, updateUser, clearSelectedUser, resetPassword,
     setParam, setPage, resetFilters,
     fetchSalesRoles, createSalesRole, updateSalesRole, setSalesRoleStatus, deleteSalesRole,
     fetchSalesStructure, createSalesAssignment, errorMessage,
+    fetchPermissions, fetchSalesRoleDetail,
   }
 })
 

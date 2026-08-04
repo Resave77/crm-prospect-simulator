@@ -40,7 +40,9 @@ model User {
   lastLoginAt     DateTime?        @map("last_login_at") @db.Timestamptz(6)
   mustChangePassword Boolean       @default(false) @map("must_change_password")
   managerId       String?          @map("manager_id") @db.Uuid
+  salesRoleId     String?          @map("sales_role_id") @db.Uuid
   manager         User?            @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  salesRole       SalesRole?       @relation("UserSalesRole", fields: [salesRoleId], references: [id], onDelete: SetNull)
   subordinates    User[]           @relation("UserManager")
   createdBy       String?          @map("created_by") @db.Uuid
   createdByUser   User?            @relation("UserCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
@@ -58,6 +60,7 @@ model User {
   prospectVisits ProspectVisit[]             @relation("ProspectVisitSalesExecutive")
   prospectComments ProspectComment[]        @relation("ProspectCommentUser")
 
+  @@index([salesRoleId])
   @@map("users")
 }
 
@@ -261,11 +264,14 @@ model SalesRole {
   level       Int      @db.SmallInt
   description String?
   isActive   Boolean  @default(true) @map("is_active")
+  landingPage String?  @map("landing_page")
   createdBy  String?  @map("created_by") @db.Uuid
   updatedBy  String?  @map("updated_by") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  accountUsers User[] @relation("UserSalesRole")
   assignments SalesStructureAssignment[]
+  rolePermissions RolePermission[]
 
   @@index([level])
   @@map("sales_roles")
@@ -289,4 +295,36 @@ model SalesStructureAssignment {
   @@index([effectiveFrom])
   @@index([effectiveTo])
   @@map("sales_structure_assignments")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(255)
+  name        String   @db.VarChar(255)
+  description String?
+  groupKey    String   @map("group_key") @db.VarChar(255)
+  parentKey   String?  @map("parent_key") @db.VarChar(255)
+  nodeType    String   @map("node_type") @db.VarChar(32)
+  routePath   String?  @map("route_path") @db.VarChar(255)
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rolePermissions RolePermission[]
+
+  @@index([groupKey, sortOrder])
+  @@index([parentKey])
+  @@map("permissions")
+}
+
+model RolePermission {
+  salesRoleId  String     @map("sales_role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  salesRole    SalesRole  @relation(fields: [salesRoleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([salesRoleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
 }

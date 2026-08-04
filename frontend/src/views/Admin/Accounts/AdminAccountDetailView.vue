@@ -9,10 +9,8 @@ import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 import { useAdminStore } from '../../../stores/admin'
 import { useAuthStore } from '../../../stores/auth'
-import ResetPasswordDialog from '../../../components/admin/ResetPasswordDialog.vue'
 import type { ApiErrorEnvelope } from '../../../types/auth'
 import type { AdminUserStatus } from '../../../types/admin'
-import { adminRoleLabel, adminRoleSeverity, adminScopeSummary } from '../../../utils/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,16 +22,32 @@ const notFound = ref(false)
 const updating = ref(false)
 const statusDialogVisible = ref(false)
 const statusTarget = ref<{ status: AdminUserStatus; label: string } | null>(null)
-const resetDialogVisible = ref(false)
+const deleteDialogVisible = ref(false)
 
 const id = computed(() => String(route.params.id))
 const user = computed(() => (store.selectedUser?.id === id.value ? store.selectedUser : null))
 const isSelf = computed(() => user.value?.id === auth.user?.id)
-const scope = computed(() => adminScopeSummary(user.value?.role ?? ''))
+const isProtectedSuperAdmin = computed(() => user.value?.email === 'admin@yummy.test' || user.value?.fullName === 'Yummy Super Admin')
+const organizationalRole = computed(() => user.value?.organizationalRole ?? null)
 
 function isNotFoundError(e: unknown) {
   return axios.isAxiosError<ApiErrorEnvelope>(e)
     && (e.response?.status === 404 || e.response?.data?.error?.code === 'USER_NOT_FOUND')
+}
+
+async function executeDelete() {
+  if (!user.value) return
+  updating.value = true
+  error.value = ''
+  try {
+    await store.deleteUser(id.value)
+    deleteDialogVisible.value = false
+    await router.push('/admin/accounts')
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    updating.value = false
+  }
 }
 
 async function load() {
@@ -50,6 +64,11 @@ async function load() {
 function formatDateTime(dateStr: string) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function landingLabel(path?: string | null) {
+  if (!path) return '—'
+  return path.split('/').filter(Boolean).map((part) => part.replace(/-/g, ' ')).join(' / ') || path
 }
 
 function confirmStatus(status: AdminUserStatus) {
@@ -112,8 +131,8 @@ onMounted(() => { load() })
             </div>
           </div>
           <div class="page-heading-actions">
-            <Button label="Reset Password" icon="pi pi-key" severity="secondary" outlined size="small" @click="resetDialogVisible = true" />
             <Button label="Edit Account" icon="pi pi-pencil" size="small" @click="router.push(`/admin/accounts/${id}/edit`)" />
+            <Button label="Delete" icon="pi pi-trash" severity="danger" outlined size="small" :disabled="isSelf || isProtectedSuperAdmin || updating" @click="deleteDialogVisible = true" />
           </div>
         </header>
 
@@ -149,36 +168,59 @@ onMounted(() => { load() })
               </div>
             </div>
 
-            <!-- ROLE & REPORTING -->
+          </div>
+
+            <!-- ROLE -->
             <div class="detail-card">
               <div class="detail-card-header">
-                <div class="detail-card-icon si-violet"><i class="pi pi-lock" /></div>
+                <div class="detail-card-icon si-violet"><i class="pi pi-sitemap" /></div>
                 <div>
-                  <h3>Role &amp; Reporting</h3>
-                  <p>Role, reporting line and access scope.</p>
+                  <h3>Role</h3>
+                  <p>Current account role from Role Management.</p>
                 </div>
               </div>
               <div class="detail-rows">
                 <div class="detail-row">
-                  <span class="detail-label">Role</span>
-                  <span class="detail-value"><Tag :value="adminRoleLabel(user.role)" :severity="adminRoleSeverity(user.role)" /></span>
+                  <span class="detail-label">Role Name</span>
+                  <span class="detail-value">{{ organizationalRole?.name || '—' }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Manager</span>
-                  <span class="detail-value">{{ user.managerName || '—' }}</span>
+                  <span class="detail-label">Level</span>
+                  <span class="detail-value">{{ organizationalRole ? `Level ${organizationalRole.level}` : '—' }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Access Scope</span>
-                  <span class="detail-value scope-summary">
-                    <span class="scope-title">{{ scope.title }}</span>
-                    <ul>
-                      <li v-for="(s, idx) in scope.scopes" :key="idx"><i class="pi pi-check-circle" /> {{ s }}</li>
-                    </ul>
+                  <span class="detail-label">Landing Page</span>
+                  <span class="detail-value">{{ landingLabel(organizationalRole?.landingPage) }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Permission Count</span>
+                  <span class="detail-value">{{ organizationalRole?.permissionCount ?? 0 }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Description</span>
+                  <span class="detail-value">
+                    {{ organizationalRole?.description || '—' }}
                   </span>
                 </div>
               </div>
             </div>
-          </div>
+
+            <!-- REPORTING STRUCTURE -->
+            <div class="detail-card">
+              <div class="detail-card-header">
+                <div class="detail-card-icon si-green"><i class="pi pi-users" /></div>
+                <div>
+                  <h3>Reporting Structure</h3>
+                  <p>Current direct manager.</p>
+                </div>
+              </div>
+              <div class="detail-rows">
+                <div class="detail-row">
+                  <span class="detail-label">Reports To</span>
+                  <span class="detail-value">{{ user.managerName || '—' }}</span>
+                </div>
+              </div>
+            </div>
 
           <div class="detail-stack">
             <!-- SECURITY -->
@@ -212,8 +254,8 @@ onMounted(() => { load() })
                   severity="danger"
                   outlined
                   size="small"
-                  :disabled="isSelf || updating"
-                  :title="isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'"
+                  :disabled="isSelf || isProtectedSuperAdmin || updating"
+                  :title="isProtectedSuperAdmin ? 'Yummy Super Admin is protected' : isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'"
                   @click="confirmStatus('INACTIVE')"
                 />
                 <Button
@@ -287,8 +329,13 @@ onMounted(() => { load() })
           </template>
         </Dialog>
 
-        <!-- RESET PASSWORD DIALOG -->
-        <ResetPasswordDialog v-model:visible="resetDialogVisible" :user="user" />
+        <Dialog v-model:visible="deleteDialogVisible" header="Delete Account" modal :style="{ width: '400px' }">
+          <p>Delete <strong>{{ user?.fullName }}</strong>? This will fail if the account is still referenced by existing records.</p>
+          <template #footer>
+            <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="updating" />
+            <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="updating" @click="executeDelete" />
+          </template>
+        </Dialog>
       </template>
     </template>
   </section>

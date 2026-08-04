@@ -98,6 +98,12 @@ func (r *adminRepoStub) FindUserByID(_ context.Context, _ uuid.UUID) (authmodel.
 func (r *adminRepoStub) ResetPassword(_ context.Context, _, _ uuid.UUID, _ string) (int64, error) {
 	return 0, nil
 }
+func (r *adminRepoStub) SetCurrentSalesAssignment(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ *uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+func (r *adminRepoStub) DeleteUser(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 
 func buildTestApp(user authmodel.User) (*fiber.App, string) {
 	return buildTestAppWithAdmin(user, adminservice.New(&adminRepoStub{}))
@@ -248,6 +254,12 @@ func (r *patchAdminRepo) FindUserByID(_ context.Context, _ uuid.UUID) (authmodel
 }
 func (r *patchAdminRepo) ResetPassword(_ context.Context, _, _ uuid.UUID, _ string) (int64, error) {
 	return 0, nil
+}
+func (r *patchAdminRepo) SetCurrentSalesAssignment(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ *uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+func (r *patchAdminRepo) DeleteUser(_ context.Context, _ uuid.UUID) error {
+	return nil
 }
 
 type resetAdminRepo struct {

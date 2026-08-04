@@ -11,7 +11,6 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import { useAdminStore } from '../../../stores/admin'
 import { useAuthStore } from '../../../stores/auth'
-import ResetPasswordDialog from '../../../components/admin/ResetPasswordDialog.vue'
 import type { AdminUserListItem } from '../../../types/admin'
 
 const store = useAdminStore()
@@ -22,27 +21,14 @@ const updating = ref(false)
 const first = ref(0)
 const deactivateDialogVisible = ref(false)
 const deactivateTarget = ref<{ id: string; name: string } | null>(null)
-const resetDialogVisible = ref(false)
-const resetPasswordTarget = ref<AdminUserListItem | null>(null)
-
-const roleOptions = [
-  { label: 'All Roles', value: '' },
-  { label: 'Super Admin', value: 'SUPER_ADMIN' },
-  { label: 'Administrator', value: 'ADMINISTRATOR' },
-  { label: 'Sales Manager', value: 'SALES_MANAGER' },
-  { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
-]
+const deleteDialogVisible = ref(false)
+const deleteTarget = ref<AdminUserListItem | null>(null)
 
 const statusOptions = [
   { label: 'All Status', value: '' },
   { label: 'Active', value: 'ACTIVE' },
   { label: 'Inactive', value: 'INACTIVE' },
 ]
-
-const selectedRole = computed({
-  get: () => store.params.role,
-  set: (val) => { store.setParam('role', val); store.setParam('page', 1); first.value = 0; load() },
-})
 
 const selectedStatus = computed({
   get: () => store.params.status,
@@ -82,51 +68,40 @@ function onPage(event: { first: number; rows: number; page: number }) {
   load()
 }
 
-function roleLabel(role: string) {
-  switch (role) {
-    case 'SUPER_ADMIN': return 'Super Admin'
-    case 'ADMINISTRATOR': return 'Administrator'
-    case 'SALES_MANAGER': return 'Sales Manager'
-    default: return 'Sales Executive'
-  }
-}
-
-function roleSeverity(role: string) {
-  switch (role) {
-    case 'SUPER_ADMIN': return 'info'
-    case 'ADMINISTRATOR': return 'warn'
-    case 'SALES_MANAGER': return 'info'
-    default: return 'success'
-  }
-}
-
 const isSelf = (id: string) => id === auth.user?.id
+const isProtectedSuperAdmin = (user: AdminUserListItem) => user.email === 'admin@yummy.test' || user.fullName === 'Yummy Super Admin'
 
 function fallback(value?: string | null) {
   return value?.trim() || '-'
 }
 
 function organizationalRoleLabel(user: AdminUserListItem) {
-  if (user.role === 'SUPER_ADMIN') return 'Super Admin'
-  return fallback(user.organizationalRole)
+  return fallback(user.organizationalRole?.name)
 }
 
-function teamLabel(user: AdminUserListItem & Record<string, unknown>) {
-  return fallback(String(user.teamName || user.managerName || user.parentName || user.regionName || ''))
+function organizationalRoleMeta(user: AdminUserListItem) {
+  const role = user.organizationalRole
+  if (!role) return 'No organizational role'
+  return `${role.permissionCount ?? 0} permissions`
 }
 
 function reportsToLabel(user: AdminUserListItem & Record<string, unknown>) {
   return fallback(String(user.parentName || user.managerName || user.reportsToName || ''))
 }
 
-function openResetPassword(user: AdminUserListItem) {
-  resetPasswordTarget.value = user
-  resetDialogVisible.value = true
+function updatedLabel(value: string) {
+  if (!value) return '-'
+  return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function confirmDeactivate(user: AdminUserListItem) {
   deactivateTarget.value = { id: user.id, name: user.fullName }
   deactivateDialogVisible.value = true
+}
+
+function confirmDelete(user: AdminUserListItem) {
+  deleteTarget.value = user
+  deleteDialogVisible.value = true
 }
 
 async function executeDeactivate() {
@@ -136,6 +111,21 @@ async function executeDeactivate() {
   try {
     await store.updateStatus(deactivateTarget.value.id, 'INACTIVE')
     deactivateDialogVisible.value = false
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    updating.value = false
+  }
+}
+
+async function executeDelete() {
+  if (!deleteTarget.value) return
+  updating.value = true
+  error.value = ''
+  try {
+    await store.deleteUser(deleteTarget.value.id)
+    deleteDialogVisible.value = false
+    deleteTarget.value = null
   } catch (e) {
     error.value = store.errorMessage(e)
   } finally {
@@ -165,7 +155,6 @@ onMounted(() => { load() })
       <div class="page-title-wrapper">
         <span class="eyebrow">Account Management</span>
         <h1>Account List</h1>
-        <p class="muted">Manage user accounts, roles, and activation status for the CRM system.</p>
       </div>
       <div class="page-heading-actions">
         <Button label="Create Account" icon="pi pi-plus" size="small" @click="router.push('/admin/accounts/create')" />
@@ -190,10 +179,6 @@ onMounted(() => { load() })
       </div>
 
       <div class="filter-grid">
-        <div class="filter-field">
-          <label>Role</label>
-          <Select v-model="selectedRole" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="All Roles" />
-        </div>
         <div class="filter-field">
           <label>Status</label>
           <Select v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All Status" />
@@ -233,7 +218,7 @@ onMounted(() => { load() })
           </div>
         </template>
 
-        <Column header="Employee" :style="{ minWidth: '250px' }">
+        <Column header="Employee" :style="{ width: '30%' }">
           <template #body="{ data }">
             <div class="employee-cell">
               <code class="employee-id">{{ data.employeeId || '-' }}</code>
@@ -245,52 +230,47 @@ onMounted(() => { load() })
             </div>
           </template>
         </Column>
-        <Column header="System Role" :style="{ minWidth: '150px' }">
+        <Column header="Role" :style="{ width: '26%' }">
           <template #body="{ data }">
-            <span class="cell-text">{{ roleLabel(data.role) }}</span>
+            <div class="cell-stack">
+              <span class="cell-primary">{{ organizationalRoleLabel(data) }}</span>
+              <span class="cell-muted">Level {{ data.organizationalRole?.level ?? '-' }} · {{ organizationalRoleMeta(data) }}</span>
+            </div>
           </template>
         </Column>
-        <Column header="Team" :style="{ minWidth: '170px' }">
-          <template #body="{ data }">
-            <span class="cell-text">{{ teamLabel(data) }}</span>
-          </template>
-        </Column>
-        <Column header="Organizational Role" :style="{ minWidth: '170px' }">
-          <template #body="{ data }">
-            <Tag :value="organizationalRoleLabel(data)" :severity="roleSeverity(data.role)" class="soft-tag" />
-          </template>
-        </Column> 
-        <Column header="Reports To" :style="{ minWidth: '160px' }">
+        <Column header="Reports To" :style="{ width: '16%' }" class="optional-column">
           <template #body="{ data }">
             <span class="cell-text">{{ reportsToLabel(data) }}</span>
           </template>
         </Column>
-        <Column header="Status" :style="{ width: '110px' }">
+        <Column header="Status" :style="{ width: '10%' }">
           <template #body="{ data }">
             <Tag :value="data.status === 'ACTIVE' ? 'Active' : 'Inactive'" :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" size="small" class="soft-tag" />
           </template>
         </Column>
-        <Column header="Actions" :style="{ width: '190px' }">
+        <Column header="Updated" :style="{ width: '10%' }" class="optional-column">
+          <template #body="{ data }">
+            <span class="cell-text">{{ updatedLabel(data.updatedAt) }}</span>
+          </template>
+        </Column>
+        <Column header="Actions" :style="{ width: '8%' }">
           <template #body="{ data }">
             <div class="row-actions">
               <Button icon="pi pi-eye" text rounded size="small" title="View account" @click="router.push(`/admin/accounts/${data.id}`)" />
               <Button icon="pi pi-pencil" text rounded size="small" title="Edit account" @click="router.push(`/admin/accounts/${data.id}/edit`)" />
-              <Button icon="pi pi-key" text rounded size="small" title="Reset password" @click="openResetPassword(data)" />
               <Button
                 v-if="data.status === 'ACTIVE'"
-                label="Deactivate"
                 icon="pi pi-user-minus"
                 text
                 rounded
                 size="small"
                 class="act-delete"
-                :disabled="isSelf(data.id) || updating"
-                :title="isSelf(data.id) ? 'You cannot deactivate your own account' : 'Deactivate account'"
+                :disabled="isSelf(data.id) || isProtectedSuperAdmin(data) || updating"
+                :title="isProtectedSuperAdmin(data) ? 'Yummy Super Admin is protected' : isSelf(data.id) ? 'You cannot deactivate your own account' : 'Deactivate account'"
                 @click="confirmDeactivate(data)"
               />
               <Button
                 v-else
-                label="Activate"
                 icon="pi pi-user-plus"
                 text
                 rounded
@@ -300,6 +280,7 @@ onMounted(() => { load() })
                 title="Activate account"
                 @click="activate(data.id)"
               />
+              <Button icon="pi pi-trash" text rounded size="small" class="act-delete" :disabled="isSelf(data.id) || isProtectedSuperAdmin(data) || updating" title="Delete account" @click="confirmDelete(data)" />
             </div>
           </template>
         </Column>
@@ -315,8 +296,13 @@ onMounted(() => { load() })
       </template>
     </Dialog>
 
-    <!-- RESET PASSWORD DIALOG -->
-    <ResetPasswordDialog v-model:visible="resetDialogVisible" :user="resetPasswordTarget" />
+    <Dialog v-model:visible="deleteDialogVisible" header="Delete Account" modal :style="{ width: '400px' }">
+      <p>Delete <strong>{{ deleteTarget?.fullName }}</strong>? This will fail if the account is still referenced by existing records.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="updating" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="updating" @click="executeDelete" />
+      </template>
+    </Dialog>
   </section>
 </template>
 
@@ -470,6 +456,8 @@ onMounted(() => { load() })
 }
 .table-panel :deep(.p-datatable-table) {
   background: #ffffff;
+  table-layout: fixed;
+  width: 100%;
 }
 .table-panel :deep(.p-datatable-thead > tr > th) {
   background: #f8fafc;
@@ -611,6 +599,7 @@ onMounted(() => { load() })
 .row-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.05rem;
   white-space: nowrap;
 }
@@ -638,11 +627,14 @@ onMounted(() => { load() })
 /* ── RESPONSIVE ───────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .filter-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr auto;
   }
   .filter-action {
     grid-column: 1 / -1;
     justify-content: flex-end;
+  }
+  .table-panel :deep(.optional-column) {
+    display: none;
   }
 }
 @media (max-width: 768px) {
@@ -659,7 +651,29 @@ onMounted(() => { load() })
     justify-content: flex-end;
   }
   .filter-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+  .table-panel :deep(.p-datatable-thead) {
+    display: none;
+  }
+  .table-panel :deep(.p-datatable-table),
+  .table-panel :deep(.p-datatable-tbody),
+  .table-panel :deep(.p-datatable-tbody > tr),
+  .table-panel :deep(.p-datatable-tbody > tr > td) {
+    display: block;
+    width: 100%;
+  }
+  .table-panel :deep(.p-datatable-tbody > tr) {
+    border-bottom: 1px solid #edf1f6;
+    padding: 0.7rem;
+  }
+  .table-panel :deep(.p-datatable-tbody > tr > td) {
+    border: 0;
+    padding: 0.35rem 0;
+  }
+  .row-actions {
+    justify-content: flex-start;
+    padding-top: 0.25rem;
   }
 }
 @media (max-width: 480px) {
