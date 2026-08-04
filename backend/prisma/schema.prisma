@@ -125,6 +125,8 @@ model ProspectVisit {
   selfieReference          String    @default("") @map("selfie_reference")
   visitNotes               String    @default("") @map("visit_notes")
   followUpNotes            String    @default("") @map("follow_up_notes")
+  visitResult              String    @default("") @map("visit_result")
+  visitOutcome             String    @default("") @map("visit_outcome")
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   prospect                 Prospect  @relation(fields: [prospectId], references: [id], onDelete: Restrict)

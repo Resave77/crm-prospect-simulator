@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -102,6 +102,10 @@ export async function getAdminVisits(filters: VisitMonitoringFilters) {
   if (filters.customerName) params.customerName = filters.customerName
   if (filters.radiusStatus && filters.radiusStatus !== 'ALL') params.radiusStatus = filters.radiusStatus
   return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/admin/visits', { params })).data.data
+}
+
+export async function getAdminReport(params: { dateFrom: string; dateTo: string; salesExecutiveId: string; territory: string }) {
+  return (await api.get<ApiEnvelope<AdminReport>>('/admin/reports', { params })).data.data
 }
 
 export async function getProspectVisits(prospectId: string) {

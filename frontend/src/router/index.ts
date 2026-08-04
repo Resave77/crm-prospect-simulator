@@ -46,7 +46,7 @@ const router = createRouter({
         { path: 'customer-assignment', name: 'AdminCustomerAssignment', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Customer Assignment', description: 'Customer assignment workflow is deferred; converted customers retain their selected Sales Executive.' } },
         { path: 'visit-monitoring', name: 'AdminVisitMonitoring', component: () => import('../views/Admin/Visit/VisitMonitoringView.vue') },
         { path: 'prospect-assignment', name: 'AdminProspectAssignment', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Prospect Assignment', description: 'Assignment is available while saving a Place in Prospect Finder; bulk reassignment is deferred.' } },
-        { path: 'reports', name: 'AdminReports', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Reports', description: 'Operational reporting is deferred until visit and attendance data exists.' } },
+        { path: 'reports', name: 'AdminReports', component: () => import('../views/Admin/Reports/ReportsAnalyticsView.vue') },
       ],
     },
     {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
@@ -231,6 +233,118 @@ func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter p
 		return nil, ErrForbidden
 	}
 	return s.repository.ListVisitMonitoring(ctx, filter)
+}
+
+func (s *Service) Report(ctx context.Context, actor Actor, filter prospectmodel.ReportFilter) (prospectmodel.Report, error) {
+	if !actor.Role.IsAdminRole() {
+		return prospectmodel.Report{}, ErrForbidden
+	}
+	from, fromErr := time.Parse("2006-01-02", filter.DateFrom)
+	to, toErr := time.Parse("2006-01-02", filter.DateTo)
+	if fromErr != nil || toErr != nil || to.Before(from) {
+		return prospectmodel.Report{}, ErrFinderInput
+	}
+	visits, err := s.repository.ListVisitMonitoring(ctx, prospectmodel.VisitMonitoringFilter{DateFrom: filter.DateFrom, DateTo: filter.DateTo, SalesExecutiveID: filter.SalesExecutiveID})
+	if err != nil {
+		return prospectmodel.Report{}, err
+	}
+	prospects, err := s.repository.ListAll(ctx)
+	if err != nil {
+		return prospectmodel.Report{}, err
+	}
+	to = to.Add(24*time.Hour - time.Nanosecond)
+	territoryOf := func(address string) string {
+		parts := strings.Split(address, ",")
+		if len(parts) > 1 {
+			return strings.TrimSpace(parts[len(parts)-2])
+		}
+		return "Unspecified"
+	}
+	territorySet := map[string]bool{}
+	filtered := make([]prospectmodel.VisitMonitoringItem, 0, len(visits))
+	for _, v := range visits {
+		territory := territoryOf(v.FormattedAddress)
+		territorySet[territory] = true
+		if filter.Territory == "" || filter.Territory == territory {
+			filtered = append(filtered, v)
+		}
+	}
+	report := prospectmodel.Report{Trends: []prospectmodel.ReportTrend{}, Stages: []prospectmodel.ReportStage{}, Performance: []prospectmodel.SalesPerformance{}, Territories: []string{}}
+	for t := range territorySet {
+		report.Territories = append(report.Territories, t)
+	}
+	sort.Strings(report.Territories)
+	perf := map[string]*prospectmodel.SalesPerformance{}
+	visited := map[string]bool{}
+	for _, v := range filtered {
+		report.KPI.TotalVisits++
+		if v.RadiusStatus == "INSIDE" {
+			report.KPI.WithinRadius++
+		} else if v.RadiusStatus == "OUTSIDE" {
+			report.KPI.OutsideRadius++
+		}
+		id := v.SalesExecutiveID.String()
+		row := perf[id]
+		if row == nil {
+			row = &prospectmodel.SalesPerformance{SalesExecutiveID: id, SalesExecutiveName: v.SalesExecutiveName, Territory: territoryOf(v.FormattedAddress)}
+			perf[id] = row
+		}
+		row.Visits++
+		if v.RadiusStatus == "INSIDE" {
+			row.WithinRadius++
+		}
+		visited[v.ProspectID.String()] = true
+	}
+	stageCounts := map[prospectmodel.Status]int{}
+	wonBySales := map[string]int{}
+	for _, p := range prospects {
+		stageCounts[p.Status]++
+		if p.Status == prospectmodel.StatusWon && !p.UpdatedAt.Before(from) && !p.UpdatedAt.After(to) && (filter.SalesExecutiveID == "" || p.AssignedSalesExecutiveID.String() == filter.SalesExecutiveID) {
+			report.KPI.WonProspects++
+			wonBySales[p.AssignedSalesExecutiveID.String()]++
+		}
+	}
+	labels := []struct {
+		name  string
+		count int
+	}{{"Discovered", len(prospects)}, {"Saved", len(prospects) - stageCounts[prospectmodel.StatusLost]}, {"Assigned", len(prospects) - stageCounts[prospectmodel.StatusLost]}, {"Visited", len(visited)}, {"Won", report.KPI.WonProspects}}
+	for _, v := range labels {
+		report.Stages = append(report.Stages, prospectmodel.ReportStage{Label: v.name, Count: v.count})
+	}
+	weeks := 1
+	if !from.IsZero() && !to.IsZero() {
+		weeks = int(to.Sub(from).Hours()/24/7) + 1
+	}
+	if weeks > 12 {
+		weeks = 12
+	}
+	for i := 0; i < weeks; i++ {
+		report.Trends = append(report.Trends, prospectmodel.ReportTrend{Label: fmt.Sprintf("W%d", i+1)})
+	}
+	for _, v := range filtered {
+		idx := int(v.CheckInAt.Sub(from).Hours() / 24 / 7)
+		if idx < 0 {
+			continue
+		}
+		if idx >= weeks {
+			idx = weeks - 1
+		}
+		if v.RadiusStatus == "INSIDE" {
+			report.Trends[idx].WithinRadius++
+		} else if v.RadiusStatus == "OUTSIDE" {
+			report.Trends[idx].OutsideRadius++
+		}
+	}
+	for id, row := range perf {
+		row.ProspectsWon = wonBySales[id]
+		if row.Visits > 0 {
+			row.Conversion = float64(row.ProspectsWon) / float64(row.Visits) * 100
+			row.Performance = int((float64(row.WithinRadius)/float64(row.Visits)*.7 + min(1, float64(row.ProspectsWon)/5)*.3) * 100)
+		}
+		report.Performance = append(report.Performance, *row)
+	}
+	sort.Slice(report.Performance, func(i, j int) bool { return report.Performance[i].Performance > report.Performance[j].Performance })
+	return report, nil
 }
 
 func (s *Service) ListMyVisits(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {

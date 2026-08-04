@@ -274,6 +274,14 @@ func (h *Handler) ListVisitMonitoring(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) Report(c *fiber.Ctx) error {
+	item, err := h.service.Report(c.UserContext(), actor(c), prospectmodel.ReportFilter{DateFrom: c.Query("dateFrom"), DateTo: c.Query("dateTo"), SalesExecutiveID: c.Query("salesExecutiveId"), Territory: c.Query("territory")})
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
+}
+
 func (h *Handler) ListMyVisits(c *fiber.Ctx) error {
 	filter := prospectmodel.VisitMonitoringFilter{
 		DateFrom:     c.Query("dateFrom"),

@@ -344,6 +344,14 @@ export interface VisitMonitoringFilters {
   radiusStatus: string
 }
 
+export interface AdminReport {
+  kpi: { totalVisits: number; withinRadius: number; outsideRadius: number; wonProspects: number }
+  trends: { label: string; withinRadius: number; outsideRadius: number }[]
+  stages: { label: string; count: number }[]
+  performance: { salesExecutiveId: string; salesExecutiveName: string; territory: string; visits: number; withinRadius: number; prospectsWon: number; conversion: number; performance: number }[]
+  territories: string[]
+}
+
 export interface UpdateParentCompanyInput {
   name: string
   termOfPayment: string
