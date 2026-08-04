@@ -226,7 +226,9 @@ type CommentAttachment struct {
 	Name        string    `json:"name"`
 	ContentType string    `json:"contentType"`
 	Size        int64     `json:"size"`
-	Path        string    `json:"-"`
+	// Path is persisted with the comment so attachments can be served later.
+	// Repository responses clear it before returning JSON to clients.
+	Path        string    `json:"path,omitempty"`
 }
 
 type PhotoCategory string

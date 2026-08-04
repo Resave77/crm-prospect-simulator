@@ -126,6 +126,9 @@ func (f *fakeProspectRepository) ListComments(_ context.Context, _ uuid.UUID) ([
 func (f *fakeProspectRepository) CreateComment(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string, _ []prospectmodel.CommentAttachment) (prospectmodel.ProspectComment, error) {
 	return prospectmodel.ProspectComment{}, nil
 }
+func (f *fakeProspectRepository) DeleteComment(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ uuid.UUID) ([]prospectmodel.CommentAttachment, error) {
+	return nil, nil
+}
 func (f *fakeProspectRepository) FindCommentAttachment(_ context.Context, _ uuid.UUID, _ uuid.UUID) (prospectmodel.CommentAttachment, error) {
 	return prospectmodel.CommentAttachment{}, nil
 }

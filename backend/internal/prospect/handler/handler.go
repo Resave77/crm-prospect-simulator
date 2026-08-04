@@ -411,10 +411,14 @@ func (h *Handler) CreateComment(c *fiber.Ctx) error {
 		if len(files) > 5 {
 			return response.Error(c, 422, "TOO_MANY_FILES", "A comment can contain up to 5 files.")
 		}
-		dir, err := filepath.Abs(filepath.Join("private_uploads", "ticketing", id.String()))
+		workingDir, err := os.Getwd()
 		if err != nil {
 			return response.Error(c, 500, "UPLOAD_FAILED", "Unable to prepare attachment storage.")
 		}
+		if filepath.Base(workingDir) != "backend" {
+			workingDir = filepath.Join(workingDir, "backend")
+		}
+		dir := filepath.Join(workingDir, "private_uploads", "ticketing", id.String())
 		if len(files) > 0 {
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return response.Error(c, 500, "UPLOAD_FAILED", "Unable to prepare attachment storage.")
@@ -450,6 +454,10 @@ func (h *Handler) CreateComment(c *fiber.Ctx) error {
 				removeCommentFiles(attachments)
 				return response.Error(c, 500, "UPLOAD_FAILED", "Unable to save attachment.")
 			}
+			if _, err := os.Stat(path); err != nil {
+				removeCommentFiles(attachments)
+				return response.Error(c, 500, "UPLOAD_FAILED", "Attachment was not persisted.")
+			}
 			attachments = append(attachments, prospectmodel.CommentAttachment{ID: attachmentID, Name: filepath.Base(file.Filename), ContentType: contentType, Size: file.Size, Path: filepath.ToSlash(path)})
 		}
 	}
@@ -459,6 +467,23 @@ func (h *Handler) CreateComment(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusCreated, item)
+}
+
+func (h *Handler) DeleteComment(c *fiber.Ctx) error {
+	prospectID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	commentID, err := uuid.Parse(c.Params("commentId"))
+	if err != nil {
+		return response.Error(c, 400, "COMMENT_ID_INVALID", "Comment ID is invalid.")
+	}
+	attachments, err := h.service.DeleteComment(c.UserContext(), actor(c), prospectID, commentID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	removeCommentFiles(attachments)
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
 func (h *Handler) CommentAttachment(c *fiber.Ctx) error {
@@ -474,7 +499,16 @@ func (h *Handler) CommentAttachment(c *fiber.Ctx) error {
 	if err != nil {
 		return writeError(c, err)
 	}
-	data, err := os.ReadFile(item.Path)
+	path := item.Path
+	if !filepath.IsAbs(path) {
+		for _, candidate := range []string{path, filepath.Join("backend", path)} {
+			if _, statErr := os.Stat(candidate); statErr == nil {
+				path = candidate
+				break
+			}
+		}
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return response.Error(c, fiber.StatusNotFound, "ATTACHMENT_NOT_FOUND", "The attachment file is no longer available.")

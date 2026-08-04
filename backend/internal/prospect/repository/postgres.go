@@ -568,6 +568,9 @@ func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.U
 		if item.Attachments, err = decodeAttachments(raw); err != nil {
 			return nil, fmt.Errorf("decode comment attachments: %w", err)
 		}
+		for i := range item.Attachments {
+			item.Attachments[i].Path = ""
+		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -595,26 +598,58 @@ func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, user
 		return model.ProspectComment{}, fmt.Errorf("read created comment: %w", err)
 	}
 	item.Attachments, err = decodeAttachments(raw)
+	for i := range item.Attachments {
+		item.Attachments[i].Path = ""
+	}
 	return item, err
 }
 
-func (r *PostgresRepository) FindCommentAttachment(ctx context.Context, prospectID, attachmentID uuid.UUID) (model.CommentAttachment, error) {
-	var raw []byte
-	err := r.pool.QueryRow(ctx, `SELECT attachments FROM prospect_comments WHERE prospect_id=$1 AND attachments @> $2::jsonb LIMIT 1`, prospectID, fmt.Sprintf(`[{"id":"%s"}]`, attachmentID)).Scan(&raw)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return model.CommentAttachment{}, ErrNotFound
+func (r *PostgresRepository) DeleteComment(ctx context.Context, prospectID, commentID, userID uuid.UUID) ([]model.CommentAttachment, error) {
+	query := `DELETE FROM prospect_comments WHERE id=$1 AND prospect_id=$2`
+	args := []any{commentID, prospectID}
+	if userID != uuid.Nil {
+		query += ` AND user_id=$3`
+		args = append(args, userID)
 	}
-	if err != nil {
-		return model.CommentAttachment{}, fmt.Errorf("find comment attachment: %w", err)
+	query += ` RETURNING attachments`
+
+	var raw []byte
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("delete prospect comment: %w", err)
 	}
 	items, err := decodeAttachments(raw)
 	if err != nil {
-		return model.CommentAttachment{}, err
+		return nil, fmt.Errorf("decode deleted comment attachments: %w", err)
 	}
-	for _, item := range items {
-		if item.ID == attachmentID {
-			return item, nil
+	return items, nil
+}
+
+func (r *PostgresRepository) FindCommentAttachment(ctx context.Context, prospectID, attachmentID uuid.UUID) (model.CommentAttachment, error) {
+	rows, err := r.pool.Query(ctx, `SELECT attachments FROM prospect_comments WHERE prospect_id=$1 ORDER BY created_at DESC`, prospectID)
+	if err != nil {
+		return model.CommentAttachment{}, fmt.Errorf("find comment attachment: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return model.CommentAttachment{}, fmt.Errorf("scan comment attachment: %w", err)
 		}
+		items, err := decodeAttachments(raw)
+		if err != nil {
+			return model.CommentAttachment{}, err
+		}
+		for _, item := range items {
+			if item.ID == attachmentID {
+				return item, nil
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return model.CommentAttachment{}, fmt.Errorf("read comment attachments: %w", err)
 	}
 	return model.CommentAttachment{}, ErrNotFound
 }

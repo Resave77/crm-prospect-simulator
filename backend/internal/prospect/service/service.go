@@ -429,6 +429,17 @@ func (s *Service) CreateComment(ctx context.Context, actor Actor, prospectID uui
 	return s.repository.CreateComment(ctx, prospectID, actor.UserID, content, attachments)
 }
 
+func (s *Service) DeleteComment(ctx context.Context, actor Actor, prospectID, commentID uuid.UUID) ([]prospectmodel.CommentAttachment, error) {
+	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
+		return nil, err
+	}
+	ownerID := actor.UserID
+	if actor.Role.IsAdminRole() {
+		ownerID = uuid.Nil
+	}
+	return s.repository.DeleteComment(ctx, prospectID, commentID, ownerID)
+}
+
 func (s *Service) CommentAttachment(ctx context.Context, actor Actor, prospectID, attachmentID uuid.UUID) (prospectmodel.CommentAttachment, error) {
 	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
 		return prospectmodel.CommentAttachment{}, err
@@ -444,11 +455,11 @@ func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospect
 	if actor.Role != authmodel.RoleSalesExecutive {
 		return ErrForbidden
 	}
-	ownerID, err := s.repository.FindProspectOwner(ctx, prospectID)
+	accessible, err := s.repository.ProspectAccessibleTo(ctx, prospectID, actor.UserID)
 	if err != nil {
 		return err
 	}
-	if ownerID != actor.UserID {
+	if !accessible {
 		return ErrForbidden
 	}
 	return nil

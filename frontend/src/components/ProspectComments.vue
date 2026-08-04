@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getProspectComments, addProspectComment, downloadCommentAttachment, getMentionUsers } from '../api/crm'
+import { getProspectComments, addProspectComment, deleteProspectComment, downloadCommentAttachment, getMentionUsers } from '../api/crm'
 import type { ProspectComment, SalesExecutiveOption } from '../types/crm'
 import type { UserRole } from '../types/auth'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   prospectId: string
   role: UserRole
-}>()
+  embedded?: boolean
+}>(), { embedded: false })
 
 const auth = useAuthStore()
 const comments = ref<ProspectComment[]>([])
@@ -18,10 +19,13 @@ const mentionUsers = ref<SalesExecutiveOption[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const loading = ref(true)
 const sending = ref(false)
+const deletingId = ref<string | null>(null)
 const error = ref('')
 const listRef = ref<HTMLElement | null>(null)
 const open = ref(false)
 const imagePreviews = ref<Record<string, string>>({})
+const unavailableAttachments = ref<Record<string, boolean>>({})
+const imageViewer = ref<{ url: string; name: string } | null>(null)
 const previewImage = ref<{ name: string; url: string } | null>(null)
 let pollId: number | undefined
 
@@ -51,6 +55,10 @@ function isOwnComment(comment: ProspectComment): boolean {
   return comment.userId === auth.user?.id
 }
 
+function canDeleteComment(comment: ProspectComment): boolean {
+  return props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR' || isOwnComment(comment)
+}
+
 async function ensureImagePreviews(items: ProspectComment[]) {
   const images = items.flatMap((comment) => comment.attachments ?? []).filter((file) => file.contentType.startsWith('image/'))
   await Promise.all(images.map(async (file) => {
@@ -58,7 +66,9 @@ async function ensureImagePreviews(items: ProspectComment[]) {
     try {
       const blob = await downloadCommentAttachment(props.prospectId, file.id, props.role)
       imagePreviews.value[file.id] = URL.createObjectURL(blob)
-    } catch { /* the filename remains available when a preview cannot be loaded */ }
+    } catch {
+      unavailableAttachments.value = { ...unavailableAttachments.value, [file.id]: true }
+    }
   }))
 }
 
@@ -115,12 +125,42 @@ function selectFiles(event: Event) {
 }
 
 async function openAttachment(id: string, name: string) {
+  if (unavailableAttachments.value[id]) {
+    error.value = 'This attachment is no longer available. Please upload the photo again.'
+    return
+  }
   try {
     const blob = await downloadCommentAttachment(props.prospectId, id, props.role)
     const url = URL.createObjectURL(blob)
+    if (blob.type.startsWith('image/')) {
+      imageViewer.value = { url, name }
+      return
+    }
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch { error.value = 'Failed to download attachment.' }
+  } catch {
+    unavailableAttachments.value = { ...unavailableAttachments.value, [id]: true }
+    error.value = 'This attachment is no longer available. Please upload the photo again.'
+  }
+}
+
+async function deleteComment(comment: ProspectComment) {
+  if (deletingId.value || !window.confirm('Delete this comment and its attachments?')) return
+  deletingId.value = comment.id
+  error.value = ''
+  try {
+    await deleteProspectComment(props.prospectId, comment.id, props.role)
+    for (const file of comment.attachments ?? []) {
+      const preview = imagePreviews.value[file.id]
+      if (preview) URL.revokeObjectURL(preview)
+      delete imagePreviews.value[file.id]
+    }
+    comments.value = comments.value.filter((item) => item.id !== comment.id)
+  } catch (caught) {
+    error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Failed to delete comment.'
+  } finally {
+    deletingId.value = null
+  }
 }
 
 function showImage(id: string, name: string) {
@@ -140,6 +180,9 @@ watch(open, (value) => { if (value) scrollToBottom() })
 watch(() => props.prospectId, () => {
   Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url))
   imagePreviews.value = {}
+  unavailableAttachments.value = {}
+  if (imageViewer.value) URL.revokeObjectURL(imageViewer.value.url)
+  imageViewer.value = null
   loading.value = true
   comments.value = []
   load()
@@ -158,21 +201,22 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (pollId) window.clearInterval(pollId)
   Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url))
+  if (imageViewer.value) URL.revokeObjectURL(imageViewer.value.url)
 })
 </script>
 
 <template>
-  <div class="pc-floating">
-    <button class="pc-launcher" aria-label="Open prospect discussion" @click="open = !open">
+  <div :class="['pc-floating', { 'pc-embedded': embedded }]">
+    <button v-if="!embedded" class="pc-launcher" aria-label="Open prospect discussion" @click="open = !open">
       <i :class="open ? 'pi pi-times' : 'pi pi-comments'" />
       <span v-if="comments.length && !open" class="pc-launcher-badge">{{ comments.length > 99 ? '99+' : comments.length }}</span>
     </button>
-  <div v-if="open" class="pc-wrap">
+     <div v-if="open || embedded" class="pc-wrap">
     <div class="pc-header">
       <i class="pi pi-comments" />
       <span>Discussion</span>
       <span v-if="!loading" class="pc-count">{{ comments.length }}</span>
-      <button class="pc-close" aria-label="Close discussion" @click="open = false"><i class="pi pi-times" /></button>
+       <button v-if="!embedded" class="pc-close" aria-label="Close discussion" @click="open = false"><i class="pi pi-times" /></button>
     </div>
 
     <div v-if="loading" class="pc-loading">
@@ -201,16 +245,24 @@ onBeforeUnmount(() => {
           <div class="pc-msg-meta">
             <strong>{{ c.userName }}</strong>
             <span>{{ formatTime(c.createdAt) }}</span>
+            <button v-if="canDeleteComment(c)" class="pc-delete-btn" :disabled="deletingId === c.id" title="Delete comment" @click="deleteComment(c)">
+              <i :class="deletingId === c.id ? 'pi pi-spin pi-spinner' : 'pi pi-trash'" />
+            </button>
           </div>
           <p v-if="c.content" class="pc-msg-text">{{ c.content }}</p>
           <div v-if="c.attachments?.length" class="pc-attachments">
-            <button v-for="file in c.attachments" :key="file.id" @click="file.contentType.startsWith('image/') && imagePreviews[file.id] ? showImage(file.id, file.name) : openAttachment(file.id, file.name)">
-              <img v-if="file.contentType.startsWith('image/') && imagePreviews[file.id]" :src="imagePreviews[file.id]" :alt="file.name" />
-              <i v-else :class="file.contentType.startsWith('image/') ? 'pi pi-image' : 'pi pi-file'" />
-              <span>{{ file.name }}</span>
+             <button v-for="file in c.attachments" :key="file.id" :disabled="unavailableAttachments[file.id]" @click="file.contentType.startsWith('image/') && imagePreviews[file.id] ? showImage(file.id, file.name) : openAttachment(file.id, file.name)">
+               <img v-if="file.contentType.startsWith('image/') && imagePreviews[file.id]" :src="imagePreviews[file.id]" :alt="file.name" />
+               <i v-else :class="unavailableAttachments[file.id] ? 'pi pi-exclamation-triangle' : (file.contentType.startsWith('image/') ? 'pi pi-image' : 'pi pi-file')" />
+               <span>{{ unavailableAttachments[file.id] ? 'File unavailable' : file.name }}</span>
             </button>
-          </div>
-        </div>
+     </div>
+     <div v-if="imageViewer" class="pc-image-viewer" @click.self="imageViewer = null">
+       <button class="pc-image-viewer-close" aria-label="Close image preview" @click="imageViewer = null"><i class="pi pi-times" /></button>
+       <img :src="imageViewer.url" :alt="imageViewer.name" />
+       <span>{{ imageViewer.name }}</span>
+     </div>
+   </div>
       </div>
     </div>
 
@@ -263,6 +315,14 @@ onBeforeUnmount(() => {
   background: var(--surface-card);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+}
+.pc-embedded { width: 100%; }
+.pc-embedded .pc-wrap {
+  position: static;
+  width: 100%;
+  max-height: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
 }
 .pc-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1101; width:58px; height:58px; border:0; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--brand-blue,#2563eb); box-shadow:0 10px 30px rgba(37,99,235,.35); cursor:pointer; font-size:1.25rem; }
 .pc-launcher-badge { position:absolute; right:-3px; top:-4px; min-width:21px; height:21px; padding:0 5px; display:grid; place-items:center; border:2px solid #fff; border-radius:999px; background:#ef4444; color:#fff; font-size:.62rem; font-weight:800; }
@@ -350,6 +410,9 @@ onBeforeUnmount(() => {
 .pc-msg-meta strong { font-size: 0.75rem; color: var(--text-primary); }
 .pc-msg-meta span { font-size: 0.62rem; color: var(--text-muted); }
 .pc-msg-own .pc-msg-meta { flex-direction: row-reverse; }
+.pc-delete-btn { margin-left: auto; padding: .15rem; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; opacity: .5; }
+.pc-delete-btn:hover:not(:disabled) { color: #dc2626; opacity: 1; }
+.pc-delete-btn:disabled { cursor: wait; opacity: .5; }
 
 .pc-msg-text {
   margin: 0; padding: 0.55rem 0.75rem;
@@ -365,6 +428,10 @@ onBeforeUnmount(() => {
 .pc-attachments button { display:flex; align-items:center; gap:.35rem; padding:.4rem .55rem; border:1px solid var(--border-light); border-radius:9px; color:var(--brand-blue); font-size:.7rem; background:#fff; cursor:pointer; }
 .pc-attachments img { display:block; width:150px; max-width:100%; height:110px; object-fit:cover; border-radius:7px; }
 .pc-attachments button:has(img) { flex-direction:column; align-items:flex-start; padding:.35rem; }
+.pc-image-viewer { position:fixed; inset:0; z-index:1200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.6rem; padding:1.5rem; background:rgba(15,23,42,.92); }
+.pc-image-viewer img { max-width:min(95vw,900px); max-height:85vh; object-fit:contain; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.pc-image-viewer span { max-width:90vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; font-size:.75rem; }
+.pc-image-viewer-close { position:absolute; top:1rem; right:1rem; width:40px; height:40px; display:grid; place-items:center; border:0; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
 .pc-mentions { display:grid; padding:.35rem .75rem; border-top:1px solid var(--border-light); background:#fff; }
 .pc-mentions button { padding:.4rem; border:0; background:transparent; text-align:left; cursor:pointer; color:var(--text-primary); }
 .pc-mentions button:hover { background:#eff6ff; }

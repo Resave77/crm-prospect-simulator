@@ -38,6 +38,7 @@ type Repository interface {
 	RejectDeletion(context.Context, uuid.UUID) error
 	ListComments(context.Context, uuid.UUID) ([]model.ProspectComment, error)
 	CreateComment(context.Context, uuid.UUID, uuid.UUID, string, []model.CommentAttachment) (model.ProspectComment, error)
+	DeleteComment(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) ([]model.CommentAttachment, error)
 	FindCommentAttachment(context.Context, uuid.UUID, uuid.UUID) (model.CommentAttachment, error)
 	FindProspectOwner(context.Context, uuid.UUID) (uuid.UUID, error)
 	ListPhotoTags(context.Context, uuid.UUID) ([]model.ProspectPhotoTag, error)

@@ -211,6 +211,23 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
         <!-- Extra Fields -->
         <div class="dcard-rows">
+          <div v-if="placeDetails.placeName" class="dcard-row">
+            <i class="pi pi-building" />
+            <span><strong>Google place:</strong> {{ placeDetails.placeName }}</span>
+          </div>
+          <div v-if="placeDetails.placeCategory" class="dcard-row">
+            <i class="pi pi-tag" />
+            <span><strong>Category:</strong> {{ placeDetails.placeCategory }}</span>
+          </div>
+          <div v-if="placeDetails.formattedAddress" class="dcard-row">
+            <i class="pi pi-map-marker" />
+            <span><strong>Google address:</strong> {{ placeDetails.formattedAddress }}</span>
+          </div>
+          <div v-if="placeDetails.googlePlaceId" class="dcard-row">
+            <i class="pi pi-id-card" />
+            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
+            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
+          </div>
           <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
             <i class="pi pi-globe" />
             <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
@@ -387,7 +404,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </RouterLink>
       </div>
     </template>
-    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" />
+    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" embedded />
   </section>
 </template>
 

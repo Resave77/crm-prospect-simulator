@@ -153,6 +153,10 @@ export async function addProspectComment(prospectId: string, content: string, ro
 	return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, form)).data.data
 }
 
+export async function deleteProspectComment(prospectId: string, commentId: string, role: UserRole) {
+	return (await api.delete<ApiEnvelope<{ deleted: boolean }>>(`${crmBaseForRole(role)}/prospects/${prospectId}/comments/${commentId}`)).data.data
+}
+
 export async function getMentionUsers(role: UserRole) {
 	const path = `${crmBaseForRole(role)}/mention-users`
 	return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>(path)).data.data
