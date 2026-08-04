@@ -6,11 +6,13 @@ import Tag from 'primevue/tag'
 import { getMyCustomer, getMyCustomerPlaceDetails } from '../../../api/crm'
 import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
+import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
+import ProspectComments from '../../../components/ProspectComments.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { copyToClipboard } from '../../../utils/placeDetails'
 import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
 import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
-import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
+import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const detail = ref<CustomerDetail | null>(null)
@@ -19,7 +21,6 @@ const error = ref('')
 const loading = ref(true)
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
-const activePhotoIdx = ref(0)
 const showAllHours = ref(false)
 
 const customer = computed(() => detail.value?.customer)
@@ -207,25 +208,20 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <span class="dcard-types-label">Categories:</span>
           <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
         </div>
+
+        <!-- Extra Fields -->
+        <div class="dcard-rows">
+          <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
+            <i class="pi pi-globe" />
+            <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
+          </div>
+        </div>
       </div>
 
       <!-- Photo Gallery -->
       <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
         <h2>Photos <DataSourceBadge source="google" /></h2>
-        <div class="dcard-photo-scroll">
-          <div
-            v-for="(photo, idx) in placeDetails.photos"
-            :key="photo.name"
-            class="dcard-photo-item"
-            :class="{ active: idx === activePhotoIdx }"
-            @click="activePhotoIdx = idx"
-          >
-            <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
-          </div>
-        </div>
-        <div v-if="placeDetails.photos[activePhotoIdx]?.attribution" class="dcard-photo-attribution">
-          Photo: {{ placeDetails.photos[activePhotoIdx].attribution }}
-        </div>
+        <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="customer?.sourceProspectId" role="SALES_EXECUTIVE" />
       </div>
 
       <!-- Opening Hours Card -->
@@ -391,6 +387,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </RouterLink>
       </div>
     </template>
+    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" />
   </section>
 </template>
 

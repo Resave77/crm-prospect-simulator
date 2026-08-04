@@ -45,7 +45,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.AllowedOrigins,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
-		AllowMethods:     "GET,POST,PATCH,DELETE,OPTIONS",
+		AllowMethods:     "GET,POST,PATCH,PUT,DELETE,OPTIONS",
 		AllowCredentials: true,
 		MaxAge:           600,
 	}))
@@ -90,6 +90,8 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/prospects/:id/comments", prospectHandler.ListComments)
 	sales.Post("/prospects/:id/comments", prospectHandler.CreateComment)
 	sales.Get("/prospects/:id/comments/attachments/:attachmentId", prospectHandler.CommentAttachment)
+	sales.Get("/prospects/:id/photo-tags", prospectHandler.ListPhotoTags)
+	sales.Put("/prospects/:id/photo-tags", prospectHandler.SetPhotoTag)
 	sales.Get("/mention-users", prospectHandler.MentionUsers)
 	sales.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	sales.Post("/prospects/:id/request-deletion", prospectHandler.RequestDeletion)
@@ -113,6 +115,8 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/mention-users", prospectHandler.MentionUsers)
 	admin.Post("/prospects/:id/comments", prospectHandler.CreateComment)
 	admin.Get("/prospects/:id/comments/attachments/:attachmentId", prospectHandler.CommentAttachment)
+	admin.Get("/prospects/:id/photo-tags", prospectHandler.ListPhotoTags)
+	admin.Put("/prospects/:id/photo-tags", prospectHandler.SetPhotoTag)
 	admin.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
 	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
 	admin.Get("/reports", prospectHandler.Report)

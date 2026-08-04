@@ -22,6 +22,7 @@ const error = ref('')
 const listRef = ref<HTMLElement | null>(null)
 const open = ref(false)
 const imagePreviews = ref<Record<string, string>>({})
+const previewImage = ref<{ name: string; url: string } | null>(null)
 let pollId: number | undefined
 
 function scrollToBottom() {
@@ -63,7 +64,10 @@ async function ensureImagePreviews(items: ProspectComment[]) {
 
 async function load() {
   try {
-    const [items, users] = await Promise.all([getProspectComments(props.prospectId, props.role), getMentionUsers(props.role)])
+    const [items, users] = await Promise.all([
+      getProspectComments(props.prospectId, props.role),
+      getMentionUsers(props.role).catch(() => [] as SalesExecutiveOption[]),
+    ])
     comments.value = items
     await ensureImagePreviews(items)
     mentionUsers.value = users.filter((u) => u.id !== auth.user?.id)
@@ -119,6 +123,11 @@ async function openAttachment(id: string, name: string) {
   } catch { error.value = 'Failed to download attachment.' }
 }
 
+function showImage(id: string, name: string) {
+  const url = imagePreviews.value[id]
+  if (url) previewImage.value = { name, url }
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
@@ -128,7 +137,13 @@ function onKeydown(e: KeyboardEvent) {
 
 watch(() => comments.value.length, () => scrollToBottom())
 watch(open, (value) => { if (value) scrollToBottom() })
-watch(() => props.prospectId, () => { loading.value = true; comments.value = []; load() })
+watch(() => props.prospectId, () => {
+  Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url))
+  imagePreviews.value = {}
+  loading.value = true
+  comments.value = []
+  load()
+})
 
 onMounted(() => {
   load()
@@ -189,7 +204,7 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="c.content" class="pc-msg-text">{{ c.content }}</p>
           <div v-if="c.attachments?.length" class="pc-attachments">
-            <button v-for="file in c.attachments" :key="file.id" @click="openAttachment(file.id, file.name)">
+            <button v-for="file in c.attachments" :key="file.id" @click="file.contentType.startsWith('image/') && imagePreviews[file.id] ? showImage(file.id, file.name) : openAttachment(file.id, file.name)">
               <img v-if="file.contentType.startsWith('image/') && imagePreviews[file.id]" :src="imagePreviews[file.id]" :alt="file.name" />
               <i v-else :class="file.contentType.startsWith('image/') ? 'pi pi-image' : 'pi pi-file'" />
               <span>{{ file.name }}</span>
@@ -224,6 +239,11 @@ onBeforeUnmount(() => {
         <i v-else class="pi pi-send" />
       </button>
     </div>
+  </div>
+  <div v-if="previewImage" class="pc-lightbox" @click.self="previewImage = null">
+    <button aria-label="Close image" @click="previewImage = null"><i class="pi pi-times" /></button>
+    <img :src="previewImage.url" :alt="previewImage.name" />
+    <span>{{ previewImage.name }}</span>
   </div>
   </div>
 </template>
@@ -384,4 +404,8 @@ onBeforeUnmount(() => {
 }
 .pc-send-btn:hover:not(:disabled) { background: #1d4ed8; transform: scale(1.05); }
 .pc-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pc-lightbox { position:fixed; inset:0; z-index:2200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.65rem; padding:1rem; background:rgba(15,23,42,.92); }
+.pc-lightbox img { max-width:min(960px,100%); max-height:calc(100dvh - 6rem); object-fit:contain; border-radius:12px; }
+.pc-lightbox span { color:#fff; font-size:.75rem; }
+.pc-lightbox button { position:absolute; top:1rem; right:1rem; width:40px; height:40px; display:grid; place-items:center; border:0; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
 </style>

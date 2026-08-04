@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerSite, ListFilterOptions, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -165,4 +165,14 @@ export async function downloadCommentAttachment(prospectId: string, attachmentId
 export async function getProspectPlaceDetails(prospectId: string, role: UserRole) {
   const base = crmBaseForRole(role)
   return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/place-details`)).data.data
+}
+
+export async function getProspectPhotoTags(prospectId: string, role: UserRole) {
+  const base = crmBaseForRole(role)
+  return (await api.get<ApiEnvelope<ProspectPhotoTag[]>>(`${base}/prospects/${prospectId}/photo-tags`)).data.data
+}
+
+export async function setProspectPhotoTag(prospectId: string, photoName: string, category: PhotoCategory, role: UserRole) {
+  const base = crmBaseForRole(role)
+  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoName, category })).data.data
 }

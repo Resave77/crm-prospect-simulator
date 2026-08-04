@@ -9,7 +9,9 @@ import { useToast } from 'primevue/usetoast'
 import { useCrmStore } from '../../../stores/crm'
 import { deleteCustomer, getAdminCustomerPlaceDetails } from '../../../api/crm'
 import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
-import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
+import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
+import ProspectComments from '../../../components/ProspectComments.vue'
+import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const fieldSources = {
   customerCode: { source: 'system' as const, tooltip: 'Generated automatically by the system during prospect conversion.' },
@@ -39,7 +41,6 @@ const error = ref('')
 const detail = ref<CustomerDetail | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
 const activeTab = ref('overview')
-const activePhotoIdx = ref(0)
 const showAllHours = ref(false)
 const deleteDialogVisible = ref(false)
 const deleting = ref(false)
@@ -276,20 +277,7 @@ async function executeDelete() {
           <!-- Photos -->
           <div v-if="placeDetails.photos?.length" class="detail-card" style="grid-column: 1 / -1;">
             <h3 class="card-heading"><i class="pi pi-images" /> Photos</h3>
-            <div class="photo-scroll">
-              <div
-                v-for="(photo, idx) in placeDetails.photos"
-                :key="photo.name"
-                class="photo-item"
-                :class="{ active: idx === activePhotoIdx }"
-                @click="activePhotoIdx = idx"
-              >
-                <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
-              </div>
-            </div>
-            <div v-if="placeDetails.photos[activePhotoIdx]?.attribution" class="photo-attribution">
-              Photo: {{ placeDetails.photos[activePhotoIdx].attribution }}
-            </div>
+            <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="detail.customer.sourceProspectId" role="ADMINISTRATOR" />
           </div>
 
           <!-- Rating & Business Status -->
@@ -313,6 +301,10 @@ async function executeDelete() {
               <div v-if="placeDetails.priceLevel" class="info-item">
                 <span class="info-label">Price Level</span>
                 <strong>{{ priceLevelLabel(placeDetails.priceLevel) }}</strong>
+              </div>
+              <div v-if="placeDetails.utcOffsetMinutes != null" class="info-item">
+                <span class="info-label">Time Zone</span>
+                <strong>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} <span class="muted">({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min)</span></strong>
               </div>
               <div v-if="placeDetails.phoneNumber" class="info-item">
                 <span class="info-label">Phone</span>
@@ -604,6 +596,7 @@ async function executeDelete() {
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
       </template>
     </Dialog>
+    <ProspectComments v-if="detail?.customer.sourceProspectId" :prospect-id="detail.customer.sourceProspectId" role="ADMINISTRATOR" />
   </section>
 </template>
 

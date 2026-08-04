@@ -43,12 +43,8 @@ const router = createRouter({
         { path: 'companies/:id', name: 'AdminCompanyDetail', component: () => import('../views/Admin/Company/CompanyDetailView.vue'), meta: { title: 'Company Detail', description: 'Company detail interface is under construction for the first release.' } },
         { path: 'companies/:id/edit', name: 'AdminCompanyEdit', component: () => import('../views/Admin/Company/CompanyEditView.vue') },
         { path: 'visit-monitoring', name: 'AdminVisitMonitoring', component: () => import('../views/Admin/Visit/VisitMonitoringView.vue') },
-<<<<<<< HEAD
         { path: 'prospect-assignment', name: 'AdminProspectAssignment', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Prospect Assignment', description: 'Assignment is available while saving a Place in Prospect Finder; bulk reassignment is deferred.' } },
         { path: 'reports', name: 'AdminReports', component: () => import('../views/Admin/Reports/ReportsAnalyticsView.vue') },
-=======
-        { path: 'reports', name: 'AdminReports', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Reports', description: 'Operational reporting is deferred until visit and attendance data exists.' } },
->>>>>>> b73ae4cfab8e40754e8d50c68c3ba624ca942472
       ],
     },
     {

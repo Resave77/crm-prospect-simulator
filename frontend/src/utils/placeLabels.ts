@@ -44,3 +44,12 @@ export function stars(rating: number): string[] {
     ...Array(empty).fill('pi-star'),
   ]
 }
+
+export function utcOffsetLabel(minutes: number | null | undefined): string {
+  if (minutes == null || Number.isNaN(minutes)) return '—'
+  const sign = minutes < 0 ? '-' : '+'
+  const abs = Math.abs(minutes)
+  const h = Math.floor(abs / 60)
+  const m = abs % 60
+  return `UTC${sign}${h.toString().padStart(2, '0')}${m ? ':' + m.toString().padStart(2, '0') : ''}`
+}

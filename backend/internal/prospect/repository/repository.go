@@ -40,4 +40,7 @@ type Repository interface {
 	CreateComment(context.Context, uuid.UUID, uuid.UUID, string, []model.CommentAttachment) (model.ProspectComment, error)
 	FindCommentAttachment(context.Context, uuid.UUID, uuid.UUID) (model.CommentAttachment, error)
 	FindProspectOwner(context.Context, uuid.UUID) (uuid.UUID, error)
+	ListPhotoTags(context.Context, uuid.UUID) ([]model.ProspectPhotoTag, error)
+	UpsertPhotoTag(context.Context, uuid.UUID, string, model.PhotoCategory, uuid.UUID) (model.ProspectPhotoTag, error)
+	ProspectAccessibleTo(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }

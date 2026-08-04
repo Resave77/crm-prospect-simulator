@@ -32,6 +32,11 @@ type createCommentRequest struct {
 	Content string `json:"content"`
 }
 
+type setPhotoTagRequest struct {
+	PhotoName string `json:"photoName"`
+	Category  string `json:"category"`
+}
+
 func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
 	return &Handler{service: prospectService, customerSvc: customerSvc}
 }
@@ -406,7 +411,10 @@ func (h *Handler) CreateComment(c *fiber.Ctx) error {
 		if len(files) > 5 {
 			return response.Error(c, 422, "TOO_MANY_FILES", "A comment can contain up to 5 files.")
 		}
-		dir := filepath.Join("private_uploads", "ticketing", id.String())
+		dir, err := filepath.Abs(filepath.Join("private_uploads", "ticketing", id.String()))
+		if err != nil {
+			return response.Error(c, 500, "UPLOAD_FAILED", "Unable to prepare attachment storage.")
+		}
 		if len(files) > 0 {
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return response.Error(c, 500, "UPLOAD_FAILED", "Unable to prepare attachment storage.")
@@ -466,15 +474,54 @@ func (h *Handler) CommentAttachment(c *fiber.Ctx) error {
 	if err != nil {
 		return writeError(c, err)
 	}
-	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf(`attachment; filename="%s"`, strings.ReplaceAll(item.Name, `"`, "")))
-	c.Type(filepath.Ext(item.Name))
-	return c.SendFile(item.Path)
+	data, err := os.ReadFile(item.Path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return response.Error(c, fiber.StatusNotFound, "ATTACHMENT_NOT_FOUND", "The attachment file is no longer available.")
+		}
+		return response.Error(c, fiber.StatusInternalServerError, "ATTACHMENT_READ_FAILED", "Unable to open the attachment.")
+	}
+	disposition := "attachment"
+	if strings.HasPrefix(item.ContentType, "image/") {
+		disposition = "inline"
+	}
+	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf(`%s; filename="%s"`, disposition, strings.ReplaceAll(item.Name, `"`, "")))
+	c.Set(fiber.HeaderContentType, item.ContentType)
+	return c.Send(data)
 }
 
 func removeCommentFiles(items []prospectmodel.CommentAttachment) {
 	for _, item := range items {
 		_ = os.Remove(item.Path)
 	}
+}
+
+func (h *Handler) ListPhotoTags(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	items, err := h.service.ListPhotoTags(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	var request setPhotoTagRequest
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoName, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
 }
 
 func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
@@ -532,7 +579,7 @@ func writeError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
-	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates):
+	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates), errors.Is(err, service.ErrPhotoTagInvalid):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())

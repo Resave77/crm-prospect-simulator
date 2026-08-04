@@ -46,6 +46,7 @@ node_modules/
 # Prisma
 # ==========================
 backend/prisma/dev.db
+backend/private_uploads/
 
 # ==========================
 # IDE

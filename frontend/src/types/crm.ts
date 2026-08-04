@@ -379,3 +379,15 @@ export interface ProspectCommentAttachment {
   contentType: string
   size: number
 }
+
+export type PhotoCategory = 'MENU' | 'PLACE'
+
+export interface ProspectPhotoTag {
+  id: string
+  prospectId: string
+  photoName: string
+  category: PhotoCategory
+  updatedBy: string
+  createdAt: string
+  updatedAt: string
+}

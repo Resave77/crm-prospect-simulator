@@ -7,10 +7,11 @@ import { getMyProspect, getProspectPlaceDetails } from '../../../api/crm'
 import type { ProspectReview, PlaceDetails } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
+import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { formatPlaceType, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
 import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
-import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars } from '../../../utils/placeLabels'
+import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const review = ref<ProspectReview | null>(null)
@@ -18,8 +19,6 @@ const placeDetails = ref<PlaceDetails | null>(null)
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
-const activePhotoIdx = ref(0)
-const menuPhotoIdx = ref(0)
 const showAllHours = ref(false)
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -27,17 +26,6 @@ const userCoords = ref<{ lat: number; lng: number } | null>(null)
 let geoWatchId: number | null = null
 
 const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
-
-const menuPhotos = computed(() => {
-  if (!placeDetails.value?.photos) return []
-  return placeDetails.value.photos.filter((p) => /menu/i.test(p.name) || /menu/i.test(p.attribution))
-})
-
-const regularPhotos = computed(() => {
-  if (!placeDetails.value?.photos) return []
-  const menuNames = new Set(menuPhotos.value.map((p) => p.name))
-  return placeDetails.value.photos.filter((p) => !menuNames.has(p.name))
-})
 
 const statusSeverity = computed(() => {
   const s = review.value?.prospect.status
@@ -194,56 +182,23 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <span class="dcard-types-label">Categories:</span>
           <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
         </div>
-      </div>
-
-      <!-- Menu Photos -->
-      <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
-        <h2><i class="pi pi-image" /> Menu</h2>
-        <template v-if="menuPhotos.length">
-          <div class="dcard-photo-scroll">
-            <div
-              v-for="(photo, idx) in menuPhotos"
-              :key="photo.name"
-              class="dcard-photo-item"
-              :class="{ active: idx === menuPhotoIdx }"
-              @click="menuPhotoIdx = idx"
-            >
-              <img :src="photo.photoUrl" :alt="`Menu ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
-            </div>
+        <div class="dcard-rows">
+          <div v-if="placeDetails.googlePlaceId" class="dcard-row">
+            <i class="pi pi-id-card" />
+            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
+            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
           </div>
-          <div v-if="menuPhotos[menuPhotoIdx]?.attribution" class="dcard-photo-attribution">
-            Photo: {{ menuPhotos[menuPhotoIdx].attribution }}
+          <div v-if="placeDetails.utcOffsetMinutes" class="dcard-row">
+            <i class="pi pi-globe" />
+            <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
           </div>
-        </template>
-        <div v-else class="dcard-menu-empty">
-          <i class="pi pi-image" />
-          <span>Menu not found</span>
         </div>
       </div>
 
-      <!-- Regular Photos -->
+      <!-- Photos (Menu vs Photo, taggable) -->
       <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
         <h2><i class="pi pi-images" /> Photos</h2>
-        <template v-if="regularPhotos.length">
-          <div class="dcard-photo-scroll">
-            <div
-              v-for="(photo, idx) in regularPhotos"
-              :key="photo.name"
-              class="dcard-photo-item"
-              :class="{ active: idx === activePhotoIdx }"
-              @click="activePhotoIdx = idx"
-            >
-              <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
-            </div>
-          </div>
-          <div v-if="regularPhotos[activePhotoIdx]?.attribution" class="dcard-photo-attribution">
-            Photo: {{ regularPhotos[activePhotoIdx].attribution }}
-          </div>
-        </template>
-        <div v-else class="dcard-menu-empty">
-          <i class="pi pi-images" />
-          <span>No photos available</span>
-        </div>
+        <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
       </div>
 
       <!-- Opening Hours Card -->

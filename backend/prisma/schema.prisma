@@ -106,6 +106,7 @@ model Prospect {
   convertedCustomerSite    CustomerSite?
   visits                   ProspectVisit[]
   comments                 ProspectComment[]        @relation("ProspectCommentProspect")
+  photoTags                ProspectPhotoTag[]      @relation("ProspectPhotoTagProspect")
 
   @@index([assignedSalesExecutiveId, status])
   @@index([status, createdAt])
@@ -236,6 +237,21 @@ model ProspectComment {
   @@index([prospectId, createdAt])
   @@index([userId])
   @@map("prospect_comments")
+}
+
+model ProspectPhotoTag {
+  id         String   @id @default(uuid()) @db.Uuid
+  prospectId String   @map("prospect_id") @db.Uuid
+  photoName  String   @map("photo_name")
+  category   String   @map("category")
+  updatedBy  String?  @map("updated_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  prospect   Prospect @relation("ProspectPhotoTagProspect", fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectId, photoName])
+  @@index([prospectId])
+  @@map("prospect_photo_tags")
 }
 
 model SalesRole {

@@ -22,6 +22,7 @@ var (
 	ErrFinderInput      = errors.New("prospect finder query is invalid")
 	ErrPlacesDisabled   = errors.New("Google Places server key is not configured")
 	ErrVisitCoordinates = errors.New("visit GPS coordinates are invalid")
+	ErrPhotoTagInvalid  = errors.New("photo category must be MENU or PLACE")
 )
 
 type Actor struct {
@@ -448,6 +449,45 @@ func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospect
 		return err
 	}
 	if ownerID != actor.UserID {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (s *Service) ListPhotoTags(ctx context.Context, actor Actor, prospectID uuid.UUID) ([]prospectmodel.ProspectPhotoTag, error) {
+	if err := s.ensurePhotoTagAccess(ctx, actor, prospectID); err != nil {
+		return nil, err
+	}
+	return s.repository.ListPhotoTags(ctx, prospectID)
+}
+
+func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
+	if err := s.ensurePhotoTagAccess(ctx, actor, prospectID); err != nil {
+		return prospectmodel.ProspectPhotoTag{}, err
+	}
+	if category != prospectmodel.PhotoCategoryMenu && category != prospectmodel.PhotoCategoryPlace {
+		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
+	}
+	photoName = strings.TrimSpace(photoName)
+	if photoName == "" {
+		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
+	}
+	return s.repository.UpsertPhotoTag(ctx, prospectID, photoName, category, actor.UserID)
+}
+
+func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {
+	if actor.Role.IsAdminRole() {
+		_, err := s.repository.FindProspectOwner(ctx, prospectID)
+		return err
+	}
+	if actor.Role != authmodel.RoleSalesExecutive {
+		return ErrForbidden
+	}
+	accessible, err := s.repository.ProspectAccessibleTo(ctx, prospectID, actor.UserID)
+	if err != nil {
+		return err
+	}
+	if !accessible {
 		return ErrForbidden
 	}
 	return nil

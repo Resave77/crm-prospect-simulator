@@ -129,6 +129,15 @@ func (f *fakeProspectRepository) CreateComment(_ context.Context, _ uuid.UUID, _
 func (f *fakeProspectRepository) FindCommentAttachment(_ context.Context, _ uuid.UUID, _ uuid.UUID) (prospectmodel.CommentAttachment, error) {
 	return prospectmodel.CommentAttachment{}, nil
 }
+func (f *fakeProspectRepository) ListPhotoTags(_ context.Context, _ uuid.UUID) ([]prospectmodel.ProspectPhotoTag, error) {
+	return []prospectmodel.ProspectPhotoTag{}, nil
+}
+func (f *fakeProspectRepository) UpsertPhotoTag(_ context.Context, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory, userID uuid.UUID) (prospectmodel.ProspectPhotoTag, error) {
+	return prospectmodel.ProspectPhotoTag{ProspectID: prospectID, PhotoName: photoName, Category: category, UpdatedBy: &userID}, nil
+}
+func (f *fakeProspectRepository) ProspectAccessibleTo(_ context.Context, _ uuid.UUID, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
 func (f *fakeProspectRepository) FindProspectOwner(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.Nil, nil
 }

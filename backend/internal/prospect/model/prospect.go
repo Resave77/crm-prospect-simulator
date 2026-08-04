@@ -228,3 +228,20 @@ type CommentAttachment struct {
 	Size        int64     `json:"size"`
 	Path        string    `json:"-"`
 }
+
+type PhotoCategory string
+
+const (
+	PhotoCategoryMenu  PhotoCategory = "MENU"
+	PhotoCategoryPlace PhotoCategory = "PLACE"
+)
+
+type ProspectPhotoTag struct {
+	ID         uuid.UUID     `json:"id"`
+	ProspectID uuid.UUID     `json:"prospectId"`
+	PhotoName  string        `json:"photoName"`
+	Category   PhotoCategory `json:"category"`
+	UpdatedBy  *uuid.UUID    `json:"updatedBy"`
+	CreatedAt  time.Time     `json:"createdAt"`
+	UpdatedAt  time.Time     `json:"updatedAt"`
+}

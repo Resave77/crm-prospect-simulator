@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -10,6 +10,9 @@ import { getProspectReview, getProspectPlaceDetails } from '../../../api/crm'
 import { useCrmStore } from '../../../stores/crm'
 import type { ProspectReview, PlaceDetails } from '../../../types/crm'
 import ProspectComments from '../../../components/ProspectComments.vue'
+import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
+import { websiteDisplayUrl } from '../../../utils/placeDetails'
+import { stars, priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,21 +20,9 @@ const crm = useCrmStore()
 const review = ref<ProspectReview | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
 const error = ref('')
+const showAllHours = ref(false)
 const mapElement = ref<HTMLElement | null>(null)
-const activePhotoIdx = ref(0)
-const menuPhotoIdx = ref(0)
 let map: L.Map | null = null
-
-const menuPhotos = computed(() => {
-  if (!placeDetails.value?.photos) return []
-  return placeDetails.value.photos.filter((p) => /menu/i.test(p.name) || /menu/i.test(p.attribution))
-})
-
-const regularPhotos = computed(() => {
-  if (!placeDetails.value?.photos) return []
-  const menuNames = new Set(menuPhotos.value.map((p) => p.name))
-  return placeDetails.value.photos.filter((p) => !menuNames.has(p.name))
-})
 
 function renderMap() {
   const p = review.value?.prospect
@@ -85,30 +76,108 @@ onBeforeUnmount(() => map?.remove())
           </div>
         </article>
 
-        <article v-if="placeDetails?.photos?.length" class="section-card review-photos">
-          <p class="eyebrow"><i class="pi pi-image" /> Menu</p>
-          <template v-if="menuPhotos.length">
-            <div class="review-photo-scroll">
-              <div v-for="(photo, idx) in menuPhotos" :key="photo.name" class="review-photo-item" :class="{ active: idx === menuPhotoIdx }" @click="menuPhotoIdx = idx">
-                <img :src="photo.photoUrl" :alt="`Menu ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+        <article v-if="placeDetails" class="section-card review-google">
+          <p class="eyebrow"><i class="pi pi-map" /> Google Maps data</p>
+          <p v-if="placeDetails.editorialSummary" class="review-editorial">{{ placeDetails.editorialSummary }}</p>
+
+          <div class="review-google-top">
+            <div v-if="placeDetails.rating > 0" class="review-rating">
+              <span class="review-rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
+              <span class="review-stars">
+                <i v-for="(s, i) in stars(placeDetails.rating)" :key="i" :class="['pi', s]" />
+              </span>
+              <span class="muted">({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
+            </div>
+            <div class="review-badges">
+              <Tag v-if="placeDetails.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
+              <Tag v-if="placeDetails.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
+            </div>
+          </div>
+
+          <div class="source-grid">
+            <div class="wide"><span>Address</span><strong>{{ placeDetails.formattedAddress }}</strong></div>
+            <div><span>Phone</span><strong>{{ placeDetails.phoneNumber || '—' }}</strong></div>
+            <div><span>International phone</span><strong>{{ placeDetails.internationalPhone || '—' }}</strong></div>
+            <div><span>Website</span><strong><a v-if="placeDetails.websiteUrl" :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="review-link">{{ websiteDisplayUrl(placeDetails.websiteUrl) }}</a><span v-else>—</span></strong></div>
+            <div><span>Google Maps</span><strong><a v-if="placeDetails.googleMapsUrl" :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="review-link">View listing <i class="pi pi-external-link" /></a><span v-else>—</span></strong></div>
+            <div><span>Time zone</span><strong>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}</strong></div>
+            <div><span>Google Place ID</span><strong class="mono review-placeid">{{ placeDetails.googlePlaceId }}</strong></div>
+            <div><span>Coordinates</span><strong v-if="placeDetails.latitude != null">{{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude?.toFixed(6) }}</strong><strong v-else>—</strong></div>
+          </div>
+
+          <div v-if="placeDetails.placeTypes?.length" class="tag-row" style="margin-top:0.85rem">
+            <span class="review-tags-label">Categories:</span>
+            <Tag v-for="t in placeDetails.placeTypes.slice(0, 8)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" />
+          </div>
+
+          <div v-if="placeDetails.openingHours" class="review-block">
+            <div class="review-block-title">
+              <strong>Opening hours</strong>
+              <span :class="['review-hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
+              <span>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</span>
+            </div>
+            <div v-if="placeDetails.openingHours.weekdays?.length" class="review-hours-list">
+              <div v-for="(day, i) in (showAllHours ? placeDetails.openingHours.weekdays : placeDetails.openingHours.weekdays.slice(0, 4))" :key="i" class="review-hours-row" v-html="day" />
+              <button v-if="placeDetails.openingHours.weekdays.length > 4" class="review-toggle" @click="showAllHours = !showAllHours">
+                {{ showAllHours ? 'Show less' : `Show all ${placeDetails.openingHours.weekdays.length} days` }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup" class="review-block">
+            <div class="review-block-title"><strong>Service options</strong></div>
+            <div class="review-chips">
+              <span v-if="placeDetails.dineIn" class="review-chip"><i class="pi pi-check" /> Dine In</span>
+              <span v-if="placeDetails.takeout" class="review-chip"><i class="pi pi-check" /> Takeout</span>
+              <span v-if="placeDetails.delivery" class="review-chip"><i class="pi pi-check" /> Delivery</span>
+              <span v-if="placeDetails.curbsidePickup" class="review-chip"><i class="pi pi-check" /> Curbside Pickup</span>
+            </div>
+          </div>
+
+          <div v-if="placeDetails?.parkingOptions || placeDetails?.paymentOptions || placeDetails?.accessibilityOptions" class="review-block">
+            <div class="review-block-title"><strong>Amenities</strong></div>
+            <div v-if="placeDetails?.parkingOptions" class="review-chips">
+              <span v-if="placeDetails.parkingOptions.freeParkingLot" class="review-chip"><i class="pi pi-check" /> Free Lot</span>
+              <span v-if="placeDetails.parkingOptions.freeStreetParking" class="review-chip"><i class="pi pi-check" /> Free Street</span>
+              <span v-if="placeDetails.parkingOptions.paidParkingLot" class="review-chip"><i class="pi pi-check" /> Paid Lot</span>
+              <span v-if="placeDetails.parkingOptions.paidStreetParking" class="review-chip"><i class="pi pi-check" /> Paid Street</span>
+              <span v-if="placeDetails.parkingOptions.garageParking" class="review-chip"><i class="pi pi-check" /> Garage</span>
+              <span v-if="placeDetails.parkingOptions.valetParking" class="review-chip"><i class="pi pi-check" /> Valet</span>
+              <span v-if="placeDetails.paymentOptions?.cashOnly" class="review-chip"><i class="pi pi-check" /> Cash</span>
+              <span v-if="placeDetails.paymentOptions?.creditCardOnly" class="review-chip"><i class="pi pi-check" /> Credit Card</span>
+              <span v-if="placeDetails.paymentOptions?.debitCardOnly" class="review-chip"><i class="pi pi-check" /> Debit Card</span>
+              <span v-if="placeDetails.paymentOptions?.nfcOnly" class="review-chip"><i class="pi pi-check" /> NFC</span>
+              <span v-if="placeDetails.accessibilityOptions?.wheelchairAccessibleEntrance" class="review-chip"><i class="pi pi-check" /> Wheelchair Entrance</span>
+              <span v-if="placeDetails.accessibilityOptions?.wheelchairAccessibleParking" class="review-chip"><i class="pi pi-check" /> Wheelchair Parking</span>
+              <span v-if="placeDetails.accessibilityOptions?.wheelchairAccessibleRestroom" class="review-chip"><i class="pi pi-check" /> Wheelchair Restroom</span>
+              <span v-if="placeDetails.accessibilityOptions?.wheelchairAccessibleSeating" class="review-chip"><i class="pi pi-check" /> Wheelchair Seating</span>
+            </div>
+          </div>
+
+          <div v-if="placeDetails.reviews?.length" class="review-block">
+            <div class="review-block-title"><strong>Reviews ({{ placeDetails.reviews.length }})</strong></div>
+            <div class="review-reviews">
+              <div v-for="(rv, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="review-review">
+                <div class="review-review-head">
+                  <img v-if="rv.authorPhoto" :src="rv.authorPhoto" :alt="rv.authorName" class="review-review-avatar" @error="($event.target as HTMLImageElement).style.display='none'" />
+                  <div v-else class="review-review-avatar-placeholder">{{ rv.authorName?.charAt(0) || '?' }}</div>
+                  <div class="review-review-meta">
+                    <strong>{{ rv.authorName }}</strong>
+                    <div class="review-review-stars">
+                      <i v-for="(s, j) in stars(rv.rating)" :key="j" :class="['pi', s]" />
+                      <span class="muted">{{ rv.time }}</span>
+                    </div>
+                  </div>
+                </div>
+                <p v-if="rv.text">{{ rv.text }}</p>
               </div>
             </div>
-            <p v-if="menuPhotos[menuPhotoIdx]?.attribution" class="review-photo-attr">Photo: {{ menuPhotos[menuPhotoIdx].attribution }}</p>
-          </template>
-          <div v-else class="review-menu-empty"><i class="pi pi-image" /><span>Menu not found</span></div>
+          </div>
         </article>
 
         <article v-if="placeDetails?.photos?.length" class="section-card review-photos">
           <p class="eyebrow"><i class="pi pi-images" /> Photos</p>
-          <template v-if="regularPhotos.length">
-            <div class="review-photo-scroll">
-              <div v-for="(photo, idx) in regularPhotos" :key="photo.name" class="review-photo-item" :class="{ active: idx === activePhotoIdx }" @click="activePhotoIdx = idx">
-                <img :src="photo.photoUrl" :alt="`Photo ${idx + 1}`" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
-              </div>
-            </div>
-            <p v-if="regularPhotos[activePhotoIdx]?.attribution" class="review-photo-attr">Photo: {{ regularPhotos[activePhotoIdx].attribution }}</p>
-          </template>
-          <div v-else class="review-menu-empty"><i class="pi pi-images" /><span>No photos available</span></div>
+          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="ADMINISTRATOR" />
         </article>
 
         <article v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="section-card">
@@ -230,6 +299,54 @@ onBeforeUnmount(() => map?.remove())
 }
 .review-menu-empty i { font-size: 1.5rem; color: #cbd5e1; }
 .review-menu-empty span { font-size: 0.82rem; font-weight: 600; }
+
+.review-google { border: 1px solid #e0e7ff; }
+.review-google .eyebrow { display: flex; align-items: center; gap: 0.4rem; }
+.review-google .eyebrow i { color: var(--brand-blue); font-size: 0.75rem; }
+.review-editorial { margin: 0 0 1rem; color: var(--text-secondary); font-size: 0.84rem; line-height: 1.55; font-style: italic; }
+.review-google-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.85rem; }
+.review-rating { display: flex; align-items: center; gap: 0.45rem; }
+.review-rating-num { font-size: 1.05rem; font-weight: 800; color: #f59e0b; }
+.review-rating .review-stars { display: flex; gap: 1px; }
+.review-rating .review-stars .pi { font-size: 0.65rem; color: #f59e0b; }
+.review-badges { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.review-link { color: var(--brand-blue); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
+.review-link:hover { text-decoration: underline; }
+.review-link i { font-size: 0.6rem; }
+.review-placeid { word-break: break-all; font-size: 0.72rem; }
+.review-tags-label { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 0.25rem; }
+.review-block { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-light); }
+.review-block-title { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; font-size: 0.78rem; }
+.review-block-title strong { color: var(--text-primary); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.06em; }
+.review-hours-dot { width: 8px; height: 8px; border-radius: 50%; }
+.review-hours-dot.open { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
+.review-hours-dot.closed { background: #ef4444; }
+.review-hours-list { display: grid; gap: 0.3rem; }
+.review-hours-row { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; }
+.review-toggle { background: none; border: none; color: var(--brand-blue); font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
+.review-toggle:hover { text-decoration: underline; }
+.review-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.review-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.2rem 0.5rem; border-radius: 9999px;
+  background: #f0fdf4; color: #059669;
+  font-size: 0.62rem; font-weight: 600;
+}
+.review-chip i { font-size: 0.5rem; }
+.review-reviews { display: grid; gap: 0.75rem; }
+.review-review { padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-light); }
+.review-review:last-child { border-bottom: none; padding-bottom: 0; }
+.review-review-head { display: flex; align-items: center; gap: 0.55rem; }
+.review-review-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.review-review-avatar-placeholder {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: #e2e8f0; color: var(--text-muted); font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+}
+.review-review-meta { flex: 1; min-width: 0; }
+.review-review-meta strong { font-size: 0.75rem; color: var(--text-primary); }
+.review-review-stars { display: flex; align-items: center; gap: 1px; }
+.review-review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
+.review-review p { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.5; }
 
 .review-notes {
   margin: 1rem 0;
