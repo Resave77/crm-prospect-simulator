@@ -145,9 +145,21 @@ export async function getProspectComments(prospectId: string, role: UserRole) {
   return (await api.get<ApiEnvelope<ProspectComment[]>>(`${base}/prospects/${prospectId}/comments`)).data.data
 }
 
-export async function addProspectComment(prospectId: string, content: string, role: UserRole) {
+export async function addProspectComment(prospectId: string, content: string, role: UserRole, files: File[] = []) {
   const base = crmBaseForRole(role)
-  return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, { content })).data.data
+	const form = new FormData()
+	form.append('content', content)
+	files.forEach((file) => form.append('files', file))
+	return (await api.post<ApiEnvelope<ProspectComment>>(`${base}/prospects/${prospectId}/comments`, form)).data.data
+}
+
+export async function getMentionUsers(role: UserRole) {
+	const path = `${crmBaseForRole(role)}/mention-users`
+	return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>(path)).data.data
+}
+
+export async function downloadCommentAttachment(prospectId: string, attachmentId: string, role: UserRole) {
+	return (await api.get(`${crmBaseForRole(role)}/prospects/${prospectId}/comments/attachments/${attachmentId}`, { responseType: 'blob' })).data as Blob
 }
 
 export async function getProspectPlaceDetails(prospectId: string, role: UserRole) {

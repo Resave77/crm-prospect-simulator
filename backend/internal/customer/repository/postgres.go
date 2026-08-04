@@ -173,9 +173,9 @@ func (r *PostgresRepository) Convert(ctx context.Context, prospectID, administra
 			latitude, longitude, preview_address, site_contacts, ppn, id_tku_number, nik,
 			shipment_cost, invoice_type, bank_account, bill_to_source, ship_to_source,
 			billing_address_preview, shipping_address_preview, sales_executive_id,
-			sales_assignments, converted_at, converted_by_admin_id)
+			sales_assignments, converted_at, converted_by_admin_id, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)`,
+			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31, now())`,
 		customerID, customerCode, parent.ID, prospectID, googlePlaceID,
 		input.CustomerName, input.CustomerSegment, input.CustomerCategory,
 		input.SiteAddress.Mode, input.SiteAddress.Province, input.SiteAddress.District,
@@ -271,8 +271,8 @@ func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UU
 		INSERT INTO parent_companies (
 			id, parent_code, name, address_mode, province, district, sub_district, village,
 			latitude, longitude, preview_address, company_contacts, npwp_name,
-			npwp_address, npwp_number, term_of_payment, kam_assignments)
-		VALUES ($1,$2,$3,'AUTO_CONVERTED','','','','',$4,$5,$6,$7,'','','','',$8)`,
+			npwp_address, npwp_number, term_of_payment, kam_assignments, updated_at)
+		VALUES ($1,$2,$3,'AUTO_CONVERTED','','','','',$4,$5,$6,$7,'','','','',$8, now())`,
 		parentID, parentCode, placeName, latitude, longitude, formattedAddress, emptyContacts, emptyKams)
 	if err != nil {
 		return model.CustomerSite{}, fmt.Errorf("create auto parent company: %w", err)
@@ -298,8 +298,8 @@ func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UU
 			latitude, longitude, preview_address, site_contacts, ppn, id_tku_number, nik,
 			shipment_cost, invoice_type, bank_account, bill_to_source, ship_to_source,
 			billing_address_preview, shipping_address_preview, sales_executive_id,
-			sales_assignments, converted_at, converted_by_admin_id)
-		VALUES ($1,$2,$3,$4,$5,$6,'General Trade',$7,'AUTO_CONVERTED','','','','',$8,$9,$10,$11,'','','','','','','',$12,$13,$14,$15)`,
+			sales_assignments, converted_at, converted_by_admin_id, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,'General Trade',$7,'AUTO_CONVERTED','','','','',$8,$9,$10,$11,'','','','','','','',$12,$13,$14,$15, now())`,
 		customerID, customerCode, parentID, prospectID, googlePlaceID,
 		placeName, placeCategory, latitude, longitude, formattedAddress, siteContacts,
 		assignedSalesExecID, salesAssignments, convertedAt, uuid.Nil)
@@ -369,8 +369,8 @@ func (r *PostgresRepository) resolveParentCompany(ctx context.Context, tx pgx.Tx
 		INSERT INTO parent_companies (
 			id, parent_code, name, address_mode, province, district, sub_district, village,
 			latitude, longitude, preview_address, company_contacts, npwp_name,
-			npwp_address, npwp_number, term_of_payment, kam_assignments)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+			npwp_address, npwp_number, term_of_payment, kam_assignments, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())`,
 		parentID, parentCode, input.ParentCompanyName, input.CompanyAddress.Mode,
 		input.CompanyAddress.Province, input.CompanyAddress.District, input.CompanyAddress.SubDistrict,
 		input.CompanyAddress.Village, input.CompanyAddress.Latitude, input.CompanyAddress.Longitude,

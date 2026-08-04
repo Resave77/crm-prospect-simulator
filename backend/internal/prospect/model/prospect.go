@@ -47,9 +47,9 @@ type Prospect struct {
 var ActiveStatuses = []Status{StatusNewLead, StatusContacted, StatusInterested, StatusQualified, StatusProposalSent, StatusNegotiation}
 
 type SalesExecutive struct {
-	ID                 uuid.UUID `json:"id"`
-	FullName           string    `json:"fullName"`
-	ActiveProspectCount int      `json:"activeProspectCount"`
+	ID                  uuid.UUID `json:"id"`
+	FullName            string    `json:"fullName"`
+	ActiveProspectCount int       `json:"activeProspectCount"`
 }
 
 type PlaceResult struct {
@@ -136,16 +136,16 @@ type CheckOutInput struct {
 }
 
 type PlacePhoto struct {
-	Name      string `json:"name"`
-	PhotoURL  string `json:"photoUrl"`
-	WidthPx   int    `json:"widthPx"`
-	HeightPx  int    `json:"heightPx"`
+	Name        string `json:"name"`
+	PhotoURL    string `json:"photoUrl"`
+	WidthPx     int    `json:"widthPx"`
+	HeightPx    int    `json:"heightPx"`
 	Attribution string `json:"attribution"`
 }
 
 type PlaceOpeningHours struct {
-	OpenNow   bool     `json:"openNow"`
-	Weekdays  []string `json:"weekdays"`
+	OpenNow  bool     `json:"openNow"`
+	Weekdays []string `json:"weekdays"`
 }
 
 type PlaceReview struct {
@@ -158,32 +158,32 @@ type PlaceReview struct {
 }
 
 type PlaceDetails struct {
-	GooglePlaceID      string              `json:"googlePlaceId"`
-	PlaceName          string              `json:"placeName"`
-	FormattedAddress   string              `json:"formattedAddress"`
-	Latitude           float64             `json:"latitude"`
-	Longitude          float64             `json:"longitude"`
-	PlaceCategory      string              `json:"placeCategory"`
-	PlaceTypes         []string            `json:"placeTypes"`
-	PhoneNumber        string              `json:"phoneNumber"`
-	InternationalPhone string              `json:"internationalPhone"`
-	WebsiteURL         string              `json:"websiteUrl"`
-	GoogleMapsURL      string              `json:"googleMapsUrl"`
-	Rating             float64             `json:"rating"`
-	UserRatingCount    int                 `json:"userRatingCount"`
-	BusinessStatus     string              `json:"businessStatus"`
-	PriceLevel         string              `json:"priceLevel"`
-	EditorialSummary   string              `json:"editorialSummary"`
-	UTCOffsetMinutes   int                 `json:"utcOffsetMinutes"`
-	Photos             []PlacePhoto        `json:"photos"`
-	OpeningHours       *PlaceOpeningHours  `json:"openingHours"`
-	Reviews            []PlaceReview       `json:"reviews"`
-	Delivery           bool                `json:"delivery"`
-	DineIn             bool                `json:"dineIn"`
-	Takeout            bool                `json:"takeout"`
-	CurbsidePickup     bool                `json:"curbsidePickup"`
-	ParkingOptions     *PlaceParking       `json:"parkingOptions"`
-	PaymentOptions     *PlacePayments      `json:"paymentOptions"`
+	GooglePlaceID        string              `json:"googlePlaceId"`
+	PlaceName            string              `json:"placeName"`
+	FormattedAddress     string              `json:"formattedAddress"`
+	Latitude             float64             `json:"latitude"`
+	Longitude            float64             `json:"longitude"`
+	PlaceCategory        string              `json:"placeCategory"`
+	PlaceTypes           []string            `json:"placeTypes"`
+	PhoneNumber          string              `json:"phoneNumber"`
+	InternationalPhone   string              `json:"internationalPhone"`
+	WebsiteURL           string              `json:"websiteUrl"`
+	GoogleMapsURL        string              `json:"googleMapsUrl"`
+	Rating               float64             `json:"rating"`
+	UserRatingCount      int                 `json:"userRatingCount"`
+	BusinessStatus       string              `json:"businessStatus"`
+	PriceLevel           string              `json:"priceLevel"`
+	EditorialSummary     string              `json:"editorialSummary"`
+	UTCOffsetMinutes     int                 `json:"utcOffsetMinutes"`
+	Photos               []PlacePhoto        `json:"photos"`
+	OpeningHours         *PlaceOpeningHours  `json:"openingHours"`
+	Reviews              []PlaceReview       `json:"reviews"`
+	Delivery             bool                `json:"delivery"`
+	DineIn               bool                `json:"dineIn"`
+	Takeout              bool                `json:"takeout"`
+	CurbsidePickup       bool                `json:"curbsidePickup"`
+	ParkingOptions       *PlaceParking       `json:"parkingOptions"`
+	PaymentOptions       *PlacePayments      `json:"paymentOptions"`
 	AccessibilityOptions *PlaceAccessibility `json:"accessibilityOptions"`
 }
 
@@ -197,10 +197,10 @@ type PlaceParking struct {
 }
 
 type PlacePayments struct {
-	CashOnly           bool `json:"cashOnly"`
-	CreditCardOnly     bool `json:"creditCardOnly"`
-	DebitCardOnly      bool `json:"debitCardOnly"`
-	NfcOnly            bool `json:"nfcOnly"`
+	CashOnly       bool `json:"cashOnly"`
+	CreditCardOnly bool `json:"creditCardOnly"`
+	DebitCardOnly  bool `json:"debitCardOnly"`
+	NfcOnly        bool `json:"nfcOnly"`
 }
 
 type PlaceAccessibility struct {
@@ -211,11 +211,20 @@ type PlaceAccessibility struct {
 }
 
 type ProspectComment struct {
-	ID         uuid.UUID `json:"id"`
-	ProspectID uuid.UUID `json:"prospectId"`
-	UserID     uuid.UUID `json:"userId"`
-	UserName   string    `json:"userName"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID          uuid.UUID           `json:"id"`
+	ProspectID  uuid.UUID           `json:"prospectId"`
+	UserID      uuid.UUID           `json:"userId"`
+	UserName    string              `json:"userName"`
+	Content     string              `json:"content"`
+	Attachments []CommentAttachment `json:"attachments"`
+	CreatedAt   time.Time           `json:"createdAt"`
+	UpdatedAt   time.Time           `json:"updatedAt"`
+}
+
+type CommentAttachment struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"contentType"`
+	Size        int64     `json:"size"`
+	Path        string    `json:"-"`
 }

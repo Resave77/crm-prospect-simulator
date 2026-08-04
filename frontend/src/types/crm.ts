@@ -368,6 +368,14 @@ export interface ProspectComment {
   userId: string
   userName: string
   content: string
+  attachments: ProspectCommentAttachment[]
   createdAt: string
   updatedAt: string
+}
+
+export interface ProspectCommentAttachment {
+  id: string
+  name: string
+  contentType: string
+  size: number
 }

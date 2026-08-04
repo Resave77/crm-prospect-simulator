@@ -181,6 +181,13 @@ func (s *Service) SalesExecutives(ctx context.Context, actor Actor) ([]prospectm
 	return s.repository.ListSalesExecutives(ctx)
 }
 
+func (s *Service) MentionUsers(ctx context.Context, actor Actor) ([]prospectmodel.SalesExecutive, error) {
+	if !actor.Role.IsAdminRole() && actor.Role != authmodel.RoleSalesExecutive {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListMentionUsers(ctx)
+}
+
 func (s *Service) SearchPlaces(ctx context.Context, actor Actor, input prospectmodel.PlaceSearchInput) ([]prospectmodel.PlaceResult, error) {
 	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
@@ -410,15 +417,22 @@ func (s *Service) ListComments(ctx context.Context, actor Actor, prospectID uuid
 	return s.repository.ListComments(ctx, prospectID)
 }
 
-func (s *Service) CreateComment(ctx context.Context, actor Actor, prospectID uuid.UUID, content string) (prospectmodel.ProspectComment, error) {
+func (s *Service) CreateComment(ctx context.Context, actor Actor, prospectID uuid.UUID, content string, attachments []prospectmodel.CommentAttachment) (prospectmodel.ProspectComment, error) {
 	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
 		return prospectmodel.ProspectComment{}, err
 	}
 	content = strings.TrimSpace(content)
-	if content == "" {
+	if content == "" && len(attachments) == 0 {
 		return prospectmodel.ProspectComment{}, ErrNotesRequired
 	}
-	return s.repository.CreateComment(ctx, prospectID, actor.UserID, content)
+	return s.repository.CreateComment(ctx, prospectID, actor.UserID, content, attachments)
+}
+
+func (s *Service) CommentAttachment(ctx context.Context, actor Actor, prospectID, attachmentID uuid.UUID) (prospectmodel.CommentAttachment, error) {
+	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
+		return prospectmodel.CommentAttachment{}, err
+	}
+	return s.repository.FindCommentAttachment(ctx, prospectID, attachmentID)
 }
 
 func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {

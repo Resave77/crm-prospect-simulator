@@ -567,6 +567,15 @@ async function executeDeleteCompany() {
       </template>
     </Dialog>
 
+    <!-- DELETE COMPANY CONFIRMATION DIALOG -->
+    <Dialog v-model:visible="companyDeleteDialogVisible" header="Delete Company" modal :style="{ width: '420px' }">
+      <p>Are you sure you want to delete <strong>{{ companyDeleteTarget?.name }}</strong> and all <strong>{{ companyDeleteTarget?.sites }}</strong> of its site(s)? This action cannot be undone.</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text @click="companyDeleteDialogVisible = false" :disabled="deleting" />
+        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDeleteCompany" />
+      </template>
+    </Dialog>
+
     <!-- ======================== COMPANY TAB ======================== -->
     <div v-if="activeTab === 'company'" class="panel-stack">
       <!-- FILTERS -->
@@ -668,7 +677,7 @@ async function executeDeleteCompany() {
                   <div class="row-actions">
                     <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="goToCompany(company.id)" />
                     <Button icon="pi pi-pencil" text rounded size="small" class="act-edit" title="Edit" @click="router.push(`/admin/companies/${company.id}/edit`)" />
-                    <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" />
+                    <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDeleteCompany(company)" />
                   </div>
                 </td>
               </tr>

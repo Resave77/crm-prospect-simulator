@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getProspectComments, addProspectComment } from '../api/crm'
-import type { ProspectComment } from '../types/crm'
+import { getProspectComments, addProspectComment, downloadCommentAttachment, getMentionUsers } from '../api/crm'
+import type { ProspectComment, SalesExecutiveOption } from '../types/crm'
 import type { UserRole } from '../types/auth'
 
 const props = defineProps<{
@@ -13,10 +13,16 @@ const props = defineProps<{
 const auth = useAuthStore()
 const comments = ref<ProspectComment[]>([])
 const newComment = ref('')
+const files = ref<File[]>([])
+const mentionUsers = ref<SalesExecutiveOption[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
 const loading = ref(true)
 const sending = ref(false)
 const error = ref('')
 const listRef = ref<HTMLElement | null>(null)
+const open = ref(false)
+const imagePreviews = ref<Record<string, string>>({})
+let pollId: number | undefined
 
 function scrollToBottom() {
   nextTick(() => {
@@ -44,9 +50,23 @@ function isOwnComment(comment: ProspectComment): boolean {
   return comment.userId === auth.user?.id
 }
 
+async function ensureImagePreviews(items: ProspectComment[]) {
+  const images = items.flatMap((comment) => comment.attachments ?? []).filter((file) => file.contentType.startsWith('image/'))
+  await Promise.all(images.map(async (file) => {
+    if (imagePreviews.value[file.id]) return
+    try {
+      const blob = await downloadCommentAttachment(props.prospectId, file.id, props.role)
+      imagePreviews.value[file.id] = URL.createObjectURL(blob)
+    } catch { /* the filename remains available when a preview cannot be loaded */ }
+  }))
+}
+
 async function load() {
   try {
-    comments.value = await getProspectComments(props.prospectId, props.role)
+    const [items, users] = await Promise.all([getProspectComments(props.prospectId, props.role), getMentionUsers(props.role)])
+    comments.value = items
+    await ensureImagePreviews(items)
+    mentionUsers.value = users.filter((u) => u.id !== auth.user?.id)
     scrollToBottom()
   } catch (caught) {
     error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Failed to load comments.'
@@ -57,19 +77,46 @@ async function load() {
 
 async function submit() {
   const text = newComment.value.trim()
-  if (!text || sending.value) return
+  if ((!text && !files.value.length) || sending.value) return
   sending.value = true
   error.value = ''
   try {
-    const item = await addProspectComment(props.prospectId, text, props.role)
+    const item = await addProspectComment(props.prospectId, text, props.role, files.value)
     comments.value.push(item)
+    await ensureImagePreviews([item])
     newComment.value = ''
+    files.value = []
+    if (fileInput.value) fileInput.value.value = ''
     scrollToBottom()
   } catch (caught) {
     error.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message ?? 'Failed to send comment.'
   } finally {
     sending.value = false
   }
+}
+
+function mention(user: SalesExecutiveOption) {
+  const before = newComment.value.replace(/@[^@\s]*$/, '')
+  newComment.value = `${before}@${user.fullName} `
+}
+
+function selectFiles(event: Event) {
+  const selected = Array.from((event.target as HTMLInputElement).files ?? [])
+  error.value = ''
+  if (selected.length > 5 || selected.some((file) => file.size > 5 * 1024 * 1024)) {
+    error.value = 'Maximum 5 files, with a maximum size of 5 MB each.'
+    return
+  }
+  files.value = selected
+}
+
+async function openAttachment(id: string, name: string) {
+  try {
+    const blob = await downloadCommentAttachment(props.prospectId, id, props.role)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch { error.value = 'Failed to download attachment.' }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -80,16 +127,37 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 watch(() => comments.value.length, () => scrollToBottom())
+watch(open, (value) => { if (value) scrollToBottom() })
+watch(() => props.prospectId, () => { loading.value = true; comments.value = []; load() })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  pollId = window.setInterval(async () => {
+    if (open.value || sending.value) return
+    try {
+      comments.value = await getProspectComments(props.prospectId, props.role)
+      await ensureImagePreviews(comments.value)
+    } catch { /* keep the last known badge count */ }
+  }, 30000)
+})
+onBeforeUnmount(() => {
+  if (pollId) window.clearInterval(pollId)
+  Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url))
+})
 </script>
 
 <template>
-  <div class="pc-wrap">
+  <div class="pc-floating">
+    <button class="pc-launcher" aria-label="Open prospect discussion" @click="open = !open">
+      <i :class="open ? 'pi pi-times' : 'pi pi-comments'" />
+      <span v-if="comments.length && !open" class="pc-launcher-badge">{{ comments.length > 99 ? '99+' : comments.length }}</span>
+    </button>
+  <div v-if="open" class="pc-wrap">
     <div class="pc-header">
       <i class="pi pi-comments" />
       <span>Discussion</span>
       <span v-if="!loading" class="pc-count">{{ comments.length }}</span>
+      <button class="pc-close" aria-label="Close discussion" @click="open = false"><i class="pi pi-times" /></button>
     </div>
 
     <div v-if="loading" class="pc-loading">
@@ -119,14 +187,27 @@ onMounted(load)
             <strong>{{ c.userName }}</strong>
             <span>{{ formatTime(c.createdAt) }}</span>
           </div>
-          <p class="pc-msg-text">{{ c.content }}</p>
+          <p v-if="c.content" class="pc-msg-text">{{ c.content }}</p>
+          <div v-if="c.attachments?.length" class="pc-attachments">
+            <button v-for="file in c.attachments" :key="file.id" @click="openAttachment(file.id, file.name)">
+              <img v-if="file.contentType.startsWith('image/') && imagePreviews[file.id]" :src="imagePreviews[file.id]" :alt="file.name" />
+              <i v-else :class="file.contentType.startsWith('image/') ? 'pi pi-image' : 'pi pi-file'" />
+              <span>{{ file.name }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <div v-if="error && comments.length" class="pc-inline-error">{{ error }}</div>
 
+    <div v-if="newComment.match(/@[^@\s]*$/)" class="pc-mentions">
+      <button v-for="user in mentionUsers.filter(u => u.fullName.toLowerCase().includes((newComment.match(/@([^@\s]*)$/)?.[1] || '').toLowerCase())).slice(0, 6)" :key="user.id" @click="mention(user)">@{{ user.fullName }}</button>
+    </div>
+    <div v-if="files.length" class="pc-selected-files"><span v-for="file in files" :key="file.name"><i class="pi pi-paperclip" />{{ file.name }}</span></div>
     <div class="pc-input-row">
+      <input ref="fileInput" class="pc-file-input" type="file" multiple accept="image/jpeg,image/png,.pdf,.docx,.xlsx" @change="selectFiles" />
+      <button class="pc-attach-btn" title="Attach photo or document" @click="fileInput?.click()"><i class="pi pi-paperclip" /></button>
       <textarea
         v-model="newComment"
         placeholder="Write a comment..."
@@ -136,7 +217,7 @@ onMounted(load)
       />
       <button
         class="pc-send-btn"
-        :disabled="!newComment.trim() || sending"
+        :disabled="(!newComment.trim() && !files.length) || sending"
         @click="submit"
       >
         <i v-if="sending" class="pi pi-spin pi-spinner" />
@@ -144,10 +225,17 @@ onMounted(load)
       </button>
     </div>
   </div>
+  </div>
 </template>
 
 <style scoped>
 .pc-wrap {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5.5rem;
+  z-index: 1100;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: min(620px, calc(100vh - 7rem));
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-light);
@@ -156,6 +244,9 @@ onMounted(load)
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
+.pc-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1101; width:58px; height:58px; border:0; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--brand-blue,#2563eb); box-shadow:0 10px 30px rgba(37,99,235,.35); cursor:pointer; font-size:1.25rem; }
+.pc-launcher-badge { position:absolute; right:-3px; top:-4px; min-width:21px; height:21px; padding:0 5px; display:grid; place-items:center; border:2px solid #fff; border-radius:999px; background:#ef4444; color:#fff; font-size:.62rem; font-weight:800; }
+.pc-close { margin-left:.15rem; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:50%; background:transparent; color:var(--text-muted); cursor:pointer; }
 
 .pc-header {
   display: flex;
@@ -203,6 +294,11 @@ onMounted(load)
   gap: 0.65rem;
   -webkit-overflow-scrolling: touch;
 }
+@media (max-width: 640px) {
+  .pc-wrap { left:.75rem; right:.75rem; bottom:5rem; width:auto; max-height:calc(100dvh - 6.5rem); }
+  .pc-list { max-height:calc(100dvh - 18rem); }
+  .pc-launcher { right:1rem; bottom:1rem; }
+}
 
 .pc-empty {
   display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
@@ -245,6 +341,17 @@ onMounted(load)
   background: var(--brand-blue, #2563eb); color: #fff;
   border-radius: 12px 12px 4px 12px;
 }
+.pc-attachments { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.3rem; }
+.pc-attachments button { display:flex; align-items:center; gap:.35rem; padding:.4rem .55rem; border:1px solid var(--border-light); border-radius:9px; color:var(--brand-blue); font-size:.7rem; background:#fff; cursor:pointer; }
+.pc-attachments img { display:block; width:150px; max-width:100%; height:110px; object-fit:cover; border-radius:7px; }
+.pc-attachments button:has(img) { flex-direction:column; align-items:flex-start; padding:.35rem; }
+.pc-mentions { display:grid; padding:.35rem .75rem; border-top:1px solid var(--border-light); background:#fff; }
+.pc-mentions button { padding:.4rem; border:0; background:transparent; text-align:left; cursor:pointer; color:var(--text-primary); }
+.pc-mentions button:hover { background:#eff6ff; }
+.pc-selected-files { display:flex; gap:.35rem; flex-wrap:wrap; padding:.4rem .75rem 0; font-size:.65rem; }
+.pc-selected-files span { padding:.25rem .4rem; background:#eef2ff; border-radius:6px; }
+.pc-file-input { display:none; }
+.pc-attach-btn { width:38px; height:38px; border:0; border-radius:50%; background:#eef2f7; color:var(--text-secondary); cursor:pointer; }
 
 .pc-input-row {
   display: flex; align-items: flex-end; gap: 0.5rem;

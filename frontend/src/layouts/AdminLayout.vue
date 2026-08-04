@@ -47,14 +47,30 @@ async function logout() {
           <i class="pi" :class="sidebarCollapsed ? 'pi-chevron-right' : 'pi-chevron-left'" />
         </button>
       </div>
-      <small v-show="!sidebarCollapsed" class="nav-caption">WORKSPACE</small>
+      <small v-show="!sidebarCollapsed" class="nav-caption">MAIN</small>
       <nav aria-label="Administrator navigation">
         <RouterLink to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
           <i class="pi pi-home" /> <span v-show="!sidebarCollapsed">Dashboard</span>
         </RouterLink>
-        <RouterLink to="/admin/sales-executives" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Executive' : ''">
-          <i class="pi pi-user" /> <span v-show="!sidebarCollapsed">Sales Executive</span>
+
+        <small v-show="!sidebarCollapsed" class="nav-caption">CUSTOMERS &amp; PROSPECTS</small>
+        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
+          <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
         </RouterLink>
+        <RouterLink to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
+          <i class="pi pi-compass" /> <span v-show="!sidebarCollapsed">Prospect Finder</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect List' : ''">
+          <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Prospect List</span>
+        </RouterLink>
+        <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
+          <i class="pi pi-th-large" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
+        </RouterLink>
+        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
+          <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
+        </RouterLink>
+
+        <small v-show="!sidebarCollapsed" class="nav-caption">MANAGEMENT</small>
         <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
           <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Accounts</span>
         </RouterLink>
@@ -64,27 +80,8 @@ async function logout() {
         <RouterLink to="/admin/sales-structure" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Structure' : ''">
           <i class="pi pi-sitemap" /> <span v-show="!sidebarCollapsed">Sales Structure</span>
         </RouterLink>
-        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
-          <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
-        </RouterLink>
-        <RouterLink to="/admin/customer-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Assignment' : ''">
-          <i class="pi pi-directions-alt" /> <span v-show="!sidebarCollapsed">Customer Assignment</span>
-        </RouterLink>
-        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
-          <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
-        </RouterLink>
-        <RouterLink to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
-          <i class="pi pi-compass" /> <span v-show="!sidebarCollapsed">Prospect Finder</span>
-        </RouterLink>
-        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect List' : ''">
-          <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Prospect List</span>
-        </RouterLink>
-        <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
-          <i class="pi pi-sitemap" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
-        </RouterLink>
-        <RouterLink to="/admin/prospect-assignment" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Assignment' : ''">
-          <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Prospect Assignment</span>
-        </RouterLink>
+
+        <small v-show="!sidebarCollapsed" class="nav-caption">REPORTS</small>
         <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
           <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
         </RouterLink>
@@ -252,6 +249,12 @@ async function logout() {
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.admin-sidebar nav .nav-caption {
+  margin-top: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f4f8;
 }
 
 .admin-sidebar nav {
