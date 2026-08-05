@@ -371,7 +371,10 @@ func resolveUserIDByEmail(ctx context.Context, tx pgx.Tx, email string) (uuid.UU
 
 func resolveRoleIDByName(ctx context.Context, tx pgx.Tx, normalized string) (uuid.UUID, bool, error) {
 	var id uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT id FROM sales_roles WHERE lower(btrim(normalized_name)) = lower(btrim($1)) ORDER BY created_at LIMIT 1`, normalized).Scan(&id)
+	err := tx.QueryRow(ctx, `
+		SELECT id FROM sales_roles
+		WHERE is_active = true AND lower(btrim(normalized_name)) = lower(btrim($1))
+		ORDER BY created_at LIMIT 1`, normalized).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, nil
 	}
@@ -510,6 +513,13 @@ func seedRoles(ctx context.Context, tx pgx.Tx, userIDMap map[uuid.UUID]uuid.UUID
 }
 
 func seedRolePermissions(ctx context.Context, tx pgx.Tx, roleIDMap map[uuid.UUID]uuid.UUID) (int, error) {
+	resolvedIDs := make([]uuid.UUID, 0, len(buildRoles()))
+	for _, r := range buildRoles() {
+		resolvedIDs = append(resolvedIDs, roleIDMap[r.ID])
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM role_permissions WHERE sales_role_id = ANY($1)`, resolvedIDs); err != nil {
+		return 0, fmt.Errorf("reset role permissions: %w", err)
+	}
 	total := 0
 	for _, r := range buildRoles() {
 		tag, err := tx.Exec(ctx, `
@@ -652,7 +662,7 @@ func run() error {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	fmt.Printf("Baseline seeded. users created=%d updated=%d; roles created=%d updated=%d; permission grants added=%d; user sales-role links set=%d; assignments created=%d updated=%d\n",
+	fmt.Printf("Baseline seeded. users created=%d updated=%d; roles created=%d updated=%d; permission grants set=%d; user sales-role links set=%d; assignments created=%d updated=%d\n",
 		users.Created, users.Updated, roles.Created, roles.Updated, permissionGrants, userRoleLinks, assignments.Created, assignments.Updated)
 	return nil
 }
