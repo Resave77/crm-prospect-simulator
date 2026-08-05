@@ -49,6 +49,11 @@ backend/prisma/dev.db
 backend/private_uploads/
 
 # ==========================
+# Runtime uploads
+# ==========================
+backend/uploads/
+
+# ==========================
 # IDE
 # ==========================
 .vscode/
