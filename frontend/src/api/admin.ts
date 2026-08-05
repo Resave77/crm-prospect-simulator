@@ -66,7 +66,9 @@ export async function getSalesRole(id: string) {
 }
 
 export async function getPermissions(search?: string) {
-  const response = await api.get<ApiEnvelope<unknown>>('/admin/permissions', { params: search ? { search } : undefined })
+  const response = await api.get<ApiEnvelope<unknown>>('/admin/permissions', {
+    params: search ? { search } : undefined,
+  })
   return asArray<AdminPermission>(response.data.data, 'Unable to load permissions.')
 }
 
@@ -79,7 +81,11 @@ export async function updateSalesRole(id: string, payload: UpdateSalesRolePayloa
 }
 
 export async function updateSalesRoleStatus(id: string, isActive: boolean) {
-  return (await api.patch<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}/status`, { isActive })).data.data
+  return (
+    await api.patch<ApiEnvelope<SalesRole>>(`/admin/sales-roles/${id}/status`, {
+      isActive,
+    })
+  ).data.data
 }
 
 export async function deleteSalesRole(id: string) {
@@ -87,10 +93,39 @@ export async function deleteSalesRole(id: string) {
 }
 
 export async function getSalesStructure(effectiveDate: string) {
-  const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-structure', { params: { effectiveDate } })
-  return asArray<SalesStructureItem>(response.data.data, 'Unable to load sales structure.')
+  const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-structure', {
+    params: { effectiveDate },
+  })
+  return asArray<SalesStructureItem>(
+    response.data.data,
+    'Unable to load sales structure.',
+  )
 }
 
 export async function createSalesAssignment(payload: CreateSalesAssignmentPayload) {
-  return (await api.post<ApiEnvelope<SalesStructureAssignment>>('/admin/sales-structure/assignments', payload)).data.data
+  return (
+    await api.post<ApiEnvelope<SalesStructureAssignment>>(
+      '/admin/sales-structure/assignments',
+      payload,
+    )
+  ).data.data
+}
+
+/**
+ * Ends an assignment without deleting its history.
+ *
+ * Expected backend contract:
+ * PATCH /api/v1/admin/sales-structure/assignments/:assignmentId/end
+ * body: { effectiveTo: 'YYYY-MM-DD' }
+ */
+export async function endSalesAssignment(
+  assignmentId: string,
+  effectiveTo: string,
+) {
+  return (
+    await api.patch<ApiEnvelope<SalesStructureAssignment>>(
+      `/admin/sales-structure/assignments/${assignmentId}/end`,
+      { effectiveTo },
+    )
+  ).data.data
 }

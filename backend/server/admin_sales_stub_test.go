@@ -39,6 +39,9 @@ func (r *adminRepoStub) CreateSalesAssignment(_ context.Context, _ uuid.UUID, _ 
 func (r *adminRepoStub) MoveSalesAssignment(_ context.Context, _, _ uuid.UUID, _ adminmodel.MoveAssignmentInput, _ uuid.UUID) error {
 	return nil
 }
+func (r *adminRepoStub) EndSalesAssignment(_ context.Context, _ uuid.UUID, _ time.Time, _ uuid.UUID) error {
+	return nil
+}
 func (r *adminRepoStub) FindSalesAssignment(_ context.Context, _ uuid.UUID) (adminmodel.SalesStructureAssignment, error) {
 	return adminmodel.SalesStructureAssignment{}, adminrepo.ErrNotFound
 }
@@ -49,6 +52,9 @@ func (r *adminRepoStub) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID, 
 	return false, nil
 }
 func (r *adminRepoStub) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (r *adminRepoStub) HasActiveChildAssignments(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
 	return false, nil
 }
 func (r *adminRepoStub) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {
@@ -92,6 +98,9 @@ func (r *patchAdminRepo) CreateSalesAssignment(_ context.Context, _ uuid.UUID, _
 func (r *patchAdminRepo) MoveSalesAssignment(_ context.Context, _, _ uuid.UUID, _ adminmodel.MoveAssignmentInput, _ uuid.UUID) error {
 	return nil
 }
+func (r *patchAdminRepo) EndSalesAssignment(_ context.Context, _ uuid.UUID, _ time.Time, _ uuid.UUID) error {
+	return nil
+}
 func (r *patchAdminRepo) FindSalesAssignment(_ context.Context, _ uuid.UUID) (adminmodel.SalesStructureAssignment, error) {
 	return adminmodel.SalesStructureAssignment{}, adminrepo.ErrNotFound
 }
@@ -102,6 +111,9 @@ func (r *patchAdminRepo) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID,
 	return false, nil
 }
 func (r *patchAdminRepo) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (r *patchAdminRepo) HasActiveChildAssignments(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
 	return false, nil
 }
 func (r *patchAdminRepo) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {

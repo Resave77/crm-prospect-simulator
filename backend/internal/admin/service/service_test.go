@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode"
@@ -25,6 +26,7 @@ type repoStub struct {
 	roles            map[uuid.UUID]model.SalesRole
 	effectiveRoles   map[uuid.UUID]model.SalesRole
 	listResult       model.UserListResult
+	lastCreate       *model.CreateUserInput
 	lastUpdate       *model.UpdateUserInput
 	createErr        error
 	updateErr        error
@@ -66,12 +68,13 @@ func (r *repoStub) CreateUser(_ context.Context, id uuid.UUID, input model.Creat
 	if r.createErr != nil {
 		return r.createErr
 	}
+	r.lastCreate = &input
 	if r.details != nil {
 		r.details[id] = model.UserDetail{
 			ID: id, EmployeeID: input.EmployeeID, FullName: input.FullName,
 			Email: input.Email, Phone: input.Phone, Role: input.Role,
 			Status: authmodel.UserActive, ManagerID: input.ManagerID,
-			MustChangePassword: true,
+			MustChangePassword: false,
 		}
 	}
 	return nil
@@ -185,7 +188,7 @@ func TestManagerAndSalesGetForbidden(t *testing.T) {
 }
 
 func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
-	role := activeRole(1)
+	role := activeRole(2)
 	stub := &repoStub{
 		details: map[uuid.UUID]model.UserDetail{},
 		emails:  map[string]uuid.UUID{}, employeeIDs: map[string]uuid.UUID{},
@@ -202,6 +205,124 @@ func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
 	_, err := svc.CreateUser(context.Background(), adminActor(), input)
 	if err != nil {
 		t.Fatalf("create sales manager: %v", err)
+	}
+}
+
+func TestCreateSalesAccountWithoutSalesRoleRejected(t *testing.T) {
+	stub := &repoStub{emails: map[string]uuid.UUID{}, employeeIDs: map[string]uuid.UUID{}}
+	svc := newTestService(stub)
+	input := model.CreateUserInput{
+		AccountType:       model.AccountTypeSalesAccount,
+		EmployeeID:        "SA-0003",
+		FullName:          "Missing Role",
+		Email:             "missing-role@yummy.test",
+		TemporaryPassword: "Password123",
+	}
+	if _, err := svc.CreateUser(context.Background(), adminActor(), input); !errors.Is(err, ErrValidation) {
+		t.Fatalf("sales account without role err=%v, want ErrValidation", err)
+	}
+}
+
+func TestCreateLevel1SalesRoleCreatesSalesManager(t *testing.T) {
+	role := model.SalesRole{ID: uuid.New(), Name: "Super Admin", Level: 1, IsActive: true}
+	stub := &repoStub{
+		details:     map[uuid.UUID]model.UserDetail{},
+		emails:      map[string]uuid.UUID{},
+		employeeIDs: map[string]uuid.UUID{},
+		roles: map[uuid.UUID]model.SalesRole{
+			role.ID: role,
+		},
+	}
+	svc := newTestService(stub)
+	input := model.CreateUserInput{
+		EmployeeID: "SA-0002", FullName: "New Level 1 Sales", Email: "sales-l1@yummy.test",
+		Role:              authmodel.RoleSalesExecutive,
+		TemporaryPassword: "Password123",
+		SalesRoleID:       &role.ID,
+	}
+	_, err := svc.CreateUser(context.Background(), adminActor(), input)
+	if err != nil {
+		t.Fatalf("create level 1 sales account: %v", err)
+	}
+	if stub.lastCreate == nil || stub.lastCreate.Role != authmodel.RoleSalesManager {
+		t.Fatalf("created role=%v, want SALES_MANAGER", stub.lastCreate)
+	}
+	if stub.lastCreate.ManagerID != nil {
+		t.Fatalf("manager must be nil, got %v", *stub.lastCreate.ManagerID)
+	}
+}
+
+func TestCreateSalesAccountMapsOrganizationalLevels(t *testing.T) {
+	for _, tc := range []struct {
+		level int
+		want  authmodel.Role
+	}{
+		{level: 1, want: authmodel.RoleSalesManager},
+		{level: 2, want: authmodel.RoleSalesManager},
+		{level: 3, want: authmodel.RoleSalesManager},
+		{level: 4, want: authmodel.RoleSalesExecutive},
+	} {
+		t.Run(fmt.Sprintf("level_%d", tc.level), func(t *testing.T) {
+			role := activeRole(tc.level)
+			stub := &repoStub{
+				details:     map[uuid.UUID]model.UserDetail{},
+				emails:      map[string]uuid.UUID{},
+				employeeIDs: map[string]uuid.UUID{},
+				roles:       map[uuid.UUID]model.SalesRole{role.ID: role},
+			}
+			svc := newTestService(stub)
+			input := model.CreateUserInput{
+				AccountType:       model.AccountTypeSalesAccount,
+				EmployeeID:        fmt.Sprintf("SA-L%d", tc.level),
+				FullName:          "Mapped Sales",
+				Email:             fmt.Sprintf("mapped-l%d@yummy.test", tc.level),
+				TemporaryPassword: "Password123",
+				SalesRoleID:       &role.ID,
+			}
+			if _, err := svc.CreateUser(context.Background(), adminActor(), input); err != nil {
+				t.Fatalf("create mapped sales: %v", err)
+			}
+			if stub.lastCreate == nil || stub.lastCreate.Role != tc.want {
+				t.Fatalf("level %d role=%v, want %v", tc.level, stub.lastCreate, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateSuperAdminAccountTypeClearsSalesRoleAndManager(t *testing.T) {
+	managerID := uuid.New()
+	stub := &repoStub{
+		details:     map[uuid.UUID]model.UserDetail{},
+		emails:      map[string]uuid.UUID{},
+		employeeIDs: map[string]uuid.UUID{},
+		users: map[uuid.UUID]authmodel.User{
+			managerID: managerUser(managerID, authmodel.UserActive),
+		},
+	}
+	svc := newTestService(stub)
+	roleID := uuid.New()
+	input := model.CreateUserInput{
+		AccountType:       model.AccountTypeSuperAdmin,
+		EmployeeID:        "SA-0001",
+		FullName:          "New Super Admin",
+		Email:             "new-super@yummy.test",
+		Role:              authmodel.RoleSalesExecutive,
+		ManagerID:         &managerID,
+		SalesRoleID:       &roleID,
+		TemporaryPassword: "Password123",
+	}
+	_, err := svc.CreateUser(context.Background(), adminActor(), input)
+	if err != nil {
+		t.Fatalf("create super admin account type: %v", err)
+	}
+	if stub.lastCreate == nil || stub.lastCreate.Role != authmodel.RoleSuperAdmin {
+		t.Fatalf("created role=%v, want SUPER_ADMIN", stub.lastCreate)
+	}
+	if stub.lastCreate.SalesRoleID != nil {
+		t.Fatalf("sales role must be nil, got %v", *stub.lastCreate.SalesRoleID)
+	}
+	if stub.lastCreate.ManagerID != nil {
+		t.Fatalf("manager must be nil, got %v", *stub.lastCreate.ManagerID)
 	}
 }
 
@@ -510,7 +631,7 @@ func TestUpdateSMToSEWithValidActiveManagerSucceeds(t *testing.T) {
 func TestUpdatePrimarySuperAdminOrganizationalRolePreservesSystemRole(t *testing.T) {
 	target := mustUUID(t, "00000000-0000-0000-0000-000000000001")
 	managerID := mustUUID(t, "00000000-0000-0000-0000-00000000000a")
-	role := activeRole(1)
+	role := model.SalesRole{ID: uuid.New(), Name: "Super Admin", Level: 1, IsActive: true}
 	stub := updateTestStub(target, authmodel.User{
 		ID: target, Email: "admin@yummy.test", FullName: "Yummy Super Admin",
 		Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive,
@@ -525,6 +646,9 @@ func TestUpdatePrimarySuperAdminOrganizationalRolePreservesSystemRole(t *testing
 	}
 	if stub.lastUpdate == nil || stub.lastUpdate.Role == nil || *stub.lastUpdate.Role != authmodel.RoleSuperAdmin {
 		t.Fatalf("system role must stay SUPER_ADMIN, got %+v", stub.lastUpdate)
+	}
+	if !stub.lastUpdate.SalesRoleID.Present || stub.lastUpdate.SalesRoleID.Value != nil {
+		t.Fatalf("sales role must be forced null, got %+v", stub.lastUpdate.SalesRoleID)
 	}
 	if !stub.lastUpdate.ManagerID.Present || stub.lastUpdate.ManagerID.Value != nil {
 		t.Fatalf("manager must be forced null, got %+v", stub.lastUpdate.ManagerID)
@@ -814,8 +938,8 @@ func TestResetResultShape(t *testing.T) {
 	if result.TemporaryPassword == "" {
 		t.Fatal("temporaryPassword must be non-empty")
 	}
-	if !result.MustChangePassword {
-		t.Fatal("mustChangePassword must be true")
+	if result.MustChangePassword {
+		t.Fatal("mustChangePassword must be false while mandatory first-login enforcement is disabled")
 	}
 	if result.SessionsRevoked != 2 {
 		t.Fatalf("sessionsRevoked=%d, want 2", result.SessionsRevoked)

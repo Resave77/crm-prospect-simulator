@@ -101,7 +101,7 @@ func (r *PostgresRepository) ListUsers(ctx context.Context, filter model.ListFil
 }
 
 func buildListWhere(filter model.ListFilter) (string, []any) {
-	conditions := make([]string, 0)
+	conditions := []string{`u.deleted_at IS NULL`}
 	args := make([]any, 0)
 	idx := 1
 
@@ -132,9 +132,6 @@ func buildListWhere(filter model.ListFilter) (string, []any) {
 		idx++
 	}
 
-	if len(conditions) == 0 {
-		return "", args
-	}
 	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
@@ -143,7 +140,7 @@ func itoa(i int) string {
 }
 
 func (r *PostgresRepository) FindUserDetail(ctx context.Context, id uuid.UUID) (model.UserDetail, error) {
-	row := r.pool.QueryRow(ctx, `SELECT `+detailColumns+` `+userJoin+` WHERE u.id = $1`, id)
+	row := r.pool.QueryRow(ctx, `SELECT `+detailColumns+` `+userJoin+` WHERE u.id = $1 AND u.deleted_at IS NULL`, id)
 	return scanUserDetail(row)
 }
 
@@ -151,7 +148,8 @@ func (r *PostgresRepository) CreateUser(ctx context.Context, id uuid.UUID, input
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, role, status,
 		                   must_change_password, manager_id, sales_role_id, created_by, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', true, $8, $9, $10, $10, now())`,
+		-- TEMP DEMO: mandatory first-login password change is disabled, so new accounts are immediately usable.
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', false, $8, $9, $10, $10, now())`,
 		id, strings.ToLower(strings.TrimSpace(input.Email)), passwordHash,
 		strings.TrimSpace(input.FullName), strings.TrimSpace(input.EmployeeID),
 		strings.TrimSpace(input.Phone), input.Role, input.ManagerID, input.SalesRoleID, actorID)
@@ -250,7 +248,13 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, id uuid.UUID, sta
 }
 
 func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error {
-	command, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	command, err := r.pool.Exec(ctx, `
+		UPDATE users
+		SET status = 'INACTIVE',
+		    deleted_at = now(),
+		    token_version = token_version + 1,
+		    updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return mapError(err)
 	}
@@ -263,7 +267,7 @@ func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error
 func (r *PostgresRepository) ListActiveManagers(ctx context.Context) ([]model.ManagerOption, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, employee_id, full_name, email FROM users
-		WHERE role = 'SALES_MANAGER' AND status = 'ACTIVE'
+		WHERE role = 'SALES_MANAGER' AND status = 'ACTIVE' AND deleted_at IS NULL
 		ORDER BY full_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list active managers: %w", err)
@@ -321,7 +325,7 @@ func (r *PostgresRepository) FindManagerByID(ctx context.Context, id uuid.UUID) 
 		       role::text, status::text, token_version, last_login_at,
 		       must_change_password, manager_id, created_by, updated_by,
 		       created_at, updated_at
-		FROM users WHERE id = $1`, id))
+		FROM users WHERE id = $1 AND deleted_at IS NULL`, id))
 }
 
 func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (authmodel.User, error) {
@@ -330,7 +334,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (au
 		       role::text, status::text, token_version, last_login_at,
 		       must_change_password, manager_id, created_by, updated_by,
 		       created_at, updated_at
-		FROM users WHERE id = $1`, id))
+		FROM users WHERE id = $1 AND deleted_at IS NULL`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return authmodel.User{}, ErrNotFound
 	}
@@ -348,7 +352,8 @@ func (r *PostgresRepository) CountActiveAdministrators(ctx context.Context) (int
 
 const resetPasswordUpdate = `UPDATE users SET
 	password_hash = $1,
-	must_change_password = TRUE,
+	-- TEMP DEMO: mandatory first-login password change is disabled.
+	must_change_password = FALSE,
 	token_version = token_version + 1,
 	updated_by = $2,
 	updated_at = now()

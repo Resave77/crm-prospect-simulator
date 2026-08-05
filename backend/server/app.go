@@ -148,6 +148,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/sales-structure", adminHandler.ListSalesStructure)
 	admin.Post("/sales-structure/assignments", adminHandler.CreateSalesAssignment)
 	admin.Post("/sales-structure/assignments/:id/move", adminHandler.MoveSalesAssignment)
+	admin.Patch("/sales-structure/assignments/:id/end", adminHandler.EndSalesAssignment)
 	admin.Get("/sales-structure/users/:userId/history", adminHandler.SalesAssignmentHistory)
 
 	admin.Get("/users", adminHandler.ListUsers)

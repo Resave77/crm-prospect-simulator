@@ -6,6 +6,8 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -16,6 +18,7 @@ import type { AdminUserListItem } from '../../../types/admin'
 const store = useAdminStore()
 const auth = useAuthStore()
 const router = useRouter()
+const toast = useToast()
 const error = ref('')
 const updating = ref(false)
 const first = ref(0)
@@ -23,6 +26,8 @@ const deactivateDialogVisible = ref(false)
 const deactivateTarget = ref<{ id: string; name: string } | null>(null)
 const deleteDialogVisible = ref(false)
 const deleteTarget = ref<AdminUserListItem | null>(null)
+const actionDialogVisible = ref(false)
+const actionTarget = ref<AdminUserListItem | null>(null)
 
 const statusOptions = [
   { label: 'All Status', value: '' },
@@ -75,6 +80,10 @@ function fallback(value?: string | null) {
   return value?.trim() || '-'
 }
 
+function accountDisplayName(user?: Pick<AdminUserListItem, 'fullName' | 'email' | 'employeeId'> | null) {
+  return user?.fullName?.trim() || user?.email?.trim() || user?.employeeId?.trim() || 'this account'
+}
+
 function organizationalRoleLabel(user: AdminUserListItem) {
   return fallback(user.organizationalRole?.name)
 }
@@ -92,6 +101,30 @@ function reportsToLabel(user: AdminUserListItem & Record<string, unknown>) {
 function updatedLabel(value: string) {
   if (!value) return '-'
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function openActions(user: AdminUserListItem) {
+  actionTarget.value = user
+  actionDialogVisible.value = true
+}
+
+function closeActions() {
+  actionDialogVisible.value = false
+  actionTarget.value = null
+}
+
+function viewSelectedAccount() {
+  if (!actionTarget.value) return
+  const id = actionTarget.value.id
+  closeActions()
+  router.push(`/admin/accounts/${id}`)
+}
+
+function editSelectedAccount() {
+  if (!actionTarget.value) return
+  const id = actionTarget.value.id
+  closeActions()
+  router.push(`/admin/accounts/${id}/edit`)
 }
 
 function confirmDeactivate(user: AdminUserListItem) {
@@ -120,14 +153,28 @@ async function executeDeactivate() {
 
 async function executeDelete() {
   if (!deleteTarget.value) return
+  const name = accountDisplayName(deleteTarget.value)
   updating.value = true
   error.value = ''
   try {
     await store.deleteUser(deleteTarget.value.id)
+    await load()
     deleteDialogVisible.value = false
     deleteTarget.value = null
+    toast.add({
+      severity: 'success',
+      summary: 'Account Deleted',
+      detail: `${name} has been removed from the active account list.`,
+      life: 3500,
+    })
   } catch (e) {
     error.value = store.errorMessage(e)
+    toast.add({
+      severity: 'error',
+      summary: 'Delete Failed',
+      detail: error.value,
+      life: 5000,
+    })
   } finally {
     updating.value = false
   }
@@ -149,48 +196,61 @@ onMounted(() => { load() })
 </script>
 
 <template>
-  <section class="admin-page">
-    <!-- PAGE HEADER -->
-    <header class="page-heading">
-      <div class="page-title-wrapper">
+  <section class="accounts-page">
+    <Toast position="top-right" />
+
+    <Message v-if="error" severity="error" class="page-message">
+      {{ error }}
+    </Message>
+
+    <header class="accounts-toolbar">
+      <div class="toolbar-title">
         <span class="eyebrow">Account Management</span>
         <h1>Account List</h1>
+        <p>{{ store.total }} account{{ store.total === 1 ? '' : 's' }}</p>
       </div>
-      <div class="page-heading-actions">
-        <Button label="Create Account" icon="pi pi-plus" size="small" @click="router.push('/admin/accounts/create')" />
-      </div>
-    </header>
 
-    <!-- ERROR -->
-    <Message v-if="error" severity="error">{{ error }}</Message>
-
-    <!-- FILTERS -->
-    <div class="filter-panel">
-      <div class="search-row">
+      <div class="toolbar-controls">
         <div class="search-field">
           <i class="pi pi-search" />
           <input
             type="text"
-            placeholder="Search by name, email, or employee ID..."
+            placeholder="Search name, email, or employee ID"
             :value="store.params.search"
             @input="onKeywordSearch(($event.target as HTMLInputElement).value)"
           />
         </div>
-      </div>
 
-      <div class="filter-grid">
-        <div class="filter-field">
-          <label>Status</label>
-          <Select v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All Status" />
-        </div>
-        <div class="filter-field filter-action">
-          <Button label="Reset" icon="pi pi-replay" severity="secondary" text size="small" @click="resetAll" />
-        </div>
-      </div>
-    </div>
+        <Select
+          v-model="selectedStatus"
+          :options="statusOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="All Status"
+          class="status-filter"
+        />
 
-    <!-- TABLE -->
-    <div class="table-panel">
+        <Button
+          label="Reset"
+          icon="pi pi-refresh"
+          severity="secondary"
+          outlined
+          size="small"
+          class="reset-button"
+          @click="resetAll"
+        />
+
+        <Button
+          label="Create Account"
+          icon="pi pi-plus"
+          size="small"
+          class="create-button"
+          @click="router.push('/admin/accounts/create')"
+        />
+      </div>
+    </header>
+
+    <div class="table-shell">
       <div v-if="store.loading && !store.users.length" class="skeleton-area">
         <Skeleton v-for="n in 8" :key="n" class="skeleton-row" />
       </div>
@@ -208,477 +268,969 @@ onMounted(() => { load() })
         paginatorTemplate="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
         currentPageReportTemplate="Showing {first} to {last} of {totalRecords} accounts"
         dataKey="id"
+        class="accounts-table"
         @page="onPage"
+        @row-click="openActions($event.data)"
       >
         <template #empty>
           <div class="empty-state">
-            <div class="empty-icon"><i class="pi pi-users" /></div>
+            <span class="empty-icon"><i class="pi pi-users" /></span>
             <strong>No accounts found</strong>
-            <span>Adjust your search or filters to view results.</span>
+            <span>Try another keyword or change the status filter.</span>
           </div>
         </template>
 
-        <Column header="Employee" :style="{ width: '30%' }">
+        <Column header="Employee" class="employee-column">
           <template #body="{ data }">
             <div class="employee-cell">
-              <code class="employee-id">{{ data.employeeId || '-' }}</code>
-              <span class="cell-primary">{{ data.fullName }}</span>
-              <span class="cell-muted">{{ data.email }}</span>
-              <span v-if="data.mustChangePassword" class="cell-warn">
-                <i class="pi pi-key" /> Password change required
+              <div class="employee-avatar">
+                {{ data.fullName?.slice(0, 1)?.toUpperCase() || '?' }}
+              </div>
+              <div class="employee-copy">
+                <strong>{{ data.fullName }}</strong>
+                <span>{{ data.email }}</span>
+                <small>
+                  {{ data.employeeId || 'No employee ID' }}
+                  <template v-if="data.mustChangePassword">
+                    · <span class="password-warning">Password change required</span>
+                  </template>
+                </small>
+              </div>
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Role" class="role-column">
+          <template #body="{ data }">
+            <div class="role-cell">
+              <strong>{{ organizationalRoleLabel(data) }}</strong>
+              <span>
+                Level {{ data.organizationalRole?.level ?? '-' }}
+                · {{ organizationalRoleMeta(data) }}
               </span>
             </div>
           </template>
         </Column>
-        <Column header="Role" :style="{ width: '26%' }">
+
+        <Column header="Reports To" class="reports-column">
           <template #body="{ data }">
-            <div class="cell-stack">
-              <span class="cell-primary">{{ organizationalRoleLabel(data) }}</span>
-              <span class="cell-muted">Level {{ data.organizationalRole?.level ?? '-' }} · {{ organizationalRoleMeta(data) }}</span>
-            </div>
+            <span class="single-line" :title="reportsToLabel(data)">
+              {{ reportsToLabel(data) }}
+            </span>
           </template>
         </Column>
-        <Column header="Reports To" :style="{ width: '16%' }" class="optional-column">
+
+        <Column header="Status" class="status-column">
           <template #body="{ data }">
-            <span class="cell-text">{{ reportsToLabel(data) }}</span>
+            <Tag
+              :value="data.status === 'ACTIVE' ? 'Active' : 'Inactive'"
+              :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'"
+              rounded
+              class="status-tag"
+            />
           </template>
         </Column>
-        <Column header="Status" :style="{ width: '10%' }">
+
+        <Column header="Updated" class="updated-column">
           <template #body="{ data }">
-            <Tag :value="data.status === 'ACTIVE' ? 'Active' : 'Inactive'" :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" size="small" class="soft-tag" />
+            <span class="single-line">{{ updatedLabel(data.updatedAt) }}</span>
           </template>
         </Column>
-        <Column header="Updated" :style="{ width: '10%' }" class="optional-column">
+
+        <Column header="Actions" class="actions-column">
           <template #body="{ data }">
-            <span class="cell-text">{{ updatedLabel(data.updatedAt) }}</span>
-          </template>
-        </Column>
-        <Column header="Actions" :style="{ width: '8%' }">
-          <template #body="{ data }">
-            <div class="row-actions">
-              <Button icon="pi pi-eye" text rounded size="small" title="View account" @click="router.push(`/admin/accounts/${data.id}`)" />
-              <Button icon="pi pi-pencil" text rounded size="small" title="Edit account" @click="router.push(`/admin/accounts/${data.id}/edit`)" />
+            <div class="row-actions" @click.stop>
               <Button
-                v-if="data.status === 'ACTIVE'"
-                icon="pi pi-user-minus"
+                icon="pi pi-ellipsis-v"
                 text
                 rounded
                 size="small"
-                class="act-delete"
-                :disabled="isSelf(data.id) || isProtectedSuperAdmin(data) || updating"
-                :title="isProtectedSuperAdmin(data) ? 'Yummy Super Admin is protected' : isSelf(data.id) ? 'You cannot deactivate your own account' : 'Deactivate account'"
-                @click="confirmDeactivate(data)"
+                class="more-action"
+                title="Open account actions"
+                aria-label="Open account actions"
+                @click="openActions(data)"
               />
-              <Button
-                v-else
-                icon="pi pi-user-plus"
-                text
-                rounded
-                size="small"
-                class="act-activate"
-                :disabled="updating"
-                title="Activate account"
-                @click="activate(data.id)"
-              />
-              <Button icon="pi pi-trash" text rounded size="small" class="act-delete" :disabled="isSelf(data.id) || isProtectedSuperAdmin(data) || updating" title="Delete account" @click="confirmDelete(data)" />
             </div>
           </template>
         </Column>
       </DataTable>
     </div>
 
-    <!-- DEACTIVATE CONFIRMATION DIALOG -->
-    <Dialog v-model:visible="deactivateDialogVisible" header="Deactivate Account" modal :style="{ width: '400px' }">
-      <p>Are you sure you want to deactivate <strong>{{ deactivateTarget?.name }}</strong>? The user will no longer be able to sign in.</p>
+    <Dialog
+  v-model:visible="actionDialogVisible"
+  modal
+  :draggable="false"
+  :closable="false"
+  :dismissableMask="true"
+  class="account-action-dialog"
+  :style="{ width: 'min(520px, calc(100vw - 2rem))' }"
+  @hide="closeActions"
+>
+  <div v-if="actionTarget" class="action-dialog-content">
+    <div class="action-dialog-header">
+      <div>
+        <span class="dialog-eyebrow">Actions</span>
+        <h2>{{ actionTarget.fullName }}</h2>
+        <p>{{ actionTarget.email }}</p>
+      </div>
+      <Button
+        icon="pi pi-times"
+        text
+        rounded
+        severity="secondary"
+        aria-label="Close"
+        @click="closeActions"
+      />
+    </div>
+
+    <div class="action-grid">
+      <button class="action-card" type="button" @click="viewSelectedAccount">
+        <span class="action-card-icon view-icon"><i class="pi pi-eye" /></span>
+        <span>
+          <strong>View Detail</strong>
+          <small>View complete account profile and access information.</small>
+        </span>
+      </button>
+
+      <button class="action-card" type="button" @click="editSelectedAccount">
+        <span class="action-card-icon edit-icon"><i class="pi pi-pencil" /></span>
+        <span>
+          <strong>Edit</strong>
+          <small>Update identity, role, and account information.</small>
+        </span>
+      </button>
+    </div>
+
+    <div class="account-summary">
+      <div>
+        <span>Role</span>
+        <strong>{{ organizationalRoleLabel(actionTarget) }}</strong>
+      </div>
+      <div>
+        <span>Status</span>
+        <Tag
+          :value="actionTarget.status === 'ACTIVE' ? 'Active' : 'Inactive'"
+          :severity="actionTarget.status === 'ACTIVE' ? 'success' : 'secondary'"
+          rounded
+        />
+      </div>
+    </div>
+
+    <div class="danger-zone">
+      <div class="danger-zone-copy">
+        <i class="pi pi-exclamation-triangle" />
+        <div>
+          <strong>
+            {{ actionTarget.status === 'ACTIVE' ? 'Deactivate Account' : 'Activate Account' }}
+          </strong>
+          <span>
+            {{
+              actionTarget.status === 'ACTIVE'
+                ? 'Disable sign-in access without deleting the account.'
+                : 'Restore sign-in access for this account.'
+            }}
+          </span>
+        </div>
+      </div>
+
+      <Button
+        v-if="actionTarget.status === 'ACTIVE'"
+        label="Deactivate"
+        icon="pi pi-user-minus"
+        severity="danger"
+        outlined
+        size="small"
+        :disabled="isSelf(actionTarget.id) || isProtectedSuperAdmin(actionTarget) || updating"
+        @click="closeActions(); confirmDeactivate(actionTarget)"
+      />
+      <Button
+        v-else
+        label="Activate"
+        icon="pi pi-user-plus"
+        severity="success"
+        outlined
+        size="small"
+        :disabled="updating"
+        @click="closeActions(); activate(actionTarget.id)"
+      />
+    </div>
+
+    <div class="delete-zone">
+      <div class="danger-zone-copy">
+        <i class="pi pi-trash" />
+        <div>
+          <strong>Delete Account</strong>
+          <span>Permanently remove this account when it is no longer referenced.</span>
+        </div>
+      </div>
+
+      <Button
+        label="Delete"
+        icon="pi pi-trash"
+        severity="danger"
+        size="small"
+        :disabled="!actionTarget || isSelf(actionTarget?.id) || isProtectedSuperAdmin(actionTarget) || updating"
+        @click="confirmDelete(actionTarget)"
+      />
+    </div>
+  </div>
+</Dialog>
+
+    <Dialog
+      v-model:visible="deactivateDialogVisible"
+      header="Deactivate Account"
+      modal
+      :draggable="false"
+      :style="{ width: 'min(420px, calc(100vw - 2rem))' }"
+    >
+      <p>
+        Are you sure you want to deactivate
+        <strong>{{ deactivateTarget?.name }}</strong>?
+        The user will no longer be able to sign in.
+      </p>
       <template #footer>
-        <Button label="Cancel" severity="secondary" text @click="deactivateDialogVisible = false" :disabled="updating" />
-        <Button label="Deactivate" severity="danger" icon="pi pi-user-minus" :loading="updating" @click="executeDeactivate" />
+        <Button
+          label="Cancel"
+          severity="secondary"
+          text
+          :disabled="updating"
+          @click="deactivateDialogVisible = false"
+        />
+        <Button
+          label="Deactivate"
+          severity="danger"
+          icon="pi pi-user-minus"
+          :loading="updating"
+          @click="executeDeactivate"
+        />
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="deleteDialogVisible" header="Delete Account" modal :style="{ width: '400px' }">
-      <p>Delete <strong>{{ deleteTarget?.fullName }}</strong>? This will fail if the account is still referenced by existing records.</p>
+    <Dialog
+      v-model:visible="deleteDialogVisible"
+      header="Delete Account"
+      modal
+      :draggable="false"
+      :style="{ width: 'min(420px, calc(100vw - 2rem))' }"
+    >
+      <p>
+        Delete <strong>{{ accountDisplayName(deleteTarget) }}</strong>?
+        This will remove the account from active account views while preserving CRM records.
+      </p>
       <template #footer>
-        <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="updating" />
-        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="updating" @click="executeDelete" />
+        <Button
+          label="Cancel"
+          severity="secondary"
+          text
+          :disabled="updating"
+          @click="deleteDialogVisible = false"
+        />
+        <Button
+          label="Delete"
+          severity="danger"
+          icon="pi pi-trash"
+          :loading="updating"
+          @click="executeDelete"
+        />
       </template>
     </Dialog>
   </section>
 </template>
 
 <style scoped>
-/* ════════════════════════════════════════════════════════════════
-   ADMIN — ACCOUNT LIST — professional, white-surface visual pass
-   ════════════════════════════════════════════════════════════════ */
-
-/* ── PAGE ─────────────────────────────────────────────────────────── */
-.admin-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.35rem 1.6rem;
+.accounts-page {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
+  padding: 0;
+  overflow-x: hidden;
   background: #ffffff;
 }
 
-/* ── PAGE HEADER ──────────────────────────────────────────────────── */
-.page-heading {
+.page-message {
+  margin: 0.75rem 1rem 0;
+}
+
+.accounts-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
 }
-.page-title-wrapper {
-  display: flex;
-  flex-direction: column;
+
+.toolbar-title {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.08rem;
+  min-width: 150px;
 }
-.page-title-wrapper .eyebrow {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--brand-green-light, #0b7766);
-  margin-bottom: 0.35rem;
-}
-.page-title-wrapper h1 {
-  font-size: 1.6rem;
+
+.eyebrow {
+  color: #64748b;
+  font-size: 0.62rem;
   font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toolbar-title h1 {
+  margin: 0;
   color: #0f172a;
-  margin: 0 0 0.25rem;
-  letter-spacing: -0.03em;
+  font-size: 1.12rem;
   line-height: 1.15;
 }
-.page-title-wrapper .muted {
-  font-size: 0.84rem;
-  color: #7c8798;
-  max-width: 520px;
-  line-height: 1.55;
-}
-.page-heading-actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding-top: 0.15rem;
-}
-.page-heading-actions :deep(.p-button) {
-  border-radius: 10px;
-  font-weight: 700;
-  box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.4);
+
+.toolbar-title p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.7rem;
 }
 
-/* ── FILTER PANEL ─────────────────────────────────────────────────── */
-.filter-panel {
-  background: #ffffff;
-  border: 1px solid #edf1f6;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+.toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) 165px auto auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(850px, 100%);
+  min-width: 0;
 }
-.search-row {
-  margin-bottom: 0.65rem;
-}
+
 .search-field {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.62rem 0.95rem;
-  background: #f8fafc;
-  border: 1px solid #e6eaf0;
-  border-radius: 11px;
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  min-width: 0;
+  gap: 0.55rem;
+  height: 38px;
+  padding: 0 0.75rem;
+  border: 1px solid #dfe5ec;
+  border-radius: 9px;
+  background: #ffffff;
 }
+
 .search-field:focus-within {
-  background: #ffffff;
   border-color: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.09);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
+
 .search-field i {
-  color: #a3adba;
-  font-size: 0.9rem;
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 0.82rem;
 }
+
 .search-field input {
-  flex: 1;
-  border: none;
-  outline: none;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
   background: transparent;
-  font-size: 0.87rem;
   color: #0f172a;
+  font-size: 0.78rem;
 }
+
 .search-field input::placeholder {
-  color: #a3adba;
+  color: #a7b1c0;
 }
 
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr) auto;
-  gap: 0.8rem;
-  align-items: end;
-}
-.filter-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.32rem;
-}
-.filter-field label {
-  font-size: 0.67rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #8492a6;
-}
-.filter-field :deep(.p-select) {
-  border-radius: 11px;
-  border-color: #e6eaf0;
-}
-.filter-field :deep(.p-select:not(.p-disabled).p-focus) {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.09);
-}
-.filter-action {
-  justify-content: flex-end;
-  padding-bottom: 0.15rem;
+.status-filter {
+  min-width: 0;
 }
 
-/* ── TABLE PANEL ──────────────────────────────────────────────────── */
-.table-panel {
+.status-filter :deep(.p-select) {
+  width: 100%;
+}
+
+.status-filter :deep(.p-select-label) {
+  padding-top: 0.54rem;
+  padding-bottom: 0.54rem;
+  font-size: 0.76rem;
+}
+
+.reset-button,
+.create-button {
+  white-space: nowrap;
+}
+
+.table-shell {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid #e5eaf0;
   background: #ffffff;
-  border: 1px solid #edf1f6;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.accounts-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.accounts-table :deep(.p-datatable-table-container) {
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
-/* Force a clean white surface for the PrimeVue DataTable regardless of theme */
-.table-panel :deep(.p-datatable) {
-  background: #ffffff;
-  color: #1e293b;
-}
-.table-panel :deep(.p-datatable-table) {
-  background: #ffffff;
-  table-layout: fixed;
+.accounts-table :deep(.p-datatable-table) {
   width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
-.table-panel :deep(.p-datatable-thead > tr > th) {
+
+.accounts-table :deep(.p-datatable-thead > tr > th) {
+  overflow: hidden;
+  padding: 0.58rem 0.7rem;
+  border-color: #e5eaf0;
   background: #f8fafc;
-  color: #64748b;
-  font-size: 0.66rem;
-  font-weight: 700;
+  color: #475569;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.accounts-table :deep(.p-datatable-tbody > tr > td) {
+  overflow: hidden;
+  padding: 0.55rem 0.7rem;
   border-color: #edf1f6;
-  padding: 0.58rem 0.75rem;
-}
-.table-panel :deep(.p-datatable-tbody > tr) {
   background: #ffffff;
-  transition: background 140ms ease;
-}
-.table-panel :deep(.p-datatable-tbody > tr > td) {
-  background: transparent;
   color: #1e293b;
-  border-color: #f1f4f8;
-  padding: 0.52rem 0.75rem;
-  font-size: 0.8rem;
-}
-.table-panel :deep(.p-datatable-tbody > tr:hover) {
-  background: #f8fafc;
-}
-.table-panel :deep(.p-datatable-tbody > tr:hover > td) {
-  background: #f8fafc;
-}
-.table-panel :deep(.p-paginator) {
-  background: #ffffff;
-  border-color: #edf1f6;
-  padding: 0.5rem 0.75rem;
-}
-.table-panel :deep(.p-paginator .p-paginator-current) {
-  color: #7c8798;
   font-size: 0.76rem;
-  font-weight: 500;
-}
-.table-panel :deep(.p-paginator-page.p-highlight) {
-  background: #2563eb;
-  color: #ffffff;
-  border-radius: 8px;
-}
-.table-panel :deep(.p-datatable-loading-overlay) {
-  background: rgba(255, 255, 255, 0.7);
+  vertical-align: middle;
 }
 
-/* ── SKELETON LOADING ─────────────────────────────────────────────── */
-.skeleton-area {
-  padding: 0.3rem 1.1rem 0.85rem;
-}
-.skeleton-row {
-  height: 3.2rem;
-  margin-top: 0.75rem;
-  border-radius: 10px;
+.accounts-table :deep(.p-datatable-tbody > tr) {
+  cursor: pointer;
 }
 
-/* ── EMPTY STATE ──────────────────────────────────────────────────── */
-.empty-state {
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 2rem;
-  text-align: center;
-  color: #8492a6;
-}
-.empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: #f8fafc;
-  display: grid;
-  place-content: center;
-  margin-bottom: 0.4rem;
-}
-.empty-icon i {
-  font-size: 1.4rem;
-  color: #a3adba;
-}
-.empty-state strong {
-  color: #0f172a;
-  font-size: 0.95rem;
+.accounts-table :deep(.p-datatable-tbody > tr:hover > td) {
+  background: #f8fbff;
 }
 
-/* ── TABLE CELLS ──────────────────────────────────────────────────── */
-.code-tag,
-.employee-id {
-  display: inline-block;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 0.12rem 0.42rem;
-  border-radius: 6px;
-  background: #eef4fb;
-  color: #35628f;
-}
-.code-blue {
-  background: #eff6ff;
-  color: #2563eb;
+.accounts-table :deep(.employee-column) {
+  width: 31%;
 }
 
-.cell-stack,
+.accounts-table :deep(.role-column) {
+  width: 24%;
+}
+
+.accounts-table :deep(.reports-column) {
+  width: 15%;
+}
+
+.accounts-table :deep(.status-column) {
+  width: 10%;
+}
+
+.accounts-table :deep(.updated-column) {
+  width: 11%;
+}
+
+.accounts-table :deep(.actions-column) {
+  width: 9%;
+  text-align: right;
+}
+
 .employee-cell {
   display: flex;
-  flex-direction: column;
-  gap: 0.08rem;
-}
-.cell-primary {
-  font-weight: 650;
-  font-size: 0.82rem;
-  color: #0f172a;
-}
-.cell-muted {
-  color: #94a3b8;
-  font-size: 0.72rem;
-}
-.cell-warn {
-  display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.15rem;
-  font-size: 0.67rem;
-  font-weight: 600;
-  color: #b45309;
-}
-.cell-text {
-  font-size: 0.8rem;
-  color: #475569;
-}
-.soft-tag {
-  font-size: 0.68rem;
-  border-radius: 999px;
+  min-width: 0;
+  gap: 0.65rem;
 }
 
-/* ── ROW ACTIONS ──────────────────────────────────────────────────── */
+.employee-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-content: center;
+  border-radius: 9px;
+  background: #eef4ff;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.employee-copy,
+.role-cell {
+  display: grid;
+  min-width: 0;
+  gap: 0.06rem;
+}
+
+.employee-copy strong,
+.role-cell strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-copy span,
+.role-cell span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.69rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-copy small {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-warning {
+  color: #b45309 !important;
+  font-weight: 700;
+}
+
+.single-line {
+  display: block;
+  overflow: hidden;
+  color: #475569;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-tag {
+  font-size: 0.66rem;
+}
+
 .row-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.05rem;
   white-space: nowrap;
 }
-.row-actions :deep(.p-button) { width: 2rem; height: 2rem; padding: 0; }
-.row-actions :deep(.p-button-label) { display: none; }
-.row-actions :deep(.p-button) {
-  transition: transform 140ms ease, background 140ms ease;
-}
-.row-actions :deep(.p-button:hover) {
-  transform: translateY(-1px);
-}
-.act-activate {
-  color: #059669 !important;
-}
-.act-activate:hover {
-  background: #ecfdf5 !important;
-}
-.act-delete {
-  color: #dc2626 !important;
-}
-.act-delete:hover {
-  background: #fef2f2 !important;
+
+.more-action {
+  width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+  border: 1px solid #dfe5ec !important;
+  background: #ffffff !important;
+  color: #64748b !important;
 }
 
-/* ── RESPONSIVE ───────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .filter-grid {
-    grid-template-columns: 1fr auto;
+.more-action:hover {
+  border-color: #cbd5e1 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.accounts-table :deep(.p-paginator) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  min-height: 48px;
+  padding: 0.45rem 0.7rem;
+  border-top: 1px solid #e5eaf0;
+  background: #ffffff;
+}
+
+.accounts-table :deep(.p-paginator-current) {
+  margin-right: auto;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.skeleton-area {
+  padding: 0.6rem 1rem;
+}
+
+.skeleton-row {
+  height: 3.2rem;
+  margin: 0.45rem 0;
+  border-radius: 8px;
+}
+
+.empty-state {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: #0f172a;
+}
+
+.empty-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-content: center;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+
+.account-action-dialog :deep(.p-dialog) {
+  overflow: hidden;
+  border: 1px solid #dfe5ec;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.account-action-dialog :deep(.p-dialog-header) {
+  display: none;
+}
+
+.account-action-dialog :deep(.p-dialog-content) {
+  padding: 0;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.action-dialog-content {
+  padding: 1.2rem;
+}
+
+.action-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+}
+
+.dialog-eyebrow {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.action-dialog-header h2 {
+  margin: 0.15rem 0 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.action-dialog-header p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.action-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-height: 92px;
+  padding: 0.9rem;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.action-card:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  transform: translateY(-1px);
+}
+
+.action-card-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-content: center;
+  border-radius: 8px;
+}
+
+.view-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.edit-icon {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.action-card > span:last-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.action-card strong {
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+
+.action-card small {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #edf1f6;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.account-summary > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.account-summary span {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.account-summary strong {
+  color: #0f172a;
+  font-size: 0.8rem;
+}
+
+.danger-zone,
+.delete-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.8rem;
+  padding: 0.8rem;
+  border-radius: 11px;
+}
+
+.danger-zone {
+  border: 1px solid #fed7aa;
+  background: #fffaf2;
+}
+
+.delete-zone {
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+}
+
+.danger-zone-copy {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.danger-zone-copy > i {
+  margin-top: 0.1rem;
+  color: #dc2626;
+}
+
+.danger-zone-copy > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.danger-zone-copy strong {
+  color: #991b1b;
+  font-size: 0.8rem;
+}
+
+.danger-zone-copy span {
+  color: #7f1d1d;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 1100px) {
+  .accounts-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
-  .filter-action {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
+
+  .toolbar-controls {
+    width: 100%;
   }
-  .table-panel :deep(.optional-column) {
+
+  .accounts-table :deep(.updated-column) {
     display: none;
+  }
+
+  .accounts-table :deep(.employee-column) {
+    width: 34%;
+  }
+
+  .accounts-table :deep(.role-column) {
+    width: 25%;
+  }
+
+  .accounts-table :deep(.reports-column) {
+    width: 18%;
+  }
+
+  .accounts-table :deep(.status-column) {
+    width: 12%;
+  }
+
+  .accounts-table :deep(.actions-column) {
+    width: 11%;
   }
 }
-@media (max-width: 768px) {
-  .admin-page {
-    padding: 1.25rem 1rem;
-    gap: 1rem;
+
+@media (max-width: 820px) {
+  .toolbar-controls {
+    grid-template-columns: minmax(0, 1fr) 150px auto;
   }
-  .page-heading {
-    flex-direction: column;
-    align-items: stretch;
+
+  .create-button {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
-  .page-heading-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  .filter-grid {
-    grid-template-columns: 1fr;
-  }
-  .table-panel :deep(.p-datatable-thead) {
+
+  .accounts-table :deep(.reports-column) {
     display: none;
   }
-  .table-panel :deep(.p-datatable-table),
-  .table-panel :deep(.p-datatable-tbody),
-  .table-panel :deep(.p-datatable-tbody > tr),
-  .table-panel :deep(.p-datatable-tbody > tr > td) {
+
+  .accounts-table :deep(.employee-column) {
+    width: 42%;
+  }
+
+  .accounts-table :deep(.role-column) {
+    width: 31%;
+  }
+
+  .accounts-table :deep(.status-column) {
+    width: 14%;
+  }
+
+  .accounts-table :deep(.actions-column) {
+    width: 13%;
+  }
+}
+
+@media (max-width: 620px) {
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .danger-zone,
+  .delete-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .danger-zone :deep(.p-button),
+  .delete-zone :deep(.p-button) {
+    width: 100%;
+  }
+
+  .accounts-toolbar {
+    padding: 0.75rem;
+  }
+
+  .toolbar-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .search-field {
+    grid-column: 1 / -1;
+  }
+
+  .reset-button,
+  .create-button {
+    width: 100%;
+  }
+
+  .create-button {
+    grid-column: auto;
+  }
+
+  .accounts-table :deep(.p-datatable-thead) {
+    display: none;
+  }
+
+  .accounts-table :deep(.p-datatable-table),
+  .accounts-table :deep(.p-datatable-tbody),
+  .accounts-table :deep(.p-datatable-tbody > tr),
+  .accounts-table :deep(.p-datatable-tbody > tr > td) {
     display: block;
     width: 100%;
   }
-  .table-panel :deep(.p-datatable-tbody > tr) {
-    border-bottom: 1px solid #edf1f6;
-    padding: 0.7rem;
+
+  .accounts-table :deep(.p-datatable-tbody > tr) {
+    position: relative;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e5eaf0;
   }
-  .table-panel :deep(.p-datatable-tbody > tr > td) {
+
+  .accounts-table :deep(.p-datatable-tbody > tr > td) {
+    padding: 0.2rem 0;
     border: 0;
-    padding: 0.35rem 0;
   }
+
+  .accounts-table :deep(.status-column) {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: block;
+    width: auto;
+  }
+
+  .accounts-table :deep(.employee-column),
+  .accounts-table :deep(.role-column),
+  .accounts-table :deep(.actions-column) {
+    display: block;
+    width: 100%;
+  }
+
+  .role-cell {
+    margin-top: 0.35rem;
+    padding-left: 2.65rem;
+  }
+
   .row-actions {
     justify-content: flex-start;
-    padding-top: 0.25rem;
+    padding-left: 2.55rem;
+    padding-top: 0.35rem;
   }
-}
-@media (max-width: 480px) {
-  .filter-grid {
-    grid-template-columns: 1fr;
+
+  .accounts-table :deep(.p-paginator-current) {
+    width: 100%;
+    margin: 0 0 0.3rem;
+    text-align: center;
   }
 }
 </style>

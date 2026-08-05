@@ -40,6 +40,9 @@ func (r *repoStub) CreateSalesAssignment(_ context.Context, _ uuid.UUID, _ model
 func (r *repoStub) MoveSalesAssignment(_ context.Context, _, _ uuid.UUID, _ model.MoveAssignmentInput, _ uuid.UUID) error {
 	return nil
 }
+func (r *repoStub) EndSalesAssignment(_ context.Context, _ uuid.UUID, _ time.Time, _ uuid.UUID) error {
+	return nil
+}
 func (r *repoStub) SetCurrentSalesAssignment(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ *uuid.UUID, _ uuid.UUID) error {
 	return nil
 }
@@ -61,6 +64,9 @@ func (r *repoStub) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID, _ tim
 	return false, nil
 }
 func (r *repoStub) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
+	return false, nil
+}
+func (r *repoStub) HasActiveChildAssignments(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
 	return false, nil
 }
 func (r *repoStub) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {

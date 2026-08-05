@@ -1,5 +1,6 @@
 export type AdminUserRole = 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 export type AdminUserStatus = 'ACTIVE' | 'INACTIVE'
+export type AdminAccountType = 'SUPER_ADMIN' | 'SALES_ACCOUNT'
 export type SalesRoleLevel = 1 | 2 | 3 | 4
 export type PermissionNodeType = 'GROUP' | 'MENU' | 'ACTION'
 
@@ -16,22 +17,6 @@ export interface AdminPermission {
   sortOrder: number
 }
 
-export interface AdminUserListItem {
-  id: string
-  employeeId: string
-  fullName: string
-  email: string
-  phone: string
-  role: AdminUserRole
-  status: AdminUserStatus
-  managerId: string | null
-  managerName: string
-  organizationalRole: AdminOrganizationalRoleSummary | null
-  mustChangePassword: boolean
-  createdAt: string
-  updatedAt: string
-}
-
 export interface AdminOrganizationalRoleSummary {
   id: string
   name: string
@@ -40,6 +25,23 @@ export interface AdminOrganizationalRoleSummary {
   permissionCount: number
   isActive: boolean
   description?: string
+}
+
+export interface AdminUserListItem {
+  id: string
+  employeeId: string
+  fullName: string
+  email: string
+  phone: string
+  role: AdminUserRole
+  accountType?: AdminAccountType
+  status: AdminUserStatus
+  managerId: string | null
+  managerName: string
+  organizationalRole: AdminOrganizationalRoleSummary | null
+  mustChangePassword: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AdminUserDetail extends AdminUserListItem {
@@ -75,6 +77,7 @@ export interface AdminCreateUserInput {
   name: string
   email: string
   phone: string
+  accountType: AdminAccountType
   salesRoleId: string | null
   managerId: string | null
   temporaryPassword: string
@@ -85,6 +88,7 @@ export interface AdminUpdateUserInput {
   name?: string
   email?: string
   phone?: string
+  accountType?: AdminAccountType
   salesRoleId?: string | null
   managerId?: string | null
 }

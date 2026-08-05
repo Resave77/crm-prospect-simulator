@@ -6,6 +6,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Drawer from 'primevue/drawer'
+import Dialog from 'primevue/dialog'
 import * as adminApi from '../../../api/admin'
 import AssignSalesDialog from '../../../components/admin/sales-structure/AssignSalesDialog.vue'
 import SalesStructureFlatTable from '../../../components/admin/sales-structure/SalesStructureFlatTable.vue'
@@ -56,6 +57,8 @@ const selectedHierarchyRows = ref<HierarchyRow[]>([])
 const expandedNodeIds = ref<Set<string>>(new Set())
 const selectedNode = ref<SalesStructureItem | null>(null)
 const drawerVisible = ref(false)
+const unassignDialogVisible = ref(false)
+const unassignTarget = ref<SalesStructureItem | null>(null)
 
 const search = ref('')
 const levelFilter = ref<SalesRoleLevel | ''>('')
@@ -92,18 +95,10 @@ const form = reactive<{ user: AdminUserListItem | null; salesRoleId: string; par
 
 const effectiveDate = computed(() => `${store.selectedEffectiveMonth}-01`)
 const dialogEffectiveDate = computed(() => `${form.effectiveMonth}-01`)
-const hasProtectedRoot = computed(() =>
-  dialogStructure.value.some(
-    (item) =>
-      !item.effectiveTo &&
-      item.systemRole === 'SUPER_ADMIN' &&
-      item.salesRole.level === 1,
-  ),
-)
 
 const activeRoleOptions = computed(() =>
   store.salesRoles
-    .filter((role) => role.isActive && !(role.level === 1 && hasProtectedRoot.value))
+    .filter((role) => role.isActive && role.name.trim().toLowerCase() !== 'super admin')
     .map((role) => ({
       label: `${role.name} — Level ${role.level}`,
       value: role.id,
@@ -121,7 +116,7 @@ const dialogAssignedUserIds = computed(() => new Set(dialogStructure.value.map((
 const parentOptions = computed(() => {
   if (!requiredParentLevel.value) return []
   return dialogStructure.value
-    .filter((item) => !item.effectiveTo && item.salesRole.level === requiredParentLevel.value && item.userId !== form.user?.id)
+    .filter((item) => isAssignmentEffectiveForMonth(item, form.effectiveMonth) && item.salesRole.level === requiredParentLevel.value && item.userId !== form.user?.id)
     .map((item) => ({ label: item.salesName, value: item.userId, level: item.salesRole.level }))
 })
 const needsParent = computed(() => Boolean(selectedLevel.value && selectedLevel.value > 1))
@@ -141,7 +136,7 @@ const canSubmit = computed(() => {
   if (!form.user || !form.salesRoleId || !form.effectiveMonth || !selectedRole.value) return false
   if (dialogAssignedUserIds.value.has(form.user.id)) return false
   if (form.user.role === 'SUPER_ADMIN') return false
-  if (selectedLevel.value === 1) return !hasProtectedRoot.value
+  if (selectedLevel.value === 1) return true
   if (!selectedLevel.value) return false
 
   return Boolean(
@@ -168,13 +163,15 @@ const statusOptions = [
   { label: 'Ended', value: 'ENDED' },
 ]
 const systemRoleOptions = [
-  { label: 'All System Roles', value: '' },
-  { label: 'Super Admin', value: 'SUPER_ADMIN' },
-  { label: 'Administrator', value: 'ADMINISTRATOR' },
+  { label: 'All Account Roles', value: '' },
   { label: 'Sales Manager', value: 'SALES_MANAGER' },
   { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
 ]
-const orgRoleFilterOptions = computed(() => store.salesRoles.filter((role) => role.isActive).map((role) => ({ label: `${role.name} — Level ${role.level}`, value: role.id })))
+const orgRoleFilterOptions = computed(() =>
+  store.salesRoles
+    .filter((role) => role.isActive && role.name.trim().toLowerCase() !== 'super admin')
+    .map((role) => ({ label: `${role.name} — Level ${role.level}`, value: role.id })),
+)
 const parentFilterOptions = computed(() => {
   const seen = new Set<string>()
   const options: { label: string; value: string }[] = []
@@ -192,7 +189,7 @@ const hasFilters = computed(() => Boolean(
 const filteredStructure = computed(() => {
   const query = search.value.trim().toLowerCase()
   return store.salesStructure.filter((item) => {
-    const status = item.effectiveTo ? 'ENDED' : 'ACTIVE'
+    const status = isAssignmentEffective(item) ? 'ACTIVE' : 'ENDED'
     const matchesSearch = !query || [item.salesName, item.parentName ?? '', item.salesRole.name, roleLabel(item.systemRole)]
       .some((value) => value.toLowerCase().includes(query))
     const matchesLevel = !levelFilter.value || item.salesRole.level === levelFilter.value
@@ -204,9 +201,9 @@ const filteredStructure = computed(() => {
   })
 })
 
-const activeStructure = computed(() => store.salesStructure.filter((item) => !item.effectiveTo))
+const activeStructure = computed(() => store.salesStructure.filter((item) => isAssignmentEffective(item)))
 const assignedThisMonth = computed(() => activeStructure.value.length)
-const assignedUserIds = computed(() => new Set(store.salesStructure.map((item) => item.userId)))
+const assignedUserIds = computed(() => new Set(activeStructure.value.map((item) => item.userId)))
 const totalActiveSales = computed(() => salesUsers.value.length)
 const unassignedUsers = computed(() => salesUsers.value.filter((user) => !assignedUserIds.value.has(user.id)))
 const unassignedCount = computed(() => unassignedUsers.value.length)
@@ -309,8 +306,31 @@ function formatMonth(month: string) {
   return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(date)
 }
 
-function statusFor(item: SalesStructureItem) {
-  return item.effectiveTo ? 'Ended' : 'Active'
+function isAssignmentEffectiveForMonth(
+  item: SalesStructureItem,
+  month: string,
+): boolean {
+  if (!month) return false
+
+  const selectedDate = `${month}-01`
+  const effectiveFrom = item.effectiveFrom.slice(0, 10)
+  const effectiveTo = item.effectiveTo?.slice(0, 10) ?? null
+
+  return (
+    effectiveFrom <= selectedDate &&
+    (effectiveTo === null || effectiveTo >= selectedDate)
+  )
+}
+
+function isAssignmentEffective(
+  item: SalesStructureItem,
+  month = store.selectedEffectiveMonth,
+): boolean {
+  return isAssignmentEffectiveForMonth(item, month)
+}
+
+function statusFor(item: SalesStructureItem): string {
+  return isAssignmentEffective(item) ? 'Active' : 'Ended'
 }
 
 function levelClass(level: SalesRoleLevel) {
@@ -411,7 +431,7 @@ function openNode(item: SalesStructureItem) {
 }
 
 function isProtectedAssignment(item: SalesStructureItem): boolean {
-  return item.systemRole === 'SUPER_ADMIN' && item.salesRole.level === 1
+  return item.systemRole === 'SUPER_ADMIN'
 }
 
 function openMoveAssignment(item: SalesStructureItem) {
@@ -495,6 +515,95 @@ function openDemotion(item: SalesStructureItem) {
     detail: `Prepare a monthly move from Level ${item.salesRole.level} to Level ${item.salesRole.level + 1}.`,
     life: 3500,
   })
+}
+
+function lastDayOfMonth(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const date = new Date(year, monthNumber, 0)
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+function nextMonthValue(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+
+  const nextDate = new Date(year, monthNumber, 1)
+
+  return [
+    nextDate.getFullYear(),
+    String(nextDate.getMonth() + 1).padStart(2, '0'),
+  ].join('-')
+}
+
+function monthDisplayLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, monthNumber - 1, 1))
+}
+function requestUnassign(item: SalesStructureItem) {
+  unassignTarget.value = item
+  unassignDialogVisible.value = true
+}
+
+function closeUnassignDialog() {
+  unassignDialogVisible.value = false
+  unassignTarget.value = null
+}
+
+async function confirmUnassign() {
+  if (!unassignTarget.value || store.endingSalesAssignment) return
+
+  error.value = ''
+
+  const target = unassignTarget.value
+  const currentMonth = store.selectedEffectiveMonth
+  const effectiveTo = lastDayOfMonth(currentMonth)
+  const nextMonth = nextMonthValue(currentMonth)
+  const nextEffectiveDate = `${nextMonth}-01`
+
+  try {
+    await store.endSalesAssignment(
+      target.assignmentId,
+      effectiveTo,
+      nextEffectiveDate,
+    )
+
+    // Setelah assignment bulan berjalan ditutup,
+    // pindah ke bulan berikutnya agar user langsung terlihat Unassigned.
+    store.selectedEffectiveMonth = nextMonth
+
+    await Promise.all([
+      store.fetchSalesStructure(nextEffectiveDate),
+      fetchSalesUsers(1, false),
+    ])
+
+    activeTab.value = 'unassigned'
+    selectedRows.value = []
+    selectedHierarchyRows.value = []
+
+    toast.add({
+      severity: 'success',
+      summary: 'Sales Unassigned',
+      detail: `${target.salesName} is unassigned starting ${monthDisplayLabel(nextMonth)}.`,
+      life: 4000,
+    })
+
+    closeUnassignDialog()
+  } catch (e) {
+    error.value = store.errorMessage(e)
+
+    toast.add({
+      severity: 'error',
+      summary: 'Unassign Failed',
+      detail: error.value,
+      life: 5000,
+    })
+  }
 }
 
 function loadStructure() {
@@ -582,18 +691,6 @@ async function loadDialogStructure() {
 }
 
 function openAssign(level?: SalesRoleLevel) {
-  const protectedRootExists = activeStructure.value.some(isProtectedAssignment)
-
-  if (level === 1 && protectedRootExists) {
-    toast.add({
-      severity: 'info',
-      summary: 'Level 1 already assigned',
-      detail: 'Yummy Super Admin is the protected Level 1 root. Continue with a Level 2 assignment.',
-      life: 4000,
-    })
-    return
-  }
-
   form.user = null
   form.salesRoleId = ''
   form.parentUserId = null
@@ -649,15 +746,7 @@ async function submitAssignment() {
     toast.add({ severity: 'success', summary: 'Assignment Created', detail: 'Sales structure has been refreshed.', life: 3000 })
     dialogVisible.value = false
   } catch (e) {
-    const message = store.errorMessage(e)
-
-    if (message.toLowerCase().includes('root protected')) {
-      formError.value =
-        'Yummy Super Admin is already the protected Level 1 root. Select a Level 2, Level 3, or Level 4 role.'
-      return
-    }
-
-    formError.value = message
+    formError.value = store.errorMessage(e)
   }
 }
 
@@ -696,46 +785,49 @@ onMounted(async () => {
 
 <template>
   <section class="admin-page">
-    <header class="page-heading">
+    <header class="page-heading compact-heading">
       <div class="page-title-wrapper">
         <span class="eyebrow">Sales Organization</span>
         <h1>Sales Structure</h1>
-        <p class="muted">Manage monthly sales team assignments in a flat organizational table.</p>
+        <p class="muted">Manage monthly reporting lines and team assignments.</p>
       </div>
-      <Button label="Assign Sales" icon="pi pi-plus" size="small" @click="openAssign()" />
+
+      <div class="heading-stats">
+        <button type="button" @click="activeTab = 'all'">
+          <span>Total</span><strong>{{ totalActiveSales }}</strong>
+        </button>
+        <button type="button" @click="activeTab = 'assigned'">
+          <span>Assigned</span><strong>{{ assignedThisMonth }}</strong>
+        </button>
+        <button type="button" @click="activeTab = 'unassigned'">
+          <span>Unassigned</span><strong>{{ unassignedCount }}</strong>
+        </button>
+        <button
+          v-for="item in levelCounts"
+          :key="item.level"
+          type="button"
+          @click="openLevelFilter(item.level)"
+        >
+          <span>L{{ item.level }}</span><strong>{{ item.count }}</strong>
+        </button>
+      </div>
+
+      <Button
+        label="Assign Sales"
+        icon="pi pi-plus"
+        size="small"
+        @click="openAssign()"
+      />
     </header>
 
     <Message v-if="error" severity="error">{{ error }}</Message>
 
-    <div class="summary-grid">
-      <button class="summary-card clickable" type="button" @click="activeTab = 'all'">
-        <span>Total Sales</span>
-        <strong>{{ totalActiveSales }}</strong>
-        <small v-if="usersTruncated">First {{ totalActiveSales }} of {{ salesUsersTotal }} loaded — use search to narrow.</small>
-      </button>
-      <button class="summary-card clickable" type="button" @click="activeTab = 'assigned'">
-        <span>Assigned</span>
-        <strong>{{ assignedThisMonth }}</strong>
-        <small>{{ formatMonth(store.selectedEffectiveMonth) }}</small>
-      </button>
-      <button class="summary-card clickable" type="button" @click="activeTab = 'unassigned'">
-        <span>Unassigned Users</span>
-        <strong>{{ unassignedCount }}</strong>
-        <small>Active sales accounts not yet assigned</small>
-      </button>
-      <button v-for="item in levelCounts" :key="item.level" class="summary-card clickable" type="button" @click="openLevelFilter(item.level)">
-        <span>Level {{ item.level }}</span>
-        <strong>{{ item.count }}</strong>
-        <small>{{ LEVEL_LABEL[item.level] }}</small>
-      </button>
-    </div>
-
     <div class="view-switcher" aria-label="Sales structure view mode">
       <button class="view-btn" :class="{ active: viewMode === 'tree' }" type="button" @click="viewMode = 'tree'">
-        <i class="pi pi-sitemap" /> Hierarchy Table
+        <i class="pi pi-sitemap" /> Hierarchy
       </button>
       <button class="view-btn" :class="{ active: viewMode === 'table' }" type="button" @click="viewMode = 'table'">
-        <i class="pi pi-table" /> Table
+        <i class="pi pi-table" /> Account Table
       </button>
     </div>
 
@@ -767,7 +859,7 @@ onMounted(async () => {
         <Select v-model="levelFilter" :options="levelFilterOptions" optionLabel="label" optionValue="value" />
       </div>
       <div class="filter-field">
-        <label>System Role</label>
+        <label>Account Role</label>
         <Select v-model="systemRoleFilter" :options="systemRoleOptions" optionLabel="label" optionValue="value" />
       </div>
       <div class="filter-field">
@@ -775,13 +867,10 @@ onMounted(async () => {
         <Select v-model="orgRoleFilter" :options="orgRoleFilterOptions" optionLabel="label" optionValue="value" filter placeholder="All roles" />
       </div>
       <div class="filter-field">
-        <label>Parent</label>
+        <label>Reports To</label>
         <Select v-model="parentFilter" :options="parentFilterOptions" optionLabel="label" optionValue="value" filter placeholder="All parents" />
       </div>
-      <div class="filter-field">
-        <label>Status</label>
-        <Select v-model="statusFilter" :options="statusOptions" optionLabel="label" optionValue="value" />
-      </div>
+
     </div>
 
     <SalesStructureHierarchyTable
@@ -835,6 +924,9 @@ onMounted(async () => {
       @assign-first="openAssign"
       @load-more="loadMoreUsers"
       @reset-filters="clearFilters"
+      @open-detail="openNode"
+      @move-assignment="openMoveAssignment"
+      @unassign="requestUnassign"
     />
     <Drawer v-model:visible="drawerVisible" position="right" header="Assignment Detail" class="detail-drawer">
       <div v-if="selectedNode" class="drawer-content">
@@ -858,13 +950,61 @@ onMounted(async () => {
           <Button
             label="Move Assignment"
             icon="pi pi-arrow-right-arrow-left"
-            :disabled="isProtectedAssignment(selectedNode) || Boolean(selectedNode.effectiveTo)"
+            :disabled="isProtectedAssignment(selectedNode) || !isAssignmentEffective(selectedNode)"
             @click="openMoveAssignment(selectedNode)"
           />
           <Button label="View History" icon="pi pi-history" severity="secondary" disabled />
         </div>
       </div>
     </Drawer>
+
+    <Dialog
+      v-model:visible="unassignDialogVisible"
+      modal
+      :draggable="false"
+      :dismissableMask="!store.endingSalesAssignment"
+      header="Unassign Sales"
+      class="unassign-dialog"
+      :style="{ width: 'min(470px, calc(100vw - 2rem))' }"
+      @hide="closeUnassignDialog"
+    >
+      <div v-if="unassignTarget" class="unassign-content">
+        <div class="warning-icon">
+          <i class="pi pi-user-minus" />
+        </div>
+        <div>
+          <strong>Unassign {{ unassignTarget.salesName }}?</strong>
+          <p>
+  The current assignment remains valid through
+  <b>{{ lastDayOfMonth(store.selectedEffectiveMonth) }}</b>.
+</p>
+
+<p>
+  <b>{{ unassignTarget.salesName }}</b> will appear in the
+  Unassigned list starting
+  <b>{{ monthDisplayLabel(nextMonthValue(store.selectedEffectiveMonth)) }}</b>.
+  Assignment history will remain available.
+</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Cancel"
+          severity="secondary"
+          outlined
+          :disabled="store.endingSalesAssignment"
+          @click="closeUnassignDialog"
+        />
+        <Button
+          label="Unassign"
+          icon="pi pi-user-minus"
+          severity="danger"
+          :loading="store.endingSalesAssignment"
+          @click="confirmUnassign"
+        />
+      </template>
+    </Dialog>
 
     <AssignSalesDialog
       v-model:visible="dialogVisible"
@@ -1018,4 +1158,340 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 @media (max-width: 1100px) { .toolbar-panel { grid-template-columns: 1fr 1fr; } .search-field { grid-column: 1 / -1; } .banner-steps { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 900px) { .tree-list { min-width: 0; } .tree-children { margin-left: 0.85rem; padding-left: 0.75rem; } .org-node { grid-template-columns: auto minmax(0, 1fr); } .node-meta { grid-column: 2; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.65rem; } }
 @media (max-width: 768px) { .admin-page { padding: 1rem; } .toolbar-panel { grid-template-columns: 1fr; } .banner-steps { grid-template-columns: 1fr; } .view-switcher { width: 100%; } .view-btn { flex: 1; justify-content: center; } .detail-grid > div { grid-template-columns: 1fr; gap: 0.2rem; } }
+
+/* ===== Presentation-ready Sales Structure redesign ===== */
+.admin-page {
+  gap: 0;
+  padding: 0;
+  background: #f8fafc;
+}
+
+.page-heading {
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: #fff;
+}
+
+.page-title-wrapper {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.page-title-wrapper .eyebrow {
+  color: #64748b;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.muted {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.summary-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
+  border-bottom: 1px solid #e5eaf0;
+  background: #fff;
+}
+
+.summary-card {
+  min-height: 68px;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-right: 1px solid #edf1f6;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.summary-card:last-child {
+  border-right: 0;
+}
+
+.summary-card:hover {
+  background: #f8fbff;
+}
+
+.summary-card span {
+  font-size: 0.6rem;
+  color: #94a3b8;
+}
+
+.summary-card strong {
+  font-size: 0.98rem;
+}
+
+.summary-card small {
+  display: none;
+}
+
+.view-switcher {
+  margin: 0.8rem 1rem 0;
+  border-radius: 9px;
+  box-shadow: none;
+}
+
+.view-btn {
+  padding: 0.45rem 0.72rem;
+  font-size: 0.74rem;
+}
+
+.view-btn.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tab-bar {
+  margin: 0.6rem 1rem 0;
+}
+
+.tab-btn {
+  padding: 0.42rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.tab-btn.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tab-btn.active .tab-count {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.toolbar-panel {
+  grid-template-columns: minmax(280px, 1fr) 180px auto;
+  margin: 0.65rem 1rem 0;
+  padding: 0.72rem;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.filter-panel {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0.55rem 1rem 0;
+  padding: 0.72rem;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.search-field {
+  min-height: 40px;
+  border-radius: 8px;
+}
+
+.filter-field label {
+  font-size: 0.61rem;
+}
+
+input[type='month'] {
+  height: 40px;
+  padding: 0 0.65rem;
+  border-radius: 8px;
+  font-size: 0.74rem;
+}
+
+.admin-page > .tree-panel,
+.admin-page > .table-panel {
+  margin: 0.7rem 1rem 1rem;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.admin-page :deep(.tree-panel) {
+  overflow-x: hidden !important;
+}
+
+.admin-page :deep(.hierarchy-table) {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.admin-page :deep(.hierarchy-table .p-datatable-table-container),
+.admin-page :deep(.table-panel .p-datatable-table-container) {
+  overflow-x: hidden !important;
+}
+
+.admin-page :deep(.hierarchy-table .p-datatable-table),
+.admin-page :deep(.table-panel .p-datatable-table) {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+
+.admin-page :deep(.p-datatable-thead > tr > th),
+.admin-page :deep(.p-datatable-tbody > tr > td) {
+  overflow: hidden;
+  padding: 0.55rem 0.62rem;
+  text-overflow: ellipsis;
+}
+
+.admin-page :deep(.p-datatable-thead > tr > th) {
+  background: #f8fafc;
+  font-size: 0.62rem;
+}
+
+.admin-page :deep(.p-datatable-tbody > tr > td) {
+  font-size: 0.73rem;
+  white-space: normal;
+}
+
+.detail-drawer :deep(.p-drawer) {
+  width: min(410px, 94vw);
+}
+
+.detail-grid > div {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.drawer-actions {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .filter-panel {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .toolbar-panel,
+  .filter-panel {
+    grid-template-columns: 1fr;
+    margin-left: 0.7rem;
+    margin-right: 0.7rem;
+  }
+
+  .view-switcher,
+  .tab-bar {
+    margin-left: 0.7rem;
+    margin-right: 0.7rem;
+  }
+
+  .admin-page > .tree-panel,
+  .admin-page > .table-panel {
+    margin-left: 0.7rem;
+    margin-right: 0.7rem;
+  }
+}
+
+.compact-heading {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 12px;
+  background: #fff;
+}
+.heading-stats {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(58px, auto));
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+.heading-stats button {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 64px;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-right: 1px solid #e5eaf0;
+  background: transparent;
+  text-align: center;
+  cursor: pointer;
+}
+.heading-stats button:last-child {
+  border-right: 0;
+}
+.heading-stats button:hover {
+  background: #eff6ff;
+}
+.heading-stats span {
+  color: #94a3b8;
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.heading-stats strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+.unassign-dialog :deep(.p-dialog) {
+  border-radius: 14px;
+}
+.unassign-content {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+}
+.warning-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-content: center;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #dc2626;
+}
+.unassign-content strong {
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+.unassign-content p {
+  margin: 0.3rem 0 0;
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+@media (max-width: 1100px) {
+  .compact-heading {
+    grid-template-columns: 1fr auto;
+  }
+  .heading-stats {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (max-width: 720px) {
+  .compact-heading {
+    grid-template-columns: 1fr;
+  }
+  .heading-stats {
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: repeat(4, 1fr);
+    width: 100%;
+  }
+  .compact-heading > .p-button {
+    width: 100%;
+  }
+}
 </style>

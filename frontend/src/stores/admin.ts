@@ -48,6 +48,7 @@ export const useAdminStore = defineStore('admin', () => {
   const selectedEffectiveMonth = ref(new Date().toISOString().slice(0, 7))
   const savingSalesRole = ref(false)
   const savingSalesAssignment = ref(false)
+  const endingSalesAssignment = ref(false)
   const permissions = ref<AdminPermission[]>([])
   const permissionsLoading = ref(false)
   const selectedRoleDetail = ref<SalesRole | null>(null)
@@ -117,7 +118,10 @@ export const useAdminStore = defineStore('admin', () => {
     selectedUser.value = null
   }
 
-  async function resetPassword(userId: string, payload: AdminResetPasswordPayload) {
+  async function resetPassword(
+    userId: string,
+    payload: AdminResetPasswordPayload,
+  ) {
     if (resettingPassword.value) return undefined
     resettingPassword.value = true
     try {
@@ -127,7 +131,10 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  function setParam<K extends keyof AdminUserListParams>(key: K, value: AdminUserListParams[K]) {
+  function setParam<K extends keyof AdminUserListParams>(
+    key: K,
+    value: AdminUserListParams[K],
+  ) {
     params[key] = value
   }
 
@@ -142,7 +149,6 @@ export const useAdminStore = defineStore('admin', () => {
     params.status = ''
     page.value = 1
   }
-
 
   async function fetchSalesRoles() {
     salesRolesLoading.value = true
@@ -164,7 +170,10 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function updateSalesRole(id: string, payload: UpdateSalesRolePayload) {
+  async function updateSalesRole(
+    id: string,
+    payload: UpdateSalesRolePayload,
+  ) {
     savingSalesRole.value = true
     try {
       const role = await adminApi.updateSalesRole(id, payload)
@@ -236,24 +245,87 @@ export const useAdminStore = defineStore('admin', () => {
       savingSalesAssignment.value = false
     }
   }
+
+async function endSalesAssignment(
+  assignmentId: string,
+  effectiveTo: string,
+  refreshDate: string,
+) {
+  endingSalesAssignment.value = true
+
+  try {
+    const assignment = await adminApi.endSalesAssignment(
+      assignmentId,
+      effectiveTo,
+    )
+
+    await fetchSalesStructure(refreshDate)
+
+    return assignment
+  } finally {
+    endingSalesAssignment.value = false
+  }
+}
+
   function errorMessage(error: unknown) {
     if (axios.isAxiosError<ApiErrorEnvelope>(error)) {
-      return error.response?.data?.error?.message ?? 'Account service is unavailable.'
+      return (
+        error.response?.data?.error?.message ??
+        'Account service is unavailable.'
+      )
     }
-    return error instanceof Error ? error.message : 'An unexpected error occurred.'
+    return error instanceof Error
+      ? error.message
+      : 'An unexpected error occurred.'
   }
 
   return {
-    users, total, page, limit, pages, loading, managerOptions, params,
-    selectedUser, detailLoading, saving, resettingPassword,
-    salesRoles, salesRolesLoading, salesStructure, salesStructureLoading, selectedEffectiveMonth, savingSalesRole, savingSalesAssignment,
-    permissions, permissionsLoading, selectedRoleDetail, roleDetailLoading,
-    fetchUsers, fetchManagers, createUser, updateStatus, deleteUser,
-    fetchUserById, updateUser, clearSelectedUser, resetPassword,
-    setParam, setPage, resetFilters,
-    fetchSalesRoles, createSalesRole, updateSalesRole, setSalesRoleStatus, deleteSalesRole,
-    fetchSalesStructure, createSalesAssignment, errorMessage,
-    fetchPermissions, fetchSalesRoleDetail,
+    users,
+    total,
+    page,
+    limit,
+    pages,
+    loading,
+    managerOptions,
+    params,
+    selectedUser,
+    detailLoading,
+    saving,
+    resettingPassword,
+    salesRoles,
+    salesRolesLoading,
+    salesStructure,
+    salesStructureLoading,
+    selectedEffectiveMonth,
+    savingSalesRole,
+    savingSalesAssignment,
+    endingSalesAssignment,
+    permissions,
+    permissionsLoading,
+    selectedRoleDetail,
+    roleDetailLoading,
+    fetchUsers,
+    fetchManagers,
+    createUser,
+    updateStatus,
+    deleteUser,
+    fetchUserById,
+    updateUser,
+    clearSelectedUser,
+    resetPassword,
+    setParam,
+    setPage,
+    resetFilters,
+    fetchSalesRoles,
+    createSalesRole,
+    updateSalesRole,
+    setSalesRoleStatus,
+    deleteSalesRole,
+    fetchSalesStructure,
+    createSalesAssignment,
+    endSalesAssignment,
+    errorMessage,
+    fetchPermissions,
+    fetchSalesRoleDetail,
   }
 })
-

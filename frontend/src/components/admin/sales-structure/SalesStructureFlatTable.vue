@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import Skeleton from 'primevue/skeleton'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import Dialog from 'primevue/dialog'
 import type { AdminUserListItem, SalesRoleLevel, SalesStructureItem } from '../../../types/admin'
 
 type ActiveTab = 'assigned' | 'unassigned' | 'all'
@@ -35,8 +37,35 @@ const emit = defineEmits<{
   'assign-first': [level?: SalesRoleLevel]
   'load-more': []
   'reset-filters': []
+  'open-detail': [item: SalesStructureItem]
+  'move-assignment': [item: SalesStructureItem]
+  'unassign': [item: SalesStructureItem]
   'update:selection': [selection: SalesStructureItem[]]
 }>()
+
+const actionDialogVisible = ref(false)
+const actionTarget = ref<SalesStructureItem | null>(null)
+
+function openActions(item: SalesStructureItem) {
+  actionTarget.value = item
+  actionDialogVisible.value = true
+}
+
+function closeActions() {
+  actionDialogVisible.value = false
+  actionTarget.value = null
+}
+
+function runAction(
+  event: 'open-detail' | 'move-assignment' | 'unassign',
+) {
+  if (!actionTarget.value) return
+  const item = actionTarget.value
+  closeActions()
+  if (event === 'open-detail') emit('open-detail', item)
+  else if (event === 'move-assignment') emit('move-assignment', item)
+  else if (event === 'unassign') emit('unassign', item)
+}
 </script>
 
 <template>
@@ -100,11 +129,23 @@ const emit = defineEmits<{
         <template #body="{ data }">{{ data.salesRole.name }}</template>
       </Column>
       <Column header="Status" sortable sortField="effectiveTo" :style="{ width: '120px' }">
-        <template #body="{ data }"><Tag :value="statusFor(data)" :severity="data.effectiveTo ? 'secondary' : 'success'" /></template>
+        <template #body="{ data }"><Tag
+  :value="statusFor(data)"
+  :severity="statusFor(data) === 'Active' ? 'success' : 'secondary'"
+/></template>
       </Column>
-      <Column header="Actions" :style="{ width: '120px' }">
-        <template #body>
-          <Button icon="pi pi-ellipsis-h" text rounded size="small" disabled title="Assignment movement is deferred" />
+      <Column header="Actions" :style="{ width: '84px' }">
+        <template #body="{ data }">
+          <Button
+            icon="pi pi-ellipsis-v"
+            text
+            rounded
+            size="small"
+            class="action-trigger"
+            title="Open assignment actions"
+            aria-label="Open assignment actions"
+            @click.stop="openActions(data)"
+          />
         </template>
       </Column>
     </DataTable>
@@ -146,6 +187,70 @@ const emit = defineEmits<{
       </Column>
     </DataTable>
 
+    <Dialog
+      v-model:visible="actionDialogVisible"
+      modal
+      :draggable="false"
+      :dismissableMask="true"
+      header="Assignment Actions"
+      class="assignment-action-dialog"
+      :style="{ width: 'min(440px, calc(100vw - 2rem))' }"
+      @hide="closeActions"
+    >
+      <div v-if="actionTarget" class="action-dialog-body">
+        <div class="action-person">
+          <span class="action-avatar">
+            {{ actionTarget.salesName.slice(0, 1).toUpperCase() }}
+          </span>
+          <div>
+            <strong>{{ actionTarget.salesName }}</strong>
+            <span>
+              Level {{ actionTarget.salesRole.level }} ·
+              {{ actionTarget.salesRole.name }}
+            </span>
+          </div>
+        </div>
+
+        <button
+          class="action-option"
+          type="button"
+          @click="runAction('open-detail')"
+        >
+          <i class="pi pi-eye" />
+          <span>
+            <strong>View Detail</strong>
+            <small>Review reporting line and current assignment.</small>
+          </span>
+        </button>
+
+        <button
+          class="action-option"
+          type="button"
+          :disabled="statusFor(actionTarget) !== 'Active'"
+          @click="runAction('move-assignment')"
+        >
+          <i class="pi pi-arrow-right-arrow-left" />
+          <span>
+            <strong>Move Assignment</strong>
+            <small>Prepare a monthly role or reporting-line move.</small>
+          </span>
+        </button>
+
+        <button
+          class="action-option danger"
+          type="button"
+          :disabled="statusFor(actionTarget) !== 'Active'"
+          @click="runAction('unassign')"
+        >
+          <i class="pi pi-user-minus" />
+          <span>
+            <strong>Unassign</strong>
+            <small>End this monthly assignment and preserve its history.</small>
+          </span>
+        </button>
+      </div>
+    </Dialog>
+
     <div v-if="activeTab !== 'assigned' && hasMoreUsers" class="load-more-row">
       <span class="cell-hint">Showing {{ salesUsers.length }} of {{ salesUsersTotal }} active accounts.</span>
       <Button label="Load more" icon="pi pi-chevron-down" severity="secondary" text size="small" :loading="salesUsersLoading" @click="emit('load-more')" />
@@ -179,4 +284,124 @@ const emit = defineEmits<{
 .sales-name.level-2 { color: #059669; }
 .sales-name.level-3 { color: #ea580c; }
 .sales-name.level-4 { color: #b45309; }
+.action-trigger {
+  width: 2rem !important;
+  height: 2rem !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #fff !important;
+  color: #64748b !important;
+}
+.action-trigger:hover {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+.assignment-action-dialog :deep(.p-dialog) {
+  border-radius: 14px;
+}
+.action-dialog-body {
+  display: grid;
+  gap: 0.55rem;
+}
+.action-person {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0 0 0.75rem;
+  border-bottom: 1px solid #edf1f6;
+}
+.action-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-content: center;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 800;
+}
+.action-person > div {
+  display: grid;
+  gap: 0.12rem;
+}
+.action-person strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+.action-person span {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+.action-option {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.action-option:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+.action-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.action-option > i {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-content: center;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+.action-option > span {
+  display: grid;
+  gap: 0.12rem;
+}
+.action-option strong {
+  color: #0f172a;
+  font-size: 0.78rem;
+}
+.action-option small {
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.action-option.danger > i {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.action-option.danger strong {
+  color: #b91c1c;
+}
+.table-panel {
+  overflow-x: hidden;
+}
+.table-panel :deep(.p-datatable-table) {
+  width: 100%;
+  table-layout: fixed;
+}
+.table-panel :deep(.p-datatable-table-container) {
+  overflow-x: hidden;
+}
+.table-panel :deep(.p-datatable-tbody > tr > td),
+.table-panel :deep(.p-datatable-thead > tr > th) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 900px) {
+  .table-panel :deep(.p-datatable-table-container) {
+    overflow-x: auto;
+  }
+  .table-panel :deep(.p-datatable-table) {
+    min-width: 820px;
+  }
+}
 </style>

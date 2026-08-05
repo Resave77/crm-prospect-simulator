@@ -90,7 +90,7 @@ func TestResetPasswordUpdateStatement(t *testing.T) {
 	}
 	for _, want := range []string{
 		`password_hash = $1`,
-		`must_change_password = TRUE`,
+		`must_change_password = FALSE`,
 		`token_version = token_version + 1`,
 		`updated_by = $2`,
 		`updated_at`,

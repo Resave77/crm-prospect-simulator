@@ -10,6 +10,7 @@ import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import Dialog from 'primevue/dialog'
 import { useAdminStore } from '../../../stores/admin'
 import type { SalesRole, SalesRoleLevel } from '../../../types/admin'
 
@@ -21,6 +22,8 @@ const showGuidance = ref(true)
 const search = ref('')
 const levelFilter = ref<SalesRoleLevel | ''>('')
 const statusFilter = ref<'ACTIVE' | 'INACTIVE' | ''>('ACTIVE')
+const actionDialogVisible = ref(false)
+const actionTarget = ref<SalesRole | null>(null)
 
 const LEVEL_ORDER: SalesRoleLevel[] = [1, 2, 3, 4]
 const LEVEL_GUIDE: Record<SalesRoleLevel, string> = {
@@ -76,6 +79,13 @@ const filteredRoles = computed(() => {
   })
 })
 const groupedRoles = computed(() => [...filteredRoles.value].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name)))
+const rolesByLevel = computed(() =>
+  LEVEL_ORDER.map((level) => ({
+    level,
+    guide: LEVEL_GUIDE[level],
+    roles: groupedRoles.value.filter((role) => role.level === level),
+  })).filter((group) => group.roles.length > 0),
+)
 const hasFilters = computed(() => Boolean(search.value.trim() || levelFilter.value || statusFilter.value))
 const duplicateRoleNames = computed(() => {
   const counts = new Map<string, number>()
@@ -127,6 +137,30 @@ function goEdit(role: SalesRole) {
   router.push(`/admin/role-management/${role.id}/edit`)
 }
 
+function openActions(role: SalesRole) {
+  actionTarget.value = role
+  actionDialogVisible.value = true
+}
+
+function closeActions() {
+  actionDialogVisible.value = false
+  actionTarget.value = null
+}
+
+function viewSelectedRole() {
+  if (!actionTarget.value) return
+  const role = actionTarget.value
+  closeActions()
+  goView(role)
+}
+
+function editSelectedRole() {
+  if (!actionTarget.value) return
+  const role = actionTarget.value
+  closeActions()
+  goEdit(role)
+}
+
 async function toggleStatus(role: SalesRole) {
   error.value = ''
   const nextActive = !role.isActive
@@ -172,205 +206,1063 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="admin-page">
-    <header class="page-heading">
-      <div class="page-title-wrapper">
+  <section class="roles-page">
+    <Message v-if="error" severity="error" class="page-message">
+      {{ error }}
+    </Message>
+
+    <header class="roles-toolbar">
+      <div class="toolbar-title">
         <span class="eyebrow">Sales Organization</span>
         <h1>Role Management</h1>
-        <p class="muted">Role names are flexible. Numeric levels control assignment hierarchy and reporting rules.</p>
+        <p>{{ filteredRoles.length }} visible · {{ activeRoles }} active</p>
       </div>
-      <Button label="Create Role" icon="pi pi-plus" size="small" @click="goCreate" />
+
+      <div class="toolbar-controls">
+        <div class="search-field">
+          <i class="pi pi-search" />
+          <InputText
+            v-model="search"
+            placeholder="Search role name, description, or landing page"
+          />
+        </div>
+
+        <Select
+          v-model="levelFilter"
+          :options="levelFilterOptions"
+          optionLabel="label"
+          optionValue="value"
+          class="toolbar-select"
+        />
+
+        <Select
+          v-model="statusFilter"
+          :options="statusOptions"
+          optionLabel="label"
+          optionValue="value"
+          class="toolbar-select"
+        />
+
+        <Button
+          label="Reset"
+          icon="pi pi-refresh"
+          severity="secondary"
+          outlined
+          size="small"
+          class="reset-button"
+          @click="clearFilters"
+        />
+
+        <Button
+          label="Add Role"
+          icon="pi pi-plus"
+          size="small"
+          class="create-button"
+          @click="goCreate"
+        />
+      </div>
     </header>
 
-    <Message v-if="error" severity="error">{{ error }}</Message>
-
-    <div class="summary-grid">
-      <div class="summary-card"><span>Total Roles</span><strong>{{ totalRoles }}</strong></div>
-      <div class="summary-card"><span>Active Roles</span><strong>{{ activeRoles }}</strong></div>
-    </div>
-
-    <div class="filter-panel">
-      <div class="search-field">
-        <i class="pi pi-search" />
-        <InputText v-model="search" placeholder="Search role name, description, or landing page..." />
+    <div class="summary-strip">
+      <div class="summary-item">
+        <span>Total Roles</span>
+        <strong>{{ totalRoles }}</strong>
       </div>
-      <div class="filter-field">
-        <label>Level</label>
-        <Select v-model="levelFilter" :options="levelFilterOptions" optionLabel="label" optionValue="value" />
+      <div class="summary-item">
+        <span>Active Roles</span>
+        <strong>{{ activeRoles }}</strong>
       </div>
-      <div class="filter-field">
-        <label>Role View</label>
-        <Select v-model="statusFilter" :options="statusOptions" optionLabel="label" optionValue="value" />
-      </div>
-      <Button label="Reset" icon="pi pi-replay" severity="secondary" text size="small" @click="clearFilters" />
-    </div>
-
-    <div class="table-panel">
-      <div v-if="store.salesRolesLoading && !roleList.length" class="skeleton-area">
-        <Skeleton v-for="n in 6" :key="n" class="skeleton-row" />
-      </div>
-      <DataTable
-        v-else
-        :value="groupedRoles"
-        :loading="store.salesRolesLoading"
-        dataKey="id"
-        scrollable
-        rowGroupMode="subheader"
-        groupRowsBy="level"
-        sortField="level"
-        :sortOrder="1"
+      <div
+        v-for="item in levelCounts"
+        :key="item.level"
+        class="summary-item"
       >
-        <template #groupheader="{ data }">
-          <span class="level-group-title">Level {{ data.level }}</span>
-        </template>
-        <template #empty>
-          <div class="empty-state">
-            <div class="empty-icon"><i class="pi pi-id-card" /></div>
-            <strong>No sales roles found</strong>
-            <span>{{ hasFilters ? 'Adjust your filters to view roles.' : 'Create a role to begin configuring the sales hierarchy.' }}</span>
-            <Button v-if="!hasFilters" label="Create Role" icon="pi pi-plus" size="small" @click="goCreate" />
-          </div>
-        </template>
-        <Column field="level" header="Level" :style="{ width: '100px' }">
-          <template #body="{ data }">
-            <span class="level-chip" :class="`level-chip-${data.level}`">Level {{ data.level }}</span>
-          </template>
-        </Column>
-        <Column field="name" header="Role Name" :style="{ minWidth: '200px' }">
-          <template #body="{ data }">
-            <div class="role-name-cell">
-              <button type="button" class="role-name-link" @click="goView(data)"><strong class="role-name">{{ data.name }}</strong></button>
-              <Tag v-if="isSystemDefaultRole(data)" value="System Default" severity="info" size="small" class="template-tag" />
-              <Tag v-if="isDemoRole(data)" value="Demo" severity="warn" size="small" class="template-tag" />
-              <span v-if="hasDuplicateName(data)" class="warning-chip" title="Duplicate display name"><i class="pi pi-exclamation-triangle" /></span>
-            </div>
-          </template>
-        </Column>
-        <Column header="Description" :style="{ minWidth: '260px' }">
-          <template #body="{ data }">
-            <template v-if="data.description">
-              <span class="cell-text clamp-2">{{ data.description }}</span>
-            </template>
-            <template v-else>
-              <div class="cell-text clamp-2">{{ roleDisplayDescription(data) }}</div>
-              <span class="cell-hint">Edit this role to customize the name and description.</span>
-            </template>
-          </template>
-        </Column>
-        <Column header="Landing Page" :style="{ width: '190px' }">
-          <template #body="{ data }">
-            <code v-if="data.landingPage" class="route-badge">{{ data.landingPage }}</code>
-            <span v-else class="cell-hint">—</span>
-          </template>
-        </Column>
-        <Column header="Permissions" :style="{ width: '110px' }">
-          <template #body="{ data }">
-            <span class="perm-count">{{ permissionCount(data) ?? '—' }}</span>
-          </template>
-        </Column>
-        <Column header="Status" :style="{ width: '100px' }"><template #body="{ data }"><Tag :value="data.isActive ? 'Active' : 'Inactive'" :severity="data.isActive ? 'success' : 'secondary'" size="small" class="soft-tag" /></template></Column>
-        <Column header="Updated At" :style="{ width: '120px' }"><template #body="{ data }"><span class="date-text">{{ formatDate(data.updatedAt) }}</span></template></Column>
-        <Column header="Actions" :style="{ width: '110px' }">
-          <template #body="{ data }">
-            <details class="action-menu">
-              <summary><i class="pi pi-ellipsis-v" /><span class="sr-only">Actions</span></summary>
-              <div class="action-popover">
-                <button type="button" @click="goView(data)"><i class="pi pi-eye" /> View</button>
-                <button type="button" @click="goEdit(data)"><i class="pi pi-pencil" /> Edit</button>
-                <button type="button" :class="{ danger: data.isActive, success: !data.isActive }" :disabled="store.savingSalesRole" @click="toggleStatus(data)">
-                  <i :class="data.isActive ? 'pi pi-ban' : 'pi pi-check-circle'" /> {{ data.isActive ? 'Deactivate' : 'Activate' }}
-                </button>
-                <button type="button" class="danger" :disabled="isSystemDefaultRole(data) || store.savingSalesRole" :title="isSystemDefaultRole(data) ? 'Default role cannot be deleted' : 'Delete role'" @click="deleteRole(data)">
-                  <i class="pi pi-trash" /> Delete
-                </button>
-              </div>
-            </details>
-          </template>
-        </Column>
-      </DataTable>
+        <span>Level {{ item.level }}</span>
+        <strong>{{ item.count }}</strong>
+      </div>
     </div>
+
+    <div v-if="store.salesRolesLoading && !roleList.length" class="skeleton-area">
+      <Skeleton v-for="n in 7" :key="n" class="skeleton-row" />
+    </div>
+
+    <div v-else-if="!rolesByLevel.length" class="empty-state">
+      <span class="empty-icon"><i class="pi pi-id-card" /></span>
+      <strong>No roles found</strong>
+      <span>
+        {{
+          hasFilters
+            ? 'Adjust the current filters.'
+            : 'Create a role to begin configuring access.'
+        }}
+      </span>
+      <Button
+        v-if="!hasFilters"
+        label="Add Role"
+        icon="pi pi-plus"
+        size="small"
+        @click="goCreate"
+      />
+    </div>
+
+    <div v-else class="level-sections">
+      <section
+        v-for="group in rolesByLevel"
+        :key="group.level"
+        class="level-section"
+      >
+        <header class="level-section-header">
+          <div class="level-section-title">
+            <span class="level-number" :class="`level-${group.level}`">
+              {{ group.level }}
+            </span>
+            <div>
+              <strong>Level {{ group.level }}</strong>
+              <span>{{ group.guide }}</span>
+            </div>
+          </div>
+
+          <span class="role-count">
+            {{ group.roles.length }} role{{ group.roles.length === 1 ? '' : 's' }}
+          </span>
+        </header>
+
+        <div class="role-list-header" aria-hidden="true">
+          <span>Role</span>
+          <span>Initial Menu</span>
+          <span>Permissions</span>
+          <span>Status</span>
+          <span>Actions</span>
+        </div>
+
+        <article
+          v-for="role in group.roles"
+          :key="role.id"
+          class="role-row"
+          tabindex="0"
+          @click="openActions(role)"
+          @keydown.enter="openActions(role)"
+        >
+          <div class="role-primary">
+            <div class="role-icon" :class="`level-${role.level}`">
+              {{ role.level }}
+            </div>
+
+            <div class="role-copy">
+              <div class="role-title-line">
+                <strong>{{ role.name }}</strong>
+
+                <Tag
+                  v-if="isSystemDefaultRole(role)"
+                  value="System"
+                  severity="info"
+                  rounded
+                  class="mini-tag"
+                />
+
+                <Tag
+                  v-if="isDemoRole(role)"
+                  value="Demo"
+                  severity="warn"
+                  rounded
+                  class="mini-tag"
+                />
+
+                <span
+                  v-if="hasDuplicateName(role)"
+                  class="duplicate-warning"
+                  title="Duplicate role name"
+                >
+                  <i class="pi pi-exclamation-triangle" />
+                </span>
+              </div>
+
+              <span class="role-description">
+                {{ roleDisplayDescription(role) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="role-menu">
+            <span class="mobile-label">Initial Menu</span>
+            <code v-if="role.landingPage" class="route-badge">
+              {{ role.landingPage }}
+            </code>
+            <span v-else class="muted-value">Not configured</span>
+          </div>
+
+          <div class="permission-cell">
+            <span class="mobile-label">Permissions</span>
+            <strong>{{ permissionCount(role) ?? 0 }}</strong>
+            <span>permissions</span>
+          </div>
+
+          <div class="role-status">
+            <span class="mobile-label">Status</span>
+            <Tag
+              :value="role.isActive ? 'Active' : 'Inactive'"
+              :severity="role.isActive ? 'success' : 'secondary'"
+              rounded
+              class="status-tag"
+            />
+          </div>
+
+          <div class="row-actions" @click.stop>
+            <Button
+              icon="pi pi-ellipsis-v"
+              text
+              rounded
+              size="small"
+              class="more-action"
+              title="Open role actions"
+              aria-label="Open role actions"
+              @click="openActions(role)"
+            />
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <Dialog
+      v-model:visible="actionDialogVisible"
+      modal
+      :draggable="false"
+      :closable="false"
+      :dismissableMask="true"
+      class="role-action-dialog"
+      :style="{ width: 'min(540px, calc(100vw - 2rem))' }"
+      @hide="closeActions"
+    >
+      <div v-if="actionTarget" class="action-dialog-content">
+        <div class="action-dialog-header">
+          <div>
+            <span class="dialog-eyebrow">Role Actions</span>
+            <h2>{{ actionTarget.name }}</h2>
+            <p>
+              Level {{ actionTarget.level }}
+              · {{ permissionCount(actionTarget) ?? 0 }} permissions
+            </p>
+          </div>
+
+          <Button
+            icon="pi pi-times"
+            text
+            rounded
+            severity="secondary"
+            aria-label="Close"
+            @click="closeActions"
+          />
+        </div>
+
+        <div class="action-grid">
+          <button class="action-card" type="button" @click="viewSelectedRole">
+            <span class="action-card-icon view-icon">
+              <i class="pi pi-eye" />
+            </span>
+            <span>
+              <strong>View Detail</strong>
+              <small>Review role information, landing page, and permissions.</small>
+            </span>
+          </button>
+
+          <button class="action-card" type="button" @click="editSelectedRole">
+            <span class="action-card-icon edit-icon">
+              <i class="pi pi-pencil" />
+            </span>
+            <span>
+              <strong>Edit Role</strong>
+              <small>Update role name, level, description, and permissions.</small>
+            </span>
+          </button>
+        </div>
+
+        <div class="role-detail-grid">
+          <div>
+            <span>Hierarchy Level</span>
+            <strong>Level {{ actionTarget.level }}</strong>
+          </div>
+          <div>
+            <span>Initial Open Menu</span>
+            <strong>{{ actionTarget.landingPage || 'Not configured' }}</strong>
+          </div>
+          <div>
+            <span>Permission Count</span>
+            <strong>{{ permissionCount(actionTarget) ?? 0 }}</strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <Tag
+              :value="actionTarget.isActive ? 'Active' : 'Inactive'"
+              :severity="actionTarget.isActive ? 'success' : 'secondary'"
+              rounded
+            />
+          </div>
+        </div>
+
+        <div class="status-zone">
+          <div class="zone-copy">
+            <i :class="actionTarget.isActive ? 'pi pi-ban' : 'pi pi-check-circle'" />
+            <div>
+              <strong>
+                {{ actionTarget.isActive ? 'Deactivate Role' : 'Activate Role' }}
+              </strong>
+              <span>
+                {{
+                  actionTarget.isActive
+                    ? 'Prevent this role from being selected for new accounts.'
+                    : 'Make this role available for account assignment.'
+                }}
+              </span>
+            </div>
+          </div>
+
+          <Button
+            :label="actionTarget.isActive ? 'Deactivate' : 'Activate'"
+            :icon="actionTarget.isActive ? 'pi pi-ban' : 'pi pi-check-circle'"
+            :severity="actionTarget.isActive ? 'danger' : 'success'"
+            outlined
+            size="small"
+            :loading="store.savingSalesRole"
+            @click="toggleStatus(actionTarget).then(closeActions)"
+          />
+        </div>
+
+        <div class="delete-zone">
+          <div class="zone-copy">
+            <i class="pi pi-trash" />
+            <div>
+              <strong>Delete Role</strong>
+              <span>
+                {{
+                  isSystemDefaultRole(actionTarget)
+                    ? 'System default roles are protected and cannot be deleted.'
+                    : 'Delete this role when it is no longer used by accounts or assignments.'
+                }}
+              </span>
+            </div>
+          </div>
+
+          <Button
+            label="Delete"
+            icon="pi pi-trash"
+            severity="danger"
+            size="small"
+            :disabled="isSystemDefaultRole(actionTarget) || store.savingSalesRole"
+            @click="deleteRole(actionTarget).then(closeActions)"
+          />
+        </div>
+      </div>
+    </Dialog>
   </section>
 </template>
 
 <style scoped>
-.admin-page { display: flex; flex-direction: column; gap: 0.95rem; padding: 1.35rem 1.6rem; min-height: 100vh; background: #ffffff; }
-.page-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
-.page-title-wrapper .eyebrow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #0b7766; }
-h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
-.muted { margin: 0; color: #7c8798; font-size: 0.85rem; }
-.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
-.summary-card, .filter-panel, .table-panel, .info-section, .guidance-banner { background: #fff; border: 1px solid #edf1f6; border-radius: 10px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
-.summary-card { padding: 0.68rem 0.8rem; display: grid; gap: 0.12rem; }
-.summary-card span { color: #64748b; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
-.summary-card strong { color: #0f172a; font-size: 1.08rem; }
-.level-breakdown { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.guidance-banner { display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.85rem 1rem; background: #fffbeb; border-color: #fde68a; }
-.guidance-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-content: center; border-radius: 10px; background: #fef3c7; color: #b45309; }
-.guidance-banner div:nth-child(2) { display: grid; gap: 0.2rem; flex: 1; }
-.guidance-banner strong { color: #92400e; font-size: 0.9rem; }
-.guidance-banner span { color: #a16207; font-size: 0.8rem; line-height: 1.45; }
-.info-section { display: grid; grid-template-columns: minmax(260px, 1.1fr) 1.6fr; gap: 1.1rem; padding: 1.1rem 1.2rem; }
-.info-body { display: grid; align-content: start; gap: 0.55rem; }
-.info-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 750; color: #0f172a; font-size: 0.95rem; }
-.info-title i { color: #0b7766; }
-.info-list { margin: 0; padding-left: 1.15rem; display: grid; gap: 0.35rem; color: #475569; font-size: 0.82rem; line-height: 1.45; }
-.hierarchy-guide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; align-content: start; }
-.hier-card { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.8rem; border: 1px solid #edf1f6; border-radius: 10px; background: #f8fafc; }
-.hier-level { font-weight: 750; color: #0f172a; font-size: 0.8rem; }
-.hier-desc { color: #64748b; font-size: 0.74rem; line-height: 1.4; }
-.filter-panel { display: grid; grid-template-columns: minmax(260px, 1fr) 200px 160px auto; gap: 0.65rem; align-items: end; padding: 0.8rem; }
-.search-field { display: flex; align-items: center; gap: 0.6rem; min-height: 2.55rem; padding: 0 0.75rem; background: #fff; border: 1px solid #dbe3ee; border-radius: 8px; }
-.search-field i { color: #94a3b8; }
-.search-field :deep(.p-inputtext) { flex: 1; border: 0; padding-inline: 0; box-shadow: none; }
-.filter-field { display: grid; gap: 0.35rem; }
-.filter-field label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b; }
-.optional-label { font-weight: 500; text-transform: none; color: #94a3b8; }
-.table-panel { overflow-x: auto; }
-.table-panel :deep(.p-datatable), .table-panel :deep(.p-datatable-table), .table-panel :deep(.p-datatable-table-container) { background: #ffffff; color: #0f172a; }
-.table-panel :deep(.p-datatable-thead > tr > th) { background: #f8fafc; color: #475569; font-size: 0.66rem; text-transform: uppercase; border-color: #edf1f6; padding: 0.55rem 0.75rem; }
-.table-panel :deep(.p-datatable-tbody > tr), .table-panel :deep(.p-datatable-tbody > tr > td) { background: #ffffff; color: #1e293b; border-color: #f1f4f8; }
-.table-panel :deep(.p-datatable-tbody > tr > td) { padding: 0.52rem 0.75rem; font-size: 0.8rem; }
-.table-panel :deep(.p-datatable-tbody > tr:hover > td) { background: #f8fafc; }
-.table-panel :deep(.p-rowgroup-header > td) { background: #f1f5f9 !important; padding: 0.42rem 0.75rem !important; border-color: #e2e8f0 !important; }
-.table-panel :deep(.p-datatable-loading-overlay) { background: rgba(255, 255, 255, 0.72); }
-.role-name { color: #0f172a; font-weight: 750; }
-.role-name-cell { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-.role-name-link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; text-align: left; }
-.role-name-link:hover .role-name { color: #0b7766; text-decoration: underline; }
-.template-tag { opacity: 0.85; }
-.warning-chip { display: inline-grid; place-content: center; width: 1.35rem; height: 1.35rem; border-radius: 999px; background: #fff7ed; color: #b45309; font-size: 0.68rem; }
-.level-group-title { color: #334155; font-size: 0.68rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
-.level-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 4.4rem; padding: 0.18rem 0.48rem; border-radius: 999px; font-size: 0.7rem; font-weight: 800; border: 1px solid transparent; }
-.level-chip-1 { background: #eff6ff; color: #1d4ed8; border-color: #dbeafe; }
-.level-chip-2 { background: #ecfdf5; color: #047857; border-color: #d1fae5; }
-.level-chip-3 { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
-.level-chip-4 { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
-.cell-text { color: #475569; line-height: 1.35; }
-.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.cell-hint { display: block; margin-top: 0.2rem; color: #94a3b8; font-size: 0.72rem; }
-.route-badge { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.68rem; font-weight: 600; color: #2563eb; background: #eff6ff; border: 1px solid #dbeafe; border-radius: 6px; padding: 0.14rem 0.42rem; white-space: nowrap; }
-.perm-count { font-weight: 800; color: #334155; font-size: 0.8rem; }
-.date-text { color: #64748b; font-size: 0.78rem; }
-.soft-tag { font-size: 0.68rem; border-radius: 999px; }
-.action-menu { position: relative; width: fit-content; }
-.action-menu summary { width: 2rem; height: 2rem; display: grid; place-content: center; list-style: none; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #64748b; cursor: pointer; }
-.action-menu summary::-webkit-details-marker { display: none; }
-.action-menu summary:hover { background: #f8fafc; color: #0f172a; }
-.action-popover { position: absolute; z-index: 20; right: 0; top: calc(100% + 0.3rem); min-width: 150px; display: grid; gap: 0.15rem; padding: 0.35rem; border: 1px solid #edf1f6; border-radius: 10px; background: #ffffff; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.22); }
-.action-popover button { display: flex; align-items: center; gap: 0.45rem; width: 100%; border: 0; border-radius: 8px; padding: 0.5rem 0.6rem; background: transparent; color: #334155; font: inherit; font-size: 0.78rem; font-weight: 700; text-align: left; cursor: pointer; }
-.action-popover button:hover { background: #f8fafc; }
-.action-popover button.danger { color: #dc2626; }
-.action-popover button.success { color: #059669; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.skeleton-area { padding: 0.6rem 1rem 1rem; }
-.skeleton-row { height: 3rem; margin-top: 0.65rem; border-radius: 10px; }
-.empty-state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; padding: 2rem; text-align: center; color: #8492a6; }
-.empty-icon { width: 52px; height: 52px; display: grid; place-content: center; border-radius: 14px; background: #f8fafc; color: #94a3b8; }
-.empty-state strong { color: #0f172a; }
-:deep(.p-inputtext), :deep(.p-select) { background: #ffffff; color: #0f172a; border-color: #dbe3ee; }
-:deep(.p-select-label), :deep(.p-select-dropdown) { color: #64748b; }
-:deep(.p-select-overlay), :deep(.p-select-list), :deep(.p-select-option) { background: #ffffff; color: #0f172a; }
-:deep(.p-select-option.p-select-option-selected), :deep(.p-select-option:hover) { background: #f1f5f9; color: #0f172a; }
-@media (max-width: 900px) { .filter-panel { grid-template-columns: 1fr 1fr; } .search-field { grid-column: 1 / -1; } .info-section { grid-template-columns: 1fr; } }
-@media (max-width: 768px) { .admin-page { padding: 1rem; } .summary-grid, .filter-panel { grid-template-columns: 1fr; } .hierarchy-guide { grid-template-columns: 1fr; } }
+.roles-page {
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 0;
+  overflow-x: hidden;
+  background: #f8fafc;
+}
+
+.page-message {
+  margin: 0.75rem 1rem 0;
+}
+
+.roles-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+}
+
+.toolbar-title {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: 170px;
+  gap: 0.08rem;
+}
+
+.eyebrow {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toolbar-title h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.12rem;
+}
+
+.toolbar-title p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+.toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 160px auto auto;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(980px, 100%);
+  min-width: 0;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 38px;
+  gap: 0.55rem;
+  padding: 0 0.75rem;
+  border: 1px solid #dfe5ec;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.search-field:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.search-field i {
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.search-field :deep(.p-inputtext) {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 0.78rem;
+}
+
+.toolbar-select {
+  min-width: 0;
+}
+
+.toolbar-select :deep(.p-select-label) {
+  padding-top: 0.54rem;
+  padding-bottom: 0.54rem;
+  font-size: 0.75rem;
+}
+
+.reset-button,
+.create-button {
+  white-space: nowrap;
+}
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid #e5eaf0;
+  background: #fff;
+}
+
+.summary-item {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.7rem 1rem;
+  border-right: 1px solid #edf1f6;
+}
+
+.summary-item:last-child {
+  border-right: 0;
+}
+
+.summary-item span {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-item strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.level-sections {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem 1.4rem;
+}
+
+.level-section {
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.level-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: #f8fafc;
+}
+
+.level-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.level-section-title > div {
+  display: grid;
+  gap: 0.06rem;
+}
+
+.level-section-title strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.level-section-title span:last-child {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.level-number {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-content: center;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.level-1 { background: #eff6ff; color: #1d4ed8; }
+.level-2 { background: #ecfdf5; color: #047857; }
+.level-3 { background: #fff7ed; color: #c2410c; }
+.level-4 { background: #f1f5f9; color: #475569; }
+
+.role-count {
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.role-list-header,
+.role-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 2.2fr) minmax(150px, 1fr) 110px 100px 60px;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.role-list-header {
+  padding: 0.45rem 0.8rem;
+  border-bottom: 1px solid #edf1f6;
+  color: #94a3b8;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.role-row {
+  min-height: 66px;
+  padding: 0.58rem 0.8rem;
+  border-bottom: 1px solid #edf1f6;
+  cursor: pointer;
+  outline: none;
+}
+
+.role-row:last-child {
+  border-bottom: 0;
+}
+
+.role-row:hover,
+.role-row:focus-visible {
+  background: #f8fbff;
+}
+
+.role-primary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.role-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-content: center;
+  border-radius: 9px;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.role-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.role-title-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.role-title-line strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mini-tag {
+  flex: 0 0 auto;
+  font-size: 0.58rem;
+}
+
+.duplicate-warning {
+  color: #b45309;
+  font-size: 0.7rem;
+}
+
+.role-menu,
+.permission-cell,
+.role-status {
+  min-width: 0;
+}
+
+.route-badge {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0.16rem 0.42rem;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted-value {
+  color: #94a3b8;
+  font-size: 0.68rem;
+}
+
+.permission-cell {
+  display: grid;
+  gap: 0.02rem;
+}
+
+.permission-cell strong {
+  color: #0f172a;
+  font-size: 0.8rem;
+}
+
+.permission-cell > span:last-child {
+  color: #94a3b8;
+  font-size: 0.62rem;
+}
+
+.status-tag {
+  font-size: 0.64rem;
+}
+
+.mobile-label {
+  display: none;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.more-action {
+  width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+  border: 1px solid #dfe5ec !important;
+  background: #fff !important;
+  color: #64748b !important;
+}
+
+.more-action:hover {
+  border-color: #cbd5e1 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.role-action-dialog :deep(.p-dialog) {
+  overflow: hidden;
+  border: 1px solid #dfe5ec;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.role-action-dialog :deep(.p-dialog-header) {
+  display: none;
+}
+
+.role-action-dialog :deep(.p-dialog-content) {
+  padding: 0;
+  background: #fff;
+}
+
+.action-dialog-content {
+  padding: 1.2rem;
+}
+
+.action-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+}
+
+.dialog-eyebrow {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.action-dialog-header h2 {
+  margin: 0.15rem 0 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+
+.action-dialog-header p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.action-card {
+  display: flex;
+  align-items: flex-start;
+  min-height: 92px;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-card:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.action-card-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-content: center;
+  border-radius: 8px;
+}
+
+.view-icon { background: #eff6ff; color: #2563eb; }
+.edit-icon { background: #fff7ed; color: #ea580c; }
+
+.action-card > span:last-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.action-card strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+}
+
+.action-card small {
+  color: #64748b;
+  font-size: 0.71rem;
+  line-height: 1.45;
+}
+
+.role-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+  padding: 0.75rem;
+  border: 1px solid #edf1f6;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.role-detail-grid > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.role-detail-grid span {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.role-detail-grid strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-zone,
+.delete-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.8rem;
+  padding: 0.8rem;
+  border-radius: 11px;
+}
+
+.status-zone {
+  border: 1px solid #fed7aa;
+  background: #fffaf2;
+}
+
+.delete-zone {
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+}
+
+.zone-copy {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.zone-copy > i {
+  margin-top: 0.1rem;
+  color: #dc2626;
+}
+
+.zone-copy > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.zone-copy strong {
+  color: #991b1b;
+  font-size: 0.8rem;
+}
+
+.zone-copy span {
+  color: #7f1d1d;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.skeleton-area {
+  padding: 1rem;
+}
+
+.skeleton-row {
+  height: 3.2rem;
+  margin: 0.45rem 0;
+  border-radius: 8px;
+}
+
+.empty-state {
+  display: flex;
+  min-height: 320px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: #fff;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: #0f172a;
+}
+
+.empty-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-content: center;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+@media (max-width: 1050px) {
+  .roles-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar-controls {
+    width: 100%;
+  }
+
+  .role-list-header,
+  .role-row {
+    grid-template-columns: minmax(260px, 2fr) minmax(140px, 1fr) 100px 90px 52px;
+  }
+}
+
+@media (max-width: 820px) {
+  .toolbar-controls {
+    grid-template-columns: minmax(0, 1fr) 170px 150px auto;
+  }
+
+  .create-button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .summary-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .role-list-header {
+    display: none;
+  }
+
+  .role-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 1rem;
+    padding: 0.8rem;
+  }
+
+  .role-primary {
+    grid-column: 1 / 2;
+  }
+
+  .row-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .role-menu,
+  .permission-cell,
+  .role-status {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    grid-column: 1 / -1;
+    padding-left: 2.65rem;
+  }
+
+  .mobile-label {
+    display: inline;
+    min-width: 88px;
+    color: #94a3b8;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 620px) {
+  .roles-toolbar {
+    padding: 0.75rem;
+  }
+
+  .toolbar-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .search-field {
+    grid-column: 1 / -1;
+  }
+
+  .reset-button,
+  .create-button {
+    width: 100%;
+  }
+
+  .create-button {
+    grid-column: auto;
+  }
+
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .level-sections {
+    padding: 0.7rem;
+  }
+
+  .level-section-header {
+    align-items: flex-start;
+  }
+
+  .level-section-title span:last-child {
+    display: none;
+  }
+
+  .action-grid,
+  .role-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-zone,
+  .delete-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .status-zone :deep(.p-button),
+  .delete-zone :deep(.p-button) {
+    width: 100%;
+  }
+}
 </style>

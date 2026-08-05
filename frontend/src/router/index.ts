@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vu
 import { pinia } from '../stores/pinia'
 import { useAuthStore } from '../stores/auth'
 import type { UserRole } from '../types/auth'
+import { homeFor, roleAllowed } from '../utils/navigation'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -77,17 +78,6 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
   ],
 })
-
-function homeFor(role: UserRole) {
-  if (role === 'SUPER_ADMIN' || role === 'ADMINISTRATOR') return '/admin/dashboard'
-  if (role === 'SALES_MANAGER') return '/forbidden'
-  return '/sales/dashboard'
-}
-
-function roleAllowed(required: UserRole, actual: UserRole) {
-  if (required === 'ADMINISTRATOR') return actual === 'SUPER_ADMIN' || actual === 'ADMINISTRATOR'
-  return required === actual
-}
 
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const auth = useAuthStore(pinia)

@@ -36,7 +36,6 @@ const props = withDefaults(
 
     /**
      * Parent dapat mengirim fungsi proteksi khusus.
-     * Default tetap melindungi SUPER_ADMIN Level 1.
      */
     isProtected?: (item: SalesStructureItem) => boolean
 
@@ -75,10 +74,7 @@ function isProtectedAssignment(item: SalesStructureItem): boolean {
     return props.isProtected(item)
   }
 
-  return (
-    item.systemRole === 'SUPER_ADMIN' &&
-    item.salesRole.level === 1
-  )
+  return item.systemRole === 'SUPER_ADMIN'
 }
 
 const actionItems = computed<MenuItem[]>(() => {

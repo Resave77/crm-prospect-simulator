@@ -21,11 +21,15 @@ type salesRepo struct {
 	roleInUse         bool
 	overlap           bool
 	incompatible      bool
+	activeChildren    bool
 	level1Roots       int
 	moveErr           error
+	endErr            error
 	createdAssignment uuid.UUID
 	movedFrom         uuid.UUID
 	movedTo           uuid.UUID
+	endedAssignment   uuid.UUID
+	endedTo           time.Time
 }
 
 func (r *salesRepo) FindSalesRole(_ context.Context, id uuid.UUID) (model.SalesRole, error) {
@@ -118,6 +122,9 @@ func (r *salesRepo) SalesAssignmentOverlaps(_ context.Context, _ uuid.UUID, _ ti
 func (r *salesRepo) HasIncompatibleCurrentChildren(_ context.Context, _ uuid.UUID, _ int, _ time.Time) (bool, error) {
 	return r.incompatible, nil
 }
+func (r *salesRepo) HasActiveChildAssignments(_ context.Context, _ uuid.UUID, _ time.Time) (bool, error) {
+	return r.activeChildren, nil
+}
 func (r *salesRepo) CountEffectiveLevel1Roots(_ context.Context, _ time.Time, _ *uuid.UUID) (int, error) {
 	return r.level1Roots, nil
 }
@@ -143,6 +150,20 @@ func (r *salesRepo) MoveSalesAssignment(_ context.Context, currentID, newID uuid
 	old.EffectiveTo = &closeDate
 	r.assignments[currentID] = old
 	r.assignments[newID] = model.SalesStructureAssignment{ID: newID, UserID: old.UserID, SalesRoleID: input.SalesRoleID, ParentUserID: input.ParentUserID, EffectiveFrom: input.EffectiveFrom.Time}
+	return nil
+}
+func (r *salesRepo) EndSalesAssignment(_ context.Context, assignmentID uuid.UUID, effectiveTo time.Time, _ uuid.UUID) error {
+	if r.endErr != nil {
+		return r.endErr
+	}
+	r.endedAssignment = assignmentID
+	r.endedTo = effectiveTo
+	assignment, ok := r.assignments[assignmentID]
+	if !ok {
+		return repository.ErrNotFound
+	}
+	assignment.EffectiveTo = &effectiveTo
+	r.assignments[assignmentID] = assignment
 	return nil
 }
 func (r *salesRepo) ListSalesAssignmentHistory(_ context.Context, userID uuid.UUID) ([]model.AssignmentHistoryItem, error) {
@@ -312,6 +333,64 @@ func TestSalesAssignmentMoveScenariosAndHistory(t *testing.T) {
 	}
 }
 
+func TestEndSalesAssignmentSucceedsAndPreservesHistory(t *testing.T) {
+	repo, l1, _, _, _ := salesTestRepo()
+	svc := New(repo)
+	actor := adminActor()
+	userID := uuid.New()
+	repo.users[userID] = authmodel.User{ID: userID, Status: authmodel.UserActive}
+	assignmentID := uuid.New()
+	repo.assignments[assignmentID] = model.SalesStructureAssignment{ID: assignmentID, UserID: userID, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-08-01")}
+
+	ended, err := svc.EndSalesAssignment(context.Background(), actor, assignmentID, model.EndAssignmentInput{EffectiveTo: salesDate("2026-08-31")})
+	if err != nil {
+		t.Fatalf("end assignment: %v", err)
+	}
+	if ended.ID != assignmentID || ended.EffectiveTo == nil || ended.EffectiveTo.Format(model.DateLayout) != "2026-08-31" {
+		t.Fatalf("ended assignment=%+v", ended)
+	}
+	if repo.endedAssignment != assignmentID || repo.endedTo.Format(model.DateLayout) != "2026-08-31" {
+		t.Fatalf("repo end call assignment=%s to=%s", repo.endedAssignment, repo.endedTo.Format(model.DateLayout))
+	}
+	history, err := svc.ListSalesAssignmentHistory(context.Background(), actor, userID)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(history) != 1 || history[0].Status != "PAST" || history[0].EffectiveTo == nil || *history[0].EffectiveTo != "2026-08-31" {
+		t.Fatalf("history after end=%+v", history)
+	}
+}
+
+func TestEndSalesAssignmentRejectsInvalidStates(t *testing.T) {
+	repo, l1, _, _, _ := salesTestRepo()
+	svc := New(repo)
+	actor := adminActor()
+	userID := uuid.New()
+	repo.users[userID] = authmodel.User{ID: userID, Status: authmodel.UserActive}
+
+	if _, err := svc.EndSalesAssignment(context.Background(), actor, uuid.New(), model.EndAssignmentInput{EffectiveTo: salesDate("2026-08-31")}); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("not found err=%v", err)
+	}
+
+	assignmentID := uuid.New()
+	endedAt := mustSalesTime("2026-08-15")
+	repo.assignments[assignmentID] = model.SalesStructureAssignment{ID: assignmentID, UserID: userID, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-08-01"), EffectiveTo: &endedAt}
+	if _, err := svc.EndSalesAssignment(context.Background(), actor, assignmentID, model.EndAssignmentInput{EffectiveTo: salesDate("2026-08-31")}); !errors.Is(err, ErrAssignmentAlreadyEnded) {
+		t.Fatalf("already ended err=%v", err)
+	}
+
+	activeID := uuid.New()
+	repo.assignments[activeID] = model.SalesStructureAssignment{ID: activeID, UserID: userID, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-08-01")}
+	if _, err := svc.EndSalesAssignment(context.Background(), actor, activeID, model.EndAssignmentInput{EffectiveTo: salesDate("2026-07-31")}); !errors.Is(err, ErrInvalidEffectiveDate) {
+		t.Fatalf("before start err=%v", err)
+	}
+
+	repo.activeChildren = true
+	if _, err := svc.EndSalesAssignment(context.Background(), actor, activeID, model.EndAssignmentInput{EffectiveTo: salesDate("2026-08-31")}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("active children err=%v", err)
+	}
+}
+
 func TestSalesAssignmentMoveRejectsRequiredRules(t *testing.T) {
 	repo, l1, l2, l3, _ := salesTestRepo()
 	svc := New(repo)
@@ -349,7 +428,7 @@ func TestSalesAssignmentMoveRejectsRequiredRules(t *testing.T) {
 	}
 }
 
-func TestSalesAssignmentRootProtectionAndRollback(t *testing.T) {
+func TestSalesAssignmentAllowsMultipleLevel1SalesRoots(t *testing.T) {
 	repo, l1, l2, _, _ := salesTestRepo()
 	svc := New(repo)
 	actor := adminActor()
@@ -363,18 +442,16 @@ func TestSalesAssignmentRootProtectionAndRollback(t *testing.T) {
 	repo.assignments[otherRootAssignmentID] = model.SalesStructureAssignment{ID: otherRootAssignmentID, UserID: otherRoot, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-09-01")}
 	repo.assignments[uuid.New()] = model.SalesStructureAssignment{ID: uuid.New(), UserID: manager, SalesRoleID: l2, ParentUserID: &root, EffectiveFrom: mustSalesTime("2026-08-01")}
 
-	repo.level1Roots = 1
 	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: uuid.New(), SalesRoleID: l1, EffectiveFrom: salesDate("2026-09-01")}); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("missing user should short-circuit root count, err=%v", err)
 	}
 	newRoot := uuid.New()
 	repo.users[newRoot] = authmodel.User{ID: newRoot, Status: authmodel.UserActive}
-	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: newRoot, SalesRoleID: l1, EffectiveFrom: salesDate("2026-09-01")}); !errors.Is(err, ErrSuperAdminRoot) {
-		t.Fatalf("duplicate root err=%v", err)
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: newRoot, SalesRoleID: l1, EffectiveFrom: salesDate("2026-09-01")}); err != nil {
+		t.Fatalf("second level 1 sales root: %v", err)
 	}
 
 	repo.moveErr = repository.ErrConflict
-	repo.level1Roots = 0
 	before := repo.assignments[rootAssignmentID]
 	if _, err := svc.MoveSalesAssignment(context.Background(), actor, rootAssignmentID, model.MoveAssignmentInput{SalesRoleID: l1, EffectiveFrom: salesDate("2026-10-01")}); !errors.Is(err, repository.ErrConflict) {
 		t.Fatalf("move insert failure err=%v", err)
@@ -382,6 +459,18 @@ func TestSalesAssignmentRootProtectionAndRollback(t *testing.T) {
 	after := repo.assignments[rootAssignmentID]
 	if before.EffectiveTo != after.EffectiveTo {
 		t.Fatalf("failed move changed old close: before=%v after=%v", before.EffectiveTo, after.EffectiveTo)
+	}
+}
+
+func TestSalesAssignmentRejectsSuperAdminUser(t *testing.T) {
+	repo, l1, _, _, _ := salesTestRepo()
+	svc := New(repo)
+	actor := adminActor()
+	superAdmin := uuid.New()
+	repo.users[superAdmin] = authmodel.User{ID: superAdmin, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: superAdmin, SalesRoleID: l1, EffectiveFrom: salesDate("2026-08-01")}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("super admin assignment err=%v, want ErrInvalidHierarchy", err)
 	}
 }
 
@@ -394,6 +483,9 @@ func TestSalesAssignmentUnauthorizedRoleForbidden(t *testing.T) {
 	}
 	if _, err := svc.MoveSalesAssignment(context.Background(), actor, uuid.New(), model.MoveAssignmentInput{}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("move forbidden err=%v", err)
+	}
+	if _, err := svc.EndSalesAssignment(context.Background(), actor, uuid.New(), model.EndAssignmentInput{}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("end forbidden err=%v", err)
 	}
 	if _, err := svc.ListSalesAssignmentHistory(context.Background(), actor, uuid.New()); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("history forbidden err=%v", err)

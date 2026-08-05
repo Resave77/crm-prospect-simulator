@@ -10,7 +10,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
-import type { SalesRole } from '../../../types/admin'
+import type { AdminAccountType, SalesRole } from '../../../types/admin'
 
 const router = useRouter()
 const store = useAdminStore()
@@ -18,76 +18,151 @@ const toast = useToast()
 const error = ref('')
 const saving = ref(false)
 
-const managerOptions = computed(() => {
-  const managers = store.managerOptions ?? []
-  return [{ label: 'Select manager', value: '' }, ...managers.map((m) => ({ label: m.name, value: m.id }))]
-})
-
 const organizationalRoleOptions = computed(() =>
-  store.salesRoles.filter((role) => role.isActive).map((role) => ({
-    label: role.name,
-    value: role.id,
-    role,
-    searchText: `${role.name} level ${role.level} ${landingLabel(role.landingPage)} ${role.permissionCount ?? 0} permissions`,
-  })),
+  store.salesRoles
+    .filter(isAssignableSalesRole)
+    .map((role) => ({
+      label: role.name,
+      value: role.id,
+      role,
+      searchText: `${role.name} level ${role.level} ${landingLabel(role.landingPage)} ${role.permissionCount ?? 0} permissions`,
+    })),
 )
 
 const form = reactive({
+  accountType: 'SALES_ACCOUNT' as AdminAccountType,
   name: '',
   email: '',
   employeeId: '',
   phone: '',
   salesRoleId: '',
-  managerId: '',
   temporaryPassword: '',
 })
 
-const selectedOrganizationalRole = computed(() => store.salesRoles.find((role) => role.id === form.salesRoleId) ?? null)
-const showManager = computed(() => false)
+const accountTypeOptions: Array<{
+  label: string
+  value: AdminAccountType
+  description: string
+}> = [
+  {
+    label: 'Sales Account',
+    value: 'SALES_ACCOUNT',
+    description: 'Uses an active Level 1–4 role from Role Management and can be assigned in Sales Structure.',
+  },
+  {
+    label: 'Super Admin',
+    value: 'SUPER_ADMIN',
+    description: 'System administrator account outside the Level 1–4 sales hierarchy.',
+  },
+]
+const isSalesAccount = computed(() => form.accountType === 'SALES_ACCOUNT')
+const selectedOrganizationalRole = computed(
+  () => store.salesRoles.find((role) => role.id === form.salesRoleId) ?? null,
+)
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const validOrganizationalSelection = computed(() => {
-  const role = selectedOrganizationalRole.value
-  return Boolean(role?.isActive)
-})
 
-const isFormValid = computed(() => {
-  if (!form.employeeId.trim()) return false
-  if (!form.name.trim()) return false
-  if (!emailPattern.test(form.email.trim())) return false
-  if (!validOrganizationalSelection.value) return false
-  if (form.temporaryPassword.length < 8) return false
-  return true
-})
+const requiredFields = computed(() => [
+  { label: 'Account Type', complete: Boolean(form.accountType) },
+  { label: 'Full Name', complete: Boolean(form.name.trim()) },
+  { label: 'Email', complete: emailPattern.test(form.email.trim()) },
+  { label: 'Role', complete: !isSalesAccount.value || Boolean(selectedOrganizationalRole.value?.isActive) },
+  { label: 'Temporary Password', complete: form.temporaryPassword.length >= 8 },
+])
 
-watch(() => form.salesRoleId, () => {
-  if (!showManager.value) form.managerId = ''
-})
+const completedRequiredCount = computed(
+  () => requiredFields.value.filter((item) => item.complete).length,
+)
+
+const isFormValid = computed(
+  () =>
+    Boolean(form.employeeId.trim()) &&
+    requiredFields.value.every((item) => item.complete),
+)
+
+watch(
+  () => form.email,
+  (email) => {
+    if (!form.employeeId || form.employeeId.startsWith('EMP-')) {
+      form.employeeId = generateEmployeeId(email)
+    }
+  },
+)
+
+watch(
+  () => form.accountType,
+  (accountType) => {
+    if (accountType === 'SUPER_ADMIN') {
+      form.salesRoleId = ''
+    }
+  },
+)
 
 function landingLabel(path?: string | null) {
   if (!path) return '-'
-  return path.split('/').filter(Boolean).map((part) => part.replace(/-/g, ' ')).join(' / ') || path
+  return (
+    path
+      .split('/')
+      .filter(Boolean)
+      .map((part) => part.replace(/-/g, ' '))
+      .join(' / ') || path
+  )
 }
 
 function roleOptionMeta(role: SalesRole) {
   return `Level ${role.level} · ${role.permissionCount ?? 0} permissions · Landing: ${landingLabel(role.landingPage)}`
 }
 
+function isAssignableSalesRole(role: SalesRole) {
+  return role.isActive && role.level >= 1 && role.level <= 4 && role.name.trim().toLowerCase() !== 'super admin'
+}
+
+function generateEmployeeId(seed = '') {
+  const now = new Date()
+  const year = now.getFullYear()
+  const normalized = seed
+    .split('@')[0]
+    ?.replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 3)
+    .toUpperCase()
+
+  const suffix = String(
+    Math.floor(1000 + Math.random() * 9000),
+  )
+
+  return `EMP-${year}-${normalized || suffix.slice(0, 3)}-${suffix}`
+}
+
+function regenerateEmployeeId() {
+  form.employeeId = generateEmployeeId(form.email)
+}
+
 async function handleSubmit() {
   if (!isFormValid.value) return
+
   saving.value = true
   error.value = ''
+
   try {
     const user = await store.createUser({
       name: form.name.trim(),
       email: form.email.trim(),
       employeeId: form.employeeId.trim(),
       phone: form.phone.trim(),
-      salesRoleId: form.salesRoleId || null,
+      accountType: form.accountType,
+      salesRoleId: isSalesAccount.value ? form.salesRoleId || null : null,
       managerId: null,
       temporaryPassword: form.temporaryPassword,
     })
-    toast.add({ severity: 'success', summary: 'Account Created', detail: `Account for ${user.fullName} has been created and is active.`, life: 4000 })
-    await new Promise((resolve) => setTimeout(resolve, 800))
+
+    toast.add({
+      severity: 'success',
+      summary: 'Account Created',
+      detail: `Account for ${user.fullName} has been created and is active.`,
+      life: 4000,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 700))
     await router.push('/admin/accounts')
   } catch (e) {
     error.value = store.errorMessage(e)
@@ -96,81 +171,170 @@ async function handleSubmit() {
   }
 }
 
-function managerName(id: string) {
-  return store.managerOptions.find((m) => m.id === id)?.name ?? '—'
-}
-
 onMounted(async () => {
+  form.employeeId = generateEmployeeId()
+
   try {
-    await Promise.all([store.fetchManagers(), store.fetchSalesRoles()])
-  } catch { /* optional */ }
+    await store.fetchSalesRoles()
+  } catch {
+    // The page-level error is handled when submitting or through the store.
+  }
 })
 </script>
-
 <template>
-  <section class="admin-page">
+  <section class="create-account-page">
     <Toast position="top-right" />
 
-    <!-- PAGE HEADER -->
-    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back" />
-    <header class="page-heading">
-      <div class="page-title-wrapper">
-        <span class="eyebrow">New Account</span>
-        <h1>Create Account</h1>
-        <p class="muted">Register a new user account and assign its role in the CRM system.</p>
+    <header class="topbar">
+      <div class="topbar-left">
+        <Button
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
+          title="Back to Accounts"
+          @click="router.push('/admin/accounts')"
+        />
+
+        <div>
+          <span class="eyebrow">Account Management</span>
+          <h1>Create Account</h1>
+          <p>Create a CRM account and assign access from Role Management.</p>
+        </div>
       </div>
-      <div class="page-heading-actions">
-        <Button label="Cancel" severity="secondary" text size="small" @click="router.push('/admin/accounts')" />
-        <Button label="Create Account" icon="pi pi-check" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
+
+      <div class="topbar-actions">
+        <Button
+          label="Cancel"
+          severity="secondary"
+          outlined
+          size="small"
+          @click="router.push('/admin/accounts')"
+        />
+        <Button
+          label="Create Account"
+          icon="pi pi-check"
+          size="small"
+          :loading="saving"
+          :disabled="!isFormValid || saving"
+          @click="handleSubmit"
+        />
       </div>
     </header>
 
-    <Message v-if="error" severity="error">{{ error }}</Message>
+    <Message v-if="error" severity="error" class="page-message">
+      {{ error }}
+    </Message>
 
-    <div class="form-layout">
-      <!-- LEFT COLUMN: FORM -->
-      <div class="form-stack">
-        <!-- ACCOUNT INFORMATION -->
-        <div class="form-card">
-          <div class="form-card-header">
-            <div class="form-card-icon si-blue"><i class="pi pi-user" /></div>
+    <div class="content-layout">
+      <main class="form-column">
+        <section class="form-section">
+          <header class="section-header">
             <div>
-              <h3>Account Information</h3>
-              <p>Basic details about the user account.</p>
+              <h2>User Information</h2>
+              <p>Primary sign-in and account identity information.</p>
             </div>
-          </div>
+            <span class="section-status required-status">Required</span>
+          </header>
+
           <div class="form-grid">
             <div class="form-field">
-              <label>Employee ID <span class="required">*</span></label>
-              <InputText v-model="form.employeeId" placeholder="e.g. YF-2026-001" />
+              <label>
+                Full Name
+                <span class="required">*</span>
+              </label>
+              <InputText
+                v-model="form.name"
+                placeholder="e.g. Budi Santoso"
+                autocomplete="name"
+              />
+              <small>Use the employee's complete name.</small>
             </div>
-            <div class="form-field">
-              <label>Full Name <span class="required">*</span></label>
-              <InputText v-model="form.name" placeholder="e.g. Budi Santoso" />
-            </div>
-            <div class="form-field">
-              <label>Email <span class="required">*</span></label>
-              <InputText v-model="form.email" placeholder="e.g. budi@yummy.test" />
-            </div>
-            <div class="form-field">
-              <label>Phone</label>
-              <InputText v-model="form.phone" placeholder="e.g. 0812-3456-7890" />
-            </div>
-          </div>
-        </div>
 
-        <!-- ROLE & ACCESS -->
-        <div class="form-card">
-          <div class="form-card-header">
-            <div class="form-card-icon si-violet"><i class="pi pi-lock" /></div>
-            <div>
-              <h3>Role &amp; Access</h3>
-              <p>Choose the account role from Role Management.</p>
+            <div class="form-field">
+              <label>
+                Email
+                <span class="required">*</span>
+              </label>
+              <InputText
+                v-model="form.email"
+                placeholder="e.g. budi@yummy.test"
+                autocomplete="email"
+              />
+              <small>This email will be used to sign in.</small>
             </div>
-          </div>
-          <div class="form-grid">
-            <div class="form-field full">
-              <label>Role <span class="required">*</span></label>
+
+            <div class="form-field">
+              <label>Employee ID</label>
+              <div class="generated-field">
+                <InputText
+                  v-model="form.employeeId"
+                  readonly
+                  aria-label="Generated employee ID"
+                />
+                <Button
+                  icon="pi pi-refresh"
+                  severity="secondary"
+                  outlined
+                  title="Generate another employee ID"
+                  @click="regenerateEmployeeId"
+                />
+              </div>
+              <small>Generated automatically. Backend generation is recommended for production.</small>
+            </div>
+
+            <div class="form-field">
+              <label>Phone <span class="optional-badge">Optional</span></label>
+              <InputText
+                v-model="form.phone"
+                placeholder="e.g. 0812-3456-7890"
+                autocomplete="tel"
+              />
+              <small>Primary contact number for this employee.</small>
+            </div>
+
+            <div class="form-field">
+              <label>
+                Temporary Password
+                <span class="required">*</span>
+              </label>
+              <Password
+                v-model="form.temporaryPassword"
+                toggleMask
+                :feedback="true"
+                promptLabel="Choose a temporary password"
+                placeholder="At least 8 characters"
+                inputClass="full-input"
+              />
+              <small>This temporary password can be changed later from account settings.</small>
+            </div>
+
+            <div class="form-field">
+              <label>
+                Account Type
+                <span class="required">*</span>
+              </label>
+              <Select
+                v-model="form.accountType"
+                :options="accountTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+              >
+                <template #option="{ option }">
+                  <div class="role-option">
+                    <strong>{{ option.label }}</strong>
+                    <span>{{ option.description }}</span>
+                  </div>
+                </template>
+              </Select>
+              <small>Select whether this is a system admin or sales account.</small>
+            </div>
+
+            <div v-if="isSalesAccount" class="form-field">
+              <label>
+                Role
+                <span class="required">*</span>
+              </label>
               <Select
                 v-model="form.salesRoleId"
                 :options="organizationalRoleOptions"
@@ -188,409 +352,665 @@ onMounted(async () => {
                   </div>
                 </template>
               </Select>
-            </div>
-            <div class="access-preview full">
-              <strong>{{ selectedOrganizationalRole?.name || 'No organizational role selected' }}</strong>
-              <span>Level {{ selectedOrganizationalRole?.level ?? '-' }}</span>
-              <span>Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</span>
-              <span>{{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</span>
-              <p>{{ selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' }}</p>
-            </div>
-            <div class="form-field">
-              <label>Temporary Password <span class="required">*</span></label>
-              <Password v-model="form.temporaryPassword" toggleMask :feedback="true" :promptLabel="'Choose a temporary password'" placeholder="At least 8 characters" />
-            </div>
-            <div class="form-field">
-              <label>Status</label>
-              <div class="readonly-value"><Tag value="ACTIVE" severity="success" /></div>
-            </div>
-            <div class="form-field">
-              <label>Must Change Password</label>
-              <div class="readonly-value"><Tag value="Yes" severity="warn" icon="pi pi-key" /></div>
-            </div>
-            <div v-if="showManager" class="form-field">
-              <label>Reports To / Manager <span class="required">*</span></label>
-              <Select v-model="form.managerId" :options="managerOptions" optionLabel="label" optionValue="value" placeholder="Select manager" />
-            </div>
-            <div v-if="showManager" class="form-field form-note-field">
-              <div class="field-note">
-                <i class="pi pi-info-circle" />
-                <span>Manager represents the current direct manager; monthly history is unchanged in this phase.</span>
-              </div>
+              <small>Role controls access, landing page, and hierarchy level.</small>
             </div>
           </div>
-          <div class="must-change-note">
-            <i class="pi pi-key" />
-            <span>This user will be required to change their password on first sign-in.</span>
-          </div>
-        </div>
-      </div>
+        </section>
 
-      <!-- RIGHT COLUMN: SIDEBAR -->
-      <aside class="form-sidebar">
-        <div class="sidebar-card">
-          <h4>Role Preview</h4>
-          <div class="role-scope">
-            <span class="role-title">{{ selectedOrganizationalRole?.name || 'No role selected' }}</span>
-            <ul>
-              <li><i class="pi pi-check-circle" /> Level {{ selectedOrganizationalRole?.level ?? '-' }}</li>
-              <li><i class="pi pi-check-circle" /> {{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</li>
-              <li><i class="pi pi-check-circle" /> Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</li>
-            </ul>
+        <section class="form-section">
+          <header class="section-header">
+            <div>
+              <h2>Role &amp; Access Preview</h2>
+              <p>Review the access that will be assigned to this account.</p>
+            </div>
+            <span class="section-status">Automatic</span>
+          </header>
+
+          <div class="access-preview">
+            <div class="preview-role">
+              <span>Selected Role</span>
+              <strong>
+                {{ isSalesAccount ? selectedOrganizationalRole?.name || 'No role selected' : 'Super Admin' }}
+              </strong>
+            </div>
+
+            <div class="access-stat">
+              <span>Level</span>
+              <strong>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : '—' }}</strong>
+            </div>
+
+            <div class="access-stat">
+              <span>Permissions</span>
+              <strong>{{ isSalesAccount ? selectedOrganizationalRole?.permissionCount ?? 0 : 'System' }}</strong>
+            </div>
+
+            <div class="access-stat">
+              <span>Initial Menu</span>
+              <strong>
+                {{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}
+              </strong>
+            </div>
+
+            <p>
+              {{
+                !isSalesAccount ? 'Super Admin is a system role and is not assigned to Sales Structure.' :
+                selectedOrganizationalRole?.description ||
+                'Select a role to preview its access configuration.'
+              }}
+            </p>
           </div>
-        </div>
-        <div class="sidebar-card">
-          <h4>Submission Summary</h4>
-          <div class="summary-list">
-            <div class="summary-row">
-              <span>Employee ID</span>
-              <strong>{{ form.employeeId || '—' }}</strong>
+
+          <div class="system-defaults">
+            <div>
+              <i class="pi pi-check-circle" />
+              <span>
+                <strong>Status:</strong>
+                Active
+              </span>
             </div>
-            <div class="summary-row">
-              <span>Name</span>
-              <strong>{{ form.name || '—' }}</strong>
+            <div>
+              <i class="pi pi-key" />
+              <span>
+                <strong>Password change:</strong>
+                Not required for the current demo deployment
+              </span>
             </div>
-            <div class="summary-row">
-              <span>Email</span>
-              <strong>{{ form.email || '—' }}</strong>
-            </div>
-            <div class="summary-row">
-              <span>Role</span>
-              <strong>{{ selectedOrganizationalRole?.name || '—' }}</strong>
-            </div>
-            <div class="summary-row">
-              <span>Manager</span>
-              <strong>{{ showManager ? managerName(form.managerId) : '—' }}</strong>
-            </div>
-            <div class="summary-row">
-              <span>Status</span>
-              <strong>Active</strong>
-            </div>
-            <div class="summary-row">
-              <span>Password Change</span>
-              <strong>Required</strong>
+            <div>
+              <i class="pi pi-sitemap" />
+              <span>
+                <strong>Sales hierarchy:</strong>
+                {{ isSalesAccount ? 'Assigned later from Sales Structure' : 'Not included' }}
+              </span>
             </div>
           </div>
-        </div>
-        <div class="sidebar-actions">
-          <Button label="Create Account" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
-          <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push('/admin/accounts')" />
-        </div>
+        </section>
+      </main>
+
+      <aside class="sidebar-column">
+        <section class="preview-card">
+          <div class="avatar-preview">
+            {{ form.name.trim().slice(0, 1).toUpperCase() || '?' }}
+          </div>
+
+          <h3>{{ form.name || 'Employee Name' }}</h3>
+          <p>{{ form.email || 'Email address' }}</p>
+
+          <Tag
+            :value="isSalesAccount ? selectedOrganizationalRole?.name || 'Role not selected' : 'Super Admin'"
+            :severity="isSalesAccount && !selectedOrganizationalRole ? 'secondary' : 'info'"
+            rounded
+          />
+
+          <div class="preview-divider" />
+
+          <dl>
+            <div>
+              <dt>Employee ID</dt>
+              <dd>{{ form.employeeId || '—' }}</dd>
+            </div>
+            <div>
+              <dt>Role Level</dt>
+              <dd>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : '—' }}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>Active</dd>
+            </div>
+            <div>
+              <dt>Initial Menu</dt>
+              <dd>{{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="required-card">
+          <div class="required-card-header">
+            <div>
+              <h3>Required Fields</h3>
+              <p>{{ completedRequiredCount }} / {{ requiredFields.length }} complete</p>
+            </div>
+            <span
+              class="completion-count"
+              :class="{ complete: isFormValid }"
+            >
+              {{ Math.round((completedRequiredCount / requiredFields.length) * 100) }}%
+            </span>
+          </div>
+
+          <div class="required-list">
+            <div
+              v-for="item in requiredFields"
+              :key="item.label"
+              class="required-item"
+              :class="{ complete: item.complete }"
+            >
+              <i
+                :class="
+                  item.complete
+                    ? 'pi pi-check-circle'
+                    : 'pi pi-circle'
+                "
+              />
+              <span>{{ item.label }}</span>
+              <small>{{ item.complete ? 'Complete' : 'Required' }}</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="help-card">
+          <i class="pi pi-info-circle" />
+          <div>
+            <strong>What should Admin fill?</strong>
+            <p>
+              Fill Full Name, Email, Temporary Password, and Account Type.
+              Role is required only for Sales Account. Phone is optional and
+              Employee ID is generated automatically.
+            </p>
+          </div>
+        </section>
       </aside>
     </div>
   </section>
 </template>
 
 <style scoped>
-.admin-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem 2rem;
+.create-account-page {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
+  overflow-x: hidden;
+  background: #f8fafc;
 }
 
-/* ── PAGE HEADER ──────────────────────────────────────────────────── */
-.page-heading {
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  gap: 1rem;
+  min-height: 68px;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.topbar-left > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
+.eyebrow {
+  color: #64748b;
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topbar h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.12rem;
+}
+
+.topbar p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+.topbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.page-message {
+  margin: 0.8rem 1rem 0;
+}
+
+.content-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  align-items: start;
+  gap: 1rem;
+  width: min(1120px, calc(100% - 2rem));
+  margin: 1rem auto 2rem;
+}
+
+.form-column {
+  display: grid;
+  min-width: 0;
   gap: 1rem;
 }
-.page-title-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.page-title-wrapper .eyebrow {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--brand-green-light, #0b7766);
-  margin-top: 0.5rem;
-}
-.page-title-wrapper h1 {
-  font-size: 1.65rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin: 0.2rem 0 0.15rem;
-  letter-spacing: -0.03em;
-}
-.page-title-wrapper .muted {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-.page-heading-actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding-top: 0.15rem;
+
+.form-section,
+.preview-card,
+.required-card,
+.help-card {
+  border: 1px solid #e3e9f0;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-/* ── FORM LAYOUT ──────────────────────────────────────────────────── */
-.form-layout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 1.5rem;
-  align-items: start;
-}
-.form-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-/* ── FORM CARDS ────────────────────────────────────────────────────── */
-.form-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-xs);
-}
-.form-card-header {
+.section-header {
   display: flex;
   align-items: flex-start;
-  gap: 0.85rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #f0f3f7;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #edf1f6;
 }
-.form-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  display: grid;
-  place-content: center;
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-.si-blue { background: #eff6ff; color: #2563eb; }
-.si-violet { background: #eef2ff; color: #6366f1; }
-.si-green { background: #ecfdf5; color: #059669; }
 
-.form-card-header h3 {
+.section-header h2 {
   margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.form-card-header p {
-  margin: 0.15rem 0 0;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  color: #0f172a;
+  font-size: 0.93rem;
 }
 
-/* ── FORM GRID ─────────────────────────────────────────────────────── */
+.section-header p {
+  margin: 0.14rem 0 0;
+  color: #7c8798;
+  font-size: 0.7rem;
+}
+
+.section-status,
+.optional-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0.14rem 0.42rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.59rem;
+  font-weight: 700;
+}
+
+.required-status {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.9rem 1rem;
+  padding: 1rem;
 }
+
 .form-field {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  min-width: 0;
   gap: 0.3rem;
 }
-.form-field.full {
-  grid-column: 1 / -1;
-}
+
 .form-field label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 750;
 }
+
 .required {
   color: #dc2626;
 }
 
-.readonly-value {
-  flex: 1;
-  min-height: 2.85rem;
-  display: flex;
-  align-items: center;
-  padding: 0 0.2rem;
+.form-field small {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  line-height: 1.4;
 }
 
-.form-note-field {
-  justify-content: flex-end;
-}
-.field-note {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.7rem;
-  font-size: 0.75rem;
-  color: #1e40af;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: var(--radius-sm);
-  line-height: 1.45;
-}
-.field-note i {
-  flex-shrink: 0;
-  font-size: 0.85rem;
-}
-
-.role-option {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.role-option strong {
-  font-size: 0.82rem;
-  color: var(--text-primary);
-}
-.role-option span {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-.access-preview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem 0.75rem;
-  padding: 0.8rem 0.9rem;
-  border: 1px solid #dbeafe;
-  border-radius: var(--radius-sm);
-  background: #f8fbff;
-}
-.access-preview strong,
-.access-preview p {
-  grid-column: 1 / -1;
-}
-.access-preview strong {
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-.access-preview span,
-.access-preview p {
-  margin: 0;
-  font-size: 0.76rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.must-change-note {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.1rem;
-  padding: 0.65rem 0.8rem;
-  font-size: 0.76rem;
-  color: #92400e;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: var(--radius-sm);
-}
-.must-change-note i {
-  flex-shrink: 0;
-  color: #d97706;
-}
-
-/* ── SIDEBAR ───────────────────────────────────────────────────────── */
-.form-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  position: sticky;
-  top: 1.5rem;
-}
-.sidebar-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 1.15rem 1.25rem;
-  box-shadow: var(--shadow-xs);
-}
-.sidebar-card h4 {
-  margin: 0 0 0.85rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-.role-scope {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-.role-title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--brand-blue);
-}
-.role-scope ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-.role-scope li {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-.role-scope li i {
-  margin-top: 0.1rem;
-  font-size: 0.8rem;
-  color: #059669;
-  flex-shrink: 0;
-}
-.summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-.summary-row span {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-.summary-row strong {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-align: right;
-}
-.sidebar-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.full-width {
+.form-field :deep(.p-inputtext),
+.form-field :deep(.p-select),
+.form-field :deep(.p-password),
+.form-field :deep(.p-password-input) {
   width: 100%;
 }
 
-/* ── RESPONSIVE ────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .form-layout {
+.generated-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 0.45rem;
+}
+
+.generated-field :deep(.p-inputtext) {
+  background: #f8fafc;
+  color: #475569;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.role-option {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.role-option strong {
+  color: #0f172a;
+  font-size: 0.8rem;
+}
+
+.role-option span {
+  color: #7c8798;
+  font-size: 0.69rem;
+}
+
+.access-preview {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) repeat(3, minmax(100px, 1fr));
+  gap: 0.7rem;
+  padding: 1rem;
+}
+
+.preview-role,
+.access-stat {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.75rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.preview-role span,
+.access-stat span {
+  color: #94a3b8;
+  font-size: 0.61rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.preview-role strong,
+.access-stat strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.79rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-preview > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #64748b;
+  font-size: 0.71rem;
+  line-height: 1.5;
+}
+
+.system-defaults {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem;
+  padding: 0 1rem 1rem;
+}
+
+.system-defaults > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.7rem;
+  border: 1px solid #d1fae5;
+  border-radius: 9px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 0.67rem;
+  line-height: 1.4;
+}
+
+.system-defaults i {
+  margin-top: 0.08rem;
+  color: #16a34a;
+}
+
+
+
+.sidebar-column {
+  position: sticky;
+  top: 84px;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.preview-card,
+.required-card {
+  padding: 1rem;
+}
+
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.avatar-preview {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-content: center;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #2563eb;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.preview-card h3 {
+  margin: 0.7rem 0 0;
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.preview-card > p {
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0.18rem 0 0.65rem;
+  color: #7c8798;
+  font-size: 0.69rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-divider {
+  width: 100%;
+  height: 1px;
+  margin: 0.85rem 0;
+  background: #edf1f6;
+}
+
+.preview-card dl {
+  display: grid;
+  width: 100%;
+  gap: 0.58rem;
+  margin: 0;
+}
+
+.preview-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.preview-card dt {
+  color: #7c8798;
+  font-size: 0.67rem;
+}
+
+.preview-card dd {
+  overflow: hidden;
+  margin: 0;
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.required-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.required-card h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+
+.required-card p {
+  margin: 0.12rem 0 0;
+  color: #94a3b8;
+  font-size: 0.64rem;
+}
+
+.completion-count {
+  padding: 0.2rem 0.42rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.completion-count.complete {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.required-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.required-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.required-item i {
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+.required-item span {
+  color: #475569;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.required-item small {
+  color: #94a3b8;
+  font-size: 0.59rem;
+}
+
+.required-item.complete {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.required-item.complete i,
+.required-item.complete span {
+  color: #15803d;
+}
+
+.help-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.help-card > i {
+  margin-top: 0.08rem;
+  color: #2563eb;
+}
+
+.help-card strong {
+  color: #1e3a8a;
+  font-size: 0.73rem;
+}
+
+.help-card p {
+  margin: 0.18rem 0 0;
+  color: #1e40af;
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .content-layout {
     grid-template-columns: 1fr;
   }
-  .form-sidebar {
+
+  .sidebar-column {
     position: static;
-    order: -1;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .help-card {
+    grid-column: 1 / -1;
   }
 }
-@media (max-width: 768px) {
-  .admin-page { padding: 1.25rem 1rem; }
-  .page-heading { flex-direction: column; }
-  .form-grid { grid-template-columns: 1fr; }
-  .form-field.full { grid-column: 1; }
+
+@media (max-width: 760px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .topbar-actions :deep(.p-button) {
+    flex: 1;
+  }
+
+  .form-grid,
+  .access-preview,
+  .system-defaults,
+  .sidebar-column {
+    grid-template-columns: 1fr;
+  }
+
+  .content-layout {
+    width: min(100% - 1rem, 1120px);
+    margin-top: 0.5rem;
+  }
+
+  .help-card {
+    grid-column: auto;
+  }
 }
 </style>

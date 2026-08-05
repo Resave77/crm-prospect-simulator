@@ -493,8 +493,8 @@ func TestResetPasswordAutoSuccess(t *testing.T) {
 	if pw, _ := data["temporaryPassword"].(string); pw == "" {
 		t.Fatal("temporaryPassword must be non-empty")
 	}
-	if mustChange, _ := data["mustChangePassword"].(bool); !mustChange {
-		t.Fatal("mustChangePassword must be true")
+	if mustChange, _ := data["mustChangePassword"].(bool); mustChange {
+		t.Fatal("mustChangePassword must be false while mandatory first-login enforcement is disabled")
 	}
 	if revoked, _ := data["sessionsRevoked"].(float64); revoked != 2 {
 		t.Fatalf("sessionsRevoked=%v, want 2", data["sessionsRevoked"])

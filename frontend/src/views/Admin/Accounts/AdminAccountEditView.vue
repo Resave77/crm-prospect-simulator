@@ -27,7 +27,7 @@ const id = computed(() => String(route.params.id))
 const organizationalRoleOptions = computed(() => {
   const currentRole = store.selectedUser?.organizationalRole
   const options = store.salesRoles
-    .filter((role) => role.isActive || role.id === currentRole?.id)
+    .filter((role) => isAssignableSalesRole(role) || (role.id === currentRole?.id && role.name.trim().toLowerCase() !== 'super admin'))
     .map((role) => ({
       label: role.name,
       value: role.id,
@@ -46,6 +46,7 @@ const organizationalRoleOptions = computed(() => {
 })
 
 const form = reactive({
+  accountType: 'SALES_ACCOUNT' as 'SUPER_ADMIN' | 'SALES_ACCOUNT',
   employeeId: '',
   name: '',
   email: '',
@@ -53,6 +54,11 @@ const form = reactive({
   salesRoleId: '',
 })
 
+const accountTypeOptions = [
+  { label: 'Sales Account', value: 'SALES_ACCOUNT', description: 'Uses active roles from Role Management.' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN', description: 'System administrator account outside Sales Structure.' },
+]
+const isSalesAccount = computed(() => form.accountType === 'SALES_ACCOUNT')
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const selectedOrganizationalRole = computed(() => {
   const fromList = store.salesRoles.find((role) => role.id === form.salesRoleId)
@@ -71,7 +77,7 @@ const isFormValid = computed(() => {
   if (!form.employeeId.trim()) return false
   if (!form.name.trim()) return false
   if (!emailPattern.test(form.email.trim())) return false
-  if (!validOrganizationalSelection.value) return false
+  if (isSalesAccount.value && !validOrganizationalSelection.value) return false
   return true
 })
 
@@ -89,6 +95,7 @@ async function load() {
     form.name = user.fullName
     form.email = user.email
     form.phone = user.phone
+    form.accountType = user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'SALES_ACCOUNT'
     form.salesRoleId = user.organizationalRole?.id ?? ''
     loaded.value = true
   } catch (e) {
@@ -106,6 +113,19 @@ function roleOptionMeta(role: SalesRole) {
   return `Level ${role.level} · ${role.permissionCount ?? 0} permissions · Landing: ${landingLabel(role.landingPage)}`
 }
 
+function isAssignableSalesRole(role: SalesRole) {
+  return role.isActive && role.level >= 1 && role.level <= 4 && role.name.trim().toLowerCase() !== 'super admin'
+}
+
+watch(
+  () => form.accountType,
+  (accountType) => {
+    if (accountType === 'SUPER_ADMIN') {
+      form.salesRoleId = ''
+    }
+  },
+)
+
 async function handleSubmit() {
   if (!isFormValid.value) return
   saving.value = true
@@ -116,7 +136,8 @@ async function handleSubmit() {
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
-      salesRoleId: form.salesRoleId || null,
+      accountType: form.accountType,
+      salesRoleId: isSalesAccount.value ? form.salesRoleId || null : null,
     })
     toast.add({ severity: 'success', summary: 'Account Updated', detail: `Account for ${user.fullName} has been updated.`, life: 4000 })
     await new Promise((resolve) => setTimeout(resolve, 800))
@@ -228,6 +249,22 @@ onMounted(async () => {
               </div>
               <div class="form-grid">
                 <div class="form-field full">
+                  <label>Account Type <span class="required">*</span></label>
+                  <Select
+                    v-model="form.accountType"
+                    :options="accountTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                  >
+                    <template #option="{ option }">
+                      <div class="role-option">
+                        <strong>{{ option.label }}</strong>
+                        <span>{{ option.description }}</span>
+                      </div>
+                    </template>
+                  </Select>
+                </div>
+                <div v-if="isSalesAccount" class="form-field full">
                   <label>Role <span class="required">*</span></label>
                   <Select
                     v-model="form.salesRoleId"
@@ -249,11 +286,11 @@ onMounted(async () => {
                   </Select>
                 </div>
                 <div class="access-preview full">
-                  <strong>{{ selectedOrganizationalRole?.name || 'No organizational role selected' }}</strong>
-                  <span>Level {{ selectedOrganizationalRole?.level ?? '-' }}</span>
-                  <span>Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</span>
-                  <span>{{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</span>
-                  <p>{{ selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' }}</p>
+                  <strong>{{ isSalesAccount ? selectedOrganizationalRole?.name || 'No organizational role selected' : 'Super Admin' }}</strong>
+                  <span>Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : '-' }}</span>
+                  <span>Landing: {{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}</span>
+                  <span>{{ isSalesAccount ? selectedOrganizationalRole?.permissionCount ?? 0 : 'System' }} permissions</span>
+                  <p>{{ isSalesAccount ? selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' : 'Super Admin is a system role and is not assigned to Sales Structure.' }}</p>
                 </div>
                 <div v-if="roleChanged" class="must-change-note full">
                   <i class="pi pi-exclamation-triangle" />
@@ -278,11 +315,11 @@ onMounted(async () => {
             <div class="sidebar-card">
               <h4>Role Preview</h4>
               <div class="role-scope">
-                <span class="role-title">{{ selectedOrganizationalRole?.name || 'No role selected' }}</span>
+                <span class="role-title">{{ isSalesAccount ? selectedOrganizationalRole?.name || 'No role selected' : 'Super Admin' }}</span>
                 <ul>
-                  <li><i class="pi pi-check-circle" /> Level {{ selectedOrganizationalRole?.level ?? '-' }}</li>
-                  <li><i class="pi pi-check-circle" /> {{ selectedOrganizationalRole?.permissionCount ?? 0 }} permissions</li>
-                  <li><i class="pi pi-check-circle" /> Landing: {{ landingLabel(selectedOrganizationalRole?.landingPage) }}</li>
+                  <li><i class="pi pi-check-circle" /> Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : '-' }}</li>
+                  <li><i class="pi pi-check-circle" /> {{ isSalesAccount ? selectedOrganizationalRole?.permissionCount ?? 0 : 'System' }} permissions</li>
+                  <li><i class="pi pi-check-circle" /> Landing: {{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}</li>
                 </ul>
               </div>
             </div>
@@ -303,7 +340,7 @@ onMounted(async () => {
                 </div>
                 <div class="summary-row">
                   <span>Role</span>
-                  <strong>{{ selectedOrganizationalRole?.name || '—' }}</strong>
+                  <strong>{{ isSalesAccount ? selectedOrganizationalRole?.name || '—' : 'Super Admin' }}</strong>
                 </div>
                 <div class="summary-row">
                   <span>Current Manager</span>

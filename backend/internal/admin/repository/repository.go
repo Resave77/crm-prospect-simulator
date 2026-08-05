@@ -7,6 +7,7 @@ import (
 
 	"crm-prospect-simulator/backend/internal/admin/model"
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
+
 	"github.com/google/uuid"
 )
 
@@ -46,10 +47,12 @@ type Repository interface {
 	SalesRoleHasAssignments(ctx context.Context, id uuid.UUID) (bool, error)
 	CreateSalesAssignment(ctx context.Context, id uuid.UUID, input model.CreateAssignmentInput, actorID uuid.UUID) error
 	MoveSalesAssignment(ctx context.Context, currentID uuid.UUID, newID uuid.UUID, input model.MoveAssignmentInput, actorID uuid.UUID) error
+	EndSalesAssignment(ctx context.Context, assignmentID uuid.UUID, effectiveTo time.Time, actorID uuid.UUID) error
 	FindSalesAssignment(ctx context.Context, id uuid.UUID) (model.SalesStructureAssignment, error)
 	FindEffectiveSalesAssignment(ctx context.Context, userID uuid.UUID, effectiveDate time.Time) (model.SalesStructureAssignment, model.SalesRole, error)
 	SalesAssignmentOverlaps(ctx context.Context, userID uuid.UUID, from time.Time, to *time.Time, excludeID *uuid.UUID) (bool, error)
 	HasIncompatibleCurrentChildren(ctx context.Context, userID uuid.UUID, parentLevel int, effectiveDate time.Time) (bool, error)
+	HasActiveChildAssignments(ctx context.Context, userID uuid.UUID, effectiveTo time.Time) (bool, error)
 	CountEffectiveLevel1Roots(ctx context.Context, effectiveDate time.Time, excludeAssignmentID *uuid.UUID) (int, error)
 	UserExists(ctx context.Context, id uuid.UUID) (bool, error)
 	ListSalesStructure(ctx context.Context, effectiveDate time.Time) ([]model.SalesStructureItem, error)

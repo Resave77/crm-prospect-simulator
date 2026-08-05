@@ -50,33 +50,58 @@ type AuthService struct {
 	now        func() time.Time
 }
 
-func NewAuthService(users repository.UserRepository, sessions repository.SessionRepository, tokens *TokenManager, refreshTTL time.Duration) *AuthService {
-	return &AuthService{users: users, sessions: sessions, tokens: tokens, refreshTTL: refreshTTL, now: time.Now}
+func NewAuthService(
+	users repository.UserRepository,
+	sessions repository.SessionRepository,
+	tokens *TokenManager,
+	refreshTTL time.Duration,
+) *AuthService {
+	return &AuthService{
+		users:      users,
+		sessions:   sessions,
+		tokens:     tokens,
+		refreshTTL: refreshTTL,
+		now:        time.Now,
+	}
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string, client ClientContext) (AuthResult, error) {
+func (s *AuthService) Login(
+	ctx context.Context,
+	email string,
+	password string,
+	client ClientContext,
+) (AuthResult, error) {
 	user, err := s.users.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
 		return AuthResult{}, ErrInvalidCredentials
 	}
+
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return AuthResult{}, ErrInvalidCredentials
 	}
+
 	if user.Status != model.UserActive {
 		return AuthResult{}, ErrUserInactive
 	}
+
 	return s.createLogin(ctx, user, client, uuid.Nil)
 }
 
-func (s *AuthService) Refresh(ctx context.Context, rawRefresh string, client ClientContext) (AuthResult, error) {
+func (s *AuthService) Refresh(
+	ctx context.Context,
+	rawRefresh string,
+	client ClientContext,
+) (AuthResult, error) {
 	sessionID, secret, err := parseRefreshCredential(rawRefresh)
 	if err != nil {
 		return AuthResult{}, ErrInvalidToken
 	}
+
 	session, err := s.sessions.FindSessionByID(ctx, sessionID)
 	if err != nil || !refreshSecretMatches(secret, session.TokenHash) {
 		return AuthResult{}, ErrInvalidToken
 	}
+
 	now := s.now().UTC()
 	if session.RevokedAt != nil {
 		if session.RevokeReason == "ROTATED" {
@@ -84,30 +109,51 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefresh string, client Cli
 		}
 		return AuthResult{}, ErrInvalidToken
 	}
+
 	if !session.Active(now) {
 		return AuthResult{}, ErrSessionExpired
 	}
+
 	user, err := s.users.FindUserByID(ctx, session.UserID)
 	if err != nil {
 		return AuthResult{}, ErrInvalidToken
 	}
+
 	if user.Status != model.UserActive {
 		return AuthResult{}, ErrUserInactive
 	}
+
 	return s.createLogin(ctx, user, client, session.ID)
 }
 
-func (s *AuthService) createLogin(ctx context.Context, user model.User, client ClientContext, replaceSessionID uuid.UUID) (AuthResult, error) {
+func (s *AuthService) createLogin(
+	ctx context.Context,
+	user model.User,
+	client ClientContext,
+	replaceSessionID uuid.UUID,
+) (AuthResult, error) {
+	// TEMP DEMO: Mandatory first-login password change is temporarily disabled for the
+	// demo/progress deployment. This modifies only the in-memory auth response
+	// and access-token source; the database column and ChangePassword feature
+	// remain intact for later reactivation.
+	user.MustChangePassword = false
+
 	now := s.now().UTC()
 	sessionID, refreshToken, refreshHash, err := newRefreshCredential()
 	if err != nil {
 		return AuthResult{}, err
 	}
+
 	refreshExpiresAt := now.Add(s.refreshTTL)
 	session := model.RefreshSession{
-		ID: sessionID, UserID: user.ID, TokenHash: refreshHash,
-		UserAgent: client.UserAgent, IPAddress: client.IPAddress, ExpiresAt: refreshExpiresAt,
+		ID:        sessionID,
+		UserID:    user.ID,
+		TokenHash: refreshHash,
+		UserAgent: client.UserAgent,
+		IPAddress: client.IPAddress,
+		ExpiresAt: refreshExpiresAt,
 	}
+
 	if replaceSessionID == uuid.Nil {
 		err = s.sessions.Create(ctx, session)
 	} else {
@@ -116,47 +162,70 @@ func (s *AuthService) createLogin(ctx context.Context, user model.User, client C
 	if err != nil {
 		return AuthResult{}, fmt.Errorf("persist refresh session: %w", err)
 	}
+
 	accessToken, accessExpiresAt, err := s.tokens.IssueAccess(user, sessionID, now)
 	if err != nil {
 		_ = s.sessions.Revoke(ctx, sessionID, "ACCESS_TOKEN_FAILURE", now)
 		return AuthResult{}, err
 	}
+
 	if replaceSessionID == uuid.Nil {
 		_ = s.users.RecordLogin(ctx, user.ID, now)
 	}
+
 	return AuthResult{
-		AccessToken: accessToken, AccessExpiresAt: accessExpiresAt,
-		RefreshToken: refreshToken, RefreshExpiresAt: refreshExpiresAt, User: user.Public(),
+		AccessToken:      accessToken,
+		AccessExpiresAt:  accessExpiresAt,
+		RefreshToken:     refreshToken,
+		RefreshExpiresAt: refreshExpiresAt,
+		User:             user.Public(),
 	}, nil
 }
 
-func (s *AuthService) AuthenticateAccess(ctx context.Context, rawToken string) (Principal, error) {
+func (s *AuthService) AuthenticateAccess(
+	ctx context.Context,
+	rawToken string,
+) (Principal, error) {
 	claims, err := s.tokens.ParseAccess(rawToken)
 	if err != nil {
 		return Principal{}, ErrInvalidToken
 	}
+
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
 		return Principal{}, ErrInvalidToken
 	}
+
 	user, err := s.users.FindUserByID(ctx, userID)
-	if err != nil || user.Status != model.UserActive || user.Role != claims.Role || user.TokenVersion != claims.TokenVersion {
+	if err != nil ||
+		user.Status != model.UserActive ||
+		user.Role != claims.Role ||
+		user.TokenVersion != claims.TokenVersion {
 		return Principal{}, ErrInvalidToken
 	}
+
 	return Principal{
-		UserID:             user.ID,
-		Role:               user.Role,
-		SessionID:          claims.SessionID,
-		TokenVersion:       user.TokenVersion,
-		MustChangePassword: user.MustChangePassword,
+		UserID:       user.ID,
+		Role:         user.Role,
+		SessionID:    claims.SessionID,
+		TokenVersion: user.TokenVersion,
+
+		// TEMP DEMO: Mandatory first-login password enforcement is disabled.
+		MustChangePassword: false,
 	}, nil
 }
 
-func (s *AuthService) Me(ctx context.Context, principal Principal) (model.PublicUser, error) {
+func (s *AuthService) Me(
+	ctx context.Context,
+	principal Principal,
+) (model.PublicUser, error) {
 	user, err := s.users.FindUserByID(ctx, principal.UserID)
 	if err != nil {
 		return model.PublicUser{}, ErrInvalidToken
 	}
+
+	// TEMP DEMO: Keep frontend auth state aligned with disabled mandatory first-login enforcement.
+	user.MustChangePassword = false
 	return user.Public(), nil
 }
 
@@ -165,20 +234,34 @@ func (s *AuthService) Logout(ctx context.Context, rawRefresh string) error {
 	if err != nil {
 		return nil
 	}
+
 	return s.sessions.Revoke(ctx, sessionID, "LOGOUT", s.now().UTC())
 }
 
 func (s *AuthService) LogoutAll(ctx context.Context, principal Principal) error {
-	return s.sessions.RevokeAllForUser(ctx, principal.UserID, "LOGOUT_ALL", s.now().UTC())
+	return s.sessions.RevokeAllForUser(
+		ctx,
+		principal.UserID,
+		"LOGOUT_ALL",
+		s.now().UTC(),
+	)
 }
 
-func (s *AuthService) ChangePassword(ctx context.Context, principal Principal, currentPassword, newPassword, confirmPassword string) (ChangePasswordResult, error) {
+func (s *AuthService) ChangePassword(
+	ctx context.Context,
+	principal Principal,
+	currentPassword string,
+	newPassword string,
+	confirmPassword string,
+) (ChangePasswordResult, error) {
 	if currentPassword == "" || newPassword == "" || confirmPassword == "" {
 		return ChangePasswordResult{}, ErrMissingFields
 	}
+
 	if newPassword != confirmPassword {
 		return ChangePasswordResult{}, ErrPasswordMismatch
 	}
+
 	if !strongPassword(newPassword) {
 		return ChangePasswordResult{}, ErrPasswordTooWeak
 	}
@@ -187,23 +270,39 @@ func (s *AuthService) ChangePassword(ctx context.Context, principal Principal, c
 	if err != nil || user.Status != model.UserActive {
 		return ChangePasswordResult{}, ErrInvalidToken
 	}
+
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)) != nil {
 		return ChangePasswordResult{}, ErrInvalidCredentials
 	}
+
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(newPassword)) == nil {
 		return ChangePasswordResult{}, ErrPasswordSame
 	}
 
-	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	newHash, err := bcrypt.GenerateFromPassword(
+		[]byte(newPassword),
+		bcrypt.DefaultCost,
+	)
 	if err != nil {
 		return ChangePasswordResult{}, fmt.Errorf("hash new password: %w", err)
 	}
-	revoked, err := s.users.ChangePassword(ctx, user.ID, string(newHash), "PASSWORD_CHANGED", s.now().UTC())
+
+	revoked, err := s.users.ChangePassword(
+		ctx,
+		user.ID,
+		string(newHash),
+		"PASSWORD_CHANGED",
+		s.now().UTC(),
+	)
 	if err != nil {
 		return ChangePasswordResult{}, err
 	}
+
 	return ChangePasswordResult{
-		PasswordChanged: true, MustChangePassword: false, SessionsRevoked: revoked, ReauthenticationRequired: true,
+		PasswordChanged:          true,
+		MustChangePassword:       false,
+		SessionsRevoked:          revoked,
+		ReauthenticationRequired: true,
 	}, nil
 }
 
@@ -211,6 +310,7 @@ func strongPassword(password string) bool {
 	if len(password) < 8 {
 		return false
 	}
+
 	var upper, lower, digit bool
 	for _, r := range password {
 		switch {
@@ -222,10 +322,13 @@ func strongPassword(password string) bool {
 			digit = true
 		}
 	}
+
 	return upper && lower && digit
 }
 
 func IsClientAuthError(err error) bool {
-	return errors.Is(err, ErrInvalidCredentials) || errors.Is(err, ErrInvalidToken) ||
-		errors.Is(err, ErrSessionExpired) || errors.Is(err, ErrUserInactive)
+	return errors.Is(err, ErrInvalidCredentials) ||
+		errors.Is(err, ErrInvalidToken) ||
+		errors.Is(err, ErrSessionExpired) ||
+		errors.Is(err, ErrUserInactive)
 }

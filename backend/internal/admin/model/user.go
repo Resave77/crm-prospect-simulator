@@ -77,11 +77,19 @@ type ManagerOption struct {
 	Email      string    `json:"email"`
 }
 
+type AccountType string
+
+const (
+	AccountTypeSuperAdmin   AccountType = "SUPER_ADMIN"
+	AccountTypeSalesAccount AccountType = "SALES_ACCOUNT"
+)
+
 type CreateUserInput struct {
 	EmployeeID        string         `json:"employeeId"`
 	FullName          string         `json:"name"`
 	Email             string         `json:"email"`
 	Phone             string         `json:"phone"`
+	AccountType       AccountType    `json:"accountType"`
 	Role              authmodel.Role `json:"role"`
 	SalesRoleID       *uuid.UUID     `json:"salesRoleId"`
 	ManagerID         *uuid.UUID     `json:"managerId"`
@@ -125,6 +133,7 @@ type UpdateUserInput struct {
 	FullName    *string         `json:"name"`
 	Email       *string         `json:"email"`
 	Phone       *string         `json:"phone"`
+	AccountType *AccountType    `json:"accountType"`
 	Role        *authmodel.Role `json:"role"`
 	SalesRoleID OptionalUUID    `json:"salesRoleId"`
 	ManagerID   OptionalUUID    `json:"managerId"`

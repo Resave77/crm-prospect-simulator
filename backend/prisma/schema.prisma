@@ -52,6 +52,7 @@ model User {
   updatedAccounts User[]           @relation("UserUpdatedBy")
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz(6)
   refreshSessions RefreshSession[]
   assignedProspects Prospect[]              @relation("ProspectSalesExecutive")
   prospectStatusChanges ProspectStatusHistory[] @relation("ProspectStatusActor")
@@ -61,6 +62,7 @@ model User {
   prospectComments ProspectComment[]        @relation("ProspectCommentUser")
 
   @@index([salesRoleId])
+  @@index([deletedAt])
   @@map("users")
 }
 

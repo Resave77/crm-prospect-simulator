@@ -14,7 +14,7 @@ import (
 )
 
 func (r *PostgresRepository) ListSalesRoles(ctx context.Context) ([]model.SalesRole, error) {
-	rows, err := r.pool.Query(ctx, `SELECT r.id, r.name, r.level, COALESCE(r.description,''), r.is_active, r.landing_page, COUNT(rp.permission_id), r.created_by, r.updated_by, r.created_at, r.updated_at FROM sales_roles r LEFT JOIN role_permissions rp ON rp.sales_role_id = r.id GROUP BY r.id ORDER BY r.level, r.name`)
+	rows, err := r.pool.Query(ctx, `SELECT r.id, r.name, r.level, COALESCE(r.description,''), r.is_active, r.landing_page, COUNT(rp.permission_id), r.created_by, r.updated_by, r.created_at, r.updated_at FROM sales_roles r LEFT JOIN role_permissions rp ON rp.sales_role_id = r.id WHERE lower(btrim(r.name)) NOT IN ('super admin', 'retired super admin') AND lower(btrim(r.normalized_name)) NOT IN ('super admin', 'retired super admin') GROUP BY r.id ORDER BY r.level, r.name`)
 	if err != nil {
 		return nil, fmt.Errorf("list sales roles: %w", err)
 	}
@@ -144,16 +144,59 @@ func (r *PostgresRepository) UserExists(ctx context.Context, id uuid.UUID) (bool
 	return exists, err
 }
 
-func (r *PostgresRepository) CreateSalesAssignment(ctx context.Context, id uuid.UUID, input model.CreateAssignmentInput, actorID uuid.UUID) error {
+func (r *PostgresRepository) CreateSalesAssignment(
+	ctx context.Context,
+	id uuid.UUID,
+	input model.CreateAssignmentInput,
+	actorID uuid.UUID,
+) error {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	_, err = tx.Exec(ctx, `INSERT INTO sales_structure_assignments (id,user_id,sales_role_id,parent_user_id,effective_from,created_by,updated_at) VALUES ($1,$2,$3,$4,$5,$6,now())`, id, input.UserID, input.SalesRoleID, input.ParentUserID, input.EffectiveFrom.Time, actorID)
+
+	effectiveFrom := input.EffectiveFrom.Time
+
+	// Assignment berlaku hanya untuk bulan yang dipilih.
+	effectiveTo := time.Date(
+		effectiveFrom.Year(),
+		effectiveFrom.Month()+1,
+		0,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+
+	_, err = tx.Exec(
+		ctx,
+		`
+		INSERT INTO sales_structure_assignments (
+			id,
+			user_id,
+			sales_role_id,
+			parent_user_id,
+			effective_from,
+			effective_to,
+			created_by,
+			updated_at
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+		`,
+		id,
+		input.UserID,
+		input.SalesRoleID,
+		input.ParentUserID,
+		effectiveFrom,
+		effectiveTo,
+		actorID,
+	)
 	if err != nil {
 		return mapError(err)
 	}
+
 	return tx.Commit(ctx)
 }
 
@@ -185,6 +228,26 @@ func (r *PostgresRepository) MoveSalesAssignment(ctx context.Context, currentID 
 		return mapError(err)
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) EndSalesAssignment(ctx context.Context, assignmentID uuid.UUID, effectiveTo time.Time, _ uuid.UUID) error {
+	cmd, err := r.pool.Exec(ctx, `
+		UPDATE sales_structure_assignments
+		SET effective_to = $2,
+		    updated_at = now()
+		WHERE id = $1
+		  AND effective_to IS NULL`,
+		assignmentID,
+		effectiveTo,
+	)
+	if err != nil {
+		return mapError(err)
+	}
+
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *PostgresRepository) FindSalesAssignment(ctx context.Context, id uuid.UUID) (model.SalesStructureAssignment, error) {
@@ -231,6 +294,19 @@ func (r *PostgresRepository) HasIncompatibleCurrentChildren(ctx context.Context,
 	return exists, err
 }
 
+func (r *PostgresRepository) HasActiveChildAssignments(ctx context.Context, userID uuid.UUID, effectiveTo time.Time) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM sales_structure_assignments
+			WHERE parent_user_id = $1
+				AND effective_from <= $2
+				AND (effective_to IS NULL OR effective_to > $2)
+		)`, userID, effectiveTo).Scan(&exists)
+	return exists, err
+}
+
 func (r *PostgresRepository) CountEffectiveLevel1Roots(ctx context.Context, effectiveDate time.Time, excludeAssignmentID *uuid.UUID) (int, error) {
 	args := []any{effectiveDate}
 	query := `
@@ -251,7 +327,7 @@ func (r *PostgresRepository) CountEffectiveLevel1Roots(ctx context.Context, effe
 }
 
 func (r *PostgresRepository) ListSalesStructure(ctx context.Context, effectiveDate time.Time) ([]model.SalesStructureItem, error) {
-	rows, err := r.pool.Query(ctx, `SELECT a.id,u.id,u.full_name,u.role::text,r.id,r.name,r.level,a.parent_user_id,p.full_name,a.effective_from,a.effective_to FROM sales_structure_assignments a JOIN users u ON u.id=a.user_id JOIN sales_roles r ON r.id=a.sales_role_id LEFT JOIN users p ON p.id=a.parent_user_id WHERE a.effective_from <= $1 AND (a.effective_to IS NULL OR a.effective_to >= $1) ORDER BY r.level,u.full_name`, effectiveDate)
+	rows, err := r.pool.Query(ctx, `SELECT a.id,u.id,u.full_name,u.role::text,r.id,r.name,r.level,a.parent_user_id,p.full_name,a.effective_from,a.effective_to FROM sales_structure_assignments a JOIN users u ON u.id=a.user_id JOIN sales_roles r ON r.id=a.sales_role_id LEFT JOIN users p ON p.id=a.parent_user_id WHERE a.effective_from <= $1 AND (a.effective_to IS NULL OR a.effective_to >= $1) AND u.role <> 'SUPER_ADMIN' AND u.deleted_at IS NULL ORDER BY r.level,u.full_name`, effectiveDate)
 	if err != nil {
 		return nil, err
 	}

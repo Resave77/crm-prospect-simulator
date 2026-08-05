@@ -10,21 +10,22 @@ import (
 	"crm-prospect-simulator/backend/internal/admin/model"
 	"crm-prospect-simulator/backend/internal/admin/repository"
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
+
 	"github.com/google/uuid"
 )
 
 var (
-	ErrSalesRoleNameRequired = errors.New("sales role name required")
-	ErrInvalidSalesRoleLevel = errors.New("invalid sales role level")
-	ErrSalesRoleNameExists   = errors.New("sales role name exists")
-	ErrSalesRoleInUse        = errors.New("sales role in use")
-	ErrSalesRoleInactive     = errors.New("sales role inactive")
-	ErrSalesUserInactive     = errors.New("sales user inactive")
-	ErrInvalidHierarchy      = errors.New("invalid sales hierarchy")
-	ErrInvalidEffectiveDate  = errors.New("invalid effective date")
-	ErrAssignmentOverlap     = errors.New("sales assignment overlaps")
-	ErrIncompatibleChildren  = errors.New("assignment has incompatible children")
-	ErrSuperAdminRoot        = errors.New("super admin root protected")
+	ErrSalesRoleNameRequired  = errors.New("sales role name required")
+	ErrInvalidSalesRoleLevel  = errors.New("invalid sales role level")
+	ErrSalesRoleNameExists    = errors.New("sales role name exists")
+	ErrSalesRoleInUse         = errors.New("sales role in use")
+	ErrSalesRoleInactive      = errors.New("sales role inactive")
+	ErrSalesUserInactive      = errors.New("sales user inactive")
+	ErrInvalidHierarchy       = errors.New("invalid sales hierarchy")
+	ErrInvalidEffectiveDate   = errors.New("invalid effective date")
+	ErrAssignmentOverlap      = errors.New("sales assignment overlaps")
+	ErrIncompatibleChildren   = errors.New("assignment has incompatible children")
+	ErrAssignmentAlreadyEnded = errors.New("sales assignment already ended")
 )
 
 var defaultSalesRoleIDs = map[uuid.UUID]bool{
@@ -175,6 +176,12 @@ func (s *Service) MoveSalesAssignment(ctx context.Context, actor Actor, currentI
 	if err != nil {
 		return model.SalesStructureAssignment{}, err
 	}
+	if input.SalesRoleID == uuid.Nil {
+		input.SalesRoleID = current.SalesRoleID
+	}
+	if input.ParentUserID == nil {
+		input.ParentUserID = current.ParentUserID
+	}
 	if !input.EffectiveFrom.Time.After(current.EffectiveFrom) {
 		return model.SalesStructureAssignment{}, ErrInvalidEffectiveDate
 	}
@@ -186,6 +193,37 @@ func (s *Service) MoveSalesAssignment(ctx context.Context, actor Actor, currentI
 		return model.SalesStructureAssignment{}, err
 	}
 	return s.repo.FindSalesAssignment(ctx, newID)
+}
+
+func (s *Service) EndSalesAssignment(ctx context.Context, actor Actor, assignmentID uuid.UUID, input model.EndAssignmentInput) (model.SalesStructureAssignment, error) {
+	if !actor.Role.IsAdminRole() {
+		return model.SalesStructureAssignment{}, ErrForbidden
+	}
+	effectiveTo := truncateDate(input.EffectiveTo.Time)
+	if effectiveTo.IsZero() {
+		return model.SalesStructureAssignment{}, ErrInvalidEffectiveDate
+	}
+	current, err := s.repo.FindSalesAssignment(ctx, assignmentID)
+	if err != nil {
+		return model.SalesStructureAssignment{}, err
+	}
+	if current.EffectiveTo != nil {
+		return model.SalesStructureAssignment{}, ErrAssignmentAlreadyEnded
+	}
+	if effectiveTo.Before(truncateDate(current.EffectiveFrom)) {
+		return model.SalesStructureAssignment{}, ErrInvalidEffectiveDate
+	}
+	hasChildren, err := s.repo.HasActiveChildAssignments(ctx, current.UserID, effectiveTo)
+	if err != nil {
+		return model.SalesStructureAssignment{}, err
+	}
+	if hasChildren {
+		return model.SalesStructureAssignment{}, ErrInvalidHierarchy
+	}
+	if err := s.repo.EndSalesAssignment(ctx, assignmentID, effectiveTo, actor.UserID); err != nil {
+		return model.SalesStructureAssignment{}, err
+	}
+	return s.repo.FindSalesAssignment(ctx, assignmentID)
 }
 
 func (s *Service) ListSalesStructure(ctx context.Context, actor Actor, effectiveDate time.Time) ([]model.SalesStructureItem, error) {
@@ -241,6 +279,9 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if user.Status != authmodel.UserActive {
 		return ErrSalesUserInactive
 	}
+	if user.Role == authmodel.RoleSuperAdmin {
+		return ErrInvalidHierarchy
+	}
 	role, err := s.repo.FindSalesRole(ctx, roleID)
 	if err != nil {
 		return err
@@ -254,13 +295,6 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if role.Level == 1 {
 		if parentID != nil {
 			return ErrInvalidHierarchy
-		}
-		count, err := s.repo.CountEffectiveLevel1Roots(ctx, date, excludeID)
-		if err != nil {
-			return err
-		}
-		if count > 0 {
-			return ErrSuperAdminRoot
 		}
 	} else {
 		if parentID == nil {
@@ -283,24 +317,6 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 		if err := s.ensureNoCycle(ctx, userID, *parentID, date); err != nil {
 			return err
 		}
-		if excludeID != nil {
-			current, err := s.repo.FindSalesAssignment(ctx, *excludeID)
-			if err == nil && current.UserID == userID {
-				currentRole, err := s.repo.FindSalesRole(ctx, current.SalesRoleID)
-				if err != nil {
-					return err
-				}
-				if currentRoleWouldLoseOnlyRoot(currentRole.Level, role.Level) {
-					count, err := s.repo.CountEffectiveLevel1Roots(ctx, date, excludeID)
-					if err != nil {
-						return err
-					}
-					if count == 0 {
-						return ErrSuperAdminRoot
-					}
-				}
-			}
-		}
 	}
 	overlaps, err := s.repo.SalesAssignmentOverlaps(ctx, userID, date, nil, excludeID)
 	if err != nil {
@@ -321,10 +337,6 @@ func (s *Service) ensureCompatibleChildren(ctx context.Context, userID uuid.UUID
 		return ErrIncompatibleChildren
 	}
 	return nil
-}
-
-func currentRoleWouldLoseOnlyRoot(currentLevel, nextLevel int) bool {
-	return currentLevel == 1 && nextLevel != 1
 }
 
 func (s *Service) ensureNoCycle(ctx context.Context, userID, parentID uuid.UUID, date time.Time) error {

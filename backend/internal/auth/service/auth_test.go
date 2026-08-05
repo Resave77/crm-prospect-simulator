@@ -306,8 +306,8 @@ func TestAuthenticateAccessIncludesMustChangePasswordFromUserRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !principal.MustChangePassword {
-		t.Fatal("principal.MustChangePassword=false, want true")
+	if principal.MustChangePassword {
+		t.Fatal("principal.MustChangePassword=true, want false while mandatory first-login enforcement is disabled")
 	}
 }
 
@@ -326,15 +326,42 @@ func TestLoginAndRefreshReturnMustChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !login.User.MustChangePassword {
-		t.Fatal("login mustChangePassword=false, want true")
+	if login.User.MustChangePassword {
+		t.Fatal("login mustChangePassword=true, want false while mandatory first-login enforcement is disabled")
 	}
 	refreshed, err := auth.Refresh(context.Background(), login.RefreshToken, ClientContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !refreshed.User.MustChangePassword {
-		t.Fatal("refresh mustChangePassword=false, want true")
+	if refreshed.User.MustChangePassword {
+		t.Fatal("refresh mustChangePassword=true, want false while mandatory first-login enforcement is disabled")
+	}
+}
+
+func TestLoginAndRefreshReturnSuperAdminRole(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := model.User{ID: uuid.New(), Email: "super@yummy.test", PasswordHash: string(hash), FullName: "Super Admin", Role: model.RoleSuperAdmin, Status: model.UserActive, TokenVersion: 1}
+	users := &userRepositoryStub{user: user}
+	sessions := &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}}
+	tokens := NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute)
+	auth := NewAuthService(users, sessions, tokens, time.Hour)
+
+	login, err := auth.Login(context.Background(), user.Email, "password123", ClientContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if login.User.Role != model.RoleSuperAdmin {
+		t.Fatalf("login role=%s, want SUPER_ADMIN", login.User.Role)
+	}
+	refreshed, err := auth.Refresh(context.Background(), login.RefreshToken, ClientContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.User.Role != model.RoleSuperAdmin {
+		t.Fatalf("refresh role=%s, want SUPER_ADMIN", refreshed.User.Role)
 	}
 }
 

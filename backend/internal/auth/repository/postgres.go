@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgresRepository struct {
@@ -28,7 +28,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (mod
 		       role::text, status::text, token_version, last_login_at,
 		       must_change_password, manager_id, created_by, updated_by,
 		       created_at, updated_at
-		FROM users WHERE email = $1`, email))
+		FROM users WHERE email = $1 AND deleted_at IS NULL`, email))
 }
 
 func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
@@ -37,7 +37,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (mo
 		       role::text, status::text, token_version, last_login_at,
 		       must_change_password, manager_id, created_by, updated_by,
 		       created_at, updated_at
-		FROM users WHERE id = $1`, id))
+		FROM users WHERE id = $1 AND deleted_at IS NULL`, id))
 }
 
 func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {

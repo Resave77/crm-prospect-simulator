@@ -6,6 +6,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
 import { useAuthStore } from '../../stores/auth'
+import { resolvePostLoginRoute } from '../../utils/navigation'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -22,8 +23,7 @@ async function submit() {
     const intended = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
       ? route.query.redirect
       : null
-    const roleHome = user.role === 'ADMINISTRATOR' ? '/admin/dashboard' : user.role === 'SALES_MANAGER' ? '/forbidden' : '/sales/dashboard'
-    await router.replace(intended ?? roleHome)
+    await router.replace(resolvePostLoginRoute(router, user.role, intended))
   } catch (caught) {
     error.value = auth.errorMessage(caught)
   }

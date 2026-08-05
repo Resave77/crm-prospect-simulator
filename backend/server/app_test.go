@@ -98,7 +98,21 @@ func TestProtectedRouteAllowsNormalAuthenticatedUser(t *testing.T) {
 	}
 }
 
-func TestProtectedRouteRequiresPasswordChange(t *testing.T) {
+func TestAdminRouteAllowsSuperAdmin(t *testing.T) {
+	app, token := buildTestApp(authmodel.User{ID: uuid.New(), Email: "super@test.test", Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive, TokenVersion: 1})
+	req := httptest.NewRequest("GET", "/api/v1/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d, want 200 for SUPER_ADMIN on admin route, body=%s", resp.StatusCode, body)
+	}
+}
+
+func TestProtectedRoutePassesThroughWhenPasswordChangeRequired(t *testing.T) {
 	app, token := buildTestApp(authmodel.User{ID: uuid.New(), Email: "admin@test.test", Role: authmodel.RoleAdministrator, Status: authmodel.UserActive, TokenVersion: 1, MustChangePassword: true})
 	req := httptest.NewRequest("GET", "/api/v1/dashboard/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -107,8 +121,8 @@ func TestProtectedRouteRequiresPasswordChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 403 || !strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
-		t.Fatalf("status=%d body=%s, want 403 PASSWORD_CHANGE_REQUIRED", resp.StatusCode, body)
+	if resp.StatusCode != 200 || strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
+		t.Fatalf("status=%d body=%s, want 200 without PASSWORD_CHANGE_REQUIRED", resp.StatusCode, body)
 	}
 }
 
@@ -151,15 +165,16 @@ func TestForcedChangeUserCanCallLogoutAndMe(t *testing.T) {
 	}
 }
 
-func TestForcedChangeRolesAreBlockedBeforeRoleMiddleware(t *testing.T) {
+func TestForcedChangeRolesUseNormalRoleMiddleware(t *testing.T) {
 	cases := []struct {
-		name string
-		role authmodel.Role
-		path string
+		name       string
+		role       authmodel.Role
+		path       string
+		wantStatus int
 	}{
-		{"administrator", authmodel.RoleAdministrator, "/api/v1/admin/users"},
-		{"sales-manager", authmodel.RoleSalesManager, "/api/v1/dashboard/admin"},
-		{"sales-executive", authmodel.RoleSalesExecutive, "/api/v1/dashboard/sales"},
+		{"administrator", authmodel.RoleAdministrator, "/api/v1/admin/users", 200},
+		{"sales-manager", authmodel.RoleSalesManager, "/api/v1/dashboard/admin", 403},
+		{"sales-executive", authmodel.RoleSalesExecutive, "/api/v1/dashboard/sales", 200},
 	}
 	for _, tc := range cases {
 		app, token := buildTestApp(authmodel.User{ID: uuid.New(), Email: tc.name + "@test.test", Role: tc.role, Status: authmodel.UserActive, TokenVersion: 1, MustChangePassword: true})
@@ -170,8 +185,8 @@ func TestForcedChangeRolesAreBlockedBeforeRoleMiddleware(t *testing.T) {
 			t.Fatal(err)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != 403 || !strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
-			t.Fatalf("%s status=%d body=%s, want password-change 403", tc.name, resp.StatusCode, body)
+		if resp.StatusCode != tc.wantStatus || strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
+			t.Fatalf("%s status=%d body=%s, want %d without PASSWORD_CHANGE_REQUIRED", tc.name, resp.StatusCode, body, tc.wantStatus)
 		}
 	}
 }
@@ -190,17 +205,17 @@ func TestRoleMiddlewareUnchangedWhenPasswordChangeNotRequired(t *testing.T) {
 	}
 }
 
-func TestForcedChangeProspectSmokeIsBlockedBeforeHandler(t *testing.T) {
+func TestForcedChangeSalesDashboardPassesThrough(t *testing.T) {
 	app, token := buildTestApp(authmodel.User{ID: uuid.New(), Email: "sales@test.test", Role: authmodel.RoleSalesExecutive, Status: authmodel.UserActive, TokenVersion: 1, MustChangePassword: true})
-	req := httptest.NewRequest("GET", "/api/v1/sales/prospects", nil)
+	req := httptest.NewRequest("GET", "/api/v1/dashboard/sales", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 403 || !strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
-		t.Fatalf("status=%d body=%s, want password-change 403", resp.StatusCode, body)
+	if resp.StatusCode != 200 || strings.Contains(string(body), "PASSWORD_CHANGE_REQUIRED") {
+		t.Fatalf("status=%d body=%s, want 200 without PASSWORD_CHANGE_REQUIRED", resp.StatusCode, body)
 	}
 }
 func TestForcedChangeUserCanCallLogoutAll(t *testing.T) {

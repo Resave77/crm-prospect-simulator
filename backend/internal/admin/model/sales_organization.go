@@ -112,6 +112,10 @@ type MoveAssignmentInput struct {
 	EffectiveFrom SalesStructureDate `json:"effectiveFrom"`
 }
 
+type EndAssignmentInput struct {
+	EffectiveTo SalesStructureDate `json:"effectiveTo"`
+}
+
 type SalesStructureItem struct {
 	AssignmentID  uuid.UUID      `json:"assignmentId"`
 	UserID        uuid.UUID      `json:"userId"`

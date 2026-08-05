@@ -8,6 +8,7 @@ import (
 	"crm-prospect-simulator/backend/internal/admin/repository"
 	"crm-prospect-simulator/backend/internal/admin/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -138,6 +139,22 @@ func (h *Handler) MoveSalesAssignment(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusCreated, assignment)
 }
 
+func (h *Handler) EndSalesAssignment(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "ASSIGNMENT_ID_INVALID", "Assignment ID is invalid.")
+	}
+	var input model.EndAssignmentInput
+	if err := c.BodyParser(&input); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	assignment, err := h.svc.EndSalesAssignment(c.UserContext(), actor(c), id, input)
+	if err != nil {
+		return writeSalesError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, assignment)
+}
+
 func (h *Handler) SalesAssignmentHistory(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("userId"))
 	if err != nil {
@@ -172,10 +189,10 @@ func writeSalesError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusUnprocessableEntity, "INVALID_EFFECTIVE_DATE", err.Error())
 	case errors.Is(err, service.ErrAssignmentOverlap):
 		return response.Error(c, fiber.StatusConflict, "SALES_ASSIGNMENT_OVERLAP", err.Error())
+	case errors.Is(err, service.ErrAssignmentAlreadyEnded):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "SALES_ASSIGNMENT_ALREADY_ENDED", err.Error())
 	case errors.Is(err, service.ErrIncompatibleChildren):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "ASSIGNMENT_HAS_INCOMPATIBLE_CHILDREN", err.Error())
-	case errors.Is(err, service.ErrSuperAdminRoot):
-		return response.Error(c, fiber.StatusUnprocessableEntity, "SUPER_ADMIN_ROOT_PROTECTED", err.Error())
 	case errors.Is(err, service.ErrPermissionNotFound):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "PERMISSION_NOT_FOUND", err.Error())
 	case errors.Is(err, service.ErrInvalidPermissionKey):
