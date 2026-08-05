@@ -54,14 +54,14 @@ async function logout() {
         </RouterLink>
 
         <small v-show="!sidebarCollapsed" class="nav-caption">CUSTOMERS &amp; PROSPECTS</small>
-        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer' : ''">
-          <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer</span>
+        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Existing' : ''">
+          <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer Existing</span>
         </RouterLink>
         <RouterLink to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
           <i class="pi pi-compass" /> <span v-show="!sidebarCollapsed">Prospect Finder</span>
         </RouterLink>
-        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect List' : ''">
-          <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Prospect List</span>
+        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Prospect' : ''">
+          <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Customer Prospect</span>
         </RouterLink>
         <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
           <i class="pi pi-th-large" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
