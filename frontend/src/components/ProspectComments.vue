@@ -27,6 +27,8 @@ const imagePreviews = ref<Record<string, string>>({})
 const unavailableAttachments = ref<Record<string, boolean>>({})
 const imageViewer = ref<{ url: string; name: string } | null>(null)
 const previewImage = ref<{ name: string; url: string } | null>(null)
+const newCount = ref(0)
+let lastReadAt = ''
 let pollId: number | undefined
 
 function scrollToBottom() {
@@ -35,6 +37,27 @@ function scrollToBottom() {
       listRef.value.scrollTop = listRef.value.scrollHeight
     }
   })
+}
+
+function readKey() {
+  return `yummy-crm:comments-read:${props.role}:${props.prospectId}`
+}
+
+function loadLastReadAt() {
+  try { lastReadAt = localStorage.getItem(readKey()) ?? '' } catch { lastReadAt = '' }
+}
+
+function countUnread(items: ProspectComment[]) {
+  if (!lastReadAt) return 0
+  const readTime = new Date(lastReadAt).getTime()
+  return items.filter((c) => c.createdAt && new Date(c.createdAt).getTime() > readTime).length
+}
+
+function markRead() {
+  const latest = comments.value.reduce((max, c) => (c.createdAt && c.createdAt > max ? c.createdAt : max), '')
+  lastReadAt = latest || new Date().toISOString()
+  try { localStorage.setItem(readKey(), lastReadAt) } catch { /* ignore */ }
+  newCount.value = 0
 }
 
 function formatTime(iso: string): string {
@@ -79,6 +102,9 @@ async function load() {
       getMentionUsers(props.role).catch(() => [] as SalesExecutiveOption[]),
     ])
     comments.value = items
+    loadLastReadAt()
+    newCount.value = lastReadAt ? countUnread(items) : 0
+    if (!lastReadAt) markRead()
     await ensureImagePreviews(items)
     mentionUsers.value = users.filter((u) => u.id !== auth.user?.id)
     scrollToBottom()
@@ -97,6 +123,7 @@ async function submit() {
   try {
     const item = await addProspectComment(props.prospectId, text, props.role, files.value)
     comments.value.push(item)
+    markRead()
     await ensureImagePreviews([item])
     newComment.value = ''
     files.value = []
@@ -176,8 +203,15 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 watch(() => comments.value.length, () => scrollToBottom())
-watch(open, (value) => { if (value) scrollToBottom() })
+watch(open, (value) => {
+  if (value) {
+    markRead()
+    scrollToBottom()
+  }
+})
 watch(() => props.prospectId, () => {
+  lastReadAt = ''
+  newCount.value = 0
   Object.values(imagePreviews.value).forEach((url) => URL.revokeObjectURL(url))
   imagePreviews.value = {}
   unavailableAttachments.value = {}
@@ -193,8 +227,10 @@ onMounted(() => {
   pollId = window.setInterval(async () => {
     if (open.value || sending.value) return
     try {
-      comments.value = await getProspectComments(props.prospectId, props.role)
-      await ensureImagePreviews(comments.value)
+    const items = await getProspectComments(props.prospectId, props.role)
+    newCount.value = countUnread(items)
+    comments.value = items
+    await ensureImagePreviews(comments.value)
     } catch { /* keep the last known badge count */ }
   }, 30000)
 })
@@ -209,7 +245,7 @@ onBeforeUnmount(() => {
   <div :class="['pc-floating', { 'pc-embedded': embedded }]">
     <button v-if="!embedded" class="pc-launcher" aria-label="Open prospect discussion" @click="open = !open">
       <i :class="open ? 'pi pi-times' : 'pi pi-comments'" />
-      <span v-if="comments.length && !open" class="pc-launcher-badge">{{ comments.length > 99 ? '99+' : comments.length }}</span>
+      <span v-if="newCount && !open" class="pc-launcher-badge">{{ newCount > 99 ? '99+' : newCount }}</span>
     </button>
      <div v-if="open || embedded" class="pc-wrap">
     <div class="pc-header">

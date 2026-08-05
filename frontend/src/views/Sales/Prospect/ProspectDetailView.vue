@@ -359,7 +359,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Comments / Ticketing -->
-      <ProspectComments :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" embedded />
+      <ProspectComments :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
 
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">

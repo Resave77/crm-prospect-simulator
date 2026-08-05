@@ -15,8 +15,10 @@ const loading = ref(true)
 const savingName = ref<string | null>(null)
 const lightbox = ref<PlacePhoto | null>(null)
 const tagError = ref('')
+let pollId: number | undefined
 
 const taggable = computed(() => !!props.prospectId)
+const canTag = computed(() => props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR')
 
 const menuPhotos = computed(() => props.photos.filter((p) => tags.value[p.name] === 'MENU'))
 const regularPhotos = computed(() => props.photos.filter((p) => tags.value[p.name] !== 'MENU'))
@@ -45,7 +47,7 @@ async function loadTags() {
 }
 
 async function setCategory(photo: PlacePhoto, category: PhotoCategory) {
-  if (savingName.value || !taggable.value) return
+  if (savingName.value || !taggable.value || !canTag.value) return
   savingName.value = photo.name
   tagError.value = ''
   try {
@@ -63,13 +65,39 @@ function onLightboxKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') lightbox.value = null
 }
 
-onMounted(loadTags)
+async function refreshTags() {
+  if (!taggable.value) return
+  try {
+    const items = await getProspectPhotoTags(props.prospectId!, props.role)
+    const map: Record<string, PhotoCategory> = {}
+    items.forEach((t) => { map[t.photoName] = t.category })
+    tags.value = map
+  } catch {
+    // keep last known tags during background refresh
+  }
+}
+
+function onResume() {
+  if (document.visibilityState === 'visible') refreshTags()
+}
+
+onMounted(() => {
+  loadTags()
+  pollId = window.setInterval(refreshTags, 30000)
+  document.addEventListener('visibilitychange', onResume)
+  window.addEventListener('focus', onResume)
+})
 watch(() => props.prospectId, () => {
   tags.value = {}
   lightbox.value = null
   loadTags()
 })
-onBeforeUnmount(() => { lightbox.value = null })
+onBeforeUnmount(() => {
+  if (pollId) window.clearInterval(pollId)
+  document.removeEventListener('visibilitychange', onResume)
+  window.removeEventListener('focus', onResume)
+  lightbox.value = null
+})
 </script>
 
 <template>
@@ -86,7 +114,7 @@ onBeforeUnmount(() => { lightbox.value = null })
             <span class="ppg-badge ppg-badge-menu"><i class="pi pi-book" /> Menu</span>
           </div>
           <button
-            v-if="taggable"
+            v-if="taggable && canTag"
             class="ppg-tag-btn"
             :disabled="savingName === photo.name"
             @click="setCategory(photo, 'PLACE')"
@@ -100,7 +128,7 @@ onBeforeUnmount(() => { lightbox.value = null })
       <div v-else class="ppg-empty">
         <i class="pi pi-image" />
         <span>No menu photos yet</span>
-        <small>Tag a photo as “Menu” below to move it here.</small>
+        <small v-if="canTag">Tag a photo as “Menu” below to move it here.</small>
       </div>
     </section>
 
@@ -114,7 +142,7 @@ onBeforeUnmount(() => { lightbox.value = null })
             <span v-if="categoryOf(photo) === 'PLACE'" class="ppg-badge ppg-badge-place"><i class="pi pi-images" /> Photo</span>
           </div>
           <button
-            v-if="taggable"
+            v-if="taggable && canTag"
             class="ppg-tag-btn"
             :disabled="savingName === photo.name"
             @click="setCategory(photo, 'MENU')"

@@ -404,7 +404,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </RouterLink>
       </div>
     </template>
-    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" embedded />
+    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" />
   </section>
 </template>
 
