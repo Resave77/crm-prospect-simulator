@@ -993,4 +993,54 @@ onMounted(async () => {
   .mp-pipeline-btn span { display: none; }
   .mp-pipeline-btn { padding: 0.4rem; }
 }
+
+/* ── Desktop ───────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .mp-back { display: none; }
+  .mp-page { gap: 1.1rem; }
+
+  .mp-header { padding: 0.25rem 0; }
+  .mp-avatar { width: 42px; height: 42px; }
+  .mp-header-text strong { font-size: 1.15rem; }
+  .mp-pipeline-btn { padding: 0.45rem 0.9rem; font-size: 0.74rem; }
+
+  .mp-pipeline-summary {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.15rem;
+  }
+  .mp-pipeline-summary-counts { gap: 1.1rem; }
+  .mp-ps-item { font-size: 0.7rem; }
+
+  .mp-search { padding: 0.65rem 0.95rem; }
+  .mp-search input { font-size: 0.85rem; }
+
+  .mp-tabs { gap: 0.5rem; }
+  .mp-tab { padding: 0.6rem 0; font-size: 0.75rem; }
+
+  .mp-section-header strong { font-size: 0.9rem; }
+
+  .mp-card-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    align-items: start;
+  }
+  .mp-card { padding: 1rem 1.1rem; }
+
+  .mp-sheet {
+    left: 50%;
+    bottom: auto;
+    top: 50%;
+    width: calc(100% - 2rem);
+    max-width: 560px;
+    max-height: 80dvh;
+    border-radius: 20px;
+    transform: translate(-50%, -50%);
+    animation: mp-fade-in 0.2s ease;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  }
+  .mp-sheet-handle { display: none; }
+}
 </style>

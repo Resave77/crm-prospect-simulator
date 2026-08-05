@@ -86,4 +86,12 @@ onMounted(async () => {
 .sk-line.w50 { width: 50%; }
 .sk-line.w70 { width: 70%; }
 @keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Desktop ─────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .success-page { padding: 2rem 1rem 3rem; }
+  .success-skeleton,
+  .success-page :deep(.vs-card) { width: 100%; max-width: 520px; }
+  .success-skeleton { padding: 3rem 2rem; }
+}
 </style>

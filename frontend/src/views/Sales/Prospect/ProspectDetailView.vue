@@ -611,4 +611,21 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   .dcard-identity h1 { font-size: 1.05rem; }
   .dcard-photo-item { flex: 0 0 160px; height: 120px; }
 }
+
+/* ── Desktop ───────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .detail-page {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+    padding-bottom: 7rem;
+  }
+  .back-link { display: none; }
+  .detail-page > .p-message,
+  .detail-skeleton,
+  .detail-empty,
+  .dcard-summary,
+  .dcard-active-visit { grid-column: 1 / -1; }
+  .detail-page :deep(.pc-wrap) { grid-column: 1 / -1; }
+}
 </style>

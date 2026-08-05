@@ -250,7 +250,44 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 <template>
   <section class="finder-page">
-    <Button icon="pi pi-arrow-left" severity="secondary" text rounded class="finder-back" @click="$router.back()" title="Back" />
+    <header class="finder-page-header">
+      <div class="finder-heading-left">
+        <Button
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
+          class="finder-back"
+          @click="$router.back()"
+          title="Back"
+        />
+        <div class="finder-page-title">
+          <span class="finder-eyebrow">Prospect Management</span>
+          <h1>Prospect Finder</h1>
+          <p>Discover nearby businesses, review place details, and assign qualified prospects.</p>
+        </div>
+      </div>
+
+      <div class="finder-page-stats">
+        <div class="finder-stat">
+          <span>Location</span>
+          <strong>{{ geoResolved ? 'Ready' : 'Detecting' }}</strong>
+        </div>
+        <div class="finder-stat">
+          <span>Radius</span>
+          <strong>{{ (radius / 1000).toFixed(1) }} km</strong>
+        </div>
+        <div class="finder-stat">
+          <span>Categories</span>
+          <strong>{{ categories.length }}</strong>
+        </div>
+        <div class="finder-stat">
+          <span>Results</span>
+          <strong>{{ results.length }}</strong>
+        </div>
+      </div>
+    </header>
+
     <div class="finder-desktop-shell">
       <aside class="finder-left-panel">
         <div class="finder-panel-header">
@@ -317,6 +354,13 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
       <div class="finder-map-stage">
         <div ref="mapElement" class="leaflet-map" role="region" aria-label="OpenStreetMap with Google Places prospect markers" />
+
+        
+
+        <div v-if="loading" class="map-loading-state">
+          <span class="map-loading-spinner" />
+          <strong>Finding nearby prospects...</strong>
+        </div>
 
         <div v-if="results.length" class="finder-floating-results">
           <div class="floating-results-header">
@@ -558,27 +602,107 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
    PROSPECT FINDER — Workspace Layout (modernized visual pass)
    ════════════════════════════════════════════════════════════════ */
 
-.finder-back { align-self: flex-start; margin: 0.75rem 0 0 0.75rem; }
 .finder-page {
-  display: flex;
-  flex-direction: column;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
-  margin: -1.5rem;
-  margin-top: 0;
+  width: calc(100% + 3rem);
+  min-width: 0;
+  height: calc(100dvh - 4rem);
   min-height: 0;
+  margin: -1.5rem;
+  padding: 0;
+  overflow: hidden;
+  background: #f8fafc;
 }
+
+.finder-page-header {
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 64px;
+  padding: 0.52rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid #e5eaf0;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.finder-heading-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.finder-back {
+  flex: 0 0 auto;
+}
+
+.finder-page-title {
+  min-width: 0;
+}
+
+.finder-eyebrow {
+  color: #64748b;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.finder-page-title h1 {
+  margin: 0.08rem 0 0;
+  color: #0f172a;
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+
+.finder-page-title p {
+  margin: 0.12rem 0 0;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finder-page-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.finder-stat {
+  display: grid;
+  gap: 0.04rem;
+  min-width: 76px;
+  padding: 0.45rem 0.65rem;
+  border-right: 1px solid #e5eaf0;
+  text-align: center;
+}
+
+.finder-stat:last-child { border-right: 0; }
+.finder-stat span { color: #94a3b8; font-size: 0.55rem; font-weight: 800; text-transform: uppercase; }
+.finder-stat strong { color: #0f172a; font-size: 0.78rem; }
 
 /* ── Desktop Shell ───────────────────────────────────────────── */
 .finder-desktop-shell {
-  flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 370px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   overflow: hidden;
   background: var(--surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: 1.25rem;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px -8px rgba(16, 24, 40, 0.10);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* ── Left Panel ──────────────────────────────────────────────── */
@@ -591,7 +715,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 .finder-panel-header {
-  padding: 1rem 1.1rem;
+  padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--border-light);
   background: linear-gradient(150deg, var(--brand-blue-50) 0%, #ffffff 70%);
 }
@@ -633,7 +757,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 .finder-filter-scroll {
-  padding: 0.55rem 0.9rem;
+  padding: 0.35rem 0.75rem 0.55rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -647,7 +771,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 /* ── Filter Sections ─────────────────────────────────────────── */
 .filter-section {
-  padding: 0.6rem 0;
+  padding: 0.45rem 0;
   border-bottom: 1px solid #eef1f5;
 }
 
@@ -1137,6 +1261,50 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .map-source-badge strong { font-size: 0.58rem; font-weight: 700; }
 .map-source-badge span { color: #718096; font-size: 0.52rem; line-height: 1.5; }
 
+.map-empty-state,
+.map-loading-state {
+  position: absolute;
+  z-index: 450;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  width: min(340px, calc(100% - 2rem));
+  transform: translate(-50%, -50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.93);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  text-align: center;
+  backdrop-filter: blur(12px);
+}
+
+.map-empty-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-content: center;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.map-empty-state strong,
+.map-loading-state strong { color: #0f172a; font-size: 0.82rem; }
+.map-empty-state p { margin: 0; color: #64748b; font-size: 0.68rem; line-height: 1.45; }
+
+.map-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: finder-spin 0.75s linear infinite;
+}
+
 /* ── Detail Dialog ───────────────────────────────────────────── */
 .detail-dialog {
   display: grid;
@@ -1480,19 +1648,29 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .finder-desktop-shell { grid-template-columns: 320px minmax(0, 1fr); }
+@media (max-width: 1180px) {
+  .finder-page-header { grid-template-columns: 1fr; }
+  .finder-page-stats { width: 100%; }
+  .finder-desktop-shell { grid-template-columns: 310px minmax(0, 1fr); }
   .category-grid { grid-template-columns: 1fr 1fr; }
   .finder-floating-results { width: 300px; }
 }
 
 @media (max-width: 900px) {
-  .finder-page { margin: -0.8rem; }
+  .finder-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    padding: 0.75rem;
+  }
   .finder-desktop-shell {
+    min-height: 780px;
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(400px, 1fr);
+    grid-template-rows: auto minmax(500px, 1fr);
+    overflow: visible;
   }
   .finder-left-panel { border-right: 0; border-bottom: 1px solid var(--border-light); }
+  .finder-filter-scroll { overflow: visible; }
   .finder-floating-results {
     top: 0.5rem;
     right: 0.5rem;
@@ -1501,11 +1679,17 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   }
 }
 
-@media (max-width: 760px) {
-  .finder-page { margin: -0.8rem; }
+@media (max-width: 640px) {
+  .finder-page-header { align-items: stretch; }
+  .finder-heading-left { align-items: flex-start; }
+  .finder-page-title p { white-space: normal; }
+  .finder-page-stats { grid-template-columns: repeat(2, 1fr); }
+  .finder-stat:nth-child(2) { border-right: 0; }
+  .finder-stat:nth-child(-n + 2) { border-bottom: 1px solid #e5eaf0; }
   .finder-panel-title h1 { font-size: 0.9rem; }
-  .map-source-badge { max-width: none; }
-  .category-grid { grid-template-columns: repeat(3, 1fr); }
+  .map-source-badge { max-width: calc(100% - 1.6rem); }
+  .category-grid { grid-template-columns: repeat(2, 1fr); }
+  .coordinate-grid, .filter-actions { grid-template-columns: 1fr; }
   .finder-floating-results {
     top: 0;
     right: 0;
@@ -1515,6 +1699,37 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
     border: none;
   }
 }
+
+@supports not (height: 100dvh) {
+  .finder-page {
+    height: calc(100vh - 4rem);
+  }
+}
+
+@media (max-height: 760px) and (min-width: 901px) {
+  .finder-page-header {
+    min-height: 56px;
+    padding-block: 0.38rem;
+  }
+
+  .finder-page-title p,
+  .finder-panel-title span {
+    display: none;
+  }
+
+  .finder-panel-header {
+    padding: 0.45rem 0.75rem;
+  }
+
+  .finder-filter-scroll {
+    padding-top: 0.2rem;
+  }
+
+  .filter-section {
+    padding: 0.32rem 0;
+  }
+}
+
 </style>
 
 <style>

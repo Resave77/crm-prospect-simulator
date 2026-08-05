@@ -24,6 +24,8 @@ Seed accounts:
 
 Seed credentials are for controlled development and test environments only.
 
+To restore the clean baseline (active accounts, current roles, role permissions, and sales structure), run `go run ./cmd/seed_baseline` from the `backend` directory.
+
 ## Routing contract
 
 - Vue owns `/`, `/login`, `/admin/*`, and `/sales/*`.

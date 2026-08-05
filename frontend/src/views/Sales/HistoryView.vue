@@ -354,4 +354,14 @@ onMounted(async () => {
 .ht-empty i { font-size: 2rem; opacity: 0.3; }
 .ht-empty strong { color: var(--text-secondary); font-size: 0.9rem; }
 .ht-empty p { margin: 0; font-size: 0.78rem; max-width: 250px; }
+
+/* ── Desktop ───────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .history-back { display: none; }
+
+  .htabs { width: auto; display: inline-flex; }
+  .htab { flex: none; padding: 0.6rem 1.4rem; }
+
+  .ht-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; align-items: start; }
+}
 </style>

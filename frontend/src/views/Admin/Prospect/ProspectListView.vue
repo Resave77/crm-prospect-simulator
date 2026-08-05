@@ -32,6 +32,9 @@ const deletionTarget = ref<Prospect | null>(null)
 const showDeletionDialog = ref(false)
 const deletionBusy = ref(false)
 
+const actionDialogVisible = ref(false)
+const actionTarget = ref<Prospect | null>(null)
+
 const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty', 'Services', 'Other']
 const industryOptions = computed(() => [{ label: 'All Business Segments', value: '' }, ...industries.map((v) => ({ label: v, value: v }))])
 const statusOptions = computed(() => [{ label: 'All Pipeline Statuses', value: '' }, ...BOARD_STATUSES.map((v) => ({ label: v.replaceAll('_', ' '), value: v }))])
@@ -65,6 +68,14 @@ function statusSeverity(status: ProspectStatus) {
   }
 }
 
+function rowClass(status: ProspectStatus) {
+  return {
+    'prospect-row-won': status === 'WON',
+    'prospect-row-lost': status === 'LOST',
+    'prospect-row-converted': status === 'CONVERTED',
+  }
+}
+
 function formatDate(dateStr: string) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -78,7 +89,38 @@ function resetFilters() {
 }
 
 function viewProspect(id: string) {
+  actionDialogVisible.value = false
   router.push({ name: 'AdminProspectReview', params: { id } })
+}
+
+function openActions(prospect: Prospect) {
+  actionTarget.value = prospect
+  actionDialogVisible.value = true
+}
+
+function closeActions() {
+  actionDialogVisible.value = false
+  actionTarget.value = null
+}
+
+function convertProspect(prospect: Prospect) {
+  actionDialogVisible.value = false
+  router.push(`/admin/prospects/${prospect.id}/convert`)
+}
+
+function requestDeleteFromActions(prospect: Prospect) {
+  actionDialogVisible.value = false
+  confirmDelete(prospect.id, prospect.placeName)
+}
+
+function requestApproveDeletionFromActions(prospect: Prospect) {
+  actionDialogVisible.value = false
+  confirmApproveDeletion(prospect)
+}
+
+async function requestRejectDeletionFromActions(prospect: Prospect) {
+  actionDialogVisible.value = false
+  await executeRejectDeletion(prospect)
 }
 
 function confirmDelete(id: string, name: string) {
@@ -146,52 +188,69 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="admin-page">
-    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
-    <header class="page-heading">
-      <div class="page-title-wrapper">
-        <span class="eyebrow">Prospect Management</span>
-        <h1>Prospect List</h1>
-        <p class="muted">All prospects across the sales pipeline. Manage, review, and track prospect lifecycle.</p>
+  <section class="prospect-page">
+    <header class="workspace-header">
+      <div class="workspace-heading">
+        <Button
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
+          class="back-button"
+          @click="router.back()"
+          title="Back"
+        />
+        <div class="page-title-wrapper">
+          <span class="eyebrow">Prospect Management</span>
+          <h1>Prospect List</h1>
+          <p class="muted">Manage, review, and track every prospect across the sales lifecycle.</p>
+        </div>
       </div>
+
+      <div class="summary-strip">
+        <button type="button" class="summary-item">
+          <i class="pi pi-inbox si-blue" />
+          <span>Total</span>
+          <strong>{{ prospects.length }}</strong>
+        </button>
+        <button type="button" class="summary-item">
+          <i class="pi pi-chart-line si-violet" />
+          <span>Active</span>
+          <strong>{{ totalActive }}</strong>
+        </button>
+        <button type="button" class="summary-item won-summary">
+          <i class="pi pi-trophy si-emerald" />
+          <span>Won</span>
+          <strong>{{ totalWon }}</strong>
+        </button>
+        <button type="button" class="summary-item">
+          <i class="pi pi-times-circle si-red" />
+          <span>Lost</span>
+          <strong>{{ totalLost }}</strong>
+        </button>
+      </div>
+
       <div class="page-heading-actions">
-        <Button label="Prospect Finder" icon="pi pi-search" severity="success" outlined size="small" @click="router.push('/admin/prospect-finder')" />
-        <Button label="View Pipeline" icon="pi pi-columns" severity="secondary" outlined size="small" @click="router.push('/admin/prospects/pipeline')" />
+        <Button
+          label="Prospect Finder"
+          icon="pi pi-search"
+          severity="success"
+          outlined
+          size="small"
+          @click="router.push('/admin/prospect-finder')"
+        />
+        <Button
+          label="View Pipeline"
+          icon="pi pi-columns"
+          severity="secondary"
+          outlined
+          size="small"
+          @click="router.push('/admin/prospects/pipeline')"
+        />
       </div>
     </header>
 
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="summary-icon si-blue"><i class="pi pi-inbox" /></div>
-        <div class="summary-data">
-          <span class="summary-label">Total Prospects</span>
-          <span class="summary-value">{{ prospects.length }}</span>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-icon si-violet"><i class="pi pi-spin pi-spinner" v-if="false" /><i class="pi pi-chart-line" /></div>
-        <div class="summary-data">
-          <span class="summary-label">Active Pipeline</span>
-          <span class="summary-value">{{ totalActive }}</span>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-icon si-emerald"><i class="pi pi-check-circle" /></div>
-        <div class="summary-data">
-          <span class="summary-label">Won</span>
-          <span class="summary-value">{{ totalWon }}</span>
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-icon si-amber"><i class="pi pi-times-circle" /></div>
-        <div class="summary-data">
-          <span class="summary-label">Lost</span>
-          <span class="summary-value">{{ totalLost }}</span>
-        </div>
-      </div>
-    </div>
-
-    <Message v-if="error" severity="error">{{ error }}</Message>
+    <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
     <div class="panel-stack">
       <div class="filter-panel">
@@ -220,7 +279,14 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="table-panel">
+      <section class="table-panel">
+        <div class="table-heading">
+          <div>
+            <strong>Prospect Overview</strong>
+            <span>{{ filtered.length }} records matching current filters</span>
+          </div>
+        </div>
+
         <div v-if="loading" class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
           <span>Loading prospects...</span>
@@ -244,10 +310,18 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in filtered" :key="p.id">
+              <tr
+                  v-for="p in filtered"
+                  :key="p.id"
+                  :class="rowClass(p.status)"
+                  class="prospect-row"
+                  tabindex="0"
+                  @click="openActions(p)"
+                  @keydown.enter="openActions(p)"
+                >
                 <td>
                   <div class="cell-stack">
-                    <RouterLink class="link-btn" to="/admin/prospects/pipeline">{{ p.placeName }}</RouterLink>
+                    <button class="link-btn" type="button" @click.stop="openActions(p)">{{ p.placeName }}</button>
                     <span class="cell-sub">{{ p.formattedAddress }}</span>
                   </div>
                 </td>
@@ -256,30 +330,139 @@ onMounted(async () => {
                 <td><span class="cell-text">{{ p.assignedSalesExecutive }}</span></td>
                 <td>
                   <div class="status-cell">
-                    <Tag :value="p.status.replaceAll('_', ' ')" :severity="statusSeverity(p.status)" />
+                    <span v-if="p.status === 'WON'" class="won-badge">
+                      <i class="pi pi-trophy" />
+                      Ready to Convert
+                    </span>
+                    <Tag
+                      v-else
+                      :value="p.status.replaceAll('_', ' ')"
+                      :severity="statusSeverity(p.status)"
+                    />
                     <span v-if="p.deletionRequested" class="deletion-badge">Deletion Requested</span>
                   </div>
                 </td>
                 <td><span class="cell-date">{{ formatDate(p.createdAt) }}</span></td>
                 <td class="td-action">
-                  <div class="row-actions">
-                    <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="viewProspect(p.id)" />
-                    <Button v-if="p.status === 'WON'" icon="pi pi-arrow-right" text rounded size="small" class="act-convert" title="Convert to Customer" @click="router.push(`/admin/prospects/${p.id}/convert`)" />
-                    <template v-if="p.deletionRequested">
-                      <Button icon="pi pi-check" text rounded size="small" class="act-approve" title="Approve Deletion" @click="confirmApproveDeletion(p)" />
-                      <Button icon="pi pi-times" text rounded size="small" class="act-reject" title="Reject Deletion" @click="executeRejectDeletion(p)" />
-                    </template>
-                    <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDelete(p.id, p.placeName)" />
-                  </div>
+                  <Button
+                    label="Manage"
+                    severity="secondary"
+                    outlined
+                    size="small"
+                    class="manage-button"
+                    @click.stop="openActions(p)"
+                  />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
 
-    <Dialog v-model:visible="deleteDialogVisible" header="Delete Prospect" modal :style="{ width: '400px' }">
+    <Dialog
+      v-model:visible="actionDialogVisible"
+      modal
+      :draggable="false"
+      :dismissable-mask="true"
+      header="Prospect Actions"
+      class="prospect-action-dialog"
+      :style="{ width: 'min(460px, calc(100vw - 2rem))' }"
+      @hide="closeActions"
+    >
+      <div v-if="actionTarget" class="action-dialog-body">
+        <div
+          class="action-summary"
+          :class="{
+            won: actionTarget.status === 'WON',
+            lost: actionTarget.status === 'LOST',
+          }"
+        >
+          <div class="action-summary-main">
+            <strong>{{ actionTarget.placeName }}</strong>
+            <span>{{ actionTarget.formattedAddress || 'Address unavailable' }}</span>
+          </div>
+          <span
+            v-if="actionTarget.status === 'WON'"
+            class="action-status won"
+          >
+            WON · Ready to Convert
+          </span>
+          <Tag
+            v-else
+            :value="actionTarget.status.replaceAll('_', ' ')"
+            :severity="statusSeverity(actionTarget.status)"
+          />
+        </div>
+
+        <div class="action-menu">
+          <button
+            type="button"
+            class="action-menu-item"
+            @click="viewProspect(actionTarget.id)"
+          >
+            <span>
+              <strong>View Details</strong>
+              <small>Open prospect review, ticketing, and comments.</small>
+            </span>
+            <span class="action-arrow">›</span>
+          </button>
+
+          <button
+            v-if="actionTarget.status === 'WON'"
+            type="button"
+            class="action-menu-item primary"
+            @click="convertProspect(actionTarget)"
+          >
+            <span>
+              <strong>Convert to Customer</strong>
+              <small>Create a customer record from this won prospect.</small>
+            </span>
+            <span class="action-arrow">›</span>
+          </button>
+
+          <button
+            v-if="actionTarget.deletionRequested"
+            type="button"
+            class="action-menu-item success"
+            @click="requestApproveDeletionFromActions(actionTarget)"
+          >
+            <span>
+              <strong>Approve Deletion Request</strong>
+              <small>Approve the submitted deletion request.</small>
+            </span>
+            <span class="action-arrow">›</span>
+          </button>
+
+          <button
+            v-if="actionTarget.deletionRequested"
+            type="button"
+            class="action-menu-item warning"
+            @click="requestRejectDeletionFromActions(actionTarget)"
+          >
+            <span>
+              <strong>Reject Deletion Request</strong>
+              <small>Keep the prospect and cancel the request.</small>
+            </span>
+            <span class="action-arrow">›</span>
+          </button>
+
+          <button
+            type="button"
+            class="action-menu-item danger"
+            @click="requestDeleteFromActions(actionTarget)"
+          >
+            <span>
+              <strong>Delete Prospect</strong>
+              <small>Permanently remove this prospect and related data.</small>
+            </span>
+            <span class="action-arrow">›</span>
+          </button>
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog v-model:visible="deleteDialogVisible" header="Delete Prospect" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
       <p>Are you sure you want to delete <strong>{{ deleteTargetName }}</strong>? This action cannot be undone.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
@@ -287,7 +470,7 @@ onMounted(async () => {
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="showDeletionDialog" header="Approve Deletion" modal :style="{ width: '400px' }">
+    <Dialog v-model:visible="showDeletionDialog" header="Approve Deletion" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
       <p v-if="deletionTarget" style="margin:0;font-size:0.85rem;line-height:1.5;">
         Approve deletion of <strong>{{ deletionTarget.placeName }}</strong>?
       </p>
@@ -301,120 +484,745 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.admin-page { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.75rem 2rem; min-height: 100vh; }
-
-.page-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin: 0; }
-.page-title-wrapper { display: flex; flex-direction: column; }
-.page-title-wrapper .eyebrow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-green-light); margin-bottom: 0.35rem; }
-.page-title-wrapper h1 { font-size: 1.65rem; font-weight: 800; color: var(--text-primary); margin: 0 0 0.2rem; letter-spacing: -0.03em; line-height: 1.15; }
-.page-title-wrapper .muted { font-size: 0.85rem; color: var(--text-muted); max-width: 520px; line-height: 1.55; }
-.page-heading-actions { display: flex; gap: 0.5rem; align-items: center; padding-top: 0.15rem; }
-
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-.summary-card {
-  display: flex; align-items: center; gap: 0.9rem; padding: 1.1rem 1.2rem;
-  background: var(--surface-card); border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--transition-smooth), transform var(--transition-smooth), border-color var(--transition-smooth);
+.prospect-page {
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  min-height: calc(100dvh - 4rem);
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 1rem;
+  overflow-x: hidden;
+  background: #f8fafc;
 }
-.summary-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-strong); }
-.summary-icon { width: 44px; height: 44px; border-radius: var(--radius-md); display: grid; place-content: center; font-size: 1.1rem; flex-shrink: 0; }
-.si-blue { background: #eff6ff; color: #2563eb; }
-.si-violet { background: #eef2ff; color: #6366f1; }
-.si-emerald { background: #ecfdf5; color: #059669; }
-.si-amber { background: #fffbeb; color: #d97706; }
-.summary-data { display: flex; flex-direction: column; gap: 0.15rem; }
-.summary-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); line-height: 1.3; }
-.summary-value { font-size: 1.45rem; font-weight: 700; color: var(--text-primary); line-height: 1.25; letter-spacing: -0.02em; }
 
-.panel-stack { display: flex; flex-direction: column; gap: 1rem; }
+.workspace-header {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.workspace-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.back-button { flex: 0 0 auto; }
+
+.page-title-wrapper {
+  min-width: 0;
+  display: grid;
+  gap: 0.05rem;
+}
+
+.page-title-wrapper .eyebrow {
+  color: #64748b;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-title-wrapper h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.08rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.page-title-wrapper .muted {
+  margin: 0;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 0.67rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(78px, auto));
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.summary-item {
+  display: grid;
+  grid-template-columns: 18px auto;
+  grid-template-rows: auto auto;
+  column-gap: 0.32rem;
+  min-width: 78px;
+  padding: 0.42rem 0.58rem;
+  border: 0;
+  border-right: 1px solid #e5eaf0;
+  background: transparent;
+  text-align: left;
+}
+
+.summary-item:last-child { border-right: 0; }
+.summary-item i { grid-row: 1 / 3; align-self: center; font-size: 0.72rem; }
+.summary-item span { color: #94a3b8; font-size: 0.5rem; font-weight: 800; text-transform: uppercase; }
+.summary-item strong { color: #0f172a; font-size: 0.8rem; }
+
+.won-summary {
+  background: #f0fdf4;
+}
+
+.won-summary span,
+.won-summary strong {
+  color: #15803d;
+}
+
+.si-blue { color: #2563eb; }
+.si-violet { color: #6366f1; }
+.si-emerald { color: #16a34a; }
+.si-red { color: #dc2626; }
+
+.page-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.page-message { margin: 0; }
+
+.panel-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.65rem;
+}
 
 .filter-panel {
-  background: var(--surface-card); border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg); padding: 1.15rem 1.3rem; box-shadow: var(--shadow-xs);
+  display: grid;
+  grid-template-columns: minmax(250px, 1.4fr) minmax(0, 2.6fr);
+  align-items: end;
+  gap: 0.7rem;
+  padding: 0.65rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
-.search-row { margin-bottom: 0.9rem; }
+
+.search-row { margin: 0; }
+
 .search-field {
-  display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.9rem;
-  background: var(--surface-subtle); border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm); transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
 }
-.search-field:focus-within { background: var(--surface-card); border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08); }
-.search-field i { color: var(--text-faint); font-size: 0.9rem; }
-.search-field input { flex: 1; border: none; outline: none; background: transparent; font-size: 0.87rem; color: var(--text-primary); }
-.search-field input::placeholder { color: var(--text-faint); }
-.filter-grid { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 0.75rem; align-items: end; }
-.filter-field { display: flex; flex-direction: column; gap: 0.3rem; }
-.filter-field :deep(.p-select) { width: 100%; }
-.filter-field label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-.filter-action { justify-content: flex-end; padding-bottom: 0.15rem; }
+
+.search-field:focus-within {
+  border-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.search-field i { color: #94a3b8; font-size: 0.76rem; }
+
+.search-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 0.76rem;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr)) auto;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.filter-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+}
+
+.filter-field label {
+  color: #64748b;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.filter-field :deep(.p-select) {
+  min-width: 0;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.filter-field :deep(.p-select-label) {
+  padding-block: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-action {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
 
 .table-panel {
-  background: var(--surface-card); border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); overflow: hidden;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
-.table-scroll { overflow-x: auto; }
 
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.table-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.62rem 0.75rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: #f8fafc;
+}
+
+.table-heading > div:first-child {
+  display: grid;
+  gap: 0.06rem;
+}
+
+.table-heading strong {
+  color: #0f172a;
+  font-size: 0.78rem;
+}
+
+.table-heading span {
+  color: #94a3b8;
+  font-size: 0.62rem;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.2rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.58rem !important;
+  font-weight: 800;
+}
+
+.legend-item.won {
+  background: #dcfce7;
+  color: #15803d !important;
+}
+
+.legend-item.lost {
+  background: #fee2e2;
+  color: #b91c1c !important;
+}
+
+.table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
 .data-table thead th {
-  position: sticky; top: 0; z-index: 1; background: #f1f5f9;
-  color: var(--text-muted); font-size: 0.68rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 0.85rem 0.95rem; border-bottom: 1px solid var(--border-light);
-  white-space: nowrap; text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.58rem 0.65rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.data-table tbody td {
-  padding: 0.85rem 0.95rem; border-bottom: 1px solid #f0f3f7;
-  color: var(--text-primary); vertical-align: middle;
-}
-.data-table tbody tr:last-child td { border-bottom: none; }
-.data-table tbody tr { transition: background var(--transition-fast); }
-.data-table tbody tr:hover { background: #f8fafc; }
-.th-action { width: 120px; text-align: center; }
 
-.cell-stack { display: flex; flex-direction: column; gap: 0.15rem; }
-.cell-sub { font-size: 0.72rem; color: var(--text-muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-text { font-size: 0.84rem; color: var(--text-secondary); }
-.cell-date { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+.data-table tbody td {
+  height: 50px;
+  padding: 0.5rem 0.65rem;
+  overflow: hidden;
+  border-bottom: 1px solid #edf1f6;
+  color: #1e293b;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:hover { background: #f8fbff; }
+.th-action { width: 100px; text-align: center; }
+
+.prospect-row-won {
+  background: linear-gradient(90deg, #f0fdf4 0%, #ffffff 48%);
+  box-shadow: inset 4px 0 0 #22c55e;
+}
+
+.prospect-row-won:hover {
+  background: linear-gradient(90deg, #dcfce7 0%, #f8fffa 48%) !important;
+}
+
+.prospect-row-lost {
+  background: linear-gradient(90deg, #fff7f7 0%, #ffffff 42%);
+  box-shadow: inset 4px 0 0 #ef4444;
+}
+
+.prospect-row-converted {
+  opacity: 0.72;
+  background: #f8fafc;
+}
+
+.cell-stack {
+  display: grid;
+  min-width: 0;
+  gap: 0.05rem;
+}
+
+.cell-sub,
+.cell-text,
+.cell-date {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-sub { max-width: 320px; color: #94a3b8; font-size: 0.62rem; }
+.cell-text { color: #475569; font-size: 0.7rem; }
+.cell-date { color: #64748b; font-size: 0.68rem; }
 
 .link-btn {
-  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
-  font: inherit; font-weight: 600; color: var(--brand-blue);
-  transition: color var(--transition-fast);
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #1d4ed8;
+  font-weight: 750;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.link-btn:hover { color: #1d4ed8; text-decoration: underline; }
+
+.link-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+}
+
+.won-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.24rem 0.55rem;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.won-badge i {
+  color: #16a34a;
+  font-size: 0.62rem;
+}
+
+.deletion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.58rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.deletion-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d97706;
+}
 
 .td-action { text-align: center; }
-.row-actions { display: flex; align-items: center; justify-content: center; gap: 0.2rem; }
-.act-view { color: var(--brand-blue) !important; }
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.row-actions :deep(.p-button) {
+  min-height: 1.9rem;
+}
+
+.act-view { color: #2563eb !important; }
 .act-view:hover { background: #eff6ff !important; }
+
+.act-convert {
+  min-width: 84px !important;
+  border: 1px solid #86efac !important;
+  background: #16a34a !important;
+  color: #fff !important;
+  font-size: 0.62rem !important;
+  font-weight: 800 !important;
+}
+
+.act-convert:hover {
+  border-color: #15803d !important;
+  background: #15803d !important;
+}
+.act-convert :deep(.p-button-label),
+.act-convert :deep(.p-button-icon) {
+  color: #ffffff !important;
+}
+
+.act-convert:deep(*) {
+  color: #ffffff !important;
+}
 .act-delete { color: #dc2626 !important; }
 .act-delete:hover { background: #fef2f2 !important; }
-.act-approve { color: #16a34a !important; border: 1px solid #bbf7d0 !important; }
-.act-approve:hover { background: #f0fdf4 !important; }
-.act-reject { color: #d97706 !important; border: 1px solid #fde68a !important; }
-.act-reject:hover { background: #fffbeb !important; }
 
-.status-cell { display: flex; flex-direction: column; gap: 0.3rem; }
-.deletion-badge {
-  display: inline-flex; align-items: center; gap: 0.3rem; width: fit-content;
-  padding: 0.2rem 0.55rem; border-radius: 9999px;
-  background: #fef3c7; color: #92400e; font-size: 0.62rem; font-weight: 700;
-  white-space: nowrap; letter-spacing: 0.02em;
+.act-approve {
+  color: #16a34a !important;
+  border: 1px solid #bbf7d0 !important;
 }
-.deletion-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #d97706; }
 
-.state-box { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 2rem; text-align: center; color: var(--text-muted); }
-.state-icon { font-size: 1.75rem; color: var(--brand-blue); margin-bottom: 0.1rem; }
-.state-icon-wrap { width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--surface-subtle); display: grid; place-content: center; margin-bottom: 0.25rem; }
-.state-icon-wrap i { font-size: 1.4rem; color: var(--text-faint); }
-.state-box strong { color: var(--text-primary); font-size: 0.95rem; }
-
-@media (max-width: 1200px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 768px) {
-  .admin-page { padding: 1.25rem 1rem; gap: 1rem; }
-  .page-heading { flex-direction: column; align-items: stretch; }
-  .summary-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-  .filter-grid { grid-template-columns: 1fr 1fr; }
+.act-reject {
+  color: #d97706 !important;
+  border: 1px solid #fde68a !important;
 }
+
+.state-box {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 2rem;
+  color: #64748b;
+  text-align: center;
+}
+
+.state-icon { color: #2563eb; font-size: 1.5rem; }
+
+.state-icon-wrap {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-content: center;
+  border-radius: 13px;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.state-box strong { color: #0f172a; font-size: 0.86rem; }
+
+@media (max-width: 1280px) {
+  .workspace-header {
+    grid-template-columns: minmax(240px, 1fr) auto;
+  }
+
+  .summary-strip {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .filter-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .prospect-page {
+    min-height: auto;
+    padding: 0.75rem;
+    overflow: visible;
+  }
+
+  .workspace-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .page-title-wrapper .muted {
+    white-space: normal;
+  }
+
+  .page-heading-actions {
+    justify-content: stretch;
+  }
+
+  .page-heading-actions :deep(.p-button) {
+    flex: 1;
+  }
+
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-action {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .prospect-page {
+    padding: 0.6rem;
+  }
+
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .summary-item:nth-child(2) { border-right: 0; }
+  .summary-item:nth-child(-n + 2) { border-bottom: 1px solid #e5eaf0; }
+
+  .page-heading-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-action {
+    grid-column: auto;
+  }
+
+  .table-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.prospect-row {
+  cursor: pointer;
+}
+
+.prospect-row:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.manage-button {
+  min-width: 72px !important;
+  height: 30px !important;
+  border-color: #cbd5e1 !important;
+  background: #fff !important;
+  color: #475569 !important;
+  font-size: 0.62rem !important;
+  font-weight: 750 !important;
+}
+
+.manage-button:hover {
+  border-color: #94a3b8 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.prospect-action-dialog :deep(.p-dialog) {
+  border-radius: 14px;
+}
+
+.action-dialog-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.action-summary {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.action-summary.won {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.action-summary.lost {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.action-summary-main {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.action-summary-main strong {
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+
+.action-summary-main span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.action-status {
+  width: fit-content;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 850;
+}
+
+.action-status.won {
+  border: 1px solid #86efac;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.action-menu {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.action-menu-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.72rem 0.75rem;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.action-menu-item:hover {
+  transform: translateY(-1px);
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.action-menu-item > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.action-menu-item strong {
+  color: #0f172a;
+  font-size: 0.74rem;
+}
+
+.action-menu-item small {
+  color: #64748b;
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.action-arrow {
+  color: #94a3b8;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.action-menu-item.primary {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.action-menu-item.primary strong,
+.action-menu-item.success strong {
+  color: #15803d;
+}
+
+.action-menu-item.success {
+  border-color: #bbf7d0;
+}
+
+.action-menu-item.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.action-menu-item.warning strong {
+  color: #a16207;
+}
+
+.action-menu-item.danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.action-menu-item.danger strong {
+  color: #b91c1c;
+}
+
 </style>

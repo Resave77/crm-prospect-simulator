@@ -44,6 +44,29 @@
     <!-- Main content area -->
     <div class="sales-shell">
       <Toast position="top-right" />
+      <header class="sales-topbar">
+        <button class="topbar-icon-btn" @click="goBack" title="Back" aria-label="Back to previous page">
+          <i class="pi pi-arrow-left" />
+        </button>
+        <button class="topbar-icon-btn" @click="refreshPage" title="Refresh" aria-label="Refresh page">
+          <i class="pi pi-refresh" />
+        </button>
+        <div class="topbar-title">{{ pageTitle }}</div>
+        <div class="topbar-spacer" />
+        <details class="profile-menu">
+          <summary>
+            <span class="avatar-initials">{{ initials }}</span>
+            <div class="profile-info"><strong>{{ auth.user?.fullName }}</strong><small>{{ roleLabel }}</small></div>
+            <i class="pi pi-chevron-down" />
+          </summary>
+          <div class="profile-dropdown">
+            <button class="signout-btn" @click="logout">
+              <i class="pi pi-sign-out" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </details>
+      </header>
       <main class="sales-content">
         <RouterView />
       </main>
@@ -72,12 +95,31 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+const pageTitle = computed(() => {
+  const p = route.path
+  if (p.includes('/check-in')) return 'Check In'
+  if (p.includes('/check-out')) return 'Check Out'
+  if (p.includes('/visit-result')) return 'Visit Result'
+  if (p.startsWith('/sales/prospects/')) return 'Prospect Details'
+  if (p.startsWith('/sales/customers/')) return 'Customer Details'
+  const titles: Record<string, string> = {
+    '/sales/dashboard': 'Home',
+    '/sales/my-customers': 'My Customers',
+    '/sales/my-prospects': 'My Prospects',
+    '/sales/pipeline': 'Pipeline',
+    '/sales/history': 'Visit History',
+    '/sales/profile': 'My Profile',
+  }
+  return titles[p] ?? 'Yummy CRM'
+})
 
 const initials = computed(() => {
   const name = auth.user?.fullName ?? ''
@@ -95,6 +137,15 @@ async function logout() {
   await auth.logout()
   await router.replace('/login')
 }
+
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/sales/dashboard')
+}
+
+function refreshPage() {
+  window.location.reload()
+}
 </script>
 
 <style>
@@ -109,6 +160,9 @@ async function logout() {
   .sales-layout .mc-fab {
     bottom: 1.5rem;
     right: 1.5rem;
+  }
+  .sales-layout .p-toast-top-right {
+    top: calc(var(--sales-topbar-h, 0px) + 1rem);
   }
 }
 
@@ -228,6 +282,7 @@ async function logout() {
   .sales-layout {
     --sales-shell-sidebar-w: 240px;
     --sales-nav-height: 0px;
+    --sales-topbar-h: 56px;
   }
 
   .sales-sidebar {
@@ -248,6 +303,10 @@ async function logout() {
     display: none;
   }
 
+  .sales-topbar {
+    display: flex;
+  }
+
   .sales-shell {
     padding-bottom: 0;
   }
@@ -256,6 +315,152 @@ async function logout() {
     max-width: 1280px;
     padding: 2rem;
   }
+}
+
+/* ── Desktop Topbar ──────────────────────────────────────────── */
+.sales-topbar {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--sales-topbar-h, 56px);
+  padding: 0 1.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.topbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.topbar-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--brand-blue);
+  border-color: var(--border-default);
+}
+
+.topbar-title {
+  margin-left: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: 10px;
+  transition: background 150ms ease;
+}
+
+.profile-menu summary:hover {
+  background: var(--surface-hover);
+}
+
+.profile-menu summary .avatar-initials {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-blue), #1d4ed8);
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px -2px rgba(37, 99, 235, 0.45);
+}
+
+.profile-menu summary .profile-info {
+  display: grid;
+  text-align: left;
+}
+
+.profile-menu summary .profile-info strong {
+  font-size: 0.68rem;
+  color: var(--text-primary);
+}
+
+.profile-menu summary .profile-info small {
+  color: var(--text-muted);
+  font-size: 0.55rem;
+}
+
+.profile-menu summary > i {
+  font-size: 0.55rem;
+  color: var(--text-faint);
+  transition: transform 150ms ease;
+}
+
+.profile-menu[open] summary > i {
+  transform: rotate(180deg);
+}
+
+.profile-dropdown {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  padding: 0.35rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px -10px rgba(15, 23, 42, 0.22);
+}
+
+.signout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.signout-btn i {
+  font-size: 0.8rem;
+}
+
+.signout-btn:hover {
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 /* ── Sidebar Styles ───────────────────────────────────────────── */

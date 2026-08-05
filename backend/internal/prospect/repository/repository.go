@@ -15,6 +15,7 @@ var (
 	ErrDuplicate     = errors.New("Google Place is already saved as a prospect")
 	ErrVisitOpen     = errors.New("prospect already has an open visit")
 	ErrVisitClosed   = errors.New("visit is already checked out")
+	ErrConflict      = errors.New("prospect is still referenced by existing records")
 )
 
 type Repository interface {

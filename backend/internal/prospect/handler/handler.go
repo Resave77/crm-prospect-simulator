@@ -623,6 +623,8 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusNotFound, "PROSPECT_NOT_FOUND", "Prospect was not found.")
 	case errors.Is(err, repository.ErrDuplicate):
 		return response.Error(c, fiber.StatusConflict, "PROSPECT_DUPLICATE", "This Google Place is already saved as a prospect.")
+	case errors.Is(err, repository.ErrConflict):
+		return response.Error(c, fiber.StatusConflict, "RECORD_CONFLICT", "Prospect cannot be deleted because it is still referenced by existing records.")
 	case errors.Is(err, repository.ErrVisitOpen):
 		return response.Error(c, fiber.StatusConflict, "VISIT_ALREADY_OPEN", "Check out the open visit before starting another one.")
 	case errors.Is(err, repository.ErrVisitClosed):

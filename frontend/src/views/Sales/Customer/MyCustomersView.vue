@@ -700,4 +700,43 @@ onMounted(async () => {
 @keyframes mc-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mc-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
+/* ── Desktop ───────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .mc-back { display: none; }
+  .mc-page { gap: 1.1rem; }
+
+  .mc-header { padding: 0.25rem 0; }
+  .mc-avatar { width: 42px; height: 42px; }
+  .mc-header-text strong { font-size: 1.15rem; }
+
+  .mc-search { padding: 0.65rem 0.95rem; }
+  .mc-search input { font-size: 0.85rem; }
+
+  .mc-tabs { gap: 0.5rem; }
+  .mc-tab { padding: 0.6rem 0; font-size: 0.78rem; }
+
+  .mc-section-header strong { font-size: 0.9rem; }
+
+  .mc-card-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+    align-items: start;
+  }
+  .mc-card { padding: 1rem 1.1rem; }
+
+  .mc-sheet {
+    left: 50%;
+    bottom: auto;
+    top: 50%;
+    width: calc(100% - 2rem);
+    max-width: 560px;
+    max-height: 80dvh;
+    border-radius: 20px;
+    transform: translate(-50%, -50%);
+    animation: mc-fade-in 0.2s ease;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  }
+  .mc-sheet-handle { display: none; }
+}
 </style>

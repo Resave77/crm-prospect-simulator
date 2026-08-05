@@ -74,7 +74,7 @@ onMounted(loadStats)
 
 <template>
   <section class="profile-page">
-    <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
+    <Button class="profile-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
     <!-- Header -->
     <div class="profile-header">
       <div class="profile-header-left">
@@ -136,7 +136,7 @@ onMounted(loadStats)
       </div>
 
       <!-- Error in stats -->
-      <Message v-if="error" severity="error" closable @close="error = ''">
+      <Message v-if="error" class="profile-error" severity="error" closable @close="error = ''">
         {{ error }}
         <Button label="Retry" size="small" text class="retry-btn" @click="loadStats" />
       </Message>
@@ -293,5 +293,31 @@ onMounted(loadStats)
   .profile-card-strip { gap: 0.35rem; }
   .strip-value { font-size: 0.65rem; }
   .stat-value { font-size: 1.3rem; }
+}
+
+/* ── Desktop ─────────────────────────────────────────────── */
+.profile-back,
+.profile-header,
+.profile-error { grid-column: 1 / -1; }
+
+@media (min-width: 768px) {
+  .profile-page {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+    gap: 1.25rem;
+    align-items: start;
+    padding-bottom: 0;
+  }
+  .profile-back { display: none; }
+  .profile-header { padding: 0.25rem 0; }
+  .profile-header-avatar { width: 44px; height: 44px; }
+  .profile-header-text h1 { font-size: 1.4rem; }
+
+  .profile-card { padding: 2rem 1.5rem; }
+  .profile-card-avatar { width: 76px; height: 76px; font-size: 1.5rem; }
+  .profile-card-name { font-size: 1.3rem; }
+
+  .perf-section { padding: 1.5rem; }
+  .stat-card { padding: 1.1rem 0.75rem; }
+  .stat-value { font-size: 1.7rem; }
 }
 </style>

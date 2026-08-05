@@ -377,6 +377,26 @@ onMounted(async () => {
   .today-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 }
 
+@media (min-width: 1024px) {
+  .sales-dash-header { padding: 0.35rem 0 0.5rem; }
+  .sales-avatar { width: 64px; height: 46px; }
+  .sales-identity-text strong { font-size: 1.25rem; }
+  .sales-identity-text small { font-size: 0.85rem; }
+
+  .ready-card { min-height: 148px; padding: 1.5rem 1.8rem; }
+  .ready-card strong { font-size: 1.45rem; }
+  .ready-card span { font-size: 0.95rem; }
+
+  .section-title strong { font-size: 1.05rem; }
+
+  .quick-stats > a { min-height: 128px; padding: 1.15rem; }
+  .quick-stats strong { font-size: 2rem; }
+  .quick-stats-info small { font-size: 0.78rem; }
+
+  .quick-actions > a { min-height: 100px; font-size: 0.75rem; }
+  .quick-actions { gap: 0.85rem; }
+}
+
 @media (max-width: 380px) {
   .sales-home { gap: 1rem; }
   .ready-card { min-height: 112px; padding: 1.1rem; }

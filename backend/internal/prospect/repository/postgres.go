@@ -472,6 +472,13 @@ func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID,
 }
 
 func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) ([]string, error) {
+	var converted bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM customer_sites WHERE source_prospect_id = $1)`, id).Scan(&converted); err != nil {
+		return nil, fmt.Errorf("check prospect conversion: %w", err)
+	}
+	if converted {
+		return nil, ErrConflict
+	}
 	rows, err := r.pool.Query(ctx, `SELECT selfie_reference FROM prospect_visits WHERE prospect_id = $1`, id)
 	if err != nil {
 		return nil, fmt.Errorf("list prospect visit selfies: %w", err)
@@ -506,6 +513,9 @@ func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) (
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM prospects WHERE id = $1`, id)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return nil, ErrConflict
+		}
 		return nil, fmt.Errorf("delete prospect: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
@@ -515,6 +525,11 @@ func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) (
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return selfies, nil
+}
+
+func isForeignKeyViolation(err error) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) && pgError.Code == "23503"
 }
 
 func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, salesExecID uuid.UUID) error {

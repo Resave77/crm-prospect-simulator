@@ -797,4 +797,26 @@ onMounted(async () => {
   .pl-sort-select { flex: 1; }
   .pl-pagination { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── DESKTOP ── */
+@media (min-width: 1024px) {
+  .pl-back { display: none; }
+  .pl-page { padding: 0 0 32px; }
+  .pl-title { font-size: 1.5rem; }
+  .pl-eyebrow { font-size: 0.75rem; }
+  .pl-total-badge { font-size: 0.75rem; }
+
+  .pg-tab { min-height: 48px; }
+  .pg-tab-label { font-size: 0.74rem; }
+
+  .pl-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 10px;
+    align-items: start;
+  }
+
+  .pl-stage-header { padding: 8px 0 6px; }
+  .pl-stage-title { font-size: 0.9rem; }
+}
 </style>
