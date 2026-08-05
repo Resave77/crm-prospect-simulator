@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -208,6 +209,18 @@ type baselineAssignment struct {
 	CreatedBy     *uuid.UUID
 }
 
+type resolvedUser struct {
+	user    baselineUser
+	actual  uuid.UUID
+	existed bool
+}
+
+type resolvedRole struct {
+	role    baselineRole
+	actual  uuid.UUID
+	existed bool
+}
+
 type counters struct {
 	Created int
 	Updated int
@@ -228,6 +241,10 @@ func optString(s string) *string {
 
 func normalizeRoleName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(name), " "))
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func buildUsers() []baselineUser {
@@ -340,24 +357,81 @@ func buildAssignments() []baselineAssignment {
 	}
 }
 
-func existsByID(ctx context.Context, tx pgx.Tx, table string, id uuid.UUID) (bool, error) {
-	var exists bool
-	err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM "+table+" WHERE id = $1)", id).Scan(&exists)
-	return exists, err
+func resolveUserIDByEmail(ctx context.Context, tx pgx.Tx, email string) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE lower(btrim(email)) = lower(btrim($1)) ORDER BY created_at LIMIT 1`, email).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return id, true, nil
 }
 
-func seedUsers(ctx context.Context, tx pgx.Tx) (counters, error) {
-	var counts counters
+func resolveRoleIDByName(ctx context.Context, tx pgx.Tx, normalized string) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM sales_roles WHERE lower(btrim(normalized_name)) = lower(btrim($1)) ORDER BY created_at LIMIT 1`, normalized).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return id, true, nil
+}
+
+func resolveAssignmentID(ctx context.Context, tx pgx.Tx, baselineID uuid.UUID, userID, roleID uuid.UUID, parentID *uuid.UUID, from, to string) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM sales_structure_assignments WHERE id = $1`, baselineID).Scan(&id)
+	if err == nil {
+		return id, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, err
+	}
+	var parent any
+	if parentID != nil {
+		parent = *parentID
+	}
+	err = tx.QueryRow(ctx, `
+		SELECT id FROM sales_structure_assignments
+		WHERE user_id = $1 AND sales_role_id = $2 AND effective_from = $3::date
+		  AND effective_to IS NOT DISTINCT FROM $4::date
+		  AND parent_user_id IS NOT DISTINCT FROM $5
+		ORDER BY created_at LIMIT 1`, userID, roleID, from, to, parent).Scan(&id)
+	if err == nil {
+		return id, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, err
+	}
+	return baselineID, false, nil
+}
+
+func seedUsers(ctx context.Context, tx pgx.Tx) (map[uuid.UUID]uuid.UUID, counters, error) {
+	resolved := make([]resolvedUser, 0, len(buildUsers()))
+	userIDMap := make(map[uuid.UUID]uuid.UUID, len(buildUsers()))
+
 	for _, u := range buildUsers() {
-		existed, err := existsByID(ctx, tx, "users", u.ID)
+		actualID, existed, err := resolveUserIDByEmail(ctx, tx, u.Email)
 		if err != nil {
-			return counts, fmt.Errorf("check user %s: %w", u.Email, err)
+			return nil, counters{}, fmt.Errorf("resolve user %s: %w", u.Email, err)
 		}
+		if !existed {
+			actualID = u.ID
+		}
+		userIDMap[u.ID] = actualID
+		resolved = append(resolved, resolvedUser{user: u, actual: actualID, existed: existed})
+	}
+
+	var counts counters
+	for _, r := range resolved {
 		var managerID any
-		if u.ManagerID != nil {
-			managerID = *u.ManagerID
+		if r.user.ManagerID != nil {
+			managerID = userIDMap[*r.user.ManagerID]
 		}
-		_, err = tx.Exec(ctx, `
+		_, err := tx.Exec(ctx, `
 			INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, role, status, must_change_password, token_version, manager_id, deleted_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7::"UserRole", $8::"UserStatus", $9, $10, $11, NULL, now())
 			ON CONFLICT (id) DO UPDATE SET
@@ -373,32 +447,43 @@ func seedUsers(ctx context.Context, tx pgx.Tx) (counters, error) {
 				manager_id = EXCLUDED.manager_id,
 				deleted_at = NULL,
 				updated_at = now()`,
-			u.ID, u.Email, u.PasswordHash, u.FullName, u.EmployeeID, u.Phone, u.SystemRole, u.Status,
-			u.MustChangePassword, u.TokenVersion, managerID)
+			r.actual, r.user.Email, r.user.PasswordHash, r.user.FullName, r.user.EmployeeID, r.user.Phone,
+			r.user.SystemRole, r.user.Status, r.user.MustChangePassword, r.user.TokenVersion, managerID)
 		if err != nil {
-			return counts, fmt.Errorf("upsert user %s: %w", u.Email, err)
+			return nil, counts, fmt.Errorf("upsert user %s: %w", r.user.Email, err)
 		}
-		if existed {
+		if r.existed {
 			counts.Updated++
 		} else {
 			counts.Created++
 		}
 	}
-	return counts, nil
+	return userIDMap, counts, nil
 }
 
-func seedRoles(ctx context.Context, tx pgx.Tx) (counters, error) {
-	var counts counters
+func seedRoles(ctx context.Context, tx pgx.Tx, userIDMap map[uuid.UUID]uuid.UUID) (map[uuid.UUID]uuid.UUID, counters, error) {
+	resolved := make([]resolvedRole, 0, len(buildRoles()))
+	roleIDMap := make(map[uuid.UUID]uuid.UUID, len(buildRoles()))
+
 	for _, r := range buildRoles() {
-		existed, err := existsByID(ctx, tx, "sales_roles", r.ID)
+		actualID, existed, err := resolveRoleIDByName(ctx, tx, normalizeRoleName(r.Name))
 		if err != nil {
-			return counts, fmt.Errorf("check role %s: %w", r.Name, err)
+			return nil, counters{}, fmt.Errorf("resolve role %s: %w", r.Name, err)
 		}
+		if !existed {
+			actualID = r.ID
+		}
+		roleIDMap[r.ID] = actualID
+		resolved = append(resolved, resolvedRole{role: r, actual: actualID, existed: existed})
+	}
+
+	var counts counters
+	for _, r := range resolved {
 		var updatedBy any
-		if r.UpdatedBy != nil {
-			updatedBy = *r.UpdatedBy
+		if r.role.UpdatedBy != nil {
+			updatedBy = userIDMap[*r.role.UpdatedBy]
 		}
-		_, err = tx.Exec(ctx, `
+		_, err := tx.Exec(ctx, `
 			INSERT INTO sales_roles (id, name, normalized_name, level, description, landing_page, is_active, created_by, updated_by, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, true, NULL, $7, now())
 			ON CONFLICT (id) DO UPDATE SET
@@ -411,26 +496,26 @@ func seedRoles(ctx context.Context, tx pgx.Tx) (counters, error) {
 				created_by = EXCLUDED.created_by,
 				updated_by = EXCLUDED.updated_by,
 				updated_at = now()`,
-			r.ID, r.Name, normalizeRoleName(r.Name), r.Level, r.Description, r.LandingPage, updatedBy)
+			r.actual, r.role.Name, normalizeRoleName(r.role.Name), r.role.Level, r.role.Description, r.role.LandingPage, updatedBy)
 		if err != nil {
-			return counts, fmt.Errorf("upsert role %s: %w", r.Name, err)
+			return nil, counts, fmt.Errorf("upsert role %s: %w", r.role.Name, err)
 		}
-		if existed {
+		if r.existed {
 			counts.Updated++
 		} else {
 			counts.Created++
 		}
 	}
-	return counts, nil
+	return roleIDMap, counts, nil
 }
 
-func seedRolePermissions(ctx context.Context, tx pgx.Tx) (int, error) {
+func seedRolePermissions(ctx context.Context, tx pgx.Tx, roleIDMap map[uuid.UUID]uuid.UUID) (int, error) {
 	total := 0
 	for _, r := range buildRoles() {
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO role_permissions (sales_role_id, permission_id)
 			SELECT $1, id FROM permissions WHERE key = ANY($2) AND is_active = true
-			ON CONFLICT DO NOTHING`, r.ID, r.PermissionKeys)
+			ON CONFLICT DO NOTHING`, roleIDMap[r.ID], r.PermissionKeys)
 		if err != nil {
 			return total, fmt.Errorf("seed permissions for role %s: %w", r.Name, err)
 		}
@@ -439,13 +524,13 @@ func seedRolePermissions(ctx context.Context, tx pgx.Tx) (int, error) {
 	return total, nil
 }
 
-func seedUserSalesRoles(ctx context.Context, tx pgx.Tx) (int, error) {
+func seedUserSalesRoles(ctx context.Context, tx pgx.Tx, userIDMap, roleIDMap map[uuid.UUID]uuid.UUID) (int, error) {
 	linked := 0
 	for _, u := range buildUsers() {
 		if u.SalesRoleID == nil {
 			continue
 		}
-		tag, err := tx.Exec(ctx, `UPDATE users SET sales_role_id = $2, updated_at = now() WHERE id = $1`, u.ID, *u.SalesRoleID)
+		tag, err := tx.Exec(ctx, `UPDATE users SET sales_role_id = $2, updated_at = now() WHERE id = $1`, userIDMap[u.ID], roleIDMap[*u.SalesRoleID])
 		if err != nil {
 			return linked, fmt.Errorf("link sales role for %s: %w", u.Email, err)
 		}
@@ -454,24 +539,27 @@ func seedUserSalesRoles(ctx context.Context, tx pgx.Tx) (int, error) {
 	return linked, nil
 }
 
-func seedAssignments(ctx context.Context, tx pgx.Tx) (counters, error) {
+func seedAssignments(ctx context.Context, tx pgx.Tx, userIDMap, roleIDMap map[uuid.UUID]uuid.UUID) (counters, error) {
 	var counts counters
 	for _, a := range buildAssignments() {
-		existed, err := existsByID(ctx, tx, "sales_structure_assignments", a.ID)
-		if err != nil {
-			return counts, err
-		}
-		var parentID any
+		resolvedUserID := userIDMap[a.UserID]
+		resolvedRoleID := roleIDMap[a.RoleID]
+		var resolvedParentID *uuid.UUID
 		if a.ParentID != nil {
-			parentID = *a.ParentID
+			resolvedParentID = ptr(userIDMap[*a.ParentID])
+		}
+		var resolvedCreatedBy any
+		if a.CreatedBy != nil {
+			resolvedCreatedBy = userIDMap[*a.CreatedBy]
 		}
 		var effectiveTo any
 		if a.EffectiveTo != nil {
 			effectiveTo = *a.EffectiveTo
 		}
-		var createdBy any
-		if a.CreatedBy != nil {
-			createdBy = *a.CreatedBy
+
+		targetID, existed, err := resolveAssignmentID(ctx, tx, a.ID, resolvedUserID, resolvedRoleID, resolvedParentID, a.EffectiveFrom, *a.EffectiveTo)
+		if err != nil {
+			return counts, err
 		}
 		_, err = tx.Exec(ctx, `
 			INSERT INTO sales_structure_assignments (id, user_id, sales_role_id, parent_user_id, effective_from, effective_to, created_by, updated_at)
@@ -484,7 +572,7 @@ func seedAssignments(ctx context.Context, tx pgx.Tx) (counters, error) {
 				effective_to = EXCLUDED.effective_to,
 				created_by = EXCLUDED.created_by,
 				updated_at = now()`,
-			a.ID, a.UserID, a.RoleID, parentID, a.EffectiveFrom, effectiveTo, createdBy)
+			targetID, resolvedUserID, resolvedRoleID, resolvedParentID, a.EffectiveFrom, effectiveTo, resolvedCreatedBy)
 		if err != nil {
 			return counts, err
 		}
@@ -495,6 +583,10 @@ func seedAssignments(ctx context.Context, tx pgx.Tx) (counters, error) {
 		}
 	}
 	return counts, nil
+}
+
+func ptr(u uuid.UUID) *uuid.UUID {
+	return &u
 }
 
 func isLocalDatabase(databaseURL string) bool {
@@ -535,23 +627,23 @@ func run() error {
 	}
 	defer tx.Rollback(ctx)
 
-	users, err := seedUsers(ctx, tx)
+	userIDMap, users, err := seedUsers(ctx, tx)
 	if err != nil {
 		return err
 	}
-	roles, err := seedRoles(ctx, tx)
+	roleIDMap, roles, err := seedRoles(ctx, tx, userIDMap)
 	if err != nil {
 		return err
 	}
-	permissionGrants, err := seedRolePermissions(ctx, tx)
+	permissionGrants, err := seedRolePermissions(ctx, tx, roleIDMap)
 	if err != nil {
 		return err
 	}
-	userRoleLinks, err := seedUserSalesRoles(ctx, tx)
+	userRoleLinks, err := seedUserSalesRoles(ctx, tx, userIDMap, roleIDMap)
 	if err != nil {
 		return err
 	}
-	assignments, err := seedAssignments(ctx, tx)
+	assignments, err := seedAssignments(ctx, tx, userIDMap, roleIDMap)
 	if err != nil {
 		return err
 	}
