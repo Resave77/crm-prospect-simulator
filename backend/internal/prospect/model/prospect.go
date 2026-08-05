@@ -241,7 +241,7 @@ const (
 type ProspectPhotoTag struct {
 	ID         uuid.UUID     `json:"id"`
 	ProspectID uuid.UUID     `json:"prospectId"`
-	PhotoName  string        `json:"photoName"`
+	PhotoIndex int           `json:"photoIndex"`
 	Category   PhotoCategory `json:"category"`
 	UpdatedBy  *uuid.UUID    `json:"updatedBy"`
 	CreatedAt  time.Time     `json:"createdAt"`

@@ -33,8 +33,8 @@ type createCommentRequest struct {
 }
 
 type setPhotoTagRequest struct {
-	PhotoName string `json:"photoName"`
-	Category  string `json:"category"`
+	PhotoIndex int    `json:"photoIndex"`
+	Category   string `json:"category"`
 }
 
 func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
@@ -551,7 +551,7 @@ func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
 	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
 	}
-	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoName, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
+	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoIndex, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
 	if err != nil {
 		return writeError(c, err)
 	}

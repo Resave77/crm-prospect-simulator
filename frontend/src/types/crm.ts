@@ -385,7 +385,7 @@ export type PhotoCategory = 'MENU' | 'PLACE'
 export interface ProspectPhotoTag {
   id: string
   prospectId: string
-  photoName: string
+  photoIndex: number
   category: PhotoCategory
   updatedBy: string
   createdAt: string

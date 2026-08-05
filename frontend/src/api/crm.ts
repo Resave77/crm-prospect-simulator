@@ -176,7 +176,7 @@ export async function getProspectPhotoTags(prospectId: string, role: UserRole) {
   return (await api.get<ApiEnvelope<ProspectPhotoTag[]>>(`${base}/prospects/${prospectId}/photo-tags`)).data.data
 }
 
-export async function setProspectPhotoTag(prospectId: string, photoName: string, category: PhotoCategory, role: UserRole) {
+export async function setProspectPhotoTag(prospectId: string, photoIndex: number, category: PhotoCategory, role: UserRole) {
   const base = crmBaseForRole(role)
-  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoName, category })).data.data
+  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoIndex, category })).data.data
 }

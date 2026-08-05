@@ -472,18 +472,17 @@ func (s *Service) ListPhotoTags(ctx context.Context, actor Actor, prospectID uui
 	return s.repository.ListPhotoTags(ctx, prospectID)
 }
 
-func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
+func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoIndex int, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
 	if err := s.ensurePhotoTagAccess(ctx, actor, prospectID); err != nil {
 		return prospectmodel.ProspectPhotoTag{}, err
 	}
 	if category != prospectmodel.PhotoCategoryMenu && category != prospectmodel.PhotoCategoryPlace {
 		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
 	}
-	photoName = strings.TrimSpace(photoName)
-	if photoName == "" {
+	if photoIndex < 0 {
 		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
 	}
-	return s.repository.UpsertPhotoTag(ctx, prospectID, photoName, category, actor.UserID)
+	return s.repository.UpsertPhotoTag(ctx, prospectID, photoIndex, category, actor.UserID)
 }
 
 func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {
