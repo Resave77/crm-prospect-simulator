@@ -1,0 +1,59 @@
+name: Development CI/CD Go to VPS via SSH
+
+on:
+  push:
+    tags:
+      - '*-backend-development'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      - name: Build Go binary (linux amd64)
+        working-directory: ./backend
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/app ./backend/cmd/server
+
+      - name: Upload binary to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          source: dist/app
+          target: '/home/smk_dev/deploy_tmp'
+          strip_components: 1
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            TAG_NAME="${{ github.ref_name }}"
+            echo "Deploy core service, tag: $TAG_NAME"
+
+            mv /home/smk_dev/deploy_tmp/app /home/smk_dev/app/backend/dev
+
+            chmod +x /home/smk_dev/app/backend/dev/app
+
+            sudo systemctl restart dev-backend.service
+
+            echo "deployment done"
