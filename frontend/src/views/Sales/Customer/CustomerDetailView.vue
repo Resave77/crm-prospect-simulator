@@ -226,7 +226,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <div v-if="placeDetails.googlePlaceId" class="dcard-row">
             <i class="pi pi-id-card" />
             <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
-            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
+            <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
           </div>
           <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
             <i class="pi pi-globe" />
@@ -383,7 +383,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <div v-if="customer?.sourceGooglePlaceId" class="dcard-row">
             <i class="pi pi-info-circle" />
             <span class="dcard-place-id"><span>Google Place ID <DataSourceBadge source="google" /></span><code>{{ customer.sourceGooglePlaceId }}</code></span>
-            <button class="dcard-copy-btn" title="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
+            <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
           </div>
           <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }} <DataSourceBadge source="system" /></span></div>
           <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }} <DataSourceBadge source="system" /></span></div>
@@ -549,11 +549,18 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   border-radius: 9999px; background: #eff6ff; color: var(--brand-blue);
   font-size: 0.62rem; font-weight: 700; white-space: nowrap;
 }
+.dcard-distance-pill i,
+.dcard-link i,
+.dcard-amenity-section strong i,
+.dcard-amenity-chip i,
+.mc-meta-item i {
+  line-height: 1;
+}
 
 /* Rows */
 .dcard-location-rows, .dcard-rows { display: grid; gap: 0.45rem; }
-.dcard-row { display: flex; align-items: flex-start; gap: 0.55rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
-.dcard-row i { color: var(--text-muted); font-size: 0.72rem; width: 1rem; text-align: center; flex-shrink: 0; margin-top: 0.1rem; }
+.dcard-row { display: flex; align-items: flex-start; gap: 0.5rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
+.dcard-row i { color: var(--text-muted); font-size: 0.78rem; width: 1rem; text-align: center; flex-shrink: 0; margin-top: 0.08rem; line-height: 1; }
 .dcard-row a { color: var(--brand-blue); text-decoration: none; }
 .dcard-row a:hover { text-decoration: underline; }
 .dcard-distance { color: var(--brand-blue); font-weight: 600; }
@@ -575,7 +582,12 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-place-id { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
 .dcard-place-id span { color: var(--text-muted); font-size: 0.62rem; font-weight: 600; display: flex; align-items: center; gap: 0.3rem; }
 .dcard-place-id code { font-size: 0.72rem; color: var(--text-primary); background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 6px; word-break: break-all; }
-.dcard-copy-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.2rem; border-radius: 6px; transition: all 0.15s ease; }
+.dcard-copy-btn {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid var(--border-light); color: var(--text-muted);
+  cursor: pointer; padding: 0; border-radius: 8px; font-size: 0.82rem; flex-shrink: 0;
+  transition: all 0.15s ease;
+}
 .dcard-copy-btn:hover { color: var(--brand-blue); background: #eff6ff; }
 
 /* ── Bottom Action Bar ───────────────────────────────────── */
@@ -588,11 +600,13 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
 }
 .dbar-btn {
-  display: flex; align-items: center; justify-content: center; gap: 0.3rem;
-  padding: 0.65rem 0; border-radius: 12px; border: none;
+  min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+  padding: 0.65rem 0.45rem; border-radius: 12px; border: none;
   font-size: 0.72rem; font-weight: 700; cursor: pointer;
-  text-decoration: none; text-align: center; transition: all 0.15s ease;
+  line-height: 1; text-decoration: none; text-align: center; transition: all 0.15s ease;
 }
+.dbar-btn i { width: 16px; height: 16px; display: inline-grid; place-items: center; font-size: 0.9rem; line-height: 1; flex-shrink: 0; }
 .dbar-navigate { background: var(--brand-blue); color: #fff; }
 .dbar-navigate:hover { background: #1d4ed8; }
 .dbar-navigate:disabled { background: #cbd5e1; cursor: not-allowed; }
@@ -647,5 +661,14 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   .detail-empty,
   .dcard-summary { grid-column: 1 / -1; }
   .detail-page :deep(.pc-wrap) { grid-column: 1 / -1; }
+}
+
+@media (min-width: 769px) {
+  .detail-bottom-bar {
+    min-height: var(--desktop-action-bar-height, 72px);
+    align-items: center;
+    padding: 0.75rem 7rem 0.75rem 1.25rem;
+  }
+  .dbar-btn { min-height: 42px; }
 }
 </style>

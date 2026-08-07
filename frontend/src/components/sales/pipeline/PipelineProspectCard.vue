@@ -42,17 +42,25 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
             <span class="cpt-name">{{ item.placeName }}</span>
             <span class="cpt-industry">{{ item.industryGroup }}</span>
           </div>
-          <div class="cpt-flow">
-            <template v-if="prv()">
-              <span class="cpt-flow-prev" :title="`Previous: ${stageLabel(prv()!)}`">{{ stageLabel(prv()!) }}</span>
-              <i class="pi pi-arrow-right cpt-flow-arr" />
-            </template>
-            <span class="cpt-flow-current" :style="{ color: stageTone(item.status).fg }">{{ stageLabel(item.status) }}</span>
-            <template v-if="nxt()">
-              <i class="pi pi-arrow-right cpt-flow-arr" />
-              <span class="cpt-flow-next" :title="`Next: ${stageLabel(nxt()!)}`">{{ stageLabel(nxt()!) }}</span>
-            </template>
-          </div>
+        </div>
+        <p class="cpt-address"><i class="pi pi-map-marker" /> <span>{{ item.formattedAddress }}</span></p>
+        <div class="cpt-meta">
+          <span><i class="pi pi-user" /> {{ item.assignedSalesExecutive || 'Assigned to you' }}</span>
+          <span
+            class="cpt-stage"
+            :style="{ background: stageTone(item.status).bg, color: stageTone(item.status).fg, borderColor: stageTone(item.status).border }"
+          >{{ stageLabel(item.status) }}</span>
+        </div>
+        <div class="cpt-flow">
+          <template v-if="prv()">
+            <span class="cpt-flow-prev" :title="`Previous: ${stageLabel(prv()!)}`">{{ stageLabel(prv()!) }}</span>
+            <i class="pi pi-arrow-right cpt-flow-arr" />
+          </template>
+          <span class="cpt-flow-current" :style="{ color: stageTone(item.status).fg }">{{ stageLabel(item.status) }}</span>
+          <template v-if="nxt()">
+            <i class="pi pi-arrow-right cpt-flow-arr" />
+            <span class="cpt-flow-next" :title="`Next: ${stageLabel(nxt()!)}`">{{ stageLabel(nxt()!) }}</span>
+          </template>
         </div>
         <div class="cpt-actions">
           <button
@@ -209,19 +217,28 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 
 /* ── COMPACT (DESKTOP) ── */
 .pipeline-card--compact {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   padding: 0;
-  border-radius: 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 .cpt-body {
+  box-sizing: border-box;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 0.42rem;
+  padding: 0.62rem;
 }
 .cpt-row-top {
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 .cpt-avatar {
   width: 30px; height: 30px;
@@ -238,27 +255,96 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
   gap: 1px;
 }
 .cpt-name {
-  font-size: 0.78rem; font-weight: 700; color: #1e293b;
+  font-size: 0.72rem; font-weight: 750; color: #0f172a;
+  line-height: 1.35;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .cpt-industry {
-  font-size: 0.6rem; color: #94a3b8;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.13rem 0.4rem;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cpt-address {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 0.28rem;
+  margin: 0;
+  color: #64748b;
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+.cpt-address i {
+  margin-top: 0.1rem;
+  color: #94a3b8;
+  font-size: 0.58rem;
+}
+.cpt-address span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.cpt-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+  color: #94a3b8;
+  font-size: 0.56rem;
+}
+.cpt-meta > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cpt-meta i {
+  font-size: 0.56rem;
+}
+.cpt-stage {
+  flex: 0 0 auto;
+  max-width: 46%;
+  overflow: hidden;
+  padding: 0.12rem 0.38rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.52rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .cpt-flow {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 0.24rem;
+  min-width: 0;
+  padding: 0.34rem 0.45rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  overflow: hidden;
 }
 .cpt-flow-prev, .cpt-flow-next {
-  font-size: 0.6rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.56rem;
   font-weight: 500;
   color: #94a3b8;
   white-space: nowrap;
 }
 .cpt-flow-current {
-  font-size: 0.65rem;
+  flex: 0 0 auto;
+  font-size: 0.58rem;
   font-weight: 800;
   white-space: nowrap;
   padding: 1px 6px;
@@ -272,13 +358,19 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 
 /* ── COMPACT ACTIONS ── */
 .cpt-actions {
+  min-width: 0;
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+  padding-top: 0.38rem;
+  border-top: 1px solid #edf1f5;
 }
 .cpt-lost-row {
+  box-sizing: border-box;
+  min-width: 0;
   display: flex;
   justify-content: flex-end;
-  padding: 0 12px 6px;
+  padding: 0 0.62rem 0.54rem;
 }
 
 /* ── SHARED ACTION BUTTONS ── */
@@ -298,6 +390,23 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
   min-height: 36px;
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+}
+.pipeline-card--compact .pact {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0.36rem 0.46rem;
+  border-radius: 7px;
+  font-size: 0.56rem;
+}
+.pipeline-card--compact .pact i { font-size: 0.58rem; }
+.pipeline-card--compact .pact-detail { flex-basis: 100%; }
+.pipeline-card--compact .pact-lost { min-height: 28px; }
+.pipeline-card--compact .pact span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pact:active { transform: scale(0.97); }
 .pact i { font-size: 0.65rem; }
@@ -409,7 +518,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 .cm-actions-row .pact { flex: 1; }
 
 /* ── RESPONSIVE ── */
-@media (max-width: 1023px) {
+@media (max-width: 768px) {
   .pipeline-card--compact .cpt-body,
   .pipeline-card--compact .cpt-lost-row {
     display: none;

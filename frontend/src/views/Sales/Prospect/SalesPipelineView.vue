@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -47,14 +47,17 @@ const sortOption = ref('updatedAt-desc')
 const currentPage = ref(1)
 const pageSize = ref(15)
 const showFilters = ref(false)
-const isDesktop = ref(window.innerWidth >= 1024)
+const DESKTOP_BREAKPOINT = 769
+const isDesktop = ref(window.innerWidth >= DESKTOP_BREAKPOINT)
 
 const draftFilters = ref({ industryGroup: '', visitStatus: '' })
 const appliedFilters = ref({ industryGroup: '', visitStatus: '' })
 
-window.addEventListener('resize', () => {
-  isDesktop.value = window.innerWidth >= 1024
-})
+function updateViewportMode() {
+  isDesktop.value = window.innerWidth >= DESKTOP_BREAKPOINT
+}
+
+window.addEventListener('resize', updateViewportMode)
 
 const prospects = computed(() => crm.myProspects.filter(item => item.status !== 'CONVERTED'))
 
@@ -141,6 +144,12 @@ const paginatedProspects = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedFiltered.value.slice(start, start + pageSize.value)
 })
+
+const boardStages = computed(() => BOARD_STATUSES)
+
+function prospectsForStage(stage: ProspectStatus) {
+  return sortedFiltered.value.filter(item => item.status === stage)
+}
 
 const stageHeaderLabel = computed(() => {
   if (activeGroup.value === 'ALL') return 'All prospects'
@@ -306,6 +315,10 @@ onMounted(async () => {
     }
   } catch (caught) { error.value = crm.errorMessage(caught) }
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewportMode)
+})
 </script>
 
 <template>
@@ -331,7 +344,7 @@ onMounted(async () => {
 
     <template v-else>
       <!-- ── GROUP TABS ── -->
-      <div class="pg-tabs">
+      <div class="pg-tabs pl-mobile-only">
         <button
           v-for="group in (['ALL', 'NEW_LEAD', 'IN_PROGRESS', 'WON', 'LOST'] as PipelineGroup[])"
           :key="group"
@@ -345,7 +358,7 @@ onMounted(async () => {
       </div>
 
       <!-- ── SECONDARY STAGE SELECTOR (IN PROGRESS only) ── -->
-      <div v-if="activeGroup === 'IN_PROGRESS'" class="pl-secondary">
+      <div v-if="activeGroup === 'IN_PROGRESS'" class="pl-secondary pl-mobile-only">
         <template v-if="isDesktop">
           <div class="ps-chips">
             <button
@@ -377,7 +390,7 @@ onMounted(async () => {
       </div>
 
       <!-- ── NEEDS ATTENTION ── -->
-      <div v-if="activeGroup === 'ALL' && needsAttentionProspects.length" class="pl-attention">
+      <div v-if="activeGroup === 'ALL' && needsAttentionProspects.length" class="pl-attention pl-mobile-only">
         <div class="pl-attention-head">
           <i class="pi pi-exclamation-circle" />
           <strong>Needs attention</strong>
@@ -412,13 +425,60 @@ onMounted(async () => {
       </div>
 
       <!-- ── STAGE HEADER ── -->
-      <div class="pl-stage-header">
+      <section class="pl-board-shell pl-desktop-only">
+        <div class="pl-board-heading">
+          <div>
+            <strong>Sales Funnel Board</strong>
+            <span>Assigned prospects grouped by current stage.</span>
+          </div>
+          <span class="pl-board-count">{{ totalFiltered }} prospects</span>
+        </div>
+
+        <div class="pl-board">
+          <section
+            v-for="stage in boardStages"
+            :key="stage"
+            class="pl-board-column"
+          >
+            <header class="pl-column-header">
+              <div>
+                <span class="pl-stage-dot" />
+                <strong>{{ stageLabel(stage) }}</strong>
+              </div>
+              <span class="pl-column-count">{{ prospectsForStage(stage).length }}</span>
+            </header>
+
+            <div class="pl-column-body">
+              <PipelineProspectCard
+                v-for="item in prospectsForStage(stage)"
+                :key="item.id"
+                :item="item"
+                :highlight="highlightId === item.id"
+                :compact="true"
+                @move-next="(i) => { const s = nextStage(i.status); if (s) openTransition(i, s) }"
+                @move-prev="(i) => { const s = previousStage(i.status); if (s) openTransition(i, s) }"
+                @mark-lost="(i) => openTransition(i, 'LOST')"
+                @mark-won="(i) => openTransition(i, 'WON')"
+                @view-detail="viewDetail"
+              />
+
+              <div v-if="!prospectsForStage(stage).length" class="pl-column-empty">
+                <i class="pi pi-inbox" />
+                <strong>No prospects</strong>
+                <span>No records match this stage.</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div class="pl-stage-header pl-mobile-only">
         <span class="pl-stage-title">{{ stageHeaderLabel }}</span>
         <span class="pl-stage-count">{{ stageHeaderCount }}</span>
       </div>
 
       <!-- ── LIST ── -->
-      <div class="pl-list">
+      <div class="pl-list pl-mobile-only">
         <template v-for="item in paginatedProspects" :key="item.id">
           <PipelineProspectCard
             v-if="isDesktop"
@@ -465,7 +525,7 @@ onMounted(async () => {
       </div>
 
       <!-- ── PAGINATION ── -->
-      <div v-if="totalFiltered > 0" class="pl-pagination">
+      <div v-if="totalFiltered > 0" class="pl-pagination pl-mobile-only">
         <template v-if="isDesktop">
           <span class="pl-page-info">Showing {{ pageStart }}–{{ pageEnd }} of {{ totalFiltered }}</span>
           <div class="pl-page-controls">
@@ -557,6 +617,7 @@ onMounted(async () => {
 
 <style scoped>
 .pl-page { padding: 0 0 24px; }
+.pl-desktop-only { display: none; }
 
 /* ── BACK ── */
 .pl-back {
@@ -727,6 +788,163 @@ onMounted(async () => {
 /* ── LIST ── */
 .pl-list { display: flex; flex-direction: column; gap: 8px; }
 
+/* â”€â”€ DESKTOP BOARD â”€â”€ */
+.pl-board-shell {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.pl-board-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #e5eaf0;
+  background: #f8fafc;
+}
+
+.pl-board-heading > div {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.pl-board-heading strong {
+  color: #0f172a;
+  font-size: 0.76rem;
+}
+
+.pl-board-heading span {
+  color: #94a3b8;
+  font-size: 0.6rem;
+}
+
+.pl-board-count {
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569 !important;
+  font-size: 0.58rem !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pl-board {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.55rem;
+  display: grid;
+  grid-auto-columns: 252px;
+  grid-auto-flow: column;
+  align-items: start;
+  gap: 0.6rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  background: #f8fafc;
+}
+
+.pl-board-column {
+  box-sizing: border-box;
+  width: 252px;
+  min-width: 252px;
+  height: fit-content;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #eef3f8;
+  scroll-snap-align: start;
+}
+
+.pl-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  min-height: 40px;
+  padding: 0.52rem 0.62rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.pl-column-header > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.pl-column-header strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pl-stage-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px #dbeafe;
+}
+
+.pl-column-count {
+  min-width: 1.5rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.pl-column-body {
+  box-sizing: border-box;
+  padding: 0.46rem;
+  display: grid;
+  align-content: start;
+  gap: 0.48rem;
+}
+
+.pl-column-empty {
+  min-height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  margin: 0;
+  padding: 0.7rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.pl-column-empty i {
+  font-size: 1rem;
+}
+
+.pl-column-empty strong {
+  color: #64748b;
+  font-size: 0.66rem;
+}
+
+.pl-column-empty span {
+  font-size: 0.56rem;
+}
+
 /* ── EMPTY ── */
 .pl-empty { display: flex; flex-direction: column; align-items: center; padding: 40px 20px; text-align: center; }
 .pl-empty-icon { width: 48px; height: 48px; border-radius: 14px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
@@ -799,12 +1017,53 @@ onMounted(async () => {
 }
 
 /* ── DESKTOP ── */
-@media (min-width: 1024px) {
+@media (min-width: 769px) {
   .pl-back { display: none; }
-  .pl-page { padding: 0 0 32px; }
+  .pl-page {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 0 0 32px;
+    overflow-x: hidden;
+  }
+  .pl-desktop-only { display: block; }
+  .pl-mobile-only { display: none !important; }
+  .pl-header {
+    align-items: center;
+    margin-bottom: 0.45rem;
+    padding: 0.64rem 0.82rem;
+    border: 1px solid #e5eaf0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
   .pl-title { font-size: 1.5rem; }
   .pl-eyebrow { font-size: 0.75rem; }
   .pl-total-badge { font-size: 0.75rem; }
+  .pl-toolbar {
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+    padding: 0.46rem;
+    border: 1px solid #e5eaf0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+  .pl-search {
+    height: 36px;
+    padding: 0 0.75rem;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .pl-toolbar-actions { gap: 0.5rem; }
+  .pl-tb-btn,
+  .pl-sort-select {
+    height: 36px;
+    border-radius: 8px;
+  }
+  .pl-sort-select {
+    min-width: 160px;
+    font-size: 0.72rem;
+  }
 
   .pg-tab { min-height: 48px; }
   .pg-tab-label { font-size: 0.74rem; }

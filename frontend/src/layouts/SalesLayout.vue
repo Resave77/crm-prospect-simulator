@@ -150,15 +150,19 @@ function refreshPage() {
 
 <style>
 /* ── Non-scoped: global desktop adjustments for Sales fixed elements ── */
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .sales-layout .detail-bottom-bar {
-    left: var(--sales-shell-sidebar-w, 0px);
-    right: 0;
-    width: auto;
+    left: var(--sales-shell-sidebar-w, 0px) !important;
+    right: 0 !important;
+    width: auto !important;
+    padding-right: calc(7rem + env(safe-area-inset-right, 0px)) !important;
   }
   .sales-layout .mp-fab,
-  .sales-layout .mc-fab {
-    bottom: 1.5rem;
+  .sales-layout .mc-fab,
+  .sales-layout .sales-chat-fab,
+  .sales-layout .chat-fab,
+  .sales-layout .pc-launcher {
+    bottom: calc(var(--desktop-action-bar-height, 0px) + 1rem);
     right: 1.5rem;
   }
   .sales-layout .p-toast-top-right {
@@ -171,7 +175,66 @@ function refreshPage() {
   top: 1rem;
   right: 1.5rem;
 }
-@media (max-width: 767px) {
+@media (max-width: 768px) {
+  .sales-layout .mp-fab,
+  .sales-layout .mc-fab,
+  .sales-layout .sales-chat-fab,
+  .sales-layout .chat-fab,
+  .sales-layout .pc-launcher {
+    right: calc(1rem + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 2rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout .pc-wrap {
+    bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 1rem + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(100dvh - var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout .detail-page {
+    padding-bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 5.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout .detail-bottom-bar {
+    left: 1rem;
+    right: 1rem;
+    bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 0.9rem + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto;
+    z-index: 90;
+    border: 1px solid rgba(191, 219, 254, 0.95);
+    border-radius: 14px;
+    padding: 0.55rem;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  }
+  .sales-layout .detail-bottom-bar .dbar-btn {
+    min-height: 44px;
+  }
+  .sales-layout:has(.detail-bottom-bar) .pc-launcher {
+    bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 5.35rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout:has(.detail-bottom-bar) .pc-wrap {
+    bottom: calc(var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) + 4.35rem + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(100dvh - var(--mobile-bottom-nav-height, var(--sales-nav-height, 78px)) - 5.35rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout .leaflet-container {
+    z-index: 0;
+  }
+  .sales-layout .leaflet-tile-pane {
+    z-index: 1 !important;
+  }
+  .sales-layout .leaflet-overlay-pane {
+    z-index: 2 !important;
+  }
+  .sales-layout .leaflet-shadow-pane {
+    z-index: 3 !important;
+  }
+  .sales-layout .leaflet-marker-pane {
+    z-index: 4 !important;
+  }
+  .sales-layout .leaflet-tooltip-pane {
+    z-index: 5 !important;
+  }
+  .sales-layout .leaflet-popup-pane,
+  .sales-layout .leaflet-control-container {
+    z-index: 6 !important;
+  }
   .sales-layout .p-toast {
     left: 1rem;
     right: 1rem;
@@ -189,6 +252,8 @@ function refreshPage() {
 .sales-layout {
   --sales-shell-sidebar-w: 0px;
   --sales-nav-height: 78px;
+  --mobile-bottom-nav-height: 78px;
+  --desktop-action-bar-height: 72px;
   display: flex;
   min-height: 100vh;
   min-height: 100dvh;
@@ -216,7 +281,8 @@ function refreshPage() {
   border-radius: 24px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 0.45rem;
+  min-height: var(--mobile-bottom-nav-height);
+  padding: 0.42rem 0.45rem;
   box-shadow:
     0 18px 42px rgba(15, 23, 42, 0.14),
     0 4px 12px rgba(15, 23, 42, 0.06);
@@ -231,7 +297,7 @@ function refreshPage() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.18rem;
+  gap: 0.2rem;
   color: var(--text-muted);
   text-decoration: none;
   font-size: 0.66rem;
@@ -241,7 +307,11 @@ function refreshPage() {
 }
 
 .sales-nav .nav-item i {
-  font-size: 1.18rem;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1rem;
   transition:
     color 0.2s ease,
     transform 0.2s ease;
@@ -278,10 +348,11 @@ function refreshPage() {
 }
 
 /* ── Desktop Breakpoint ───────────────────────────────────────── */
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .sales-layout {
     --sales-shell-sidebar-w: 240px;
     --sales-nav-height: 0px;
+    --mobile-bottom-nav-height: 0px;
     --sales-topbar-h: 56px;
   }
 

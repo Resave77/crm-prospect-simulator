@@ -337,7 +337,7 @@ onMounted(async () => {
       </div>
     </template>
 
-    <button class="mc-fab" @click="openFilterSheet" aria-label="Open filter panel">
+    <button class="mc-fab" @click="openFilterSheet" aria-label="Open filter panel" title="Open filters">
       <i class="pi pi-filter" />
       <span v-if="activeFilterCount()" class="mc-fab-badge">{{ activeFilterCount() }}</span>
     </button>
@@ -595,14 +595,15 @@ onMounted(async () => {
 @keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .mc-fab {
-  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  right: 1rem;
+  position: fixed; bottom: calc(var(--mobile-bottom-nav-height, 78px) + 1rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #059669, #047857); color: #fff;
-  font-size: 1.1rem; cursor: pointer; z-index: 50;
+  font-size: 1.15rem; cursor: pointer; z-index: 50;
   box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35);
   display: grid; place-items: center; transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+.mc-fab i { font-size: 1.15rem; line-height: 1; }
 .mc-fab:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45); }
 .mc-fab-badge {
   position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px;
@@ -701,7 +702,7 @@ onMounted(async () => {
 @keyframes mc-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
 /* ── Desktop ───────────────────────────────────────────────── */
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .mc-back { display: none; }
   .mc-page { gap: 1.1rem; }
 
@@ -738,5 +739,9 @@ onMounted(async () => {
     box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
   }
   .mc-sheet-handle { display: none; }
+  .mc-fab {
+    bottom: calc(var(--desktop-action-bar-height, 0px) + 1rem);
+    right: 1.5rem;
+  }
 }
 </style>

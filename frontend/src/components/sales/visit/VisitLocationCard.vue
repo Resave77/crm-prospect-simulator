@@ -161,15 +161,16 @@ onBeforeUnmount(() => cleanup())
 </style>
 
 <style scoped>
-.vlm-wrapper { width: 100%; min-width: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light, #e2e8f0); position: relative; isolation: isolate; z-index: 0; touch-action: pan-x pan-y; }
+.vlm-wrapper { width: 100%; min-width: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-light, #e2e8f0); position: relative; isolation: isolate; z-index: 0; touch-action: pan-x pan-y; background: #f8fafc; }
 .vlm-container { width: 100%; height: 100%; }
 .vlm-empty { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; background: #f1f5f9; color: #94a3b8; font-size: 0.78rem; }
 .vlm-empty i { font-size: 1.4rem; }
 .vlm-legend {
-  position: absolute; bottom: 6px; left: 6px; z-index: 10;
-  display: flex; gap: 0.55rem; padding: 0.3rem 0.6rem; border-radius: 8px;
+  position: absolute; bottom: 8px; left: 8px; right: 8px; z-index: 10;
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.55rem; width: fit-content; max-width: calc(100% - 16px);
+  padding: 0.34rem 0.6rem; border-radius: 8px;
   background: rgba(255,255,255,0.92); backdrop-filter: blur(4px);
-  font-size: 0.6rem; color: #475569; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  font-size: 0.6rem; line-height: 1.2; color: #475569; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 .vlm-legend-item { display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
 .vlm-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }

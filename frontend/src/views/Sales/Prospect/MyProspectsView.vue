@@ -551,7 +551,7 @@ onMounted(async () => {
     </Dialog>
 
     <!-- FAB filter -->
-    <button class="mp-fab" @click="openFilterSheet" aria-label="Open filter panel">
+    <button class="mp-fab" @click="openFilterSheet" aria-label="Open filter panel" title="Open filters">
       <i class="pi pi-filter" />
       <span v-if="activeFilterCount()" class="mp-fab-badge">{{ activeFilterCount() }}</span>
     </button>
@@ -880,14 +880,15 @@ onMounted(async () => {
 
 /* ── FAB ───────────────────────────────────────────────────── */
 .mp-fab {
-  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  right: 1rem;
+  position: fixed; bottom: calc(var(--mobile-bottom-nav-height, 78px) + 1rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
   width: 48px; height: 48px; border-radius: 50%; border: 0;
   background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
-  font-size: 1.1rem; cursor: pointer; z-index: 50;
+  font-size: 1.15rem; cursor: pointer; z-index: 50;
   box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
   display: grid; place-items: center; transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+.mp-fab i { font-size: 1.15rem; line-height: 1; }
 .mp-fab:hover { transform: scale(1.08); box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45); }
 .mp-fab-badge {
   position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px;
@@ -995,7 +996,7 @@ onMounted(async () => {
 }
 
 /* ── Desktop ───────────────────────────────────────────────── */
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .mp-back { display: none; }
   .mp-page { gap: 1.1rem; }
 
@@ -1042,5 +1043,9 @@ onMounted(async () => {
     box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
   }
   .mp-sheet-handle { display: none; }
+  .mp-fab {
+    bottom: calc(var(--desktop-action-bar-height, 0px) + 1rem);
+    right: 1.5rem;
+  }
 }
 </style>
