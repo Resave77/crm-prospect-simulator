@@ -242,6 +242,7 @@ async function submit() {
   error.value = ''
   try {
     const item = await crm.transition(selected.value.id, target.value, notes.value)
+    await crm.loadMyProspects()
     success.value = `${item.placeName} moved to ${stageLabel(item.status)}.`
     successTarget.value = item.status
     selected.value = null
