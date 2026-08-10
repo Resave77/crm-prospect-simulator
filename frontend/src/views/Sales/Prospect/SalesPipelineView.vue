@@ -90,6 +90,12 @@ const secondaryCounts = computed(() => {
 })
 
 const groupFiltered = computed(() => {
+  // Desktop renders the complete funnel board at once.
+  // Route-entry helpers (for example after checkout) may set activeGroup /
+  // secondaryStage to focus a prospect, but those mobile-oriented filters
+  // must never hide the other desktop board columns.
+  if (isDesktop.value) return prospects.value
+
   switch (activeGroup.value) {
     case 'NEW_LEAD': return prospects.value.filter(p => p.status === 'NEW_LEAD')
     case 'IN_PROGRESS': return prospects.value.filter(p => IN_PROGRESS_STAGES.includes(p.status))
@@ -100,7 +106,15 @@ const groupFiltered = computed(() => {
 })
 
 const secondaryFiltered = computed(() => {
-  if (activeGroup.value !== 'IN_PROGRESS' || secondaryStage.value === 'ALL_PROGRESS') return groupFiltered.value
+  // Secondary stage selection is a mobile list concern. On desktop, every
+  // pipeline stage must remain visible even when the page was entered with
+  // ?prospectId=...&action=update.
+  if (isDesktop.value) return groupFiltered.value
+
+  if (activeGroup.value !== 'IN_PROGRESS' || secondaryStage.value === 'ALL_PROGRESS') {
+    return groupFiltered.value
+  }
+
   return groupFiltered.value.filter(p => p.status === secondaryStage.value)
 })
 
@@ -243,6 +257,13 @@ async function submit() {
   try {
     const item = await crm.transition(selected.value.id, target.value, notes.value)
     await crm.loadMyProspects()
+
+    if (!isDesktop.value) {
+      const group = groupFromStatus(item.status)
+      activeGroup.value = group
+      secondaryStage.value = group === 'IN_PROGRESS' ? item.status : 'ALL_PROGRESS'
+    }
+
     success.value = `${item.placeName} moved to ${stageLabel(item.status)}.`
     successTarget.value = item.status
     selected.value = null
@@ -292,30 +313,72 @@ const SORT_OPTIONS = [
   { value: 'stage-order', label: 'Stage order' },
 ]
 
+async function handlePipelineEntry() {
+  await crm.loadMyProspects()
+
+  const qId = route.query.prospectId as string | undefined
+  const qAction = route.query.action as string | undefined
+
+  if (!qId || qAction !== 'update') return
+
+  highlightId.value = qId
+
+  const found = prospects.value.find((p) => p.id === qId)
+
+  if (found) {
+    const group = groupFromStatus(found.status)
+
+    activeGroup.value = group
+    secondaryStage.value = group === 'IN_PROGRESS' ? found.status : 'ALL_PROGRESS'
+
+    await nextTick()
+
+    const el = document.getElementById(`prospect-card-${qId}`)
+    if (el) {
+      el.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+
+    const name = found.placeName || 'prospect'
+    success.value = `Visit completed. Review ${name} and move it to the next stage when ready.`
+  } else {
+    success.value = 'Prospect updated — review and move to the next stage when ready.'
+  }
+
+  window.setTimeout(() => {
+    if (highlightId.value === qId) {
+      highlightId.value = null
+    }
+  }, 4000)
+}
+
 onMounted(async () => {
   try {
-    await crm.loadMyProspects()
+    await handlePipelineEntry()
+  } catch (caught) {
+    error.value = crm.errorMessage(caught)
+  }
+})
+
+watch(
+  () => route.fullPath,
+  async (fullPath, previousFullPath) => {
+    if (fullPath === previousFullPath) return
+
     const qId = route.query.prospectId as string | undefined
     const qAction = route.query.action as string | undefined
-    if (qId && qAction === 'update') {
-      highlightId.value = qId
-      const found = prospects.value.find(p => p.id === qId)
-      if (found) {
-        const g = groupFromStatus(found.status)
-        activeGroup.value = g
-        if (g === 'IN_PROGRESS') secondaryStage.value = found.status
-        await nextTick()
-        const el = document.getElementById(`prospect-card-${qId}`)
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        const name = found.placeName || 'prospect'
-        success.value = `Visit completed. Review ${name} and move it to the next stage when ready.`
-      } else {
-        success.value = 'Prospect updated — review and move to the next stage when ready.'
-      }
-      setTimeout(() => { highlightId.value = null }, 4000)
+
+    if (!qId || qAction !== 'update') return
+
+    try {
+      await handlePipelineEntry()
+    } catch (caught) {
+      error.value = crm.errorMessage(caught)
     }
-  } catch (caught) { error.value = crm.errorMessage(caught) }
-})
+  },
+)
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportMode)
@@ -789,7 +852,7 @@ onBeforeUnmount(() => {
 /* ── LIST ── */
 .pl-list { display: flex; flex-direction: column; gap: 8px; }
 
-/* â”€â”€ DESKTOP BOARD â”€â”€ */
+/* ── DESKTOP BOARD ── */
 .pl-board-shell {
   min-width: 0;
   overflow: hidden;

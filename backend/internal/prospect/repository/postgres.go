@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"crm-prospect-simulator/backend/internal/prospect/model"
 	"github.com/google/uuid"
@@ -532,6 +533,13 @@ func isForeignKeyViolation(err error) bool {
 	return errors.As(err, &pgError) && pgError.Code == "23503"
 }
 
+func isUndefinedColumn(err error, column string) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) &&
+		pgError.Code == "42703" &&
+		(pgError.ColumnName == column || strings.Contains(pgError.Message, `"`+column+`"`))
+}
+
 func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, salesExecID uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE prospects SET deletion_requested = TRUE, updated_at = now()
@@ -688,6 +696,9 @@ func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.
 		WHERE prospect_id = $1
 		ORDER BY photo_index ASC`, prospectID)
 	if err != nil {
+		if isUndefinedColumn(err, "photo_index") {
+			return []model.ProspectPhotoTag{}, nil
+		}
 		return nil, fmt.Errorf("list prospect photo tags: %w", err)
 	}
 	defer rows.Close()
@@ -714,6 +725,9 @@ func (r *PostgresRepository) UpsertPhotoTag(ctx context.Context, prospectID uuid
 		id, prospectID, photoIndex, category, userID).
 		Scan(&item.ID, &item.ProspectID, &item.PhotoIndex, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
+		if isUndefinedColumn(err, "photo_index") {
+			return model.ProspectPhotoTag{}, ErrPhotoTagSchemaUnsupported
+		}
 		return model.ProspectPhotoTag{}, fmt.Errorf("upsert prospect photo tag: %w", err)
 	}
 	return item, nil

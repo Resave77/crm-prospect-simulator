@@ -739,9 +739,12 @@ onMounted(async () => {
     box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
   }
   .mc-sheet-handle { display: none; }
-  .mc-fab {
-    bottom: calc(var(--desktop-action-bar-height, 0px) + 1rem);
-    right: 1.5rem;
+  .mc-fab { display: none; }
+}
+
+@media (min-width: 1280px) {
+  .mc-card-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

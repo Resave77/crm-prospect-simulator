@@ -563,7 +563,13 @@ func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
 	}
-	item, err := h.service.Review(c.UserContext(), actor(c), id)
+	currentActor := actor(c)
+	var item prospectmodel.Review
+	if currentActor.Role.IsAdminRole() {
+		item, err = h.service.Review(c.UserContext(), currentActor, id)
+	} else {
+		item, err = h.service.MyProspect(c.UserContext(), currentActor, id)
+	}
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -617,6 +623,8 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())
+	case errors.Is(err, repository.ErrPhotoTagSchemaUnsupported):
+		return response.Error(c, fiber.StatusServiceUnavailable, "PHOTO_TAGGING_UNAVAILABLE", "Photo tagging is unavailable with the current database schema.")
 	case errors.Is(err, service.ErrProspectStatus), errors.Is(err, repository.ErrInvalidStatus):
 		return response.Error(c, fiber.StatusConflict, "PROSPECT_STATUS_INVALID", "The prospect stage changed or this transition is not allowed.")
 	case errors.Is(err, repository.ErrNotFound):

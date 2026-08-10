@@ -596,7 +596,7 @@ async function executeDelete() {
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
       </template>
     </Dialog>
-    <ProspectComments v-if="detail?.customer.sourceProspectId" :prospect-id="detail.customer.sourceProspectId" role="ADMINISTRATOR" />
+    <ProspectComments v-if="detail?.customer.sourceProspectId" class="admin-comments-section" :prospect-id="detail.customer.sourceProspectId" role="ADMINISTRATOR" embedded />
   </section>
 </template>
 
@@ -607,6 +607,14 @@ async function executeDelete() {
   gap: 1.25rem;
   padding: 1.75rem 2rem;
   min-height: 100vh;
+}
+
+.admin-comments-section {
+  width: 100%;
+}
+
+.admin-comments-section :deep(.pc-list) {
+  max-height: 420px;
 }
 
 /* ── PAGE HEADER ──────────────────────────────────────────────────── */

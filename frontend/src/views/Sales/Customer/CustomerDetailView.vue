@@ -20,7 +20,10 @@ const placeDetails = ref<PlaceDetails | null>(null)
 const error = ref('')
 const loading = ref(true)
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
+const isDesktop = ref(false)
+const photoGalleryShell = ref<HTMLElement | null>(null)
 let geoWatchId: number | null = null
+let desktopQuery: MediaQueryList | null = null
 const showAllHours = ref(false)
 
 const customer = computed(() => detail.value?.customer)
@@ -34,13 +37,8 @@ const displayEmail = computed(() => {
   return customer.value?.contacts?.[0]?.email ?? ''
 })
 
-const displayContactName = computed(() => {
-  return customer.value?.contacts?.[0]?.name || customer.value?.name || ''
-})
-
-const displayContactPosition = computed(() => {
-  return customer.value?.contacts?.[0]?.position ?? ''
-})
+const siteContacts = computed(() => customer.value?.contacts ?? [])
+const companyContacts = computed(() => parentCompany.value?.contacts ?? [])
 
 const hasCoords = computed(() => {
   return customer.value?.address?.latitude != null && customer.value?.address?.longitude != null
@@ -74,6 +72,10 @@ function acquireGPS() {
   )
 }
 
+function syncDesktop(value: MediaQueryList | MediaQueryListEvent) {
+  isDesktop.value = value.matches
+}
+
 const copied = ref(false)
 const showLegend = ref(false)
 function handleCopy(text: string) {
@@ -82,7 +84,32 @@ function handleCopy(text: string) {
   setTimeout(() => { copied.value = false }, 2000)
 }
 
+function findPhotoScroller() {
+  const root = photoGalleryShell.value
+  if (!root) return null
+
+  const candidates = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]
+  return candidates.find((element) => {
+    const style = window.getComputedStyle(element)
+    return (
+      (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+      element.scrollWidth > element.clientWidth + 8
+    )
+  }) ?? candidates.find((element) => element.scrollWidth > element.clientWidth + 8) ?? null
+}
+
+function scrollPhotos(direction: -1 | 1) {
+  const scroller = findPhotoScroller()
+  if (!scroller) return
+
+  const distance = Math.max(scroller.clientWidth * 0.8, 320)
+  scroller.scrollBy({ left: direction * distance, behavior: 'smooth' })
+}
+
 onMounted(async () => {
+  desktopQuery = window.matchMedia('(min-width: 1024px)')
+  syncDesktop(desktopQuery)
+  desktopQuery.addEventListener('change', syncDesktop)
   acquireGPS()
   try {
     const customerId = String(route.params.id)
@@ -97,7 +124,10 @@ onMounted(async () => {
   } finally { loading.value = false }
 })
 
-onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
+onBeforeUnmount(() => {
+  if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId)
+  desktopQuery?.removeEventListener('change', syncDesktop)
+})
 </script>
 
 <template>
@@ -146,18 +176,18 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <div class="dcard-avatar">{{ initials(customer?.name || 'Customer') }}</div>
           <div class="dcard-identity">
             <p class="eyebrow">Customer Existing</p>
-            <h1>{{ customer?.name }} <DataSourceBadge source="google" /></h1>
-            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }} <DataSourceBadge source="manual" /></small>
+            <h1>{{ customer?.name }} <DataSourceBadge source="google" label="Google" /></h1>
+            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }} <DataSourceBadge source="manual" label="Manual" /></small>
           </div>
         </div>
         <div class="dcard-codes">
-          <div class="dcard-code-item"><span>Customer code <DataSourceBadge source="system" /></span><strong>{{ customer?.customerCode }}</strong></div>
-          <div class="dcard-code-item"><span>Parent code <DataSourceBadge source="system" /></span><strong>{{ customer?.parentCode }}</strong></div>
+          <div class="dcard-code-item"><span>Customer code <DataSourceBadge source="system" label="CRM" /></span><strong>{{ customer?.customerCode }}</strong></div>
+          <div class="dcard-code-item"><span>Parent code <DataSourceBadge source="system" label="CRM" /></span><strong>{{ customer?.parentCode }}</strong></div>
         </div>
         <div class="dcard-tags">
-          <Tag value="ACTIVE" severity="success" /> <DataSourceBadge source="system" />
-          <Tag v-if="customer?.segment" :value="customer.segment" /> <DataSourceBadge source="manual" />
-          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" /> <DataSourceBadge source="google" />
+          <Tag value="ACTIVE" severity="success" />
+          <Tag v-if="customer?.segment" :value="customer.segment" />
+          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" />
           <template v-if="placeDetails">
             <Tag v-if="placeDetails.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
             <Tag v-if="placeDetails.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
@@ -167,13 +197,14 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
       <!-- Google Place Info Card -->
       <div v-if="placeDetails" class="dcard dcard-google-info">
-        <h2>Google Maps Info <DataSourceBadge source="google" /></h2>
+        <div class="dcard-google-heading">
+          <h2>Google Maps Info <DataSourceBadge source="google" label="Google" /></h2>
+        </div>
 
-        <!-- Editorial Summary -->
         <p v-if="placeDetails.editorialSummary" class="dcard-editorial">{{ placeDetails.editorialSummary }}</p>
 
-        <!-- Rating + Website Row -->
-        <div class="dcard-info-grid">
+        <!-- Primary Google actions / summary -->
+        <div class="dcard-info-grid dcard-google-actions">
           <div v-if="placeDetails.rating > 0" class="dcard-info-item">
             <div class="dcard-rating">
               <span class="dcard-rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
@@ -183,62 +214,123 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
               <span class="dcard-rating-count">({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
             </div>
           </div>
+
           <div v-if="placeDetails.websiteUrl" class="dcard-info-item">
             <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="dcard-link">
               <i class="pi pi-external-link" /> Website
             </a>
           </div>
+
           <div v-if="placeDetails.googleMapsUrl" class="dcard-info-item">
             <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="dcard-link">
               <i class="pi pi-map" /> View on Google Maps
             </a>
           </div>
-          <div v-if="placeDetails.phoneNumber" class="dcard-info-item">
+
+          <div v-if="placeDetails.phoneNumber" class="dcard-info-item dcard-phone-item">
             <a :href="`tel:${placeDetails.phoneNumber}`" class="dcard-link">
               <i class="pi pi-phone" /> {{ placeDetails.phoneNumber }}
             </a>
-            <span v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber" class="dcard-intl-phone">
+            <span
+              v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber"
+              class="dcard-intl-phone"
+            >
               International: {{ placeDetails.internationalPhone }}
             </span>
           </div>
         </div>
 
-        <!-- Place Types -->
+        <!-- Google categories -->
         <div v-if="placeDetails.placeTypes?.length" class="dcard-types">
           <span class="dcard-types-label">Categories:</span>
-          <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
+          <Tag
+            v-for="t in placeDetails.placeTypes.slice(0, 6)"
+            :key="t"
+            :value="t.replace(/_/g, ' ')"
+            severity="secondary"
+            class="dcard-type-tag"
+          />
         </div>
 
-        <!-- Extra Fields -->
-        <div class="dcard-rows">
+        <!-- Structured Google detail fields -->
+        <div class="dcard-rows dcard-google-details">
           <div v-if="placeDetails.placeName" class="dcard-row">
             <i class="pi pi-building" />
             <span><strong>Google place:</strong> {{ placeDetails.placeName }}</span>
           </div>
+
           <div v-if="placeDetails.placeCategory" class="dcard-row">
             <i class="pi pi-tag" />
             <span><strong>Category:</strong> {{ placeDetails.placeCategory }}</span>
           </div>
+
           <div v-if="placeDetails.formattedAddress" class="dcard-row">
             <i class="pi pi-map-marker" />
             <span><strong>Google address:</strong> {{ placeDetails.formattedAddress }}</span>
           </div>
-          <div v-if="placeDetails.googlePlaceId" class="dcard-row">
-            <i class="pi pi-id-card" />
-            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
-            <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
+
+          <div
+            v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber"
+            class="dcard-row"
+          >
+            <i class="pi pi-phone" />
+            <span><strong>International phone:</strong> {{ placeDetails.internationalPhone }}</span>
           </div>
+
+          <div v-if="placeDetails.googlePlaceId" class="dcard-row dcard-google-place-id-row">
+            <i class="pi pi-id-card" />
+            <span class="dcard-place-id">
+              <span>Google Place ID</span>
+              <code>{{ placeDetails.googlePlaceId }}</code>
+            </span>
+            <button
+              class="dcard-copy-btn"
+              title="Copy Place ID"
+              aria-label="Copy Place ID"
+              @click="handleCopy(placeDetails.googlePlaceId)"
+            >
+              <i class="pi pi-copy" />
+            </button>
+          </div>
+
           <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
             <i class="pi pi-globe" />
-            <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
+            <span>
+              <strong>Time zone:</strong>
+              {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}
+              ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)
+            </span>
+          </div>
+
+          <div
+            v-if="placeDetails.latitude != null && placeDetails.longitude != null"
+            class="dcard-row dcard-row-coords"
+          >
+            <i class="pi pi-compass" />
+            <span>
+              <strong>Google GPS:</strong>
+              {{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}
+            </span>
           </div>
         </div>
       </div>
 
       <!-- Photo Gallery -->
       <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
-        <h2>Photos <DataSourceBadge source="google" /></h2>
-        <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="customer?.sourceProspectId" role="SALES_EXECUTIVE" />
+        <div class="photo-gallery-header">
+          <h2>Photos <DataSourceBadge source="google" /></h2>
+          <div class="photo-gallery-controls" aria-label="Photo gallery navigation">
+            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos left" @click="scrollPhotos(-1)">
+              <i class="pi pi-chevron-left" />
+            </button>
+            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos right" @click="scrollPhotos(1)">
+              <i class="pi pi-chevron-right" />
+            </button>
+          </div>
+        </div>
+        <div ref="photoGalleryShell" class="photo-gallery-shell">
+          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="customer?.sourceProspectId" role="SALES_EXECUTIVE" />
+        </div>
       </div>
 
       <!-- Opening Hours Card -->
@@ -262,7 +354,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Location Card -->
-      <div class="dcard">
+      <div class="dcard dcard-location">
         <div class="dcard-header-row">
           <h2>Location <DataSourceBadge source="google" /></h2>
           <span v-if="distance != null" class="dcard-distance-pill">
@@ -286,12 +378,14 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Contact Card -->
-      <div class="dcard">
+      <div class="dcard dcard-contact">
         <h2>Contact & Address</h2>
-        <div v-if="displayContactName || displayPhone || displayEmail" class="dcard-contact-section">
-          <div v-if="displayContactName" class="dcard-row"><i class="pi pi-user" /><span><strong>{{ displayContactName }}</strong><template v-if="displayContactPosition"> · {{ displayContactPosition }}</template> <DataSourceBadge source="manual" /></span></div>
-          <div v-if="displayPhone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${displayPhone}`">{{ displayPhone }}</a> <DataSourceBadge source="google" /></div>
-          <div v-if="displayEmail" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${displayEmail}`">{{ displayEmail }}</a> <DataSourceBadge source="manual" /></div>
+        <div v-if="siteContacts.length" class="dcard-contact-section">
+          <div v-for="(contact, idx) in siteContacts" :key="idx" class="dcard-contact-block">
+            <div class="dcard-row"><i class="pi pi-user" /><span><strong>{{ contact.name || customer?.name || 'Unnamed Contact' }}</strong><template v-if="contact.position"> - {{ contact.position }}</template> <DataSourceBadge source="manual" /></span></div>
+            <div v-if="contact.phone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${contact.phone}`">{{ contact.phone }}</a> <DataSourceBadge source="google" /></div>
+            <div v-if="contact.email" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${contact.email}`">{{ contact.email }}</a> <DataSourceBadge source="manual" /></div>
+          </div>
         </div>
         <p v-else class="dcard-empty-text">No contacts on file.</p>
         <div v-if="customer?.address?.previewAddress" class="dcard-address-block">
@@ -302,6 +396,54 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
             <span v-if="customer.address.subDistrict">{{ customer.address.subDistrict }}, </span>
             <span v-if="customer.address.district">{{ customer.address.district }}, </span>
             <span v-if="customer.address.province">{{ customer.address.province }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parent Company -->
+      <div v-if="parentCompany" class="dcard dcard-parent-company">
+        <h2>Parent Company</h2>
+        <div class="dcard-rows">
+          <div class="dcard-row"><i class="pi pi-building" /><span><strong>Company:</strong> {{ parentCompany.name || 'Not provided' }} <DataSourceBadge source="system" /></span></div>
+          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Company code:</strong> {{ parentCompany.parentCode || 'Not provided' }} <DataSourceBadge source="system" /></span></div>
+          <div v-if="parentCompany.termOfPayment" class="dcard-row"><i class="pi pi-credit-card" /><span><strong>Term of payment:</strong> {{ parentCompany.termOfPayment }} <DataSourceBadge source="manual" /></span></div>
+          <div v-if="parentCompany.npwpNumber" class="dcard-row"><i class="pi pi-id-card" /><span><strong>NPWP number:</strong> {{ parentCompany.npwpNumber }} <DataSourceBadge source="manual" /></span></div>
+          <div v-if="parentCompany.npwpName" class="dcard-row"><i class="pi pi-building" /><span><strong>NPWP name:</strong> {{ parentCompany.npwpName }} <DataSourceBadge source="manual" /></span></div>
+          <div v-if="parentCompany.npwpAddress" class="dcard-row"><i class="pi pi-map" /><span><strong>NPWP address:</strong> {{ parentCompany.npwpAddress }} <DataSourceBadge source="manual" /></span></div>
+          <div v-if="parentCompany.address?.previewAddress" class="dcard-row"><i class="pi pi-map-marker" /><span><strong>Company address:</strong> {{ parentCompany.address.previewAddress }} <DataSourceBadge source="manual" /></span></div>
+          <div v-if="parentCompany.address?.province || parentCompany.address?.district || parentCompany.address?.subDistrict || parentCompany.address?.village" class="dcard-row">
+            <i class="pi pi-map" />
+            <span>
+              <strong>Company area:</strong>
+              <template v-if="parentCompany.address.village">{{ parentCompany.address.village }}, </template>
+              <template v-if="parentCompany.address.subDistrict">{{ parentCompany.address.subDistrict }}, </template>
+              <template v-if="parentCompany.address.district">{{ parentCompany.address.district }}, </template>
+              <template v-if="parentCompany.address.province">{{ parentCompany.address.province }}</template>
+              <DataSourceBadge source="manual" />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Company Contacts -->
+      <div v-if="companyContacts.length" class="dcard dcard-company-contacts">
+        <h2>Company Contacts</h2>
+        <div class="dcard-contact-section">
+          <div v-for="(contact, idx) in companyContacts" :key="idx" class="dcard-contact-block">
+            <div class="dcard-row"><i class="pi pi-user" /><span><strong>{{ contact.name || 'Unnamed Contact' }}</strong><template v-if="contact.position"> - {{ contact.position }}</template> <DataSourceBadge source="manual" /></span></div>
+            <div v-if="contact.phone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${contact.phone}`">{{ contact.phone }}</a></div>
+            <div v-if="contact.email" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${contact.email}`">{{ contact.email }}</a></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KAM Assignments -->
+      <div v-if="parentCompany?.kamAssignments?.length" class="dcard dcard-kam">
+        <h2>KAM Assignments</h2>
+        <div class="dcard-contact-section">
+          <div v-for="(kam, idx) in parentCompany.kamAssignments" :key="idx" class="dcard-contact-block">
+            <div class="dcard-row"><i class="pi pi-user" /><span><strong>{{ kam.ownerName || 'Unassigned' }}</strong> <DataSourceBadge source="manual" /></span></div>
+            <div class="dcard-row"><i class="pi pi-calendar" /><span>{{ kam.startMonth }}/{{ kam.startYear }}<template v-if="kam.end"> - {{ kam.end }}</template></span></div>
           </div>
         </div>
       </div>
@@ -328,7 +470,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Service Options -->
-      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services">
+      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services dcard-service-options">
         <h2>Service Options <DataSourceBadge source="google" /></h2>
         <div class="dcard-service-tags">
           <Tag v-if="placeDetails.dineIn" value="Dine In" severity="success" />
@@ -339,7 +481,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Parking & Payment & Accessibility -->
-      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services">
+      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services dcard-amenities">
         <h2>Amenities <DataSourceBadge source="google" /></h2>
         <div class="dcard-amenities-grid">
           <div v-if="placeDetails?.parkingOptions" class="dcard-amenity-section">
@@ -375,7 +517,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Conversion Source -->
-      <div class="dcard">
+      <div class="dcard dcard-conversion">
         <h2>Conversion Source</h2>
         <div class="dcard-rows">
           <div class="dcard-row"><i class="pi pi-user" /><span><strong>Prospect:</strong> {{ detail.sourceProspectName }} <DataSourceBadge source="prospect" /></span></div>
@@ -386,9 +528,12 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
             <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
           </div>
           <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }} <DataSourceBadge source="system" /></span></div>
+          <div class="dcard-row"><i class="pi pi-refresh" /><span><strong>Last updated:</strong> {{ customer?.updatedAt ? new Date(customer.updatedAt).toLocaleString() : '-' }} <DataSourceBadge source="system" /></span></div>
           <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }} <DataSourceBadge source="system" /></span></div>
         </div>
       </div>
+
+      <ProspectComments v-if="customer?.sourceProspectId" class="detail-comments" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" :embedded="isDesktop" />
 
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">
@@ -404,7 +549,6 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </RouterLink>
       </div>
     </template>
-    <ProspectComments v-if="customer?.sourceProspectId" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" />
   </section>
 </template>
 
@@ -459,13 +603,42 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
 /* Google Info */
-.dcard-google-info { border: 1px solid #e0e7ff; background: linear-gradient(135deg, #f5f3ff 0%, var(--surface-card) 100%); }
+.dcard-google-info {
+  border: 1px solid #e0e7ff;
+  background: linear-gradient(135deg, #f5f3ff 0%, var(--surface-card) 100%);
+}
+.dcard-google-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+.dcard-google-heading h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
 .dcard-editorial { margin: 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.55; font-style: italic; }
 .dcard-info-grid { display: grid; gap: 0.4rem; }
-.dcard-info-item { display: flex; align-items: center; gap: 0.5rem; }
+.dcard-info-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dcard-phone-item {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
 .dcard-link { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--brand-blue); text-decoration: none; font-size: 0.8rem; font-weight: 600; }
 .dcard-link:hover { text-decoration: underline; }
-.dcard-intl-phone { color: var(--text-muted); font-size: 0.72rem; }
+.dcard-intl-phone {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
 .dcard-rating { display: flex; align-items: center; gap: 0.35rem; }
 .dcard-rating-num { font-size: 0.95rem; font-weight: 800; color: #f59e0b; }
 .dcard-stars { display: flex; gap: 1px; }
@@ -477,6 +650,51 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 /* Photo Gallery */
 .dcard-photos { border: 1px solid #e0e7ff; }
+
+.photo-gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.photo-gallery-header h2 { margin: 0; }
+
+.photo-gallery-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.photo-scroll-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.photo-scroll-btn:hover {
+  color: var(--brand-blue);
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.photo-scroll-btn i {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.photo-gallery-shell {
+  min-width: 0;
+  overflow: hidden;
+}
 .dcard-photo-scroll {
   display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch; padding-bottom: 0.3rem;
@@ -568,6 +786,13 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 /* Contact */
 .dcard-contact-section { display: grid; gap: 0.45rem; }
+.dcard-contact-block {
+  display: grid;
+  gap: 0.35rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-light);
+}
+.dcard-contact-block:last-child { padding-bottom: 0; border-bottom: none; }
 .dcard-address-block {
   padding: 0.75rem; background: #f8fafc; border-radius: 12px;
   border: 1px solid var(--border-light); margin-top: 0.25rem;
@@ -593,7 +818,7 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 /* ── Bottom Action Bar ───────────────────────────────────── */
 .detail-bottom-bar {
   position: fixed; bottom: 0; left: 0; right: 0;
-  width: 100%; z-index: 40;
+  width: 100%; z-index: 1000;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -640,6 +865,27 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
+  .dcard-google-actions,
+  .dcard-google-details {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dcard-phone-item {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .dcard-reviews-list,
+  .detail-page :deep(.pc-list) {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .photo-scroll-btn {
+    width: 32px;
+    height: 32px;
+  }
+
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }
@@ -649,26 +895,128 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 /* ── Desktop ─────────────────────────────────────────────── */
 @media (min-width: 1024px) {
   .detail-page {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
     padding-bottom: 7rem;
+    align-items: start;
+    align-content: start;
   }
+
   .back-link { display: none; }
+
+  /* Stable full-width flow prevents blank space caused by variable-height cards. */
   .ds-legend,
   .detail-page > .p-message,
   .detail-skeleton,
   .detail-empty,
-  .dcard-summary { grid-column: 1 / -1; }
-  .detail-page :deep(.pc-wrap) { grid-column: 1 / -1; }
+  .dcard,
+  .detail-comments,
+  .detail-page :deep(.pc-wrap) {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1 / -1;
+    align-self: start;
+  }
+
+  /* Use desktop width inside cards instead of pairing variable-height cards. */
+  .dcard-info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.65rem 1rem;
+  }
+
+  .dcard-google-actions {
+    align-items: center;
+    padding: 0.15rem 0;
+  }
+
+  .dcard-google-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1.25rem;
+  }
+
+  .dcard-google-place-id-row {
+    align-items: center;
+  }
+
+  .dcard-google-info .dcard-rows,
+  .dcard-location .dcard-location-rows,
+  .dcard-contact .dcard-rows,
+  .dcard-parent-company .dcard-rows,
+  .dcard-conversion .dcard-rows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1rem;
+  }
+
+  .dcard-google-info .dcard-google-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1.25rem;
+  }
+
+  .dcard-contact-section {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+  }
+
+  .dcard-amenities-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7rem 1rem;
+  }
+
+  .dcard-reviews-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dcard-review {
+    min-width: 0;
+    padding: 0.7rem;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .dcard-review:last-child {
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 0.7rem;
+  }
+
+  .detail-comments {
+    margin-top: 0;
+  }
+
+  .detail-page :deep(.pc-list) {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dcard-photos,
+  .dcard-photos :deep(*) {
+    min-width: 0;
+  }
 }
 
 @media (min-width: 769px) {
   .detail-bottom-bar {
+    left: var(--sidebar-width, 240px);
+    right: 0;
+    width: auto;
     min-height: var(--desktop-action-bar-height, 72px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    padding: 0.75rem 7rem 0.75rem 1.25rem;
+    gap: 0.75rem;
+    padding: 0.65rem 2rem;
   }
-  .dbar-btn { min-height: 42px; }
+
+  .dbar-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    height: 44px;
+    box-sizing: border-box;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
 }
 </style>

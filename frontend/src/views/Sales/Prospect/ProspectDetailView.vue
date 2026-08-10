@@ -8,6 +8,7 @@ import type { ProspectReview, PlaceDetails } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
 import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
+import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { formatPlaceType, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
 import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
@@ -20,10 +21,17 @@ const error = ref('')
 const success = ref('')
 const loading = ref(true)
 const showAllHours = ref(false)
+const showLegend = ref(false)
+const showAllVisits = ref(false)
+const showAllStatusHistory = ref(false)
+const showAllReviews = ref(false)
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
+const isDesktop = ref(false)
+const photoGalleryShell = ref<HTMLElement | null>(null)
 let geoWatchId: number | null = null
+let desktopQuery: MediaQueryList | null = null
 
 const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
 
@@ -43,7 +51,24 @@ const displayTypes = computed(() => {
   return types.filter((t) => !skip.has(t)).slice(0, 5)
 })
 
-const userCoordsForDistance = computed(() => userCoords.value)
+const displayedVisits = computed(() => {
+  const items = review.value?.visits ?? []
+  return showAllVisits.value ? items : items.slice(0, 2)
+})
+
+const displayedStatusHistory = computed(() => {
+  const items = review.value?.history ?? []
+  return showAllStatusHistory.value ? items : items.slice(0, 6)
+})
+
+const displayedReviews = computed(() => {
+  const items = placeDetails.value?.reviews ?? []
+  return showAllReviews.value ? items : items.slice(0, 4)
+})
+
+function syncDesktop(value: MediaQueryList | MediaQueryListEvent) {
+  isDesktop.value = value.matches
+}
 
 function navigate() {
   const p = review.value?.prospect
@@ -71,7 +96,34 @@ function handleCopy(text: string) {
   setTimeout(() => { if (success.value === 'Copied to clipboard.') success.value = '' }, 2000)
 }
 
+function findPhotoScroller() {
+  const root = photoGalleryShell.value
+  if (!root) return null
+
+  const candidates = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]
+
+  return candidates.find((element) => {
+    const style = window.getComputedStyle(element)
+    const canOverflow = style.overflowX === 'auto' || style.overflowX === 'scroll'
+    return canOverflow && element.scrollWidth > element.clientWidth + 8
+  }) ?? candidates.find((element) => element.scrollWidth > element.clientWidth + 8) ?? null
+}
+
+function scrollPhotos(direction: -1 | 1) {
+  const scroller = findPhotoScroller()
+  if (!scroller) return
+
+  const distance = Math.max(scroller.clientWidth * 0.8, 320)
+  scroller.scrollBy({
+    left: direction * distance,
+    behavior: 'smooth',
+  })
+}
+
 onMounted(async () => {
+  desktopQuery = window.matchMedia('(min-width: 1024px)')
+  syncDesktop(desktopQuery)
+  desktopQuery.addEventListener('change', syncDesktop)
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
@@ -84,7 +136,10 @@ onMounted(async () => {
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
 
-onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId) })
+onBeforeUnmount(() => {
+  if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId)
+  desktopQuery?.removeEventListener('change', syncDesktop)
+})
 </script>
 
 <template>
@@ -93,6 +148,19 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
+
+    <!-- Data Source Legend -->
+    <div class="ds-legend">
+      <button class="ds-legend-toggle" @click="showLegend = !showLegend">
+        <i class="pi pi-info-circle" /> Data source legend
+        <i :class="showLegend ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+      </button>
+      <div v-if="showLegend" class="ds-legend-body">
+        <div class="ds-legend-item"><DataSourceBadge source="google" /> <span>Data imported from Google Maps / Places</span></div>
+        <div class="ds-legend-item"><DataSourceBadge source="manual" /> <span>Data entered or updated by the sales/admin team</span></div>
+        <div class="ds-legend-item"><DataSourceBadge source="system" /> <span>Generated automatically by CRM</span></div>
+      </div>
+    </div>
 
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>
@@ -114,21 +182,92 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       <div class="dcard dcard-summary">
         <div class="dcard-summary-top">
           <div class="dcard-avatar dcard-avatar-prospect">{{ initials(review.prospect.placeName || 'Prospect') }}</div>
+
           <div class="dcard-identity">
-            <p class="eyebrow">Prospect</p>
-            <h1>{{ review.prospect.placeName }}</h1>
+            <div class="dcard-title-line">
+              <div>
+                <p class="eyebrow">Prospect Detail</p>
+                <h1>
+                  {{ review.prospect.placeName || 'Unnamed Prospect' }}
+                  <DataSourceBadge source="google" label="Google" />
+                </h1>
+              </div>
+              <Tag
+                class="summary-status"
+                :value="review.prospect.status.replaceAll('_', ' ')"
+                :severity="statusSeverity"
+              />
+            </div>
+
+            <div v-if="review.prospect.formattedAddress" class="summary-address">
+              <i class="pi pi-map-marker" />
+              <span>{{ review.prospect.formattedAddress }}</span>
+            </div>
           </div>
-          <Tag :value="review.prospect.status.replaceAll('_', ' ')" :severity="statusSeverity" />
         </div>
+
+        <div class="summary-meta-grid">
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">
+              <i class="pi pi-user" /> Assigned Sales
+              <DataSourceBadge source="manual" label="Manual" />
+            </span>
+            <strong>{{ review.prospect.assignedSalesExecutive || 'Unassigned' }}</strong>
+          </div>
+
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">
+              <i class="pi pi-phone" /> Phone
+              <DataSourceBadge source="google" label="Google" />
+            </span>
+            <strong>{{ review.prospect.phoneNumber || 'Not provided' }}</strong>
+          </div>
+
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">
+              <i class="pi pi-tag" /> Category
+              <DataSourceBadge source="google" label="Google" />
+            </span>
+            <strong>{{ review.prospect.placeCategory || 'Not provided' }}</strong>
+          </div>
+
+          <div class="summary-meta-item">
+            <span class="summary-meta-label">
+              <i class="pi pi-briefcase" /> Industry
+              <DataSourceBadge source="google" label="Google" />
+            </span>
+            <strong>{{ review.prospect.industryGroup || 'Not provided' }}</strong>
+          </div>
+        </div>
+
+        <div class="dcard-codes">
+          <div class="dcard-code-item">
+            <span>Google Place ID <DataSourceBadge source="google" label="Google" /></span>
+            <strong>{{ review.prospect.googlePlaceId || '-' }}</strong>
+          </div>
+          <div class="dcard-code-item">
+            <span>Last Updated <DataSourceBadge source="system" label="CRM" /></span>
+            <strong>{{ new Date(review.prospect.updatedAt).toLocaleString() }}</strong>
+          </div>
+        </div>
+
         <div class="dcard-tags">
           <Tag v-if="review.prospect.placeCategory" :value="review.prospect.placeCategory" severity="secondary" />
           <Tag v-if="review.prospect.industryGroup" :value="review.prospect.industryGroup" />
-          <Tag v-if="review.prospect.assignedSalesExecutive" :value="`Assigned: ${review.prospect.assignedSalesExecutive}`" severity="info" />
           <template v-if="placeDetails">
-            <Tag v-if="placeDetails.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
-            <Tag v-if="placeDetails.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
+            <Tag
+              v-if="placeDetails.businessStatus"
+              :value="businessStatusLabel(placeDetails.businessStatus)"
+              :severity="businessStatusSeverity(placeDetails.businessStatus)"
+            />
+            <Tag
+              v-if="placeDetails.priceLevel"
+              :value="priceLevelLabel(placeDetails.priceLevel)"
+              :severity="priceLevelSeverity(placeDetails.priceLevel)"
+            />
           </template>
         </div>
+
         <div v-if="displayTypes.length" class="dcard-type-badges">
           <span v-for="t in displayTypes" :key="t" class="dcard-type-badge">{{ formatPlaceType(t) }}</span>
         </div>
@@ -145,9 +284,11 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </div>
       </div>
 
+      <div class="detail-content-grid">
+        <div class="detail-column detail-column-main">
       <!-- Google Maps Info Card -->
       <div v-if="placeDetails" class="dcard dcard-google-info">
-        <h2>Google Maps Info</h2>
+        <h2>Google Maps Info <DataSourceBadge source="google" label="Google" /></h2>
         <p v-if="placeDetails.editorialSummary" class="dcard-editorial">{{ placeDetails.editorialSummary }}</p>
         <div class="dcard-info-grid">
           <div v-if="placeDetails.rating > 0" class="dcard-info-item">
@@ -183,27 +324,156 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
         </div>
         <div class="dcard-rows">
+          <div v-if="placeDetails.placeName" class="dcard-row">
+            <i class="pi pi-building" />
+            <span><strong>Google place:</strong> {{ placeDetails.placeName }}</span>
+          </div>
+          <div v-if="placeDetails.placeCategory" class="dcard-row">
+            <i class="pi pi-tag" />
+            <span><strong>Category:</strong> {{ placeDetails.placeCategory }}</span>
+          </div>
+          <div v-if="placeDetails.formattedAddress" class="dcard-row">
+            <i class="pi pi-map-marker" />
+            <span><strong>Google address:</strong> {{ placeDetails.formattedAddress }}</span>
+          </div>
+          <div v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber" class="dcard-row">
+            <i class="pi pi-phone" />
+            <span><strong>International phone:</strong> {{ placeDetails.internationalPhone }}</span>
+          </div>
           <div v-if="placeDetails.googlePlaceId" class="dcard-row">
             <i class="pi pi-id-card" />
             <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
             <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
           </div>
-          <div v-if="placeDetails.utcOffsetMinutes" class="dcard-row">
+          <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
             <i class="pi pi-globe" />
             <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
+          </div>
+          <div v-if="placeDetails.latitude != null && placeDetails.longitude != null" class="dcard-row dcard-row-coords">
+            <i class="pi pi-compass" />
+            <span>Google GPS: {{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}</span>
           </div>
         </div>
       </div>
 
+      <!-- Location Card -->
+      <div class="dcard dcard-location">
+        <div class="dcard-header-row">
+          <h2>Location <DataSourceBadge source="google" label="Google" /></h2>
+          <span v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords" class="dcard-distance-pill">
+            <i class="pi pi-compass" /> {{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away
+          </span>
+        </div>
+        <EntityLocationMap
+          :latitude="review.prospect.latitude"
+          :longitude="review.prospect.longitude"
+          :label="review.prospect.placeName"
+          :interactive="false"
+          height="200px"
+        />
+        <div class="dcard-location-rows">
+          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ review.prospect.formattedAddress || 'No address' }}</span></div>
+          <div v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="dcard-row dcard-row-coords">
+            <i class="pi pi-compass" />
+            <span>GPS: {{ review.prospect.latitude?.toFixed(6) }}, {{ review.prospect.longitude?.toFixed(6) }}</span>
+            <button class="dcard-copy-btn" title="Copy coordinates" aria-label="Copy coordinates" @click="handleCopy(`${review.prospect.latitude}, ${review.prospect.longitude}`)"><i class="pi pi-copy" /></button>
+          </div>
+          <a v-if="review.prospect.googleMapsUrl" :href="review.prospect.googleMapsUrl" target="_blank" rel="noopener noreferrer" class="dcard-row dcard-row-link">
+            <i class="pi pi-external-link" /><span>Open in Google Maps</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Contact & Address -->
+      <div class="dcard dcard-contact">
+        <h2>Contact & Address</h2>
+        <div class="dcard-rows">
+          <div class="dcard-row"><i class="pi pi-building" /><span><strong>Place name:</strong> {{ review.prospect.placeName || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
+          <div class="dcard-row"><i class="pi pi-phone" /><span><strong>Phone:</strong> <a v-if="review.prospect.phoneNumber" :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a><template v-else>Not provided</template> <DataSourceBadge source="google" label="Google" /></span></div>
+          <div class="dcard-row"><i class="pi pi-globe" /><span><strong>Website:</strong> <a v-if="review.prospect.websiteUrl && isValidWebsite(review.prospect.websiteUrl)" :href="review.prospect.websiteUrl" target="_blank" rel="noopener">{{ websiteDisplayUrl(review.prospect.websiteUrl) }}</a><template v-else>Not provided</template> <DataSourceBadge source="google" label="Google" /></span></div>
+          <div class="dcard-row"><i class="pi pi-map-marker" /><span><strong>Address:</strong> {{ review.prospect.formattedAddress || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
+        </div>
+      </div>
+
+      <!-- Business Information -->
+      <div class="dcard dcard-business">
+        <h2>Business Information</h2>
+        <div class="dcard-rows">
+          <div class="dcard-row"><i class="pi pi-tag" /><span><strong>Category:</strong> {{ review.prospect.placeCategory || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
+          <div class="dcard-row"><i class="pi pi-briefcase" /><span><strong>Industry group:</strong> {{ review.prospect.industryGroup || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
+          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales executive:</strong> {{ review.prospect.assignedSalesExecutive || 'Unassigned' }} <DataSourceBadge source="manual" label="Manual" /></span></div>
+          <div class="dcard-row">
+            <i class="pi pi-id-card" />
+            <span class="dcard-place-id"><span>Google Place ID <DataSourceBadge source="google" label="Google" /></span><code>{{ review.prospect.googlePlaceId || 'Not provided' }}</code></span>
+            <button v-if="review.prospect.googlePlaceId" class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(review.prospect.googlePlaceId)"><i class="pi pi-copy" /></button>
+          </div>
+          <div class="dcard-row"><i class="pi pi-calendar-plus" /><span><strong>Created:</strong> {{ new Date(review.prospect.createdAt).toLocaleString() }} <DataSourceBadge source="system" label="CRM" /></span></div>
+          <div class="dcard-row"><i class="pi pi-refresh" /><span><strong>Updated:</strong> {{ new Date(review.prospect.updatedAt).toLocaleString() }} <DataSourceBadge source="system" label="CRM" /></span></div>
+        </div>
+      </div>
+
+        
+
+      <!-- Visit History -->
+      <div class="dcard dcard-visits history-card">
+        <div class="history-card-header">
+          <h2>Visit History</h2>
+          <span class="history-count">{{ review.visits.length }}</span>
+        </div>
+        <div v-if="review.visits.length" class="dcard-visit-list">
+          <div v-for="visit in displayedVisits" :key="visit.id" class="dcard-visit">
+            <div class="dcard-visit-header">
+              <Tag :value="visit.checkOutAt ? 'Completed' : 'Active'" :severity="visit.checkOutAt ? 'secondary' : 'success'" />
+              <span>{{ formatVisitDate(visit.checkInAt) }}</span>
+            </div>
+            <div class="dcard-visit-body">
+              <div class="dcard-visit-detail"><i class="pi pi-sign-in" /><span>Check-in: {{ visit.checkInLatitude.toFixed(4) }}, {{ visit.checkInLongitude.toFixed(4) }}</span></div>
+              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-sign-out" /><span>Check-out: {{ visit.checkOutLatitude?.toFixed(4) }}, {{ visit.checkOutLongitude?.toFixed(4) }}</span></div>
+              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-clock" /><span>Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</span></div>
+              <div v-if="visit.visitNotes" class="dcard-visit-detail"><i class="pi pi-comment" /><span>{{ visit.visitNotes }}</span></div>
+              <div v-if="visit.followUpNotes" class="dcard-visit-detail"><i class="pi pi-directions" /><span>Follow-up: {{ visit.followUpNotes }}</span></div>
+              <div v-if="visit.selfieReference && visit.selfieReference !== 'SIMULATED_SELFIE_PLACEHOLDER'" class="dcard-visit-selfie">
+                <img :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference" alt="Visit selfie" />
+              </div>
+              <div class="dcard-visit-detail dcard-visit-exec"><i class="pi pi-user" /><span>{{ visit.salesExecutiveName }}</span></div>
+            </div>
+          </div>
+        </div>
+        <p v-else class="dcard-empty-text">No visits recorded yet.</p>
+        <button
+          v-if="review.visits.length > 2"
+          type="button"
+          class="section-toggle-btn"
+          @click="showAllVisits = !showAllVisits"
+        >
+          <span>{{ showAllVisits ? 'Show less' : `Show all ${review.visits.length} visits` }}</span>
+          <i :class="showAllVisits ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+        </button>
+      </div>
+      </div>
+
+        <div class="detail-column detail-column-side">
       <!-- Photos (Menu vs Photo, taggable) -->
       <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
-        <h2><i class="pi pi-images" /> Photos</h2>
-        <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
+        <div class="photo-gallery-header">
+          <h2><i class="pi pi-images" /> Photos <DataSourceBadge source="google" label="Google" /></h2>
+          <div class="photo-gallery-controls" aria-label="Photo gallery navigation">
+            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos left" @click="scrollPhotos(-1)">
+              <i class="pi pi-chevron-left" />
+            </button>
+            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos right" @click="scrollPhotos(1)">
+              <i class="pi pi-chevron-right" />
+            </button>
+          </div>
+        </div>
+        <div ref="photoGalleryShell" class="photo-gallery-shell">
+          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
+        </div>
       </div>
 
       <!-- Opening Hours Card -->
       <div v-if="placeDetails?.openingHours" class="dcard dcard-hours">
-        <h2><i class="pi pi-clock" /> Opening Hours</h2>
+        <h2><i class="pi pi-clock" /> Opening Hours <DataSourceBadge source="google" label="Google" /></h2>
         <div class="dcard-hours-status">
           <span :class="['dcard-hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
           <strong>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</strong>
@@ -221,30 +491,9 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </div>
       </div>
 
-      <!-- Reviews -->
-      <div v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
-        <h2><i class="pi pi-comments" /> Reviews</h2>
-        <div class="dcard-reviews-list">
-          <div v-for="(item, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="dcard-review">
-            <div class="dcard-review-header">
-              <img v-if="item.authorPhoto" :src="item.authorPhoto" class="dcard-review-avatar" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
-              <div v-else class="dcard-review-avatar-placeholder">{{ item.authorName?.charAt(0) || '?' }}</div>
-              <div class="dcard-review-meta">
-                <strong>{{ item.authorName }}</strong>
-                <div class="dcard-review-stars">
-                  <i v-for="(s, j) in stars(item.rating)" :key="j" :class="['pi', s]" />
-                  <span class="dcard-review-time">{{ item.time }}</span>
-                </div>
-              </div>
-            </div>
-            <p v-if="item.text" class="dcard-review-text">{{ item.text }}</p>
-          </div>
-        </div>
-      </div>
-
       <!-- Service Options -->
-      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services">
-        <h2><i class="pi pi-shopping-bag" /> Service Options</h2>
+      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services dcard-service-options">
+        <h2><i class="pi pi-shopping-bag" /> Service Options <DataSourceBadge source="google" label="Google" /></h2>
         <div class="dcard-service-tags">
           <Tag v-if="placeDetails.dineIn" value="Dine In" severity="success" />
           <Tag v-if="placeDetails.takeout" value="Takeout" severity="info" />
@@ -254,8 +503,8 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
       </div>
 
       <!-- Amenities -->
-      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services">
-        <h2><i class="pi pi-building" /> Amenities</h2>
+      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services dcard-amenities">
+        <h2><i class="pi pi-building" /> Amenities <DataSourceBadge source="google" label="Google" /></h2>
         <div class="dcard-amenities-grid">
           <div v-if="placeDetails?.parkingOptions" class="dcard-amenity-section">
             <strong><i class="pi pi-directions" /> Parking</strong>
@@ -289,64 +538,23 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
         </div>
       </div>
 
-      <!-- Location Card -->
-      <div class="dcard">
-        <div class="dcard-header-row">
-          <h2>Location</h2>
-          <span v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords" class="dcard-distance-pill">
-            <i class="pi pi-compass" /> {{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away
-          </span>
+      <!-- Sales Notes -->
+      <div v-if="review.prospect.visitNotes || review.prospect.followUpNotes" class="dcard dcard-sales-notes">
+        <h2>Sales Notes</h2>
+        <div class="dcard-rows">
+          <div v-if="review.prospect.visitNotes" class="dcard-row"><i class="pi pi-comment" /><span><strong>Visit notes:</strong> {{ review.prospect.visitNotes }} <DataSourceBadge source="manual" label="Manual" /></span></div>
+          <div v-if="review.prospect.followUpNotes" class="dcard-row"><i class="pi pi-directions" /><span><strong>Follow-up:</strong> {{ review.prospect.followUpNotes }} <DataSourceBadge source="manual" label="Manual" /></span></div>
         </div>
-        <EntityLocationMap
-          :latitude="review.prospect.latitude"
-          :longitude="review.prospect.longitude"
-          :label="review.prospect.placeName"
-          :interactive="false"
-          height="200px"
-        />
-        <div class="dcard-location-rows">
-          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ review.prospect.formattedAddress || 'No address' }}</span></div>
-          <div v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="dcard-row dcard-row-coords">
-            <i class="pi pi-compass" />
-            <span>GPS: {{ review.prospect.latitude?.toFixed(6) }}, {{ review.prospect.longitude?.toFixed(6) }}</span>
-            <button class="dcard-copy-btn" title="Copy coordinates" aria-label="Copy coordinates" @click="handleCopy(`${review.prospect.latitude}, ${review.prospect.longitude}`)"><i class="pi pi-copy" /></button>
-          </div>
-          <a v-if="review.prospect.googleMapsUrl" :href="review.prospect.googleMapsUrl" target="_blank" rel="noopener noreferrer" class="dcard-row dcard-row-link">
-            <i class="pi pi-external-link" /><span>Open in Google Maps</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Visit History -->
-      <div class="dcard">
-        <h2>Visit History</h2>
-        <div v-if="review.visits.length" class="dcard-visit-list">
-          <div v-for="visit in review.visits" :key="visit.id" class="dcard-visit">
-            <div class="dcard-visit-header">
-              <Tag :value="visit.checkOutAt ? 'Completed' : 'Active'" :severity="visit.checkOutAt ? 'secondary' : 'success'" />
-              <span>{{ formatVisitDate(visit.checkInAt) }}</span>
-            </div>
-            <div class="dcard-visit-body">
-              <div class="dcard-visit-detail"><i class="pi pi-sign-in" /><span>Check-in: {{ visit.checkInLatitude.toFixed(4) }}, {{ visit.checkInLongitude.toFixed(4) }}</span></div>
-              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-sign-out" /><span>Check-out: {{ visit.checkOutLatitude?.toFixed(4) }}, {{ visit.checkOutLongitude?.toFixed(4) }}</span></div>
-              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-clock" /><span>Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</span></div>
-              <div v-if="visit.visitNotes" class="dcard-visit-detail"><i class="pi pi-comment" /><span>{{ visit.visitNotes }}</span></div>
-              <div v-if="visit.followUpNotes" class="dcard-visit-detail"><i class="pi pi-directions" /><span>Follow-up: {{ visit.followUpNotes }}</span></div>
-              <div v-if="visit.selfieReference && visit.selfieReference !== 'SIMULATED_SELFIE_PLACEHOLDER'" class="dcard-visit-selfie">
-                <img :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference" alt="Visit selfie" />
-              </div>
-              <div class="dcard-visit-detail dcard-visit-exec"><i class="pi pi-user" /><span>{{ visit.salesExecutiveName }}</span></div>
-            </div>
-          </div>
-        </div>
-        <p v-else class="dcard-empty-text">No visits recorded yet.</p>
       </div>
 
       <!-- Status History -->
-      <div class="dcard">
-        <h2>Status History</h2>
+      <div class="dcard dcard-status-history history-card">
+        <div class="history-card-header">
+          <h2>Status History</h2>
+          <span class="history-count">{{ review.history.length }}</span>
+        </div>
         <div v-if="review.history.length" class="dcard-timeline">
-          <div v-for="entry in review.history" :key="entry.id" class="dcard-timeline-entry">
+          <div v-for="entry in displayedStatusHistory" :key="entry.id" class="dcard-timeline-entry">
             <div class="dcard-timeline-dot" />
             <div class="dcard-timeline-content">
               <strong>{{ (entry.fromStatus || 'Created').replaceAll('_', ' ') }} → {{ entry.toStatus.replaceAll('_', ' ') }}</strong>
@@ -356,10 +564,59 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
           </div>
         </div>
         <p v-else class="dcard-empty-text">No status changes recorded.</p>
+        <button
+          v-if="review.history.length > 6"
+          type="button"
+          class="section-toggle-btn"
+          @click="showAllStatusHistory = !showAllStatusHistory"
+        >
+          <span>{{ showAllStatusHistory ? 'Show less' : `Show all ${review.history.length} changes` }}</span>
+          <i :class="showAllStatusHistory ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+        </button>
+      </div>
+      
+
+        </div>
+      </div>
+
+      <!-- Reviews -->
+      <div class="detail-reviews-section">
+      <div v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
+        <div class="dcard-header-row">
+          <h2><i class="pi pi-comments" /> Reviews</h2>
+          <span class="section-count">{{ placeDetails.reviews.length }}</span>
+        </div>
+        <div class="dcard-reviews-list">
+          <div v-for="(item, i) in displayedReviews" :key="i" class="dcard-review">
+            <div class="dcard-review-header">
+              <img v-if="item.authorPhoto" :src="item.authorPhoto" class="dcard-review-avatar" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
+              <div v-else class="dcard-review-avatar-placeholder">{{ item.authorName?.charAt(0) || '?' }}</div>
+              <div class="dcard-review-meta">
+                <strong>{{ item.authorName }}</strong>
+                <div class="dcard-review-stars">
+                  <i v-for="(s, j) in stars(item.rating)" :key="j" :class="['pi', s]" />
+                  <span class="dcard-review-time">{{ item.time }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-if="item.text" class="dcard-review-text">{{ item.text }}</p>
+          </div>
+        </div>
+        <button
+          v-if="placeDetails.reviews.length > 4"
+          type="button"
+          class="section-toggle-btn"
+          @click="showAllReviews = !showAllReviews"
+        >
+          <span>{{ showAllReviews ? 'Show less' : `Show all ${placeDetails.reviews.length} reviews` }}</span>
+          <i :class="showAllReviews ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+        </button>
+
+      </div>
       </div>
 
       <!-- Comments / Ticketing -->
-      <ProspectComments :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
+      <ProspectComments class="detail-comments" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" :embedded="isDesktop" />
 
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">
@@ -382,7 +639,47 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 </template>
 
 <style scoped>
-.detail-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: 5.5rem; }
+.detail-page { display: grid; gap: 0.6rem; width: 100%; padding-bottom: 5.5rem; align-content: start; }
+.detail-content-grid,
+.detail-column { display: contents; }
+
+
+.detail-reviews-section {
+  min-width: 0;
+}
+
+.detail-reviews-section > .dcard {
+  margin: 0;
+}
+
+.history-card {
+  min-width: 0;
+  align-content: start;
+}
+
+.history-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.history-card-header h2 { margin: 0; }
+
+.history-count {
+  min-width: 28px;
+  height: 24px;
+  padding: 0 0.45rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: #eff6ff;
+  color: var(--brand-blue);
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 
 .detail-skeleton { display: grid; gap: 0.85rem; }
 .sk-header { display: flex; align-items: center; gap: 0.7rem; }
@@ -409,14 +706,84 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
   background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem; min-width: 0;
 }
 .dcard h2 { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.dcard h2 { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
 
-.dcard-summary { background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%); }
+
+.dcard-summary {
+  background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%);
+  gap: 0.7rem;
+}
 .dcard-summary-top { display: flex; align-items: flex-start; gap: 0.85rem; }
+.dcard-title-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+}
+.dcard-title-line > div { min-width: 0; }
+.summary-status { flex-shrink: 0; }
+.summary-address {
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.summary-address i {
+  color: var(--brand-blue);
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+.summary-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.summary-meta-item {
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(191, 219, 254, 0.72);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 0.22rem;
+}
+.summary-meta-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.57rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.summary-meta-label > i {
+  color: var(--brand-blue);
+  font-size: 0.64rem;
+}
+.summary-meta-item strong {
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .dcard-avatar { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #fff; font-weight: 800; font-size: 1rem; flex-shrink: 0; }
 .dcard-avatar-prospect { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25); }
 .dcard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .dcard-identity .eyebrow { margin: 0; }
-.dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.3; }
+.dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: 0; color: var(--text-primary); line-height: 1.3; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+
+.dcard-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.dcard-code-item { padding: 0.55rem 0.65rem; background: rgba(255,255,255,0.7); border-radius: 10px; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.dcard-code-item span { color: var(--text-muted); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.dcard-code-item strong { font-size: 0.78rem; color: var(--text-primary); font-weight: 700; overflow-wrap: anywhere; }
 
 .dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
@@ -457,6 +824,45 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-photos { border: 1px solid #e0e7ff; }
 .dcard-photos h2 { display: flex; align-items: center; gap: 0.4rem; }
 .dcard-photos h2 i { color: var(--brand-blue); font-size: 0.75rem; }
+
+.photo-gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.photo-gallery-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.photo-scroll-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.photo-scroll-btn:hover {
+  color: var(--brand-blue);
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  transform: translateY(-1px);
+}
+
+.photo-scroll-btn:active { transform: translateY(0); }
+.photo-scroll-btn i { font-size: 0.72rem; line-height: 1; }
+.photo-gallery-shell { min-width: 0; overflow: hidden; }
 .dcard-photo-scroll {
   display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch; padding-bottom: 0.3rem;
@@ -495,8 +901,12 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dcard-hours-toggle:hover { text-decoration: underline; }
 
 /* Reviews */
-.dcard-reviews { border: 1px solid #e0e7ff; }
-.dcard-reviews-list { display: grid; gap: 0.75rem; }
+.dcard-reviews {
+  border: 1px solid #e0e7ff;
+  min-height: 0;
+  align-content: start;
+}
+.dcard-reviews-list { display: grid; gap: 0.75rem; min-height: 0; }
 .dcard-review { padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-light); }
 .dcard-review:last-child { border-bottom: none; padding-bottom: 0; }
 .dcard-review-header { display: flex; align-items: center; gap: 0.6rem; }
@@ -530,6 +940,21 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 .dcard-header-row { display: flex; align-items: center; justify-content: space-between; }
 .dcard-header-row h2 { margin: 0; }
+.section-count {
+  min-width: 34px;
+  height: 24px;
+  padding: 0 0.45rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: #f8fafc;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid var(--border-light);
+}
+
 .dcard-distance-pill {
   display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem;
   border-radius: 9999px; background: #eff6ff; color: var(--brand-blue);
@@ -586,9 +1011,42 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 
 .dcard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
 
+.section-toggle-btn {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.section-toggle-btn:hover {
+  color: var(--brand-blue);
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+.section-toggle-btn i { font-size: 0.62rem; }
+
+.detail-comments {
+  min-width: 0;
+}
+
+.detail-comments :deep(.pc-wrap) {
+  margin: 0;
+}
+
 .detail-bottom-bar {
   position: fixed; bottom: 0; left: 0; right: 0;
-  width: 100%; z-index: 40;
+  width: 100%; z-index: 1000;
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
   padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--surface-card); border-top: 1px solid var(--border-light);
@@ -613,36 +1071,271 @@ onBeforeUnmount(() => { if (geoWatchId != null) navigator.geolocation?.clearWatc
 .dbar-checkout { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 .dbar-checkout:hover { background: #ffedd5; }
 
+/* Data Source Legend */
+.ds-legend {
+  border: 1px solid var(--border-light); border-radius: var(--radius-xl);
+  background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden;
+}
+.ds-legend-toggle {
+  width: 100%; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.65rem 1rem; border: 0; background: transparent;
+  color: var(--text-muted); font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; transition: color 0.15s ease;
+}
+.ds-legend-toggle:hover { color: var(--text-primary); }
+.ds-legend-toggle i:first-child { font-size: 0.8rem; color: var(--brand-blue); }
+.ds-legend-toggle i:last-child { margin-left: auto; font-size: 0.6rem; }
+.ds-legend-body { display: grid; gap: 0.45rem; padding: 0 1rem 0.75rem; }
+.ds-legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; }
+
 @media (max-width: 767px) {
+  .detail-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+  .detail-column { display: contents; }
+  .dcard-visit-list,
+  .dcard-timeline,
+  .dcard-reviews-list {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+  .detail-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+  .detail-column {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .dcard-visit-list,
+  .dcard-timeline,
+  .dcard-reviews-list {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+  .detail-content-grid { display: block; column-count: 1; }
+  .detail-column { display: contents; }
+
+  .history-scroll-region,
+  .dcard-visit-list,
+  .dcard-timeline,
+  .detail-reviews-section .dcard-reviews-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .detail-page { gap: 0.7rem; }
   .dcard { padding: 1rem; }
   .dcard-identity h1 { font-size: 1.05rem; }
+  .dcard-title-line { flex-direction: column; gap: 0.45rem; }
+  .summary-status { align-self: flex-start; }
+  .summary-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dcard-codes { grid-template-columns: minmax(0, 1fr); }
   .dcard-photo-item { flex: 0 0 160px; height: 120px; }
+  .photo-scroll-btn { width: 32px; height: 32px; }
 }
 
 /* ── Desktop ───────────────────────────────────────────────── */
 @media (min-width: 1024px) {
   .detail-page {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
     padding-bottom: 7rem;
+    align-items: start;
+    align-content: start;
   }
+
   .back-link { display: none; }
-  .detail-page > .p-message,
-  .detail-skeleton,
-  .detail-empty,
-  .dcard-summary,
-  .dcard-active-visit { grid-column: 1 / -1; }
-  .detail-page :deep(.pc-wrap) { grid-column: 1 / -1; }
+
+  /*
+   * Stable dense document flow.
+   * We intentionally use one full-width card flow for variable-height sections.
+   * This removes the dead-space problem permanently: no section has to wait
+   * for a taller card in the opposite column.
+   *
+   * The page stays compact by using multi-column DATA GRIDS inside the cards,
+   * not by placing variable-height cards side-by-side.
+   */
+  .detail-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+    min-width: 0;
+    align-items: start;
+  }
+
+  .detail-column {
+    display: contents;
+  }
+
+  .detail-content-grid > *,
+  .detail-column > .dcard {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    align-self: start;
+  }
+
+  /* Keep the reading order predictable even though the original template
+     stores cards in two wrappers. */
+  .dcard-google-info { order: 1; }
+  .dcard-photos { order: 2; }
+  .dcard-location { order: 3; }
+  .dcard-contact { order: 4; }
+  .dcard-business { order: 5; }
+  .dcard-hours { order: 6; }
+  .dcard-service-options { order: 7; }
+  .dcard-amenities { order: 8; }
+  .dcard-sales-notes { order: 9; }
+  .dcard-visits { order: 10; }
+  .dcard-status-history { order: 11; }
+
+  /* Use horizontal space INSIDE cards so the page remains compact. */
+  .dcard-info-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem 1rem;
+  }
+
+  .dcard-google-info .dcard-rows,
+  .dcard-contact .dcard-rows,
+  .dcard-business .dcard-rows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1rem;
+  }
+
+  .dcard-location .dcard-location-rows,
+  .dcard-sales-notes .dcard-rows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem 1rem;
+  }
+
+  .dcard-amenities-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7rem 1rem;
+  }
+
+  /* Visit/Status/Reviews grow naturally. No nested scroll areas. */
+  .dcard-visit-list,
+  .dcard-timeline,
+  .dcard-reviews-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .dcard-visits .dcard-visit-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .detail-reviews-section {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .detail-reviews-section .dcard-reviews-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .detail-reviews-section .dcard-review {
+    min-width: 0;
+    padding: 0.7rem;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .detail-reviews-section .dcard-review:last-child {
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 0.7rem;
+  }
+
+  .detail-comments {
+    width: 100%;
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .detail-page :deep(.pc-wrap) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .photo-gallery-shell :deep(*) {
+    min-width: 0;
+  }
 }
 
 @media (min-width: 769px) {
   .detail-bottom-bar {
+    left: var(--sidebar-width, 240px);
+    right: 0;
+    width: auto;
     min-height: var(--desktop-action-bar-height, 72px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    padding: 0.75rem 7rem 0.75rem 1.25rem;
+    gap: 0.75rem;
+    padding: 0.65rem 2rem;
   }
-  .dbar-btn { min-height: 42px; }
+
+  .dbar-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    height: 44px;
+    box-sizing: border-box;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
 }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .detail-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .detail-column { display: contents; }
+  .dcard-visit-list,
+  .dcard-timeline,
+  .dcard-reviews-list {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+  .detail-content-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .detail-column {
+    display: grid;
+    gap: 0.65rem;
+  }
+  .dcard-visit-list,
+  .dcard-timeline,
+  .dcard-reviews-list {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+  .detail-content-grid { display: block; column-count: 1; }
+  .detail-column { display: contents; }
+
+  .history-scroll-region,
+  .dcard-visit-list,
+  .dcard-timeline,
+  .detail-reviews-section .dcard-reviews-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .summary-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 </style>

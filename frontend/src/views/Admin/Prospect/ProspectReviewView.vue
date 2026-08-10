@@ -207,8 +207,6 @@ onBeforeUnmount(() => map?.remove())
           </div>
         </article>
 
-        <ProspectComments :prospect-id="review.prospect.id" role="ADMINISTRATOR" />
-
       </div>
 
       <aside class="review-sidebar">
@@ -229,6 +227,8 @@ onBeforeUnmount(() => map?.remove())
           <Button label="Convert" icon="pi pi-arrow-right" icon-pos="right" @click="router.push(`/admin/prospects/${review.prospect.id}/convert`)" />
         </div>
       </aside>
+
+      <ProspectComments class="admin-comments-section" :prospect-id="review.prospect.id" role="ADMINISTRATOR" embedded />
     </div>
   </section>
 </template>
@@ -238,6 +238,14 @@ onBeforeUnmount(() => map?.remove())
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 1.25rem;
+}
+
+.admin-comments-section {
+  grid-column: 1 / -1;
+}
+
+.admin-comments-section :deep(.pc-list) {
+  max-height: 420px;
 }
 
 .review-page {

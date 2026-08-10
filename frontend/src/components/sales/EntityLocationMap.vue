@@ -90,6 +90,21 @@ onBeforeUnmount(() => cleanup())
 
 <style>
 .entity-map-icon-host { border: 0; background: transparent; }
+.entity-map-wrapper .leaflet-container,
+.entity-map-wrapper .leaflet-pane,
+.entity-map-wrapper .leaflet-top,
+.entity-map-wrapper .leaflet-bottom {
+  z-index: 0 !important;
+}
+.entity-map-wrapper .leaflet-tile-pane { z-index: 1 !important; }
+.entity-map-wrapper .leaflet-overlay-pane { z-index: 2 !important; }
+.entity-map-wrapper .leaflet-shadow-pane { z-index: 3 !important; }
+.entity-map-wrapper .leaflet-marker-pane { z-index: 4 !important; }
+.entity-map-wrapper .leaflet-tooltip-pane { z-index: 5 !important; }
+.entity-map-wrapper .leaflet-popup-pane,
+.entity-map-wrapper .leaflet-control-container {
+  z-index: 6 !important;
+}
 .entity-map-marker {
   width: 36px; height: 36px; display: grid; place-items: center;
   color: #fff; background: #2563eb; border: 3px solid #fff;
@@ -107,9 +122,13 @@ onBeforeUnmount(() => cleanup())
   width: 100%; min-width: 0; border-radius: 12px; overflow: hidden;
   border: 1px solid var(--border-light, #e2e8f0);
   position: relative;
+  isolation: isolate;
+  z-index: 0;
 }
 .entity-map-container {
   width: 100%; height: 100%;
+  position: relative;
+  z-index: 0;
 }
 .entity-map-empty {
   width: 100%; height: 100%; display: flex; flex-direction: column;
