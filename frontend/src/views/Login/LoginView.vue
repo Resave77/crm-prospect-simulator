@@ -23,7 +23,7 @@ async function submit() {
     const intended = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
       ? route.query.redirect
       : null
-    await router.replace(resolvePostLoginRoute(router, user.role, intended))
+    await router.replace(resolvePostLoginRoute(router, user, intended))
   } catch (caught) {
     error.value = auth.errorMessage(caught)
   }
@@ -214,8 +214,8 @@ async function submit() {
 
 :deep(.p-inputtext:focus),
 :deep(.p-password-input:focus) {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #d14350;
+  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.12);
 }
 
 :deep(.p-password) {
@@ -230,15 +230,15 @@ async function submit() {
 .submit-btn {
   margin-top: 0.25rem;
   border-radius: 10px !important;
-  background: #2563eb !important;
-  border-color: #2563eb !important;
+  background: #d14350 !important;
+  border-color: #d14350 !important;
   font-weight: 700 !important;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18) !important;
+  box-shadow: 0 8px 18px rgba(209, 67, 80, 0.18) !important;
 }
 
 .submit-btn:hover {
-  background: #1d4ed8 !important;
-  border-color: #1d4ed8 !important;
+  background: #bb3342 !important;
+  border-color: #bb3342 !important;
 }
 
 .privacy-copy {

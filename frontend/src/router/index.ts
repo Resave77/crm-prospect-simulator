@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vu
 import { pinia } from '../stores/pinia'
 import { useAuthStore } from '../stores/auth'
 import type { UserRole } from '../types/auth'
-import { homeFor, roleAllowed } from '../utils/navigation'
+import { FORBIDDEN_ROUTE, homeFor, roleAllowed } from '../utils/navigation'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -82,11 +82,12 @@ const router = createRouter({
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const auth = useAuthStore(pinia)
   await auth.bootstrap()
+  const user = auth.user
 
-  if (to.name === 'Login' && auth.role && auth.role !== 'SALES_MANAGER') return homeFor(auth.role)
+  if (to.name === 'Login' && user && homeFor(user) !== FORBIDDEN_ROUTE) return homeFor(user)
   if (to.meta.public) return true
-  if (!auth.authenticated) return { name: 'Login', query: { redirect: to.fullPath } }
-  if (to.meta.role && !roleAllowed(to.meta.role, auth.role!)) return homeFor(auth.role!)
+  if (!user) return { name: 'Login', query: { redirect: to.fullPath } }
+  if (to.meta.role && !roleAllowed(to.meta.role, user.role, Boolean(user.salesRole))) return homeFor(user)
   return true
 })
 

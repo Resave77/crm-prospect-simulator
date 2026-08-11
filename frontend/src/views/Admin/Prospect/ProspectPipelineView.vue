@@ -519,16 +519,16 @@ onMounted(async () => {
   width: 0.42rem;
   height: 0.42rem;
   border-radius: 999px;
-  background: #2563eb;
-  box-shadow: 0 0 0 3px #dbeafe;
+  background: #d14350;
+  box-shadow: 0 0 0 3px #ffd9dd;
 }
 
 .stage-count {
   min-width: 1.5rem;
   padding: 0.12rem 0.38rem;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-size: 0.6rem;
   font-weight: 800;
   text-align: center;
@@ -557,12 +557,12 @@ onMounted(async () => {
 
 .kanban-card:hover {
   transform: translateY(-1px);
-  border-color: #93c5fd;
-  box-shadow: 0 6px 18px -8px rgba(37, 99, 235, 0.25);
+  border-color: #e9909a;
+  box-shadow: 0 6px 18px -8px rgba(209, 67, 80, 0.25);
 }
 
 .kanban-card:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #d14350;
   outline-offset: 2px;
 }
 
@@ -579,8 +579,8 @@ onMounted(async () => {
   overflow: hidden;
   padding: 0.13rem 0.4rem;
   border-radius: 5px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -596,7 +596,7 @@ onMounted(async () => {
 
 .kanban-card:hover .card-chevron {
   transform: translateX(2px);
-  color: #2563eb;
+  color: #d14350;
 }
 
 .kanban-card h2 {
@@ -672,7 +672,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  color: #2563eb;
+  color: #d14350;
   font-size: 0.56rem;
   font-weight: 800;
 }

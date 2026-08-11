@@ -164,6 +164,7 @@ const statusOptions = [
 ]
 const systemRoleOptions = [
   { label: 'All Account Roles', value: '' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN' },
   { label: 'Sales Manager', value: 'SALES_MANAGER' },
   { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
 ]
@@ -1051,17 +1052,17 @@ onMounted(async () => {
 h1 { margin: 0.2rem 0 0.2rem; font-size: 1.6rem; color: #0f172a; }
 .muted { margin: 0; color: #7c8798; font-size: 0.85rem; }
 
-.banner-panel { display: flex; gap: 0.9rem; align-items: flex-start; padding: 0.9rem 1.1rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; }
-.banner-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-content: center; border-radius: 10px; background: #dbeafe; color: #2563eb; }
+.banner-panel { display: flex; gap: 0.9rem; align-items: flex-start; padding: 0.9rem 1.1rem; background: #fff1f2; border: 1px solid #f3b9c0; border-radius: 12px; }
+.banner-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-content: center; border-radius: 10px; background: #ffd9dd; color: #d14350; }
 .banner-content { display: grid; gap: 0.35rem; flex: 1; min-width: 0; }
-.banner-content strong { color: #1e40af; font-size: 0.9rem; }
-.banner-steps { margin: 0; padding-left: 1.1rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem 0.8rem; color: #1e40af; font-size: 0.78rem; line-height: 1.45; }
-.banner-steps li::marker { color: #2563eb; }
+.banner-content strong { color: #ad3040; font-size: 0.9rem; }
+.banner-steps { margin: 0; padding-left: 1.1rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem 0.8rem; color: #ad3040; font-size: 0.78rem; line-height: 1.45; }
+.banner-steps li::marker { color: #d14350; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 0.65rem; }
 .summary-card, .filter-panel, .table-panel, .toolbar-panel, .tree-panel { background: #fff; border: 1px solid #edf1f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03); }
 .summary-card { padding: 0.72rem 0.8rem; display: grid; gap: 0.12rem; text-align: left; font: inherit; cursor: pointer; transition: border-color 140ms ease, background 140ms ease; }
-.summary-card:hover { border-color: #bfdbfe; background: #fbfdff; }
+.summary-card:hover { border-color: #f3b9c0; background: #fbfdff; }
 .summary-card span { color: #64748b; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
 .summary-card strong { color: #0f172a; font-size: 1.1rem; }
 .summary-card small { color: #94a3b8; font-size: 0.68rem; line-height: 1.3; }
@@ -1116,7 +1117,7 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .assign-section-title { display: flex; align-items: center; gap: 0.55rem; font-weight: 750; color: #0f172a; font-size: 0.86rem; }
 .assign-step { width: 22px; height: 22px; display: grid; place-content: center; border-radius: 999px; background: #0b7766; color: #fff; font-size: 0.7rem; font-weight: 700; }
 .section-note { color: #8492a6; font-size: 0.75rem; }
-.parent-info { display: flex; gap: 0.5rem; align-items: center; padding: 0.6rem 0.75rem; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1e40af; font-size: 0.8rem; line-height: 1.4; }
+.parent-info { display: flex; gap: 0.5rem; align-items: center; padding: 0.6rem 0.75rem; border: 1px solid #f3b9c0; border-radius: 8px; background: #fff1f2; color: #ad3040; font-size: 0.8rem; line-height: 1.4; }
 .parent-info.muted { border-color: #e2e8f0; background: #f8fafc; color: #64748b; }
 .user-option { display: grid; gap: 0.15rem; padding: 0.25rem 0; }
 .user-option.is-disabled { opacity: 0.55; }
@@ -1139,7 +1140,7 @@ input[type='month'] { border: 1px solid #dbe3ee; border-radius: 6px; padding: 0.
 .detail-drawer :deep(.p-drawer-header) { border-bottom: 1px solid #edf1f6; padding: 0.9rem 1rem; }
 .drawer-content { display: grid; gap: 1rem; }
 .drawer-person { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid #edf1f6; }
-.drawer-avatar { width: 2.45rem; height: 2.45rem; display: grid; place-content: center; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-weight: 850; }
+.drawer-avatar { width: 2.45rem; height: 2.45rem; display: grid; place-content: center; border-radius: 999px; background: #fff1f2; color: #bb3342; font-weight: 850; }
 .drawer-person div { display: grid; gap: 0.15rem; }
 .drawer-person strong { color: #0f172a; }
 .drawer-person span { color: #64748b; font-size: 0.78rem; }
@@ -1215,7 +1216,7 @@ h1 {
 }
 
 .summary-card:hover {
-  background: #f8fbff;
+  background: #fffbfb;
 }
 
 .summary-card span {
@@ -1243,8 +1244,8 @@ h1 {
 }
 
 .view-btn.active {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #fff1f2;
+  color: #bb3342;
 }
 
 .tab-bar {
@@ -1258,14 +1259,14 @@ h1 {
 }
 
 .tab-btn.active {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: #f3b9c0;
+  background: #fff1f2;
+  color: #bb3342;
 }
 
 .tab-btn.active .tab-count {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: #ffd9dd;
+  color: #bb3342;
 }
 
 .toolbar-panel {
@@ -1431,7 +1432,7 @@ input[type='month'] {
   border-right: 0;
 }
 .heading-stats button:hover {
-  background: #eff6ff;
+  background: #fff1f2;
 }
 .heading-stats span {
   color: #94a3b8;

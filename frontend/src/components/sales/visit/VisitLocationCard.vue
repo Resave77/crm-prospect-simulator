@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -77,8 +77,8 @@ async function initMap() {
 
   radiusCircle = L.circle([tLat, tLng], {
     radius: props.radiusMeters,
-    color: '#2563eb',
-    fillColor: '#2563eb',
+    color: '#d14350',
+    fillColor: '#d14350',
     fillOpacity: 0.08,
     weight: 2,
     dashArray: '6 4',
@@ -153,7 +153,7 @@ onBeforeUnmount(() => cleanup())
   transform: rotate(-45deg); box-shadow: 0 3px 12px rgba(0,0,0,0.25);
 }
 .vlm-marker i { transform: rotate(45deg); font-size: 0.7rem; }
-.vlm-marker-target { background: #2563eb; }
+.vlm-marker-target { background: #d14350; }
 .vlm-marker-sales { background: #dc2626; }
 .vlm-wrapper .leaflet-popup { max-width: min(200px, 75vw) !important; }
 .vlm-wrapper .leaflet-popup-content-wrapper { font-size: 0.75rem; border-radius: 10px; }
@@ -174,7 +174,7 @@ onBeforeUnmount(() => cleanup())
 }
 .vlm-legend-item { display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
 .vlm-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.vlm-dot-target { background: #2563eb; }
+.vlm-dot-target { background: #d14350; }
 .vlm-dot-sales { background: #dc2626; }
-.vlm-ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px dashed #2563eb; flex-shrink: 0; }
+.vlm-ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px dashed #d14350; flex-shrink: 0; }
 </style>

@@ -10,7 +10,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
-import type { AdminAccountType, SalesRole } from '../../../types/admin'
+import type { AdminAccountType, SalesRole, SalesStructureItem } from '../../../types/admin'
 
 const router = useRouter()
 const store = useAdminStore()
@@ -36,6 +36,7 @@ const form = reactive({
   employeeId: '',
   phone: '',
   salesRoleId: '',
+  reportsToUserId: '',
   temporaryPassword: '',
 })
 
@@ -47,17 +48,28 @@ const accountTypeOptions: Array<{
   {
     label: 'Sales Account',
     value: 'SALES_ACCOUNT',
-    description: 'Uses an active Level 1–4 role from Role Management and can be assigned in Sales Structure.',
+    description: 'Uses an active Sales Level 1–3 role (hierarchy Level 2–4) and is assigned directly into Sales Structure.',
   },
   {
     label: 'Super Admin',
     value: 'SUPER_ADMIN',
-    description: 'System administrator account outside the Level 1–4 sales hierarchy.',
+    description: 'System administrator account. Additional Super Admin accounts do not create another Level 1 hierarchy root.',
   },
 ]
 const isSalesAccount = computed(() => form.accountType === 'SALES_ACCOUNT')
 const selectedOrganizationalRole = computed(
   () => store.salesRoles.find((role) => role.id === form.salesRoleId) ?? null,
+)
+const requiredParentLevel = computed(() => selectedOrganizationalRole.value ? selectedOrganizationalRole.value.level - 1 : null)
+const reportsToOptions = computed(() =>
+  store.salesStructure
+    .filter((item: SalesStructureItem) => item.salesRole.level === requiredParentLevel.value)
+    .map((item: SalesStructureItem) => ({
+      label: item.salesName,
+      value: item.userId,
+      searchText: `${item.salesName} ${item.salesRole.name} level ${item.salesRole.level}`,
+      item,
+    })),
 )
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -67,6 +79,7 @@ const requiredFields = computed(() => [
   { label: 'Full Name', complete: Boolean(form.name.trim()) },
   { label: 'Email', complete: emailPattern.test(form.email.trim()) },
   { label: 'Role', complete: !isSalesAccount.value || Boolean(selectedOrganizationalRole.value?.isActive) },
+  { label: 'Reports To', complete: !isSalesAccount.value || Boolean(form.reportsToUserId) },
   { label: 'Temporary Password', complete: form.temporaryPassword.length >= 8 },
 ])
 
@@ -94,7 +107,15 @@ watch(
   (accountType) => {
     if (accountType === 'SUPER_ADMIN') {
       form.salesRoleId = ''
+      form.reportsToUserId = ''
     }
+  },
+)
+
+watch(
+  () => form.salesRoleId,
+  () => {
+    form.reportsToUserId = ''
   },
 )
 
@@ -114,7 +135,7 @@ function roleOptionMeta(role: SalesRole) {
 }
 
 function isAssignableSalesRole(role: SalesRole) {
-  return role.isActive && role.level >= 1 && role.level <= 4 && role.name.trim().toLowerCase() !== 'super admin'
+  return role.isActive && role.level >= 2 && role.level <= 4
 }
 
 function generateEmployeeId(seed = '') {
@@ -137,6 +158,10 @@ function regenerateEmployeeId() {
   form.employeeId = generateEmployeeId(form.email)
 }
 
+function todayDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 async function handleSubmit() {
   if (!isFormValid.value) return
 
@@ -151,7 +176,7 @@ async function handleSubmit() {
       phone: form.phone.trim(),
       accountType: form.accountType,
       salesRoleId: isSalesAccount.value ? form.salesRoleId || null : null,
-      managerId: null,
+      managerId: isSalesAccount.value ? form.reportsToUserId || null : null,
       temporaryPassword: form.temporaryPassword,
     })
 
@@ -175,7 +200,7 @@ onMounted(async () => {
   form.employeeId = generateEmployeeId()
 
   try {
-    await store.fetchSalesRoles()
+    await Promise.all([store.fetchSalesRoles(), store.fetchSalesStructure(todayDate())])
   } catch {
     // The page-level error is handled when submitting or through the store.
   }
@@ -327,7 +352,7 @@ onMounted(async () => {
                   </div>
                 </template>
               </Select>
-              <small>Select whether this is a system admin or sales account.</small>
+              <small>Choose system-level Super Admin access or a Sales Account with an organizational role.</small>
             </div>
 
             <div v-if="isSalesAccount" class="form-field">
@@ -352,7 +377,33 @@ onMounted(async () => {
                   </div>
                 </template>
               </Select>
-              <small>Role controls access, landing page, and hierarchy level.</small>
+              <small>Sales Level 1–3 maps to hierarchy Level 2–4 and controls access plus the landing page.</small>
+            </div>
+
+            <div v-if="isSalesAccount" class="form-field">
+              <label>
+                Reports To
+                <span class="required">*</span>
+              </label>
+              <Select
+                v-model="form.reportsToUserId"
+                :options="reportsToOptions"
+                optionLabel="label"
+                optionValue="value"
+                filter
+                :filterFields="['label', 'searchText']"
+                :disabled="!selectedOrganizationalRole"
+                :placeholder="selectedOrganizationalRole ? `Select Level ${requiredParentLevel} parent` : 'Select a role first'"
+                :loading="store.salesStructureLoading"
+              >
+                <template #option="{ option }">
+                  <div class="role-option">
+                    <strong>{{ option.item.salesName }}</strong>
+                    <span>{{ option.item.salesRole.name }} - Level {{ option.item.salesRole.level }}</span>
+                  </div>
+                </template>
+              </Select>
+              <small>Parent must be exactly one hierarchy level above this role.</small>
             </div>
           </div>
         </section>
@@ -376,7 +427,7 @@ onMounted(async () => {
 
             <div class="access-stat">
               <span>Level</span>
-              <strong>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : '—' }}</strong>
+              <strong>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : 'System' }}</strong>
             </div>
 
             <div class="access-stat">
@@ -393,7 +444,9 @@ onMounted(async () => {
 
             <p>
               {{
-                !isSalesAccount ? 'Super Admin is a system role and is not assigned to Sales Structure.' :
+                !isSalesAccount
+                  ? 'Super Admin provides system administration access. Creating an additional Super Admin does not create another Level 1 root; the existing primary Super Admin remains the hierarchy root.'
+                  :
                 selectedOrganizationalRole?.description ||
                 'Select a role to preview its access configuration.'
               }}
@@ -418,8 +471,12 @@ onMounted(async () => {
             <div>
               <i class="pi pi-sitemap" />
               <span>
-                <strong>Sales hierarchy:</strong>
-                {{ isSalesAccount ? 'Assigned later from Sales Structure' : 'Not included' }}
+                <strong>Hierarchy assignment:</strong>
+                {{
+                  isSalesAccount
+                    ? 'Created automatically using the selected Role and Reports To'
+                    : 'No additional hierarchy root will be created'
+                }}
               </span>
             </div>
           </div>
@@ -450,7 +507,7 @@ onMounted(async () => {
             </div>
             <div>
               <dt>Role Level</dt>
-              <dd>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : '—' }}</dd>
+              <dd>{{ isSalesAccount ? selectedOrganizationalRole?.level ?? '—' : 'System' }}</dd>
             </div>
             <div>
               <dt>Status</dt>
@@ -503,8 +560,10 @@ onMounted(async () => {
             <strong>What should Admin fill?</strong>
             <p>
               Fill Full Name, Email, Temporary Password, and Account Type.
-              Role is required only for Sales Account. Phone is optional and
-              Employee ID is generated automatically.
+              Sales Accounts also require a Role and Reports To so their hierarchy
+              assignment can be created automatically. Additional Super Admin accounts
+              receive system access without creating another Level 1 root.
+              Phone is optional and Employee ID is generated automatically.
             </p>
           </div>
         </section>
@@ -808,8 +867,8 @@ onMounted(async () => {
   height: 58px;
   place-content: center;
   border-radius: 50%;
-  background: #eaf2ff;
-  color: #2563eb;
+  background: #fff5f6;
+  color: #d14350;
   font-size: 1rem;
   font-weight: 800;
 }
@@ -947,23 +1006,23 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.85rem;
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  border-color: #f3b9c0;
+  background: #fff1f2;
 }
 
 .help-card > i {
   margin-top: 0.08rem;
-  color: #2563eb;
+  color: #d14350;
 }
 
 .help-card strong {
-  color: #1e3a8a;
+  color: #922833;
   font-size: 0.73rem;
 }
 
 .help-card p {
   margin: 0.18rem 0 0;
-  color: #1e40af;
+  color: #ad3040;
   font-size: 0.66rem;
   line-height: 1.5;
 }

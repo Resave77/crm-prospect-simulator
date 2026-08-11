@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { stageTone, stageLabel } from './stageColors'
 import { nextStage, previousStage } from '../../../domain/pipeline'
 import type { Prospect } from '../../../types/crm'
@@ -206,13 +206,13 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 }
 .pipeline-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
 .pipeline-card--highlight {
-  border-color: #2563eb !important;
-  box-shadow: 0 0 0 2px rgba(37,99,235,0.18), 0 2px 8px rgba(37,99,235,0.1) !important;
+  border-color: #d14350 !important;
+  box-shadow: 0 0 0 2px rgba(209,67,80,0.18), 0 2px 8px rgba(209,67,80,0.1) !important;
   animation: pulse-highlight 0.6s ease;
 }
 @keyframes pulse-highlight {
-  0% { box-shadow: 0 0 0 4px rgba(37,99,235,0.25); }
-  100% { box-shadow: 0 0 0 2px rgba(37,99,235,0.18), 0 2px 8px rgba(37,99,235,0.1); }
+  0% { box-shadow: 0 0 0 4px rgba(209,67,80,0.25); }
+  100% { box-shadow: 0 0 0 2px rgba(209,67,80,0.18), 0 2px 8px rgba(209,67,80,0.1); }
 }
 
 /* ── COMPACT (DESKTOP) ── */
@@ -422,10 +422,10 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 }
 .pact-detail:hover { background: #f8fafc; }
 .pact-next {
-  background: #2563eb;
+  background: #d14350;
   color: #fff;
 }
-.pact-next:hover { background: #1d4ed8; }
+.pact-next:hover { background: #bb3342; }
 .pact-won {
   background: #16a34a;
   color: #fff;

@@ -26,11 +26,13 @@ const (
 	userSales3ID = "4ef6f759-c0e9-45ea-996e-8f07c38ab201"
 	userSandyID  = "3f01df1b-950d-43f1-bce2-d8cc658d2101"
 
-	roleLevel1ID = "00000000-0000-0000-0000-000000000101"
-	roleLevel2ID = "00000000-0000-0000-0000-000000000102"
-	roleLevel3ID = "00000000-0000-0000-0000-000000000103"
-	roleLevel4ID = "00000000-0000-0000-0000-000000000104"
+	roleSuperAdminID               = "00000000-0000-0000-0000-000000000100"
+	roleLevel1ID                   = "00000000-0000-0000-0000-000000000101"
+	roleLevel2ID                   = "00000000-0000-0000-0000-000000000102"
+	roleLegacyRegionalSupervisorID = "00000000-0000-0000-0000-000000000103"
+	roleLevel3ID                   = "00000000-0000-0000-0000-000000000104"
 
+	assignmentAdminRootID    = "840abe29-2f74-4422-89b7-d4834c1cf61c"
 	assignmentLevel1RootID   = "945c73a2-cedb-42bf-88c2-9e78388967e5"
 	assignmentLevel2ID       = "6d0b6630-f256-41bd-8a37-acbff3ab542f"
 	assignmentLevel3ID       = "989db891-e70e-4f2a-a414-6b5f24a3a6c7"
@@ -235,10 +237,6 @@ func optUUID(s string) *uuid.UUID {
 	return &u
 }
 
-func optString(s string) *string {
-	return &s
-}
-
 func normalizeRoleName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(name), " "))
 }
@@ -272,22 +270,22 @@ func buildUsers() []baselineUser {
 		{
 			ID: uid(userLevel3ID), Email: "level3@yummy.test", PasswordHash: passwordHashLevel3,
 			FullName: "Jamal Kabur", EmployeeID: "EMP-2026-LEV-5264", SystemRole: "SALES_EXECUTIVE",
-			Status: "ACTIVE", TokenVersion: 1, SalesRoleID: optUUID(roleLevel4ID),
+			Status: "ACTIVE", TokenVersion: 1, SalesRoleID: optUUID(roleLevel3ID),
 		},
 		{
 			ID: uid(userSalesID), Email: "sales@yummy.test", PasswordHash: passwordHashSales,
 			FullName: "Nurdin Pratama", EmployeeID: "SE-0001", SystemRole: "SALES_EXECUTIVE",
-			Status: "ACTIVE", TokenVersion: 5, SalesRoleID: optUUID(roleLevel4ID),
+			Status: "ACTIVE", TokenVersion: 5, SalesRoleID: optUUID(roleLevel3ID),
 		},
 		{
 			ID: uid(userSales2ID), Email: "sales2@yummy.test", PasswordHash: passwordHashAdmin,
 			FullName: "Alicia Ramadhan", EmployeeID: "SE-0002", SystemRole: "SALES_EXECUTIVE",
-			Status: "ACTIVE", TokenVersion: 1, SalesRoleID: optUUID(roleLevel4ID),
+			Status: "ACTIVE", TokenVersion: 1, SalesRoleID: optUUID(roleLevel3ID),
 		},
 		{
 			ID: uid(userSales3ID), Email: "sales3@yummy.test", PasswordHash: passwordHashAdmin,
 			FullName: "Rizky Ananda", EmployeeID: "SE-0003", SystemRole: "SALES_EXECUTIVE",
-			Status: "ACTIVE", TokenVersion: 1,
+			Status: "ACTIVE", TokenVersion: 1, SalesRoleID: optUUID(roleLevel3ID),
 		},
 		{
 			ID: uid(userSandyID), Email: "sandy@yummy.test", PasswordHash: passwordHashSandy,
@@ -300,23 +298,23 @@ func buildUsers() []baselineUser {
 func buildRoles() []baselineRole {
 	return []baselineRole{
 		{
-			ID: uid(roleLevel1ID), Name: "Sales Level 1", Level: 1,
-			Description: "Default editable sales organization role", LandingPage: "/admin/dashboard",
+			ID: uid(roleSuperAdminID), Name: "SUPER_ADMIN", Level: 1,
+			Description: "Top-level organizational role for the primary Super Admin", LandingPage: "/admin/dashboard",
 			PermissionKeys: levelOnePermissions, UpdatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(roleLevel2ID), Name: "Sales Level 2", Level: 2,
-			Description: "Default editable sales organization role", LandingPage: "/sales/dashboard",
+			ID: uid(roleLevel1ID), Name: "Sales Level 1", Level: 2,
+			Description: "Top-level sales role under Super Admin", LandingPage: "/sales/dashboard",
 			PermissionKeys: levelTwoPermissions, UpdatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(roleLevel3ID), Name: "Sales Regional Supervisor", Level: 3,
-			Description: "Supervises Level 4 sales in one team", LandingPage: "/sales/dashboard",
+			ID: uid(roleLevel2ID), Name: "Sales Level 2", Level: 3,
+			Description: "Second-level sales role", LandingPage: "/sales/dashboard",
 			PermissionKeys: levelThreePermissions, UpdatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(roleLevel4ID), Name: "Sales Level 4", Level: 4,
-			Description: "Default editable sales organization role", LandingPage: "/sales/dashboard",
+			ID: uid(roleLevel3ID), Name: "Sales Level 3", Level: 4,
+			Description: "Operational sales role", LandingPage: "/sales/dashboard",
 			PermissionKeys: levelFourPermissions, UpdatedBy: optUUID(userAdminID),
 		},
 	}
@@ -325,33 +323,38 @@ func buildRoles() []baselineRole {
 func buildAssignments() []baselineAssignment {
 	return []baselineAssignment{
 		{
+			ID: uid(assignmentAdminRootID), UserID: uid(userAdminID), RoleID: uid(roleSuperAdminID),
+			EffectiveFrom: "2026-08-01",
+			CreatedBy:     optUUID(userAdminID),
+		},
+		{
 			ID: uid(assignmentLevel1RootID), UserID: uid(userLevel1ID), RoleID: uid(roleLevel1ID),
-			EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ParentID: optUUID(userAdminID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 		{
 			ID: uid(assignmentLevel2ID), UserID: uid(userLevel2ID), RoleID: uid(roleLevel2ID),
-			ParentID: optUUID(userLevel1ID), EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ParentID: optUUID(userLevel1ID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 		{
 			ID: uid(assignmentLevel3ID), UserID: uid(userLevel3ID), RoleID: uid(roleLevel3ID),
-			ParentID: optUUID(userLevel2ID), EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ParentID: optUUID(userLevel2ID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(assignmentSalesLevel3ID), UserID: uid(userSalesID), RoleID: uid(roleLevel4ID),
-			ParentID: optUUID(userLevel3ID), EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ID: uid(assignmentSalesLevel3ID), UserID: uid(userSalesID), RoleID: uid(roleLevel3ID),
+			ParentID: optUUID(userLevel2ID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(assignmentSales2Level3ID), UserID: uid(userSales2ID), RoleID: uid(roleLevel4ID),
-			ParentID: optUUID(userLevel3ID), EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ID: uid(assignmentSales2Level3ID), UserID: uid(userSales2ID), RoleID: uid(roleLevel3ID),
+			ParentID: optUUID(userLevel2ID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 		{
-			ID: uid(assignmentSales3Level3ID), UserID: uid(userSales3ID), RoleID: uid(roleLevel4ID),
-			ParentID: optUUID(userLevel3ID), EffectiveFrom: "2026-08-01", EffectiveTo: optString("2026-08-31"),
+			ID: uid(assignmentSales3Level3ID), UserID: uid(userSales3ID), RoleID: uid(roleLevel3ID),
+			ParentID: optUUID(userLevel2ID), EffectiveFrom: "2026-08-01",
 			CreatedBy: optUUID(userAdminID),
 		},
 	}
@@ -369,14 +372,25 @@ func resolveUserIDByEmail(ctx context.Context, tx pgx.Tx, email string) (uuid.UU
 	return id, true, nil
 }
 
-func resolveRoleIDByName(ctx context.Context, tx pgx.Tx, normalized string) (uuid.UUID, bool, error) {
+func resolveRoleID(ctx context.Context, tx pgx.Tx, baselineID uuid.UUID, normalized string) (uuid.UUID, bool, error) {
 	var id uuid.UUID
-	err := tx.QueryRow(ctx, `
+
+	// Prefer the stable baseline UUID so renaming a role does not create a duplicate.
+	err := tx.QueryRow(ctx, `SELECT id FROM sales_roles WHERE id = $1`, baselineID).Scan(&id)
+	if err == nil {
+		return id, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, err
+	}
+
+	// Fallback for databases that may already contain the same role under a different UUID.
+	err = tx.QueryRow(ctx, `
 		SELECT id FROM sales_roles
 		WHERE is_active = true AND lower(btrim(normalized_name)) = lower(btrim($1))
 		ORDER BY created_at LIMIT 1`, normalized).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, false, nil
+		return baselineID, false, nil
 	}
 	if err != nil {
 		return uuid.Nil, false, err
@@ -384,7 +398,7 @@ func resolveRoleIDByName(ctx context.Context, tx pgx.Tx, normalized string) (uui
 	return id, true, nil
 }
 
-func resolveAssignmentID(ctx context.Context, tx pgx.Tx, baselineID uuid.UUID, userID, roleID uuid.UUID, parentID *uuid.UUID, from, to string) (uuid.UUID, bool, error) {
+func resolveAssignmentID(ctx context.Context, tx pgx.Tx, baselineID uuid.UUID, userID, roleID uuid.UUID, parentID *uuid.UUID, from string, to *string) (uuid.UUID, bool, error) {
 	var id uuid.UUID
 	err := tx.QueryRow(ctx, `SELECT id FROM sales_structure_assignments WHERE id = $1`, baselineID).Scan(&id)
 	if err == nil {
@@ -469,7 +483,7 @@ func seedRoles(ctx context.Context, tx pgx.Tx, userIDMap map[uuid.UUID]uuid.UUID
 	roleIDMap := make(map[uuid.UUID]uuid.UUID, len(buildRoles()))
 
 	for _, r := range buildRoles() {
-		actualID, existed, err := resolveRoleIDByName(ctx, tx, normalizeRoleName(r.Name))
+		actualID, existed, err := resolveRoleID(ctx, tx, r.ID, normalizeRoleName(r.Name))
 		if err != nil {
 			return nil, counters{}, fmt.Errorf("resolve role %s: %w", r.Name, err)
 		}
@@ -510,6 +524,20 @@ func seedRoles(ctx context.Context, tx pgx.Tx, userIDMap map[uuid.UUID]uuid.UUID
 		}
 	}
 	return roleIDMap, counts, nil
+}
+
+func deactivateLegacyBaselineRoles(ctx context.Context, tx pgx.Tx) error {
+	legacyID := uid(roleLegacyRegionalSupervisorID)
+
+	_, err := tx.Exec(ctx, `
+		UPDATE sales_roles
+		SET is_active = false, updated_at = now()
+		WHERE id = $1
+	`, legacyID)
+	if err != nil {
+		return fmt.Errorf("deactivate legacy regional supervisor role: %w", err)
+	}
+	return nil
 }
 
 func seedRolePermissions(ctx context.Context, tx pgx.Tx, roleIDMap map[uuid.UUID]uuid.UUID) (int, error) {
@@ -567,7 +595,7 @@ func seedAssignments(ctx context.Context, tx pgx.Tx, userIDMap, roleIDMap map[uu
 			effectiveTo = *a.EffectiveTo
 		}
 
-		targetID, existed, err := resolveAssignmentID(ctx, tx, a.ID, resolvedUserID, resolvedRoleID, resolvedParentID, a.EffectiveFrom, *a.EffectiveTo)
+		targetID, existed, err := resolveAssignmentID(ctx, tx, a.ID, resolvedUserID, resolvedRoleID, resolvedParentID, a.EffectiveFrom, a.EffectiveTo)
 		if err != nil {
 			return counts, err
 		}
@@ -655,6 +683,10 @@ func run() error {
 	}
 	assignments, err := seedAssignments(ctx, tx, userIDMap, roleIDMap)
 	if err != nil {
+		return err
+	}
+
+	if err := deactivateLegacyBaselineRoles(ctx, tx); err != nil {
 		return err
 	}
 

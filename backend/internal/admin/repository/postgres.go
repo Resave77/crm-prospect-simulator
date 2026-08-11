@@ -26,22 +26,34 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 const listColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
+	active_assignment.parent_user_id, COALESCE(parent.full_name, ''),
 	sr.id, sr.name, sr.level, sr.landing_page, sr.permission_count, sr.is_active, COALESCE(sr.description, ''),
 	u.created_at, u.updated_at`
 
 const detailColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
+	active_assignment.parent_user_id, COALESCE(parent.full_name, ''),
 	sr.id, sr.name, sr.level, sr.landing_page, sr.permission_count, sr.is_active, COALESCE(sr.description, ''),
 	u.created_by, u.updated_by,
 	u.created_at, u.updated_at`
 
 const userJoin = `FROM users u LEFT JOIN users m ON m.id = u.manager_id
 	LEFT JOIN LATERAL (
+		SELECT a.sales_role_id, a.parent_user_id
+		FROM sales_structure_assignments a
+		WHERE a.user_id = u.id
+			AND a.effective_from <= CURRENT_DATE
+			AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+		ORDER BY a.effective_from DESC
+		LIMIT 1
+	) active_assignment ON true
+	LEFT JOIN users parent ON parent.id = active_assignment.parent_user_id
+	LEFT JOIN LATERAL (
 		SELECT r.id, r.name, r.level, r.landing_page, COUNT(rp.permission_id)::int AS permission_count, r.is_active, r.description
 		FROM sales_roles r
 		LEFT JOIN role_permissions rp ON rp.sales_role_id = r.id
-		WHERE r.id = u.sales_role_id
+		WHERE r.id = COALESCE(active_assignment.sales_role_id, u.sales_role_id)
 		GROUP BY r.id
 		LIMIT 1
 	) sr ON true`
@@ -231,7 +243,77 @@ func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, input
 }
 
 func (r *PostgresRepository) SetCurrentSalesAssignment(ctx context.Context, userID uuid.UUID, salesRoleID *uuid.UUID, parentUserID *uuid.UUID, actorID uuid.UUID) error {
-	return nil
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if salesRoleID == nil {
+		_, err := tx.Exec(ctx, `
+			UPDATE sales_structure_assignments
+			SET effective_to = CURRENT_DATE - INTERVAL '1 day',
+			    updated_at = now()
+			WHERE user_id = $1
+			  AND effective_from <= CURRENT_DATE
+			  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)`,
+			userID)
+		if err != nil {
+			return mapError(err)
+		}
+		return tx.Commit(ctx)
+	}
+
+	var currentID *uuid.UUID
+	var currentRoleID *uuid.UUID
+	var currentParentID *uuid.UUID
+	err = tx.QueryRow(ctx, `
+		SELECT id, sales_role_id, parent_user_id
+		FROM sales_structure_assignments
+		WHERE user_id = $1
+		  AND effective_from <= CURRENT_DATE
+		  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+		ORDER BY effective_from DESC
+		LIMIT 1
+		FOR UPDATE`,
+		userID).Scan(&currentID, &currentRoleID, &currentParentID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+
+	if currentID != nil && uuidPtrEqual(currentRoleID, salesRoleID) && uuidPtrEqual(currentParentID, parentUserID) {
+		return tx.Commit(ctx)
+	}
+
+	if currentID != nil {
+		_, err = tx.Exec(ctx, `
+			UPDATE sales_structure_assignments
+			SET effective_to = CURRENT_DATE - INTERVAL '1 day',
+			    updated_at = now()
+			WHERE id = $1`,
+			*currentID)
+		if err != nil {
+			return mapError(err)
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO sales_structure_assignments (
+			id,
+			user_id,
+			sales_role_id,
+			parent_user_id,
+			effective_from,
+			effective_to,
+			created_by,
+			updated_at
+		)
+		VALUES (gen_random_uuid(), $1, $2, $3, date_trunc('month', CURRENT_DATE)::date, NULL, $4, now())`,
+		userID, *salesRoleID, parentUserID, actorID)
+	if err != nil {
+		return mapError(err)
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status authmodel.UserStatus, actorID uuid.UUID) error {
@@ -415,10 +497,12 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	var orgActive pgtype.Bool
 	var orgDescription pgtype.Text
 	var managerID *uuid.UUID
+	var reportsToUserID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
+		&reportsToUserID, &item.ReportsToName,
 		&orgRoleID, &orgRoleName, &orgRoleLevel, &orgLanding, &orgPermissionCount, &orgActive, &orgDescription,
 		&item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
@@ -434,6 +518,7 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 		item.OrganizationalRole = orgSummary(*orgRoleID, orgRoleName, orgRoleLevel, orgLanding, orgPermissionCount, orgActive, orgDescription)
 	}
 	item.ManagerID = managerID
+	item.ReportsToUserID = reportsToUserID
 	return item, nil
 }
 
@@ -449,10 +534,12 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 	var orgActive pgtype.Bool
 	var orgDescription pgtype.Text
 	var managerID *uuid.UUID
+	var reportsToUserID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
+		&reportsToUserID, &item.ReportsToName,
 		&orgRoleID, &orgRoleName, &orgRoleLevel, &orgLanding, &orgPermissionCount, &orgActive, &orgDescription,
 		&item.CreatedBy, &item.UpdatedBy,
 		&item.CreatedAt, &item.UpdatedAt)
@@ -469,10 +556,18 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 		item.Phone = phone.String
 	}
 	item.ManagerID = managerID
+	item.ReportsToUserID = reportsToUserID
 	if orgRoleID != nil {
 		item.OrganizationalRole = orgSummary(*orgRoleID, orgRoleName, orgRoleLevel, orgLanding, orgPermissionCount, orgActive, orgDescription)
 	}
 	return item, nil
+}
+
+func uuidPtrEqual(left, right *uuid.UUID) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func orgSummary(id uuid.UUID, name pgtype.Text, level pgtype.Int2, landing pgtype.Text, permissionCount pgtype.Int4, active pgtype.Bool, description pgtype.Text) *model.OrganizationalRoleSummary {

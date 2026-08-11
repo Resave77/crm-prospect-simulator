@@ -40,6 +40,7 @@ type Principal struct {
 	SessionID          uuid.UUID
 	TokenVersion       int
 	MustChangePassword bool
+	SalesRole          *model.SalesRoleSummary
 }
 
 type AuthService struct {
@@ -209,6 +210,7 @@ func (s *AuthService) AuthenticateAccess(
 		Role:         user.Role,
 		SessionID:    claims.SessionID,
 		TokenVersion: user.TokenVersion,
+		SalesRole:    user.SalesRole,
 
 		// TEMP DEMO: Mandatory first-login password enforcement is disabled.
 		MustChangePassword: false,

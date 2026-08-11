@@ -43,21 +43,31 @@ type User struct {
 	LastLoginAt        *time.Time
 	MustChangePassword bool
 	ManagerID          *uuid.UUID
+	SalesRole          *SalesRoleSummary
 	CreatedBy          *uuid.UUID
 	UpdatedBy          *uuid.UUID
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
 
+type SalesRoleSummary struct {
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Level          int       `json:"level"`
+	LandingPage    *string   `json:"landingPage"`
+	PermissionKeys []string  `json:"permissionKeys,omitempty"`
+}
+
 type PublicUser struct {
-	ID                 uuid.UUID  `json:"id"`
-	Email              string     `json:"email"`
-	FullName           string     `json:"fullName"`
-	EmployeeID         string     `json:"employeeId"`
-	Phone              string     `json:"phone"`
-	Role               Role       `json:"role"`
-	MustChangePassword bool       `json:"mustChangePassword"`
-	ManagerID          *uuid.UUID `json:"managerId"`
+	ID                 uuid.UUID         `json:"id"`
+	Email              string            `json:"email"`
+	FullName           string            `json:"fullName"`
+	EmployeeID         string            `json:"employeeId"`
+	Phone              string            `json:"phone"`
+	Role               Role              `json:"role"`
+	MustChangePassword bool              `json:"mustChangePassword"`
+	ManagerID          *uuid.UUID        `json:"managerId"`
+	SalesRole          *SalesRoleSummary `json:"salesRole"`
 }
 
 func (u User) Public() PublicUser {
@@ -70,5 +80,6 @@ func (u User) Public() PublicUser {
 		Role:               u.Role,
 		MustChangePassword: u.MustChangePassword,
 		ManagerID:          u.ManagerID,
+		SalesRole:          u.SalesRole,
 	}
 }

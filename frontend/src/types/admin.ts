@@ -38,6 +38,8 @@ export interface AdminUserListItem {
   status: AdminUserStatus
   managerId: string | null
   managerName: string
+  reportsToUserId?: string | null
+  reportsToName?: string
   organizationalRole: AdminOrganizationalRoleSummary | null
   mustChangePassword: boolean
   createdAt: string

@@ -515,7 +515,7 @@ function openActionMenu(
 }
 
 .hierarchy-table :deep(.p-datatable-tbody > tr:hover > td) {
-  background: #f8fbff;
+  background: #fffbfb;
 }
 
 .hierarchy-table :deep(.selection-column) {
@@ -560,7 +560,7 @@ function openActionMenu(
 
 .hier-level.level-1,
 .sales-name.level-1 {
-  color: #1d4ed8;
+  color: #bb3342;
 }
 
 .hier-level.level-2,

@@ -9,8 +9,8 @@ test('post-login redirect falls back to the existing admin dashboard route', asy
 
   assert.match(router, /path: 'dashboard', name: 'AdminDashboard'/)
   assert.match(navigation, /ADMIN_DASHBOARD_ROUTE = '\/admin\/dashboard'/)
-  assert.match(navigation, /routePermitted\(router, intended, role\)/)
-  assert.match(login, /resolvePostLoginRoute\(router, user\.role, intended\)/)
+  assert.match(navigation, /routePermitted\(router, intended, user\)/)
+  assert.match(login, /resolvePostLoginRoute\(router, user, intended\)/)
 })
 
 test('SUPER_ADMIN passes administrator route guards', async () => {

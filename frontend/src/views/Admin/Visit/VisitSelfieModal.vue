@@ -260,7 +260,7 @@ function viewGps() {
 .info-value-col small { font-size: 0.68rem; color: var(--text-muted); }
 .info-text-wrap { font-size: 0.75rem; color: var(--text-primary); text-align: right; max-width: 260px; word-break: break-word; }
 
-.prospect-link { color: #2563eb; cursor: pointer; }
+.prospect-link { color: #d14350; cursor: pointer; }
 .prospect-link:hover { text-decoration: underline; }
 
 .note-block { display: flex; flex-direction: column; gap: 0.25rem; }

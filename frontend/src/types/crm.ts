@@ -43,6 +43,18 @@ export interface PlaceResult {
   markerColor: string
   markerIcon: string
   placeTypes: string[]
+  isCustomer?: boolean
+  customerId?: string
+}
+
+export interface CustomerMarker {
+  customerId: string
+  customerCode: string
+  googlePlaceId: string
+  name: string
+  address: string
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface SalesExecutiveOption { id: string; fullName: string; activeProspectCount: number }

@@ -4,15 +4,88 @@ import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
-const auth=useAuthStore(); const crm=useCrmStore(); const error=ref('')
-const active=computed(()=>crm.pipeline.filter(v=>!['LOST','CONVERTED'].includes(v.status)).length)
-const won=computed(()=>crm.pipeline.filter(v=>v.status==='WON').length)
-const assignedToday=computed(()=>crm.pipeline.slice(0,3))
-const stageCounts=computed(()=>['NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION','WON'].map(status=>({status,count:crm.pipeline.filter(v=>v.status===status).length})))
-onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCustomers()])}catch(e){error.value=crm.errorMessage(e)}})
+import { getAdminVisits } from '../../../api/crm'
+import type { ProspectStatus, VisitMonitoringItem } from '../../../types/crm'
+
+const auth = useAuthStore()
+const crm = useCrmStore()
+const error = ref('')
+const loading = ref(true)
+const todayVisits = ref<VisitMonitoringItem[]>([])
+
+const todayKey = new Date().toLocaleDateString('en-CA')
+const formattedDate = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date())
+const stages: ProspectStatus[] = ['NEW_LEAD', 'CONTACTED', 'INTERESTED', 'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATION', 'WON']
+
+const active = computed(() => crm.pipeline.filter((item) => !['LOST', 'CONVERTED', 'WON'].includes(item.status)).length)
+const won = computed(() => crm.pipeline.filter((item) => item.status === 'WON' || item.status === 'CONVERTED').length)
+const stageCounts = computed(() => stages.map((status) => ({ status, count: crm.pipeline.filter((item) => item.status === status).length })))
+const maxStageCount = computed(() => Math.max(1, ...stageCounts.value.map((entry) => entry.count)))
+const recentPipeline = computed(() => [...crm.pipeline].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5))
+const todayAssignments = computed(() => todayVisits.value.slice(0, 4))
+
+function statusSeverity(status: ProspectStatus): 'success' | 'danger' | 'warn' | 'info' | 'secondary' {
+  if (status === 'WON' || status === 'CONVERTED') return 'success'
+  if (status === 'LOST') return 'danger'
+  if (status === 'QUALIFIED' || status === 'NEGOTIATION') return 'warn'
+  if (status === 'NEW_LEAD') return 'secondary'
+  return 'info'
+}
+
+onMounted(async () => {
+  try {
+    const [, , visits] = await Promise.all([
+      crm.loadPipeline(),
+      crm.loadAdminCustomers(),
+      getAdminVisits({ dateFrom: todayKey, dateTo: todayKey, salesExecutiveId: '', customerName: '', radiusStatus: 'ALL' }),
+    ])
+    todayVisits.value = visits
+  } catch (caught) {
+    error.value = crm.errorMessage(caught)
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
-<template><section class="admin-dashboard"><Message v-if="error" severity="error">{{ error }}</Message><div class="dashboard-header"><div><h1>Admin Dashboard</h1><p>A clear view of field sales momentum, {{ auth.user?.fullName }}.</p></div><RouterLink class="date-control" to="/admin/prospects/pipeline"><i class="pi pi-calendar" /> {{ new Date().toLocaleDateString() }}</RouterLink></div><div class="metric-grid"><RouterLink to="/admin/customers" class="metric-card"><span>Total Customers<i class="pi pi-users" /></span><strong>{{ crm.adminCustomers.length }}</strong><small>Converted existing customers</small></RouterLink><RouterLink to="/admin/visit-monitoring" class="metric-card"><span>Today's Visits<i class="pi pi-map-marker" /></span><strong>{{ assignedToday.length }}</strong><small>Simulation assignments</small></RouterLink><RouterLink to="/admin/prospects/pipeline" class="metric-card"><span>Total Prospects<i class="pi pi-briefcase" /></span><strong>{{ crm.pipeline.length }}</strong><small>{{ active }} active pipeline</small></RouterLink><RouterLink to="/admin/prospects/list" class="metric-card"><span>Won Prospect<i class="pi pi-star" /></span><strong>{{ won }}</strong><small>Use WON filter in list</small></RouterLink></div><div class="dashboard-grid"><article class="dashboard-panel trend-panel"><header><div><strong>Pipeline Trend</strong><span>Current distribution by stage</span></div></header><div class="bar-chart"><div v-for="entry in stageCounts" :key="entry.status"><span>{{ entry.count }}</span><i :style="{height:`${Math.max(12,entry.count*28)}px`}" /><small>{{ entry.status.split('_').map(v=>v[0]).join('') }}</small></div></div></article><article class="dashboard-panel pipeline-summary"><header><div><strong>Prospect Pipeline</strong><span>Current stage distribution</span></div><RouterLink to="/admin/prospects/pipeline">•••</RouterLink></header><div class="open-total"><span>Open prospects</span><strong>{{ active }}</strong></div><div v-for="entry in stageCounts.slice(-4)" :key="entry.status" class="pipeline-line"><span>{{ entry.status.replaceAll('_',' ') }}</span><i><b :style="{width:`${Math.max(5,(entry.count/Math.max(1,crm.pipeline.length))*100)}%`}" /></i><strong>{{ entry.count }}</strong></div></article><article class="dashboard-panel recent-panel"><header><div><strong>Recent Pipeline Activity</strong><span>Latest records updated by the sales team</span></div><RouterLink to="/admin/prospects/pipeline">View all</RouterLink></header><table><thead><tr><th>Sales Executive</th><th>Prospect</th><th>Industry</th><th>Status</th></tr></thead><tbody><tr v-for="item in crm.pipeline.slice(0,5)" :key="item.id"><td>{{ item.assignedSalesExecutive }}</td><td>{{ item.placeName }}</td><td>{{ item.industryGroup }}</td><td><Tag :value="item.status.replaceAll('_',' ')" :severity="item.status==='WON'?'success':'info'" /></td></tr></tbody></table></article><article class="dashboard-panel assignments"><header><div><strong>Today's Assignment</strong><span>{{ assignedToday.length }} active records</span></div></header><RouterLink v-for="item in assignedToday" :key="item.id" :to="`/admin/prospects/pipeline?search=${encodeURIComponent(item.placeName)}`"><span>{{ new Date(item.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) }}</span><div><strong>{{ item.placeName }}</strong><small>{{ item.assignedSalesExecutive }}</small></div><i class="pi pi-arrow-right" /></RouterLink></article></div></section></template>
+<template>
+  <section class="admin-dashboard">
+    <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
+    <div class="dashboard-header">
+      <div><span class="dashboard-eyebrow">Workspace overview</span><h1>Admin Dashboard</h1><p>Monitor sales activity and pipeline momentum, {{ auth.user?.fullName }}.</p></div>
+      <RouterLink class="date-control" to="/admin/visit-monitoring"><i class="pi pi-calendar" /> {{ formattedDate }}</RouterLink>
+    </div>
+    <div v-if="loading" class="metric-grid dashboard-skeletons"><div v-for="n in 4" :key="n" class="metric-card skeleton-metric"><i /><strong /><small /></div></div>
+    <div v-else class="metric-grid">
+      <RouterLink to="/admin/customers" class="metric-card"><span>Total Customers<i class="pi pi-users" /></span><strong>{{ crm.adminCustomers.length }}</strong><small>Converted customer records</small></RouterLink>
+      <RouterLink to="/admin/visit-monitoring" class="metric-card"><span>Today's Visits<i class="pi pi-map-marker" /></span><strong>{{ todayVisits.length }}</strong><small>Recorded field visits today</small></RouterLink>
+      <RouterLink to="/admin/prospects/pipeline" class="metric-card"><span>Total Prospects<i class="pi pi-briefcase" /></span><strong>{{ crm.pipeline.length }}</strong><small>{{ active }} currently active</small></RouterLink>
+      <RouterLink to="/admin/prospects/list" class="metric-card"><span>Won Prospects<i class="pi pi-star" /></span><strong>{{ won }}</strong><small>Won and converted records</small></RouterLink>
+    </div>
+    <div class="dashboard-grid">
+      <article class="dashboard-panel trend-panel">
+        <header><div><strong>Pipeline Distribution</strong><span>Prospects grouped by current stage</span></div><RouterLink to="/admin/prospects/pipeline">Open pipeline</RouterLink></header>
+        <div v-if="!loading && crm.pipeline.length" class="bar-chart"><div v-for="entry in stageCounts" :key="entry.status"><span>{{ entry.count }}</span><i :style="{ height: `${Math.max(10, (entry.count / maxStageCount) * 120)}px` }" /><small>{{ entry.status.split('_').map((value) => value[0]).join('') }}</small></div></div>
+        <div v-else-if="!loading" class="panel-empty"><i class="pi pi-chart-bar" /><strong>No pipeline data</strong><span>Pipeline distribution will appear here.</span></div><div v-else class="chart-skeleton" />
+      </article>
+      <article class="dashboard-panel pipeline-summary">
+        <header><div><strong>Prospect Pipeline</strong><span>Progress across later stages</span></div><RouterLink to="/admin/prospects/pipeline"><i class="pi pi-arrow-up-right" /></RouterLink></header>
+        <div class="open-total"><span>Open prospects</span><strong>{{ active }}</strong></div>
+        <div v-for="entry in stageCounts.slice(-4)" :key="entry.status" class="pipeline-line"><span>{{ entry.status.replaceAll('_', ' ') }}</span><i><b :style="{ width: `${Math.max(5, (entry.count / maxStageCount) * 100)}%` }" /></i><strong>{{ entry.count }}</strong></div>
+      </article>
+      <article class="dashboard-panel recent-panel">
+        <header><div><strong>Recent Pipeline Activity</strong><span>Latest prospect records updated by the team</span></div><RouterLink to="/admin/prospects/pipeline">View all</RouterLink></header>
+        <div v-if="recentPipeline.length" class="activity-table-wrap"><table><thead><tr><th>Sales Executive</th><th>Prospect</th><th>Industry</th><th>Status</th></tr></thead><tbody><tr v-for="item in recentPipeline" :key="item.id"><td>{{ item.assignedSalesExecutive || 'Unassigned' }}</td><td>{{ item.placeName }}</td><td>{{ item.industryGroup || '—' }}</td><td><Tag :value="item.status.replaceAll('_', ' ')" :severity="statusSeverity(item.status)" /></td></tr></tbody></table></div>
+        <div v-else-if="!loading" class="panel-empty compact"><i class="pi pi-inbox" /><strong>No recent activity</strong></div>
+      </article>
+      <article class="dashboard-panel assignments">
+        <header><div><strong>Today's Visits</strong><span>{{ todayVisits.length }} recorded today</span></div><RouterLink to="/admin/visit-monitoring">View all</RouterLink></header>
+        <RouterLink v-for="item in todayAssignments" :key="item.id" :to="`/admin/visit-monitoring?customerName=${encodeURIComponent(item.customerName)}`"><span>{{ new Date(item.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span><div><strong>{{ item.customerName }}</strong><small>{{ item.salesExecutiveName }}</small></div><i class="pi pi-arrow-right" /></RouterLink>
+        <div v-if="!loading && !todayAssignments.length" class="panel-empty compact"><i class="pi pi-calendar-times" /><strong>No visits recorded today</strong></div>
+      </article>
+    </div>
+  </section>
+</template>
 
 <style scoped>
 .admin-dashboard {
@@ -40,6 +113,7 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   color: var(--text-muted, #64748b); 
   font-size: 0.8rem; 
 }
+.dashboard-eyebrow { display:block; margin-bottom:.3rem; color:#d14350; font-size:.62rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
 .date-control {
   padding: 0.55rem 0.9rem;
   display: flex;
@@ -56,9 +130,9 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .date-control:hover { 
-  border-color: var(--brand-blue, #2563eb); 
-  color: var(--brand-blue, #2563eb);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+  border-color: var(--brand-blue, #d14350); 
+  color: var(--brand-blue, #d14350);
+  box-shadow: 0 4px 12px rgba(209, 67, 80, 0.12);
   transform: translateY(-1px);
 }
 
@@ -87,13 +161,13 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(209, 67, 80, 0.3), transparent);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
 .metric-card:hover { 
   box-shadow: 0 10px 20px -5px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03); 
-  border-color: rgba(37, 99, 235, 0.3); 
+  border-color: rgba(209, 67, 80, 0.3); 
   transform: translateY(-3px); 
 }
 .metric-card:hover::before {
@@ -114,8 +188,8 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   height: 2.1rem; 
   display: grid; 
   place-items: center;
-  color: var(--brand-blue, #2563eb); 
-  background: var(--brand-blue-bg, #eff6ff); 
+  color: var(--brand-blue, #d14350); 
+  background: var(--brand-blue-bg, #fff1f2); 
   border-radius: var(--radius-sm, 8px); 
   font-size: 0.9rem;
   transition: transform 0.2s ease;
@@ -125,9 +199,9 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
 }
 
 /* Aksentuasi warna ikon berdasarkan kartu */
-.metric-card:nth-child(1) > span i { color: #2563eb; background: #eff6ff; }
+.metric-card:nth-child(1) > span i { color: #d14350; background: #fff1f2; }
 .metric-card:nth-child(2) > span i { color: #059669; background: #ecfdf5; }
-.metric-card:nth-child(3) > span i { color: #7c3aed; background: #f5f3ff; }
+.metric-card:nth-child(3) > span i { color: #c54b59; background: #f5f3ff; }
 .metric-card:nth-child(4) > span i { color: #d97706; background: #fffbe2; }
 
 .metric-card > strong { 
@@ -178,17 +252,17 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   font-size: 0.68rem; 
 }
 .dashboard-panel header a { 
-  color: var(--brand-blue, #2563eb); 
+  color: var(--brand-blue, #d14350); 
   text-decoration: none; 
   font-size: 0.72rem; 
   font-weight: 600; 
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  background: var(--brand-blue-50, #eff6ff);
+  background: var(--brand-blue-50, #fff1f2);
   transition: all 0.2s ease; 
 }
 .dashboard-panel header a:hover { 
-  background: var(--brand-blue, #2563eb);
+  background: var(--brand-blue, #d14350);
   color: #ffffff;
 }
 
@@ -225,14 +299,14 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
 .bar-chart i { 
   width: 24px; 
   max-height: 130px; 
-  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%); 
+  background: linear-gradient(180deg, #df5a66 0%, #bb3342 100%); 
   border-radius: 6px 6px 2px 2px; 
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 4px rgba(209, 67, 80, 0.25);
   transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease; 
 }
 .bar-chart div:hover i {
   transform: scaleY(1.03);
-  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  background: linear-gradient(180deg, #df5a66 0%, #d14350 100%);
 }
 
 /* Summary Pipeline */
@@ -242,9 +316,9 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #1e40af; 
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); 
-  border: 1px solid #bfdbfe;
+  color: #ad3040; 
+  background: linear-gradient(135deg, #fff1f2 0%, #ffd9dd 100%); 
+  border: 1px solid #f3b9c0;
   border-radius: var(--radius-sm, 8px); 
 }
 .open-total span { 
@@ -277,7 +351,7 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
 .pipeline-line b { 
   height: 100%; 
   display: block; 
-  background: linear-gradient(90deg, #3b82f6, #1d4ed8); 
+  background: linear-gradient(90deg, #df5a66, #bb3342); 
   border-radius: 10px; 
   transition: width 0.4s ease;
 }
@@ -288,6 +362,7 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
 
 /* Recent Activity Table */
 .recent-panel { overflow-x: auto; }
+.activity-table-wrap { overflow-x:auto; }
 .recent-panel table { 
   width: 100%;
   margin-top: 0.85rem; 
@@ -334,14 +409,14 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   transition: all 0.2s ease;
 }
 .assignments > a:hover { 
-  background: #eff6ff; 
-  border-color: #bfdbfe;
+  background: #fff1f2; 
+  border-color: #f3b9c0;
   transform: translateX(2px);
 }
 .assignments > a > span { 
   font-size: 0.65rem; 
   font-weight: 700;
-  color: #2563eb;
+  color: #d14350;
   background: #ffffff;
   padding: 0.2rem 0.35rem;
   border-radius: 4px;
@@ -363,10 +438,44 @@ onMounted(async()=>{try{await Promise.all([crm.loadPipeline(),crm.loadAdminCusto
   transition: transform 0.2s ease, color 0.2s ease;
 }
 .assignments > a:hover i {
-  color: #2563eb;
+  color: #d14350;
   transform: translateX(3px);
 }
 
+.panel-empty { min-height:190px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.35rem; color:var(--text-muted); text-align:center; }
+.panel-empty i { width:44px; height:44px; display:grid; place-items:center; margin-bottom:.25rem; border-radius:13px; color:#d14350; background:#fff1f2; }
+.panel-empty strong { color:var(--text-primary); font-size:.78rem; }
+.panel-empty span { font-size:.68rem; }
+.panel-empty.compact { min-height:110px; }
+.chart-skeleton { height:200px; margin-top:1rem; border-radius:10px; background:linear-gradient(90deg,#f8f4f5 25%,#fff 50%,#f8f4f5 75%); background-size:200% 100%; animation:dashboard-pulse 1.4s infinite; }
+.skeleton-metric { min-height:118px; pointer-events:none; }
+.skeleton-metric > i,.skeleton-metric > strong,.skeleton-metric > small { display:block; border-radius:6px; background:#f1e8ea; animation:dashboard-pulse 1.4s infinite; }
+.skeleton-metric > i { width:34px; height:34px; margin-left:auto; }
+.skeleton-metric > strong { width:42%; height:24px; margin:.4rem 0; }
+.skeleton-metric > small { width:70%; height:9px; }
+@keyframes dashboard-pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
 @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .admin-dashboard { padding:.15rem 0; }
+  .dashboard-header { align-items:flex-start; gap:.8rem; margin-bottom:1rem; }
+  .dashboard-header h1 { font-size:1.35rem; }
+  .dashboard-header p { font-size:.72rem; }
+  .date-control { padding:.48rem; font-size:0; }
+  .date-control i { font-size:.85rem; }
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
+  .metric-card { padding:.85rem; border-radius:12px; }
+  .metric-card > span { font-size:.58rem; }
+  .metric-card > span i { width:1.8rem; height:1.8rem; }
+  .metric-card > strong { font-size:1.45rem; }
+  .metric-card small { font-size:.58rem; }
+  .dashboard-grid { gap:.7rem; margin-top:.8rem; }
+  .dashboard-panel { padding:.9rem; border-radius:12px; }
+  .bar-chart { height:180px; padding:.9rem .35rem .45rem; overflow-x:auto; justify-content:space-between; }
+  .bar-chart div { min-width:36px; }
+  .bar-chart i { width:18px; }
+  .activity-table-wrap table { min-width:620px; }
+  .pipeline-line { grid-template-columns:88px 1fr 24px; gap:.4rem; }
+}
 </style>

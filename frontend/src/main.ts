@@ -12,39 +12,39 @@ import { pinia } from './stores/pinia'
 const RefinedAura = definePreset(Aura, {
   semantic: {
     primary: {
-      50: '#eef5ff',
-      100: '#e0edff',
-      200: '#c8dbff',
-      300: '#a3c2ff',
-      400: '#749fff',
-      500: '#3b82f6',
-      600: '#2563eb',
-      700: '#1d4fd8',
-      800: '#1e40af',
-      900: '#1e3a8a',
-      950: '#172554'
+      50: '#fff1f2',
+      100: '#ffd9dd',
+      200: '#ffc7cd',
+      300: '#f49ba5',
+      400: '#e47781',
+      500: '#df5a66',
+      600: '#d14350',
+      700: '#bb3342',
+      800: '#a92c39',
+      900: '#922833',
+      950: '#591923'
     },
     colorScheme: {
       light: {
         surface: {
           0: '#ffffff',
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#d5dde9',
-          400: '#9aa5b7',
-          500: '#8490a3',
-          600: '#52615d',
-          700: '#374151',
-          800: '#1f2937',
-          900: '#111827',
-          950: '#030712'
+          50: '#fcf9f9',
+          100: '#f7f1f2',
+          200: '#eee3e5',
+          300: '#dccdd0',
+          400: '#a39397',
+          500: '#8d7d81',
+          600: '#625357',
+          700: '#493c40',
+          800: '#352b2e',
+          900: '#241c1e',
+          950: '#140e10'
         },
         highlight: {
-          background: '#eef5ff',
-          focusBackground: '#e0edff',
-          color: '#2563eb',
-          focusColor: '#1d4fd8'
+          background: '#fff1f2',
+          focusBackground: '#ffd9dd',
+          color: '#d14350',
+          focusColor: '#bb3342'
         }
       }
     },
@@ -56,7 +56,14 @@ const RefinedAura = definePreset(Aura, {
 
 createApp(App)
   .use(pinia)
-  .use(PrimeVue, { theme: { preset: RefinedAura } })
+  .use(PrimeVue, {
+    theme: {
+      preset: RefinedAura,
+      options: {
+        darkModeSelector: false
+      }
+    }
+  })
   .use(router)
   .use(ToastService)
   .mount('#app')

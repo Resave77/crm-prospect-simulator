@@ -190,11 +190,11 @@ function sortIcon(key: string, currentKey: string, direction: string) {
 }
 
 .act-view {
-  color: #2563eb !important;
+  color: #d14350 !important;
 }
 
 .act-view:hover {
-  background: #eff6ff !important;
+  background: #fff1f2 !important;
 }
 
 .act-edit {

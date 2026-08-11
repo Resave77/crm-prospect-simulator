@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+﻿<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -23,6 +23,19 @@ const error = ref('')
 const showAllHours = ref(false)
 const mapElement = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
+
+const mergedTypes = computed<string[]>(() => {
+  if (placeDetails.value?.placeTypes?.length) return placeDetails.value.placeTypes
+  return review.value?.prospect.placeTypes ?? []
+})
+
+const mergedCategory = computed(() => placeDetails.value?.placeCategory || review.value?.prospect.placeCategory || '')
+const mergedAddress = computed(() => placeDetails.value?.formattedAddress || review.value?.prospect.formattedAddress || '')
+const mergedPhone = computed(() => placeDetails.value?.phoneNumber || review.value?.prospect.phoneNumber || '')
+const mergedWebsite = computed(() => placeDetails.value?.websiteUrl || review.value?.prospect.websiteUrl || '')
+const mergedPlaceId = computed(() => placeDetails.value?.googlePlaceId || review.value?.prospect.googlePlaceId || '')
+const mergedLat = computed(() => placeDetails.value?.latitude ?? review.value?.prospect.latitude ?? null)
+const mergedLng = computed(() => placeDetails.value?.longitude ?? review.value?.prospect.longitude ?? null)
 
 function renderMap() {
   const p = review.value?.prospect
@@ -59,28 +72,10 @@ onBeforeUnmount(() => map?.remove())
 
     <div v-if="review" class="review-grid">
       <div class="review-main">
-        <article class="section-card">
-          <div class="page-heading"><div><p class="eyebrow">Administrator review</p><h1>{{ review.prospect.placeName }}</h1></div><div class="page-heading-tags"><Tag :value="review.prospect.status" :severity="review.prospect.status === 'WON' ? 'success' : review.prospect.status === 'LOST' ? 'danger' : 'warn'" /><Tag v-if="review.prospect.status === 'WON'" value="Ready for conversion" severity="success" /></div></div>
-          <div class="source-grid">
-            <div><span>Category</span><strong>{{ review.prospect.placeCategory }}</strong></div>
-            <div><span>Industry Group</span><strong>{{ review.prospect.industryGroup }}</strong></div>
-            <div class="wide"><span>Formatted Address</span><strong>{{ review.prospect.formattedAddress }}</strong></div>
-            <div><span>Phone</span><strong>{{ review.prospect.phoneNumber || 'Not available' }}</strong></div>
-            <div><span>Website</span><strong><a v-if="review.prospect.websiteUrl" :href="review.prospect.websiteUrl" target="_blank" rel="noopener">{{ review.prospect.websiteUrl }}</a><span v-else>Not available</span></strong></div>
-            <div><span>Google Place ID</span><strong class="mono">{{ review.prospect.googlePlaceId }}</strong></div>
-            <div><span>Sales Executive</span><strong>{{ review.prospect.assignedSalesExecutive }}</strong></div>
-            <div><span>Coordinates</span><strong v-if="review.prospect.latitude != null">{{ review.prospect.latitude.toFixed(6) }}, {{ review.prospect.longitude?.toFixed(6) }}</strong><strong v-else>Not available</strong></div>
-          </div>
-          <div v-if="review.prospect.placeTypes.length" class="tag-row" style="margin-top:0.85rem">
-            <Tag v-for="t in review.prospect.placeTypes" :key="t" :value="t" severity="secondary" />
-          </div>
-        </article>
+        <article class="section-card review-google">
+          <div class="page-heading"><div><p class="eyebrow"><i class="pi pi-map" /> Administrator review</p><h1>{{ review.prospect.placeName }}</h1></div><div class="page-heading-tags"><Tag :value="review.prospect.status" :severity="review.prospect.status === 'WON' ? 'success' : review.prospect.status === 'LOST' ? 'danger' : 'warn'" /><Tag v-if="review.prospect.status === 'WON'" value="Ready for conversion" severity="success" /></div></div>
 
-        <article v-if="placeDetails" class="section-card review-google">
-          <p class="eyebrow"><i class="pi pi-map" /> Google Maps data</p>
-          <p v-if="placeDetails.editorialSummary" class="review-editorial">{{ placeDetails.editorialSummary }}</p>
-
-          <div class="review-google-top">
+          <div v-if="placeDetails" class="review-google-top">
             <div v-if="placeDetails.rating > 0" class="review-rating">
               <span class="review-rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
               <span class="review-stars">
@@ -94,23 +89,28 @@ onBeforeUnmount(() => map?.remove())
             </div>
           </div>
 
+          <p v-if="placeDetails?.editorialSummary" class="review-editorial">{{ placeDetails.editorialSummary }}</p>
+
           <div class="source-grid">
-            <div class="wide"><span>Address</span><strong>{{ placeDetails.formattedAddress }}</strong></div>
-            <div><span>Phone</span><strong>{{ placeDetails.phoneNumber || '—' }}</strong></div>
-            <div><span>International phone</span><strong>{{ placeDetails.internationalPhone || '—' }}</strong></div>
-            <div><span>Website</span><strong><a v-if="placeDetails.websiteUrl" :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="review-link">{{ websiteDisplayUrl(placeDetails.websiteUrl) }}</a><span v-else>—</span></strong></div>
-            <div><span>Google Maps</span><strong><a v-if="placeDetails.googleMapsUrl" :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="review-link">View listing <i class="pi pi-external-link" /></a><span v-else>—</span></strong></div>
-            <div><span>Time zone</span><strong>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}</strong></div>
-            <div><span>Google Place ID</span><strong class="mono review-placeid">{{ placeDetails.googlePlaceId }}</strong></div>
-            <div><span>Coordinates</span><strong v-if="placeDetails.latitude != null">{{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude?.toFixed(6) }}</strong><strong v-else>—</strong></div>
+            <div><span>Category</span><strong>{{ mergedCategory }}</strong></div>
+            <div><span>Industry Group</span><strong>{{ review.prospect.industryGroup }}</strong></div>
+            <div class="wide"><span>Formatted Address</span><strong>{{ mergedAddress }}</strong></div>
+            <div><span>Phone</span><strong>{{ mergedPhone || '—' }}</strong></div>
+            <div v-if="placeDetails?.internationalPhone"><span>International phone</span><strong>{{ placeDetails.internationalPhone }}</strong></div>
+            <div><span>Website</span><strong><a v-if="mergedWebsite" :href="mergedWebsite" target="_blank" rel="noopener" class="review-link">{{ websiteDisplayUrl(mergedWebsite) }}</a><span v-else>—</span></strong></div>
+            <div><span>Google Maps</span><strong><a v-if="placeDetails?.googleMapsUrl" :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="review-link">View listing <i class="pi pi-external-link" /></a><span v-else>—</span></strong></div>
+            <div v-if="placeDetails?.utcOffsetMinutes != null"><span>Time zone</span><strong>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}</strong></div>
+            <div><span>Google Place ID</span><strong class="mono review-placeid">{{ mergedPlaceId }}</strong></div>
+            <div><span>Sales Executive</span><strong>{{ review.prospect.assignedSalesExecutive }}</strong></div>
+            <div><span>Coordinates</span><strong v-if="mergedLat != null && mergedLng != null">{{ mergedLat.toFixed(6) }}, {{ mergedLng.toFixed(6) }}</strong><strong v-else>—</strong></div>
           </div>
 
-          <div v-if="placeDetails.placeTypes?.length" class="tag-row" style="margin-top:0.85rem">
+          <div v-if="mergedTypes.length" class="tag-row" style="margin-top:0.85rem">
             <span class="review-tags-label">Categories:</span>
-            <Tag v-for="t in placeDetails.placeTypes.slice(0, 8)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" />
+            <Tag v-for="t in mergedTypes.slice(0, 8)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" />
           </div>
 
-          <div v-if="placeDetails.openingHours" class="review-block">
+          <div v-if="placeDetails?.openingHours" class="review-block">
             <div class="review-block-title">
               <strong>Opening hours</strong>
               <span :class="['review-hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
@@ -124,7 +124,7 @@ onBeforeUnmount(() => map?.remove())
             </div>
           </div>
 
-          <div v-if="placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup" class="review-block">
+          <div v-if="placeDetails?.delivery || placeDetails?.dineIn || placeDetails?.takeout || placeDetails?.curbsidePickup" class="review-block">
             <div class="review-block-title"><strong>Service options</strong></div>
             <div class="review-chips">
               <span v-if="placeDetails.dineIn" class="review-chip"><i class="pi pi-check" /> Dine In</span>
@@ -154,7 +154,7 @@ onBeforeUnmount(() => map?.remove())
             </div>
           </div>
 
-          <div v-if="placeDetails.reviews?.length" class="review-block">
+          <div v-if="placeDetails?.reviews?.length" class="review-block">
             <div class="review-block-title"><strong>Reviews ({{ placeDetails.reviews.length }})</strong></div>
             <div class="review-reviews">
               <div v-for="(rv, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="review-review">
@@ -176,8 +176,13 @@ onBeforeUnmount(() => map?.remove())
         </article>
 
         <article v-if="placeDetails?.photos?.length" class="section-card review-photos">
+          <p class="eyebrow"><i class="pi pi-book" /> Menu</p>
+          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="ADMINISTRATOR" section="menu" />
+        </article>
+
+        <article v-if="placeDetails?.photos?.length" class="section-card review-photos">
           <p class="eyebrow"><i class="pi pi-images" /> Photos</p>
-          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="ADMINISTRATOR" />
+          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="ADMINISTRATOR" section="photos" />
         </article>
 
         <article v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="section-card">
@@ -282,7 +287,7 @@ onBeforeUnmount(() => map?.remove())
   text-transform: uppercase;
 }
 
-.review-photos { border: 1px solid #e0e7ff; }
+.review-photos { border: 1px solid #fbd6da; }
 .review-photos .eyebrow { display: flex; align-items: center; gap: 0.4rem; }
 .review-photos .eyebrow i { color: var(--brand-blue); font-size: 0.75rem; }
 .review-photo-scroll {
@@ -308,7 +313,7 @@ onBeforeUnmount(() => map?.remove())
 .review-menu-empty i { font-size: 1.5rem; color: #cbd5e1; }
 .review-menu-empty span { font-size: 0.82rem; font-weight: 600; }
 
-.review-google { border: 1px solid #e0e7ff; }
+.review-google { border: 1px solid #fbd6da; }
 .review-google .eyebrow { display: flex; align-items: center; gap: 0.4rem; }
 .review-google .eyebrow i { color: var(--brand-blue); font-size: 0.75rem; }
 .review-editorial { margin: 0 0 1rem; color: var(--text-secondary); font-size: 0.84rem; line-height: 1.55; font-style: italic; }

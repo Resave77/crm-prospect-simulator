@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="sales-layout">
     <!-- Desktop sidebar -->
     <aside class="sales-sidebar">
@@ -127,6 +127,7 @@ const initials = computed(() => {
 })
 
 const roleLabel = computed(() => {
+  if (auth.user?.salesRole?.name) return auth.user.salesRole.name
   if (auth.user?.role === 'ADMINISTRATOR') return 'Administrator'
   if (auth.user?.role === 'SALES_MANAGER') return 'Sales Manager'
   if (auth.user?.role === 'SALES_EXECUTIVE') return 'Sales Executive'
@@ -244,6 +245,22 @@ function refreshPage() {
     top: calc(env(safe-area-inset-top) + 0.75rem);
     right: 1rem;
   }
+  /* Keep the prospect discussion panel & launcher clear of the mobile bottom nav */
+  .sales-layout .sales-shell .pc-launcher {
+    bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* Detail pages also have a fixed action bar; keep comments above it. */
+  .sales-layout .sales-shell .detail-page .pc-launcher {
+    right: 1rem;
+    bottom: calc(10.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .sales-layout .sales-shell .pc-wrap {
+    bottom: calc(9.75rem + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 10.75rem - env(safe-area-inset-bottom, 0px));
+  }
+  .sales-layout .sales-shell .pc-list {
+    max-height: calc(100dvh - 18rem - env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>
 
@@ -319,9 +336,9 @@ function refreshPage() {
 
 .sales-nav .nav-item.router-link-active {
   color: var(--brand-blue);
-  background: #eef5ff;
+  background: #fff1f2;
   font-weight: 700;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(209, 67, 80, 0.05);
 }
 
 .sales-nav .nav-item.router-link-active i {
@@ -463,12 +480,12 @@ function refreshPage() {
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand-blue), #1d4ed8);
+  background: linear-gradient(135deg, var(--brand-blue), #bb3342);
   border-radius: 50%;
   font-size: 0.72rem;
   font-weight: 800;
   flex-shrink: 0;
-  box-shadow: 0 3px 8px -2px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 3px 8px -2px rgba(209, 67, 80, 0.45);
 }
 
 .profile-menu summary .profile-info {
@@ -629,7 +646,7 @@ function refreshPage() {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--brand-blue), #1d4ed8);
+  background: linear-gradient(135deg, var(--brand-blue), #bb3342);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 800;
@@ -682,4 +699,5 @@ function refreshPage() {
   width: 20px;
   text-align: center;
 }
+
 </style>

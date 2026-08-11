@@ -419,8 +419,8 @@ onBeforeUnmount(() => {
 .vrcard-summary-top { display: flex; align-items: flex-start; gap: 0.85rem; }
 .vrcard-avatar {
   width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; font-weight: 800;
-  font-size: 0.9rem; flex-shrink: 0; box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+  background: linear-gradient(135deg, #d14350, #bb3342); color: #fff; font-weight: 800;
+  font-size: 0.9rem; flex-shrink: 0; box-shadow: 0 3px 10px rgba(209, 67, 80, 0.25);
 }
 .vrcard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .vrcard-identity .eyebrow { margin: 0; }
@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
   background: #fff; color: var(--text-muted); cursor: pointer; display: grid; place-items: center;
   font-size: 0.72rem; transition: all 0.15s ease;
 }
-.vrcard-refresh-btn:hover { color: var(--brand-blue); border-color: #bfdbfe; background: #eff6ff; }
+.vrcard-refresh-btn:hover { color: var(--brand-blue); border-color: #f3b9c0; background: #fff1f2; }
 .vrcard-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .vrcard-location-rows { display: grid; gap: 0.4rem; }

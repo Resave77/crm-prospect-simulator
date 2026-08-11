@@ -95,7 +95,7 @@ function organizationalRoleMeta(user: AdminUserListItem) {
 }
 
 function reportsToLabel(user: AdminUserListItem & Record<string, unknown>) {
-  return fallback(String(user.parentName || user.managerName || user.reportsToName || ''))
+  return fallback(String(user.reportsToName || user.parentName || user.managerName || ''))
 }
 
 function updatedLabel(value: string) {
@@ -617,8 +617,8 @@ onMounted(() => { load() })
 }
 
 .search-field:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  border-color: #d14350;
+  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
 }
 
 .search-field i {
@@ -714,7 +714,7 @@ onMounted(() => { load() })
 }
 
 .accounts-table :deep(.p-datatable-tbody > tr:hover > td) {
-  background: #f8fbff;
+  background: #fffbfb;
 }
 
 .accounts-table :deep(.employee-column) {
@@ -756,8 +756,8 @@ onMounted(() => { load() })
   flex: 0 0 auto;
   place-content: center;
   border-radius: 9px;
-  background: #eef4ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-size: 0.75rem;
   font-weight: 800;
 }
@@ -957,8 +957,8 @@ onMounted(() => { load() })
 }
 
 .action-card:hover {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: #f3b9c0;
+  background: #fffbfb;
   transform: translateY(-1px);
 }
 
@@ -972,8 +972,8 @@ onMounted(() => { load() })
 }
 
 .view-icon {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 
 .edit-icon {

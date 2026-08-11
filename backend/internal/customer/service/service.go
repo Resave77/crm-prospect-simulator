@@ -24,8 +24,9 @@ var (
 )
 
 type Actor struct {
-	UserID uuid.UUID
-	Role   authmodel.Role
+	UserID         uuid.UUID
+	Role           authmodel.Role
+	PermissionKeys []string
 }
 
 type ConversionForm struct {
@@ -123,14 +124,14 @@ func (s *Service) CustomerFilterOptions(ctx context.Context, actor Actor) (custo
 }
 
 func (s *Service) MyCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_customers") {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListCustomersForSales(ctx, actor.UserID)
 }
 
 func (s *Service) MyCustomer(ctx context.Context, actor Actor, id uuid.UUID) (customermodel.CustomerDetail, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_customer_detail") {
 		return customermodel.CustomerDetail{}, ErrForbidden
 	}
 	return s.repository.FindCustomerForSales(ctx, id, actor.UserID)
@@ -141,6 +142,18 @@ func (s *Service) AdminCustomer(ctx context.Context, actor Actor, id uuid.UUID) 
 		return customermodel.CustomerDetail{}, ErrForbidden
 	}
 	return s.repository.FindCustomer(ctx, id)
+}
+
+func (actor Actor) can(permissionKey string) bool {
+	if actor.Role == authmodel.RoleSalesExecutive && actor.PermissionKeys == nil {
+		return true
+	}
+	for _, key := range actor.PermissionKeys {
+		if key == permissionKey {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) AutoConvert(ctx context.Context, prospectID uuid.UUID) (customermodel.CustomerSite, error) {

@@ -120,6 +120,12 @@ function permissionCount(role: SalesRole) {
   return role.permissionCount ?? role.permissions?.length ?? null
 }
 
+function systemRoleLabel(role: SalesRole) {
+  if (role.level === 1) return 'SUPER_ADMIN'
+  if (role.level === 4) return 'SALES_EXECUTIVE'
+  return 'SALES_MANAGER'
+}
+
 function load() {
   error.value = ''
   store.fetchSalesRoles().catch((e) => { error.value = store.errorMessage(e) })
@@ -328,6 +334,7 @@ onMounted(load)
         </header>
 
         <div class="role-list-header" aria-hidden="true">
+          <span>System Role</span>
           <span>Role</span>
           <span>Initial Menu</span>
           <span>Permissions</span>
@@ -343,6 +350,16 @@ onMounted(load)
           @click="openActions(role)"
           @keydown.enter="openActions(role)"
         >
+          <div class="system-role-cell">
+            <span class="mobile-label">System Role</span>
+            <Tag
+              :value="systemRoleLabel(role)"
+              :severity="role.level === 1 ? 'info' : role.level === 4 ? 'secondary' : 'success'"
+              rounded
+              class="status-tag"
+            />
+          </div>
+
           <div class="role-primary">
             <div class="role-icon" :class="`level-${role.level}`">
               {{ role.level }}
@@ -635,8 +652,8 @@ onMounted(load)
 }
 
 .search-field:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  border-color: #d14350;
+  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
 }
 
 .search-field i {
@@ -754,7 +771,7 @@ onMounted(load)
   font-weight: 850;
 }
 
-.level-1 { background: #eff6ff; color: #1d4ed8; }
+.level-1 { background: #fff1f2; color: #bb3342; }
 .level-2 { background: #ecfdf5; color: #047857; }
 .level-3 { background: #fff7ed; color: #c2410c; }
 .level-4 { background: #f1f5f9; color: #475569; }
@@ -768,9 +785,13 @@ onMounted(load)
 .role-list-header,
 .role-row {
   display: grid;
-  grid-template-columns: minmax(280px, 2.2fr) minmax(150px, 1fr) 110px 100px 60px;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(260px, 2fr) minmax(150px, 1fr) 110px 100px 60px;
   align-items: center;
   gap: 0.7rem;
+}
+
+.system-role-cell {
+  min-width: 0;
 }
 
 .role-list-header {
@@ -796,7 +817,7 @@ onMounted(load)
 
 .role-row:hover,
 .role-row:focus-visible {
-  background: #f8fbff;
+  background: #fffbfb;
 }
 
 .role-primary {
@@ -870,10 +891,10 @@ onMounted(load)
   overflow: hidden;
   max-width: 100%;
   padding: 0.16rem 0.42rem;
-  border: 1px solid #dbeafe;
+  border: 1px solid #ffd9dd;
   border-radius: 6px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 0.65rem;
   text-overflow: ellipsis;
@@ -995,8 +1016,8 @@ onMounted(load)
 }
 
 .action-card:hover {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: #f3b9c0;
+  background: #fffbfb;
 }
 
 .action-card-icon {
@@ -1008,7 +1029,7 @@ onMounted(load)
   border-radius: 8px;
 }
 
-.view-icon { background: #eff6ff; color: #2563eb; }
+.view-icon { background: #fff1f2; color: #d14350; }
 .edit-icon { background: #fff7ed; color: #ea580c; }
 
 .action-card > span:last-child {

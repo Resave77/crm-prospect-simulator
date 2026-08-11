@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -46,4 +46,6 @@ type Repository interface {
 	ListPhotoTags(context.Context, uuid.UUID) ([]model.ProspectPhotoTag, error)
 	UpsertPhotoTag(context.Context, uuid.UUID, int, model.PhotoCategory, uuid.UUID) (model.ProspectPhotoTag, error)
 	ProspectAccessibleTo(context.Context, uuid.UUID, uuid.UUID) (bool, error)
+	ExistingCustomerPlaceIDs(context.Context, []string) (map[string]bool, error)
+	ListCustomerMarkers(context.Context) ([]model.CustomerMarker, error)
 }

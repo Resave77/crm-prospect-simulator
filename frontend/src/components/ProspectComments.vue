@@ -243,9 +243,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div :class="['pc-floating', { 'pc-embedded': embedded }]">
-    <button v-if="!embedded" class="pc-launcher" aria-label="Open prospect discussion" @click="open = !open">
-      <i :class="open ? 'pi pi-times' : 'pi pi-comments'" />
-      <span v-if="newCount && !open" class="pc-launcher-badge">{{ newCount > 99 ? '99+' : newCount }}</span>
+    <button v-if="!embedded && !open" class="pc-launcher" aria-label="Open prospect discussion" @click="open = true">
+      <i class="pi pi-comments" />
+      <span v-if="newCount" class="pc-launcher-badge">{{ newCount > 99 ? '99+' : newCount }}</span>
     </button>
      <div v-if="open || embedded" class="pc-wrap">
     <div class="pc-header">
@@ -360,7 +360,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
 }
-.pc-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1101; width:58px; height:58px; border:0; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--brand-blue,#2563eb); box-shadow:0 10px 30px rgba(37,99,235,.35); cursor:pointer; font-size:1.25rem; }
+.pc-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1101; width:58px; height:58px; border:0; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--brand-blue,#d14350); box-shadow:0 10px 30px rgba(209,67,80,.35); cursor:pointer; font-size:1.25rem; }
 .pc-launcher-badge { position:absolute; right:-3px; top:-4px; min-width:21px; height:21px; padding:0 5px; display:grid; place-items:center; border:2px solid #fff; border-radius:999px; background:#ef4444; color:#fff; font-size:.62rem; font-weight:800; }
 .pc-close { margin-left:.15rem; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:50%; background:transparent; color:var(--text-muted); cursor:pointer; }
 
@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
 .pc-count {
   min-width: 20px; height: 20px;
   display: inline-grid; place-items: center;
-  border-radius: 9999px; background: var(--brand-blue-bg, #eff6ff);
+  border-radius: 9999px; background: var(--brand-blue-bg, #fff1f2);
   color: var(--brand-blue); font-size: 0.6rem; font-weight: 700;
   margin-left: auto;
 }
@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
   font-size: 0.72rem; font-weight: 800;
 }
 .pc-msg-avatar-own {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
+  background: linear-gradient(135deg, #d14350, #bb3342); color: #fff;
 }
 
 .pc-msg-body { flex: 1; min-width: 0; }
@@ -457,7 +457,7 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 .pc-msg-own .pc-msg-text {
-  background: var(--brand-blue, #2563eb); color: #fff;
+  background: var(--brand-blue, #d14350); color: #fff;
   border-radius: 12px 12px 4px 12px;
 }
 .pc-attachments { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.3rem; }
@@ -470,9 +470,9 @@ onBeforeUnmount(() => {
 .pc-image-viewer-close { position:absolute; top:1rem; right:1rem; width:40px; height:40px; display:grid; place-items:center; border:0; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
 .pc-mentions { display:grid; padding:.35rem .75rem; border-top:1px solid var(--border-light); background:#fff; }
 .pc-mentions button { padding:.4rem; border:0; background:transparent; text-align:left; cursor:pointer; color:var(--text-primary); }
-.pc-mentions button:hover { background:#eff6ff; }
+.pc-mentions button:hover { background:#fff1f2; }
 .pc-selected-files { display:flex; gap:.35rem; flex-wrap:wrap; padding:.4rem .75rem 0; font-size:.65rem; }
-.pc-selected-files span { padding:.25rem .4rem; background:#eef2ff; border-radius:6px; }
+.pc-selected-files span { padding:.25rem .4rem; background:#fff5f6; border-radius:6px; }
 .pc-file-input { display:none; }
 .pc-attach-btn { width:38px; height:38px; border:0; border-radius:50%; background:#eef2f7; color:var(--text-secondary); cursor:pointer; }
 
@@ -492,7 +492,7 @@ onBeforeUnmount(() => {
   max-height: 100px; min-height: 38px;
 }
 .pc-input-row textarea:focus {
-  border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  border-color: var(--brand-blue); box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
   background: #fff;
 }
 .pc-input-row textarea::placeholder { color: var(--text-muted); }
@@ -501,14 +501,108 @@ onBeforeUnmount(() => {
 .pc-send-btn {
   width: 38px; height: 38px; flex-shrink: 0;
   display: grid; place-items: center; border-radius: 50%;
-  border: 0; background: var(--brand-blue, #2563eb); color: #fff;
+  border: 0; background: var(--brand-blue, #d14350); color: #fff;
   cursor: pointer; font-size: 0.85rem;
   transition: background 0.15s ease, transform 0.15s ease;
 }
-.pc-send-btn:hover:not(:disabled) { background: #1d4ed8; transform: scale(1.05); }
+.pc-send-btn:hover:not(:disabled) { background: #bb3342; transform: scale(1.05); }
 .pc-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pc-lightbox { position:fixed; inset:0; z-index:2200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.65rem; padding:1rem; background:rgba(15,23,42,.92); }
 .pc-lightbox img { max-width:min(960px,100%); max-height:calc(100dvh - 6rem); object-fit:contain; border-radius:12px; }
 .pc-lightbox span { color:#fff; font-size:.75rem; }
 .pc-lightbox button { position:absolute; top:1rem; right:1rem; width:40px; height:40px; display:grid; place-items:center; border:0; border-radius:50%; background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
+
+/* ── Refined discussion experience (shared by Sales and Admin) ── */
+.pc-wrap {
+  width: min(390px, calc(100vw - 2rem));
+  max-height: min(570px, calc(100dvh - 7rem));
+  border-color: #eadde0;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 60px -18px rgba(73, 34, 41, 0.28), 0 8px 22px rgba(73, 34, 41, 0.08);
+}
+.pc-embedded .pc-wrap { border-radius: 18px; box-shadow: 0 8px 24px rgba(73,34,41,.07); }
+.pc-launcher {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255,255,255,.9);
+  background: linear-gradient(145deg, #df5a66, #d14350 58%, #bb3342);
+  box-shadow: 0 12px 28px rgba(173,48,64,.35);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.pc-launcher:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(173,48,64,.4); }
+.pc-header {
+  position: relative;
+  min-height: 56px;
+  padding: 0.7rem 0.8rem;
+  gap: 0.65rem;
+  overflow: hidden;
+  border-bottom: 0;
+  color: #fff;
+  background: linear-gradient(120deg, #d14350, #c63d4b 64%, #bb3342);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.pc-header::after { content:''; position:absolute; right:-34px; top:-55px; width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,.09); }
+.pc-header > i { width: 30px; height: 30px; display:grid; place-items:center; border-radius:9px; color:#d14350; background:#fff; font-size:.82rem; box-shadow:0 4px 10px rgba(80,20,30,.14); }
+.pc-header > span:not(.pc-count) { font-size: .8rem; font-weight: 800; }
+.pc-count { margin-left:auto; min-width:26px; height:24px; padding:0 7px; color:#fff; background:rgba(255,255,255,.17); border:1px solid rgba(255,255,255,.24); }
+.pc-close { position:relative; z-index:1; width:32px; height:32px; color:#fff; background:rgba(255,255,255,.12); }
+.pc-close:hover { background:rgba(255,255,255,.22); }
+.pc-list {
+  max-height: 320px;
+  gap: 0.8rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, #fff 0, #fdfafa 100%);
+  scrollbar-width: thin;
+  scrollbar-color: #eadde0 transparent;
+}
+.pc-msg { gap:.55rem; }
+.pc-msg-avatar { width:30px; height:30px; border-radius:9px; border:1px solid #e6dadd; background:#fff; color:#625357; box-shadow:0 2px 6px rgba(73,34,41,.05); font-size:.65rem; }
+.pc-msg-avatar-own { border-color:#ffd9dd; color:#fff; background:linear-gradient(145deg,#df5a66,#d14350); }
+.pc-msg-body { max-width: calc(100% - 38px); }
+.pc-msg-meta { margin-bottom:.28rem; gap:.45rem; }
+.pc-msg-meta strong { font-size:.72rem; }
+.pc-msg-meta span { font-size:.58rem; }
+.pc-msg-text {
+  padding:.55rem .68rem;
+  border:1px solid #eee3e5;
+  border-radius:4px 14px 14px 14px;
+  background:#fff;
+  color:#493c40;
+  box-shadow:0 3px 10px rgba(73,34,41,.04);
+}
+.pc-msg-own .pc-msg-text {
+  border-color:#d14350;
+  border-radius:14px 4px 14px 14px;
+  background:linear-gradient(145deg,#df5a66,#d14350);
+  box-shadow:0 5px 14px rgba(173,48,64,.16);
+}
+.pc-delete-btn { width:24px; height:24px; display:grid; place-items:center; border-radius:7px; }
+.pc-delete-btn:hover:not(:disabled) { background:#fef2f2; }
+.pc-empty { min-height:210px; justify-content:center; gap:.55rem; }
+.pc-empty i { width:52px; height:52px; display:grid; place-items:center; border-radius:16px; color:#d14350; background:#fff1f2; opacity:1; font-size:1.15rem; }
+.pc-empty span { max-width:220px; line-height:1.5; }
+.pc-attachments button { border-color:#eadde0; border-radius:11px; background:#fff; box-shadow:0 2px 7px rgba(73,34,41,.04); }
+.pc-attachments img { border-radius:9px; }
+.pc-selected-files { padding:.5rem .85rem; border-top:1px solid #f1e8ea; background:#fff9fa; }
+.pc-selected-files span { display:inline-flex; align-items:center; gap:.25rem; border:1px solid #ffd9dd; border-radius:8px; background:#fff1f2; color:#ad3040; }
+.pc-mentions { padding:.4rem; border:1px solid #eadde0; border-bottom:0; background:#fff; }
+.pc-mentions button { border-radius:8px; font-size:.72rem; }
+.pc-input-row { gap:.4rem; padding:.55rem; border-top:1px solid #eadde0; background:#fff; }
+.pc-attach-btn { width:36px; height:36px; border:1px solid #eadde0; border-radius:10px; background:#fcf9f9; color:#8d7d81; }
+.pc-attach-btn:hover { color:#d14350; border-color:#f3b9c0; background:#fff1f2; }
+.pc-input-row textarea { min-height:36px; padding:.5rem .65rem; border-color:#e6dadd; border-radius:10px; background:#fcf9f9; }
+.pc-send-btn { width:36px; height:36px; border-radius:10px; background:linear-gradient(145deg,#df5a66,#d14350); box-shadow:0 5px 12px rgba(173,48,64,.2); }
+.pc-send-btn:hover:not(:disabled) { background:#bb3342; transform:translateY(-1px); }
+
+@media (max-width: 640px) {
+  .pc-wrap { left:.65rem; right:.65rem; width:auto; border-radius:20px; }
+  .pc-header { min-height:60px; padding:.75rem .85rem; }
+  .pc-list { padding:.8rem; gap:.7rem; }
+  .pc-msg-body { max-width:calc(100% - 40px); }
+  .pc-msg-text { font-size:.76rem; }
+  .pc-input-row { padding:.6rem; }
+}
 </style>

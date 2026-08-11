@@ -196,7 +196,7 @@ const emit = defineEmits<{
 .assign-section-title { display: flex; align-items: center; gap: 0.55rem; font-weight: 750; color: #0f172a; font-size: 0.86rem; }
 .assign-step { width: 22px; height: 22px; display: grid; place-content: center; border-radius: 999px; background: #0b7766; color: #fff; font-size: 0.7rem; font-weight: 700; }
 .section-note { color: #8492a6; font-size: 0.75rem; }
-.parent-info { display: flex; gap: 0.5rem; align-items: center; padding: 0.6rem 0.75rem; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1e40af; font-size: 0.8rem; line-height: 1.4; }
+.parent-info { display: flex; gap: 0.5rem; align-items: center; padding: 0.6rem 0.75rem; border: 1px solid #f3b9c0; border-radius: 8px; background: #fff1f2; color: #ad3040; font-size: 0.8rem; line-height: 1.4; }
 .parent-info.muted { border-color: #e2e8f0; background: #f8fafc; color: #64748b; }
 .user-option { display: grid; gap: 0.15rem; padding: 0.25rem 0; }
 .user-option.is-disabled { opacity: 0.55; }

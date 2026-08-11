@@ -13,7 +13,7 @@ import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
-import type { PlaceDetails, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
+import type { CustomerMarker, PlaceDetails, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
 const toast = useToast()
 
@@ -31,6 +31,8 @@ const geoResolved = ref(false)
 const results = ref<PlaceResult[]>([])
 const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
+const customerMarkers = ref<CustomerMarker[]>([])
+const customersLoading = ref(false)
 const placeDetails = ref<PlaceDetails | null>(null)
 const placeDetailsLoading = ref(false)
 const placeDetailsError = ref('')
@@ -46,7 +48,9 @@ const mapElement = ref<HTMLElement | null>(null)
 const resultsScroll = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let searchCircle: L.Circle | null = null
+let customerLayer: L.LayerGroup | null = null
 const markers = new Map<string, L.Marker>()
+const customerMarkerMap = new Map<string, L.Marker>()
 
 const selectedSalesCount = computed(() => {
   const exec = sales.value.find(s => s.id === salesExecutiveId.value)
@@ -66,8 +70,11 @@ watch([results, resultSearch], () => {
 }, { immediate: true })
 
 function markerIcon(item: PlaceResult, active = false) {
+  if (item.isCustomer) {
+    return customerMarkerIcon(active)
+  }
   const safeIcon = /^pi pi-[a-z-]+$/.test(item.markerIcon) ? item.markerIcon : 'pi pi-map-marker'
-  const safeColor = /^#[0-9a-f]{6}$/i.test(item.markerColor) ? item.markerColor : '#2563eb'
+  const safeColor = /^#[0-9a-f]{6}$/i.test(item.markerColor) ? item.markerColor : '#d14350'
   return L.divIcon({
     className: 'finder-leaflet-icon-host',
     html: `<span class="finder-leaflet-marker${active ? ' is-selected' : ''}" style="--marker-color:${safeColor}"><i class="${safeIcon}"></i></span>`,
@@ -77,6 +84,40 @@ function markerIcon(item: PlaceResult, active = false) {
   })
 }
 
+function customerMarkerIcon(active = false) {
+  return L.divIcon({
+    className: 'finder-leaflet-icon-host',
+    html: `<span class="finder-leaflet-marker is-customer${active ? ' is-selected' : ''}" title="Existing customer"><b>Y</b></span>`,
+    iconSize: active ? [46, 52] : [38, 44],
+    iconAnchor: active ? [23, 50] : [19, 42],
+    popupAnchor: [0, -44],
+  })
+}
+
+function customerToResult(c: CustomerMarker): PlaceResult {
+  return {
+    customerId: c.customerId,
+    googlePlaceId: c.googlePlaceId,
+    name: c.name,
+    address: c.address,
+    category: 'Existing Customer',
+    distance: 0,
+    rating: 0,
+    userRatingCount: 0,
+    businessStatus: 'OPERATIONAL',
+    latitude: c.latitude,
+    longitude: c.longitude,
+    phone: '',
+    website: '',
+    googleMapsUrl: '',
+    markerCategory: 'customer',
+    markerColor: '#16a34a',
+    markerIcon: '',
+    placeTypes: [],
+    isCustomer: true,
+  }
+}
+
 function initializeMap() {
   if (!mapElement.value || map) return
   map = L.map(mapElement.value, { zoomControl: true, preferCanvas: true }).setView([-6.2, 106.8], 12)
@@ -84,6 +125,39 @@ function initializeMap() {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map)
+  customerLayer = L.layerGroup().addTo(map)
+}
+
+function renderCustomerMarkers() {
+  if (!map || !customerLayer) return
+  customerLayer.clearLayers()
+  customerMarkerMap.clear()
+  const bounds: L.LatLngExpression[] = []
+  for (const item of customerMarkers.value) {
+    if (item.latitude === null || item.longitude === null) continue
+    const position: L.LatLngExpression = [item.latitude, item.longitude]
+    const marker = L.marker(position, { icon: customerMarkerIcon(selected.value?.customerId === item.customerId), keyboard: true, title: item.name })
+      .bindTooltip(item.name, { direction: 'top', offset: [0, -42] })
+      .on('click', () => selectCustomer(item))
+      .addTo(customerLayer)
+    customerMarkerMap.set(item.customerId, marker)
+    bounds.push(position)
+  }
+  if (!results.value.length && bounds.length) {
+    map.fitBounds(L.latLngBounds(bounds), { padding: [48, 48], maxZoom: 14 })
+  }
+}
+
+async function loadCustomerMarkers() {
+  customersLoading.value = true
+  try {
+    customerMarkers.value = await crmApi.getCustomerMarkers()
+  } catch (caught) {
+    toast.add({ severity: 'warn', summary: 'Customers unavailable', detail: crmError(caught), life: 5000 })
+  } finally {
+    customersLoading.value = false
+    renderCustomerMarkers()
+  }
 }
 
 function drawSearchArea() {
@@ -91,9 +165,9 @@ function drawSearchArea() {
   searchCircle?.remove()
   searchCircle = L.circle([latitude.value, longitude.value], {
     radius: radius.value,
-    color: '#2563eb',
+    color: '#d14350',
     weight: 1,
-    fillColor: '#3b82f6',
+    fillColor: '#df5a66',
     fillOpacity: 0.06,
   }).addTo(map)
 }
@@ -104,6 +178,7 @@ function renderMarkers() {
   markers.clear()
   const bounds: L.LatLngExpression[] = []
   for (const item of results.value) {
+    if (item.isCustomer) continue
     if (item.latitude === null || item.longitude === null) continue
     const position: L.LatLngExpression = [item.latitude, item.longitude]
     const marker = L.marker(position, { icon: markerIcon(item, selected.value?.googlePlaceId === item.googlePlaceId), keyboard: true, title: item.name })
@@ -124,28 +199,43 @@ async function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
   placeDetails.value = null
   placeDetailsError.value = ''
-  placeDetailsLoading.value = true
   detailOpen.value = true
-  try {
-    placeDetails.value = await crmApi.getPlaceDetails(item.googlePlaceId)
-  } catch (caught) {
-    placeDetailsError.value = crmError(caught)
-  } finally {
-    placeDetailsLoading.value = false
+  if (item.googlePlaceId) {
+    placeDetailsLoading.value = true
+    try {
+      placeDetails.value = await crmApi.getPlaceDetails(item.googlePlaceId)
+    } catch (caught) {
+      placeDetailsError.value = crmError(caught)
+    } finally {
+      placeDetailsLoading.value = false
+    }
   }
   if (focusMap && map && item.latitude !== null && item.longitude !== null) {
     map.flyTo([item.latitude, item.longitude], Math.max(map.getZoom(), 16), { duration: 0.55 })
-    markers.get(item.googlePlaceId)?.openTooltip()
+    const cid = item.customerId
+    if (cid) customerMarkerMap.get(cid)?.openTooltip()
+    else markers.get(item.googlePlaceId)?.openTooltip()
   }
   nextTick(() => {
+    if (!item.googlePlaceId) return
     const el = resultsScroll.value?.querySelector(`[data-place-id="${item.googlePlaceId}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   })
 }
 
+function selectCustomer(item: CustomerMarker) {
+  selectResult(customerToResult(item), true)
+}
+
 watch(selected, (current, previous) => {
-  if (previous) markers.get(previous.googlePlaceId)?.setIcon(markerIcon(previous, false))
-  if (current) markers.get(current.googlePlaceId)?.setIcon(markerIcon(current, true))
+  if (previous) {
+    if (previous.customerId) customerMarkerMap.get(previous.customerId)?.setIcon(customerMarkerIcon(false))
+    else markers.get(previous.googlePlaceId)?.setIcon(markerIcon(previous, false))
+  }
+  if (current) {
+    if (current.customerId) customerMarkerMap.get(current.customerId)?.setIcon(customerMarkerIcon(true))
+    else markers.get(current.googlePlaceId)?.setIcon(markerIcon(current, true))
+  }
 })
 
 watch(radius, drawSearchArea)
@@ -187,6 +277,10 @@ function useGPS() {
 async function save() {
   if (!selected.value || !salesExecutiveId.value || !industryGroup.value) {
     toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select a Place, Industry Group, and Sales Executive before saving.', life: 4000 })
+    return
+  }
+  if (selected.value.isCustomer) {
+    toast.add({ severity: 'warn', summary: 'Existing customer', detail: 'This place is already an existing customer and cannot be assigned to sales.', life: 4000 })
     return
   }
   error.value = ''
@@ -237,6 +331,7 @@ onMounted(async () => {
   await nextTick()
   initializeMap()
   useGPS()
+  loadCustomerMarkers()
   try {
     sales.value = await crmApi.getSalesExecutives()
     salesExecutiveId.value = sales.value[0]?.id ?? ''
@@ -245,7 +340,13 @@ onMounted(async () => {
   }
 })
 
-onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
+onBeforeUnmount(() => {
+  map?.remove()
+  map = null
+  customerLayer = null
+  markers.clear()
+  customerMarkerMap.clear()
+})
 </script>
 
 <template>
@@ -329,10 +430,10 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
               <span class="filter-section-title">Search Radius</span>
               <span class="radius-value">{{ (radius / 1000).toFixed(1) }} km</span>
             </div>
-            <Slider v-model="radius" :min="500" :max="50000" :step="500" class="finder-slider" />
+            <Slider v-model="radius" :min="500" :max="20000" :step="500" class="finder-slider" />
             <div class="radius-range-labels">
               <span>0.5 km</span>
-              <span>50 km</span>
+              <span>20 km</span>
             </div>
           </div>
 
@@ -383,11 +484,15 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
               :class="{ selected: selected?.googlePlaceId === item.googlePlaceId }"
               @click="selectResult(item, true)"
             >
-              <span class="result-marker" :style="{ background: item.markerColor }"><i :class="item.markerIcon" /></span>
+              <span class="result-marker" :class="{ 'is-customer': item.isCustomer }" :style="item.isCustomer ? undefined : { background: item.markerColor }">
+                <b v-if="item.isCustomer">Y</b>
+                <i v-else :class="item.markerIcon" />
+              </span>
               <div class="result-info">
                 <div class="result-name-row">
                   <strong>{{ item.name }}</strong>
                   <Tag v-if="item.rating" :value="`★ ${item.rating}`" severity="info" class="result-rating-tag" />
+                  <Tag v-if="item.isCustomer" value="Existing Customer" severity="success" class="result-customer-tag" />
                 </div>
                 <span class="result-category">{{ item.category }}</span>
                 <span class="result-address">{{ item.address }}</span>
@@ -412,6 +517,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
             <span>Google Places stays server-side. Map tiles use OpenStreetMap.</span>
           </div>
         </div>
+
+        <div v-if="customerMarkers.length || customersLoading" class="map-customer-badge" :class="{ 'is-loading': customersLoading }">
+          <span class="map-customer-dot"><b>Y</b></span>
+          <div>
+            <strong>{{ customersLoading ? 'Loading existing customers...' : `${customerMarkers.length} existing customer${customerMarkers.length !== 1 ? 's' : ''}` }}</strong>
+            <span>Existing customers are always visible and cannot be assigned to sales.</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -419,12 +532,16 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
       <div v-if="placeDetailsLoading" class="dialog-loading"><div class="loading-pulse" /><span>Loading full details...</span></div>
       <div v-else-if="selected" class="detail-dialog">
         <div class="detail-hero-bar">
-          <span class="detail-hero" :style="{ background: selected.markerColor }"><i :class="selected.markerIcon" /></span>
+          <span class="detail-hero" :class="{ 'is-customer': selected.isCustomer }" :style="selected.isCustomer ? undefined : { background: selected.markerColor }">
+            <b v-if="selected.isCustomer">Y</b>
+            <i v-else :class="selected.markerIcon" />
+          </span>
           <div class="detail-hero-info">
             <h2>{{ placeDetails?.placeName || selected.name }}</h2>
             <div class="detail-hero-meta">
               <span>{{ placeDetails?.placeCategory || selected.category }}</span>
-              <Tag v-if="(placeDetails?.rating || selected.rating)!" :value="`★ ${(placeDetails?.rating || selected.rating)!.toFixed(1)}`" severity="info" />
+              <Tag v-if="selected.isCustomer" value="Existing Customer" severity="success" />
+              <Tag v-else-if="(placeDetails?.rating || selected.rating)!" :value="`★ ${(placeDetails?.rating || selected.rating)!.toFixed(1)}`" severity="info" />
               <Tag v-if="placeDetails?.userRatingCount || selected.userRatingCount" :value="`${placeDetails?.userRatingCount || selected.userRatingCount} reviews`" severity="secondary" />
               <Tag v-if="placeDetails?.priceLevel" :value="placeDetails.priceLevel" severity="contrast" />
             </div>
@@ -574,7 +691,10 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
         <div class="detail-assignment">
           <h3>Assignment</h3>
-          <div class="detail-assignment-fields">
+          <Message v-if="selected?.isCustomer" severity="success" :closable="false" class="assignment-warning">
+            <strong>Existing customer</strong> — this place has already been converted to a customer and can no longer be assigned to sales.
+          </Message>
+          <div v-else class="detail-assignment-fields">
             <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
             <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
             <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
@@ -587,7 +707,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
       <template #footer>
         <div class="detail-dialog-footer">
           <Button label="Cancel" severity="secondary" text @click="detailOpen = false" />
-          <Button label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !industryGroup" @click="save" />
+          <Button v-if="selected?.isCustomer" label="Existing Customer" icon="pi pi-check" severity="success" disabled />
+          <Button v-else label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !industryGroup" @click="save" />
         </div>
       </template>
     </Dialog>
@@ -732,11 +853,11 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand-blue) 0%, #1d4fd8 100%);
+  background: linear-gradient(135deg, var(--brand-blue) 0%, #bb3342 100%);
   border-radius: 0.7rem;
   font-size: 0.85rem;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px -2px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 4px 12px -2px rgba(209, 67, 80, 0.45);
 }
 
 .finder-panel-title h1 {
@@ -835,7 +956,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .keyword-input-wrap :deep(.p-inputtext:focus) {
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
 }
 
 /* Categories */
@@ -860,9 +981,9 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); transform: translateY(-1px); }
 
 .category-chip.active {
-  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #eaf1ff 100%);
+  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff5f6 100%);
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.14), 0 2px 6px -2px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 0 0 1px rgba(209, 67, 80, 0.14), 0 2px 6px -2px rgba(209, 67, 80, 0.25);
 }
 
 .category-chip span {
@@ -888,7 +1009,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .radius-value {
   padding: 0.16rem 0.55rem;
   color: var(--brand-blue);
-  background: linear-gradient(135deg, var(--brand-blue-50), #eaf1ff);
+  background: linear-gradient(135deg, var(--brand-blue-50), #fff5f6);
   border: 1px solid var(--brand-blue-100);
   border-radius: 999px;
   font-size: 0.65rem;
@@ -927,7 +1048,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .coordinate-grid input:focus {
   outline: none;
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
 }
 
 /* Filter Actions */
@@ -1053,7 +1174,7 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .floating-results-search input:focus {
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
 }
 
 .floating-results-search input::placeholder { color: var(--text-faint); }
@@ -1106,14 +1227,14 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .result-card:hover {
   border-color: var(--brand-blue-100);
   background: #f8faff;
-  box-shadow: 0 4px 14px -4px rgba(37, 99, 235, 0.16);
+  box-shadow: 0 4px 14px -4px rgba(209, 67, 80, 0.16);
   transform: translateY(-1px);
 }
 
 .result-card.selected {
   border-color: var(--brand-blue);
   background: linear-gradient(135deg, #f5f8ff 0%, #eef3ff 100%);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12), 0 6px 16px -4px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 0 0 2px rgba(209, 67, 80, 0.12), 0 6px 16px -4px rgba(209, 67, 80, 0.18);
 }
 
 .result-marker {
@@ -1127,6 +1248,22 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   flex-shrink: 0;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16);
 }
+
+.result-marker.is-customer {
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  box-shadow: 0 3px 8px rgba(21, 128, 61, 0.35);
+}
+
+.result-marker.is-customer b {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.result-customer-tag { transform: scale(0.85); transform-origin: left; }
 
 .result-info {
   min-width: 0;
@@ -1261,6 +1398,54 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .map-source-badge strong { font-size: 0.58rem; font-weight: 700; }
 .map-source-badge span { color: #718096; font-size: 0.52rem; line-height: 1.5; }
 
+/* ── Existing Customer Badge ─────────────────────────────────── */
+.map-customer-badge {
+  position: absolute;
+  z-index: 500;
+  left: 0.8rem;
+  bottom: 4.6rem;
+  max-width: 280px;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(187, 247, 208, 0.9);
+  border-radius: 0.7rem;
+  box-shadow: 0 6px 20px rgba(21, 128, 61, 0.14);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+}
+
+.map-customer-badge.is-loading { opacity: 0.7; }
+
+.map-customer-dot {
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-top: 0.02rem;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22), 0 3px 8px rgba(21, 128, 61, 0.35);
+}
+
+.map-customer-dot b {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.map-customer-badge div { display: grid; gap: 0.1rem; }
+.map-customer-badge strong { font-size: 0.6rem; font-weight: 700; color: var(--text-primary); }
+.map-customer-badge span { color: #718096; font-size: 0.52rem; line-height: 1.5; }
+
 .map-empty-state,
 .map-loading-state {
   position: absolute;
@@ -1288,8 +1473,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   height: 42px;
   place-content: center;
   border-radius: 12px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 
 .map-empty-state strong,
@@ -1299,8 +1484,8 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 .map-loading-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #dbeafe;
-  border-top-color: #2563eb;
+  border: 3px solid #ffd9dd;
+  border-top-color: #d14350;
   border-radius: 50%;
   animation: finder-spin 0.75s linear infinite;
 }
@@ -1348,6 +1533,21 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
   border-radius: 0.85rem;
   font-size: 1rem;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+.detail-hero.is-customer {
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2), 0 6px 16px rgba(21, 128, 61, 0.35);
+}
+
+.detail-hero.is-customer b {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
 .detail-hero-info h2 {
@@ -1753,12 +1953,37 @@ onBeforeUnmount(() => { map?.remove(); map = null; markers.clear() })
 
 .finder-leaflet-marker i { transform: rotate(45deg); font-size: 0.8rem; }
 
+.finder-leaflet-marker.is-customer {
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  border-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25), 0 6px 16px rgba(21, 128, 61, 0.4);
+}
+
+.finder-leaflet-marker.is-customer b {
+  transform: rotate(45deg);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
 .finder-leaflet-marker.is-selected {
   width: 44px;
   height: 44px;
-  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16),
+  box-shadow: 0 0 0 6px rgba(209, 67, 80, 0.16),
               0 8px 22px rgba(22, 41, 67, 0.38);
 }
 
+.finder-leaflet-marker.is-customer.is-selected {
+  width: 46px;
+  height: 46px;
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.2), 0 8px 22px rgba(21, 128, 61, 0.42);
+}
+
 .finder-leaflet-marker.is-selected i { font-size: 1rem; }
+.finder-leaflet-marker.is-customer.is-selected b { font-size: 1.4rem; }
 </style>

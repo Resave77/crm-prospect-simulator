@@ -254,6 +254,9 @@ func (s *Service) validateSalesRole(ctx context.Context, name string, level int,
 	if level < 1 || level > 4 {
 		return ErrInvalidSalesRoleLevel
 	}
+	if level == 1 && !isSuperAdminSalesRoleName(name) {
+		return ErrInvalidSalesRoleLevel
+	}
 	exists, err := s.repo.SalesRoleNameExists(ctx, normalizeSalesRoleName(name), excludeID)
 	if err != nil {
 		return err
@@ -279,9 +282,6 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if user.Status != authmodel.UserActive {
 		return ErrSalesUserInactive
 	}
-	if user.Role == authmodel.RoleSuperAdmin {
-		return ErrInvalidHierarchy
-	}
 	role, err := s.repo.FindSalesRole(ctx, roleID)
 	if err != nil {
 		return err
@@ -289,6 +289,27 @@ func (s *Service) validateAssignment(ctx context.Context, userID, roleID uuid.UU
 	if !role.IsActive {
 		return ErrSalesRoleInactive
 	}
+
+	// Hierarchy V2:
+	// - SUPER_ADMIN is the only system role allowed to occupy Level 1.
+	// - Level 1 is the single root and must not have a parent.
+	// - Non-SUPER_ADMIN users must occupy Level 2-4.
+	if user.Role == authmodel.RoleSuperAdmin {
+		if role.Level != 1 || parentID != nil {
+			return ErrInvalidHierarchy
+		}
+
+		rootCount, err := s.repo.CountEffectiveLevel1Roots(ctx, date, excludeID)
+		if err != nil {
+			return err
+		}
+		if rootCount > 0 {
+			return ErrInvalidHierarchy
+		}
+	} else if role.Level == 1 {
+		return ErrInvalidHierarchy
+	}
+
 	if err := s.ensureCompatibleChildren(ctx, userID, role.Level, date); err != nil {
 		return err
 	}
@@ -360,6 +381,10 @@ func (s *Service) ensureNoCycle(ctx context.Context, userID, parentID uuid.UUID,
 
 func normalizeSalesRoleName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(name)), " "))
+}
+func isSuperAdminSalesRoleName(name string) bool {
+	normalized := normalizeSalesRoleName(name)
+	return normalized == "super_admin" || normalized == "super admin"
 }
 func truncateDate(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)

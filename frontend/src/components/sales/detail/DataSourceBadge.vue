@@ -49,8 +49,8 @@ const iconClass = computed(() => icons[props.source])
   vertical-align: middle;
 }
 .ds-badge i { font-size: 0.5rem; }
-.ds-google { background: #eff6ff; color: #2563eb; }
+.ds-google { background: #fff1f2; color: #d14350; }
 .ds-manual { background: #fffbeb; color: #b45309; }
-.ds-system { background: #f5f3ff; color: #7c3aed; }
+.ds-system { background: #f5f3ff; color: #c54b59; }
 .ds-prospect { background: #ecfdf5; color: #059669; }
 </style>

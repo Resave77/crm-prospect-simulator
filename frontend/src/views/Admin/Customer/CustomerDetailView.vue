@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { onMounted, ref } from 'vue'
+﻿<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
@@ -44,6 +44,15 @@ const activeTab = ref('overview')
 const showAllHours = ref(false)
 const deleteDialogVisible = ref(false)
 const deleting = ref(false)
+
+const siteGoogleMapsUrl = computed(() => {
+  if (placeDetails.value?.googleMapsUrl) return placeDetails.value.googleMapsUrl
+  const lat = detail.value?.customer.address?.latitude
+  const lng = detail.value?.customer.address?.longitude
+  if (lat != null && lng != null) return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+  if (detail.value?.customer.address?.previewAddress) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detail.value.customer.address.previewAddress)}`
+  return ''
+})
 
 const tabs = [
   { key: 'overview', label: 'Overview', icon: 'pi pi-id-card' },
@@ -268,6 +277,33 @@ async function executeDelete() {
         </div>
 
         <template v-else>
+          <!-- Google Place Identity -->
+          <div class="detail-card">
+            <h3 class="card-heading"><i class="pi pi-building" /> Google Place</h3>
+            <div class="info-grid">
+              <div v-if="placeDetails.placeName" class="info-item full">
+                <span class="info-label">Google Place Name <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
+                <strong>{{ placeDetails.placeName }}</strong>
+              </div>
+              <div v-if="placeDetails.formattedAddress" class="info-item full">
+                <span class="info-label">Google Address <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
+                <strong>{{ placeDetails.formattedAddress }}</strong>
+              </div>
+              <div v-if="placeDetails.latitude != null" class="info-item">
+                <span class="info-label">Coordinates <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
+                <strong>{{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}</strong>
+              </div>
+              <div v-if="placeDetails.googlePlaceId" class="info-item full">
+                <span class="info-label">Google Place ID <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
+                <code class="code-tag" style="word-break: break-all;">{{ placeDetails.googlePlaceId }}</code>
+              </div>
+              <div v-if="placeDetails.googleMapsUrl" class="info-item full">
+                <span class="info-label">Google Maps <span class="fs-badge fs-google" title="Retrieved from Google Places.">GOOGLE</span></span>
+                <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="info-link"><i class="pi pi-map" /> View on Google Maps</a>
+              </div>
+            </div>
+          </div>
+
           <!-- Editorial Summary -->
           <div v-if="placeDetails.editorialSummary" class="detail-card" style="grid-column: 1 / -1;">
             <h3 class="card-heading"><i class="pi pi-info-circle" /> About this place</h3>
@@ -318,10 +354,6 @@ async function executeDelete() {
                 <span class="info-label">Website</span>
                 <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="info-link"><i class="pi pi-external-link" /> {{ placeDetails.websiteUrl }}</a>
               </div>
-              <div v-if="placeDetails.googleMapsUrl" class="info-item">
-                <span class="info-label">Google Maps</span>
-                <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="info-link"><i class="pi pi-map" /> View on Google Maps</a>
-              </div>
             </div>
           </div>
 
@@ -355,7 +387,9 @@ async function executeDelete() {
 
           <!-- Reviews -->
           <div v-if="placeDetails.reviews?.length" class="detail-card" style="grid-column: 1 / -1;">
-            <h3 class="card-heading"><i class="pi pi-comments" /> Reviews</h3>
+            <h3 class="card-heading"><i class="pi pi-comments" /> Reviews
+              <span v-if="placeDetails.userRatingCount > 0" class="rating-count">({{ placeDetails.userRatingCount.toLocaleString() }} total on Google)</span>
+            </h3>
             <div class="reviews-list">
               <div v-for="(review, i) in placeDetails.reviews.slice(0, 5)" :key="i" class="review-item">
                 <div class="review-header">
@@ -372,6 +406,9 @@ async function executeDelete() {
                 <p v-if="review.text" class="review-text">{{ review.text }}</p>
               </div>
             </div>
+            <a v-if="placeDetails.googleMapsUrl" :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="reviews-maps-link">
+              <i class="pi pi-external-link" /> See all reviews on Google Maps
+            </a>
           </div>
 
           <!-- Service Options -->
@@ -553,6 +590,9 @@ async function executeDelete() {
                 <strong>{{ detail.customer.address.latitude?.toFixed(6) }}, {{ detail.customer.address.longitude?.toFixed(6) }}</strong>
               </div>
             </div>
+            <a v-if="siteGoogleMapsUrl" :href="siteGoogleMapsUrl" target="_blank" rel="noopener" class="info-link address-maps-link">
+              <i class="pi pi-map" /> Open in Google Maps
+            </a>
           </div>
           <div v-else class="empty-inline">
             <i class="pi pi-map" />
@@ -674,8 +714,8 @@ async function executeDelete() {
   color: var(--text-secondary);
 }
 .code-blue {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 
 /* ── SUMMARY STRIP ─────────────────────────────────────────────────── */
@@ -826,10 +866,10 @@ async function executeDelete() {
   text-align: left;
   font: inherit;
   font-weight: 600;
-  color: #2563eb;
+  color: #d14350;
   transition: color 0.15s;
 }
-.link-btn:hover { color: #1d4ed8; text-decoration: underline; }
+.link-btn:hover { color: #bb3342; text-decoration: underline; }
 
 /* ── EMPTY / INLINE ────────────────────────────────────────────────── */
 .empty-card {
@@ -884,8 +924,8 @@ async function executeDelete() {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   display: grid;
   place-content: center;
   font-weight: 800;
@@ -953,8 +993,8 @@ async function executeDelete() {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #eef2ff;
-  color: #6366f1;
+  background: #fff5f6;
+  color: #d15a66;
   display: grid;
   place-content: center;
   font-weight: 700;
@@ -1023,7 +1063,7 @@ async function executeDelete() {
 .rating-stars { display: flex; gap: 1px; }
 .rating-stars .pi { font-size: 0.7rem; color: #f59e0b; }
 .rating-count { color: var(--text-muted); font-size: 0.75rem; }
-.info-link { color: #2563eb; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
+.info-link { color: #d14350; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
 .info-link:hover { text-decoration: underline; }
 .types-wrap { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .type-tag { font-size: 0.68rem !important; }
@@ -1033,7 +1073,7 @@ async function executeDelete() {
 .hours-dot.closed { background: #ef4444; }
 .hours-list { display: grid; gap: 0.3rem; }
 .hours-row { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; }
-.hours-toggle { background: none; border: none; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
+.hours-toggle { background: none; border: none; color: #d14350; font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
 .hours-toggle:hover { text-decoration: underline; }
 .reviews-list { display: grid; gap: 0.85rem; }
 .review-item { padding-bottom: 0.75rem; border-bottom: 1px solid #f0f3f7; }
@@ -1047,6 +1087,13 @@ async function executeDelete() {
 .review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
 .review-time { color: var(--text-muted); font-size: 0.68rem; margin-left: 0.4rem; }
 .review-text { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
+.reviews-maps-link {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #f0f3f7;
+  color: #d14350; text-decoration: none; font-size: 0.78rem; font-weight: 600;
+}
+.reviews-maps-link:hover { text-decoration: underline; }
+.address-maps-link { margin-top: 0.85rem; }
 
 /* ── FIELD SOURCE BADGE ────────────────────────────────────────────── */
 .fs-badge {
@@ -1068,7 +1115,7 @@ async function executeDelete() {
   color: #fff;
 }
 .fs-google {
-  background: #3b82f6;
+  background: #df5a66;
   color: #fff;
 }
 .fs-manual {

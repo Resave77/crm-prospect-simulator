@@ -434,8 +434,8 @@ onMounted(() => { load() })
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #eff6ff; color: #2563eb; }
-.si-violet { background: #eef2ff; color: #6366f1; }
+.si-blue { background: #fff1f2; color: #d14350; }
+.si-violet { background: #fff5f6; color: #d15a66; }
 .si-green { background: #ecfdf5; color: #059669; }
 .si-amber { background: #fffbeb; color: #d97706; }
 
@@ -533,8 +533,8 @@ onMounted(() => { load() })
   word-break: break-all;
 }
 .code-blue {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 
 /* ── STATE BOX ────────────────────────────────────────────────────── */

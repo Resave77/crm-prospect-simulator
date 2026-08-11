@@ -46,8 +46,7 @@ const roleId = computed(() => String(route.params.id ?? ''))
 const DESCRIPTION_MAX = 255
 
 const LEVEL_OPTIONS: { label: string; value: SalesRoleLevel }[] = [
-  { label: 'Level 1 - Top-level organizational role', value: 1 },
-  { label: 'Level 2 - Reports to Level 1 and oversees Levels 3-4', value: 2 },
+  { label: 'Level 2 - Sales Level 1 business role', value: 2 },
   { label: 'Level 3 - Reports to Level 2 and oversees Level 4', value: 3 },
   { label: 'Level 4 - Operational/self-scope role', value: 4 },
 ]

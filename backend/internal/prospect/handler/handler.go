@@ -98,7 +98,7 @@ func (h *Handler) resolveProspectID(ctx context.Context, id uuid.UUID, act servi
 	if h.customerSvc == nil {
 		return id, nil
 	}
-	custActor := customerservice.Actor{UserID: act.UserID, Role: act.Role}
+	custActor := customerservice.Actor{UserID: act.UserID, Role: act.Role, PermissionKeys: act.PermissionKeys}
 	detail, err := h.customerSvc.MyCustomer(ctx, custActor, id)
 	if err != nil {
 		if errors.Is(err, customerrepo.ErrNotFound) || errors.Is(err, customerservice.ErrForbidden) {
@@ -192,6 +192,14 @@ func (h *Handler) Pipeline(c *fiber.Ctx) error {
 
 func (h *Handler) SalesExecutives(c *fiber.Ctx) error {
 	items, err := h.service.SalesExecutives(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) CustomerMarkers(c *fiber.Ctx) error {
+	items, err := h.service.CustomerMarkers(c.UserContext(), actor(c))
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -597,7 +605,11 @@ func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
 
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
-	return service.Actor{UserID: principal.UserID, Role: principal.Role}
+	var permissionKeys []string
+	if principal.SalesRole != nil {
+		permissionKeys = principal.SalesRole.PermissionKeys
+	}
+	return service.Actor{UserID: principal.UserID, Role: principal.Role, PermissionKeys: permissionKeys}
 }
 
 func removeSelfieFiles(references ...string) {
@@ -625,6 +637,8 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())
 	case errors.Is(err, repository.ErrPhotoTagSchemaUnsupported):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PHOTO_TAGGING_UNAVAILABLE", "Photo tagging is unavailable with the current database schema.")
+	case errors.Is(err, service.ErrAlreadyCustomer):
+		return response.Error(c, fiber.StatusConflict, "ALREADY_CUSTOMER", "This place is already an existing customer and cannot be assigned to sales.")
 	case errors.Is(err, service.ErrProspectStatus), errors.Is(err, repository.ErrInvalidStatus):
 		return response.Error(c, fiber.StatusConflict, "PROSPECT_STATUS_INVALID", "The prospect stage changed or this transition is not allowed.")
 	case errors.Is(err, repository.ErrNotFound):

@@ -264,8 +264,8 @@ h1 {
   color: #047857;
 }
 .si-blue {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 .panel-header h3 {
   margin: 0;
@@ -313,9 +313,9 @@ h1 {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #2563eb;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
+  color: #d14350;
+  background: #fff1f2;
+  border: 1px solid #ffd9dd;
   border-radius: 6px;
   padding: 0.14rem 0.45rem;
   word-break: break-all;
@@ -331,9 +331,9 @@ h1 {
   border: 1px solid transparent;
 }
 .level-chip-1 {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #dbeafe;
+  background: #fff1f2;
+  color: #bb3342;
+  border-color: #ffd9dd;
 }
 .level-chip-2 {
   background: #ecfdf5;

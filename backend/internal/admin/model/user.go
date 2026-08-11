@@ -28,6 +28,8 @@ type UserListItem struct {
 	Status             authmodel.UserStatus       `json:"status"`
 	ManagerID          *uuid.UUID                 `json:"managerId"`
 	ManagerName        string                     `json:"managerName"`
+	ReportsToUserID    *uuid.UUID                 `json:"reportsToUserId"`
+	ReportsToName      string                     `json:"reportsToName"`
 	OrganizationalRole *OrganizationalRoleSummary `json:"organizationalRole"`
 	MustChangePassword bool                       `json:"mustChangePassword"`
 	CreatedAt          time.Time                  `json:"createdAt"`
@@ -52,6 +54,8 @@ type UserDetail struct {
 	Status             authmodel.UserStatus       `json:"status"`
 	ManagerID          *uuid.UUID                 `json:"managerId"`
 	ManagerName        string                     `json:"managerName"`
+	ReportsToUserID    *uuid.UUID                 `json:"reportsToUserId"`
+	ReportsToName      string                     `json:"reportsToName"`
 	OrganizationalRole *OrganizationalRoleSummary `json:"organizationalRole"`
 	MustChangePassword bool                       `json:"mustChangePassword"`
 	CreatedBy          *uuid.UUID                 `json:"createdBy"`

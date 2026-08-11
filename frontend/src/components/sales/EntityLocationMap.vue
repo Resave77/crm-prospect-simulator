@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -107,7 +107,7 @@ onBeforeUnmount(() => cleanup())
 }
 .entity-map-marker {
   width: 36px; height: 36px; display: grid; place-items: center;
-  color: #fff; background: #2563eb; border: 3px solid #fff;
+  color: #fff; background: #d14350; border: 3px solid #fff;
   border-radius: 50% 50% 50% 0; box-shadow: 0 4px 14px rgba(22, 41, 67, 0.3);
   transform: rotate(-45deg);
 }

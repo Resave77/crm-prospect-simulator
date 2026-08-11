@@ -280,7 +280,7 @@ function runAction(
 .load-more-row { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 0.9rem 1rem; border-top: 1px solid #f1f4f8; }
 .load-more-row .cell-hint { margin: 0; }
 .sales-name { font-weight: 750; }
-.sales-name.level-1 { color: #2563eb; }
+.sales-name.level-1 { color: #d14350; }
 .sales-name.level-2 { color: #059669; }
 .sales-name.level-3 { color: #ea580c; }
 .sales-name.level-4 { color: #b45309; }
@@ -315,8 +315,8 @@ function runAction(
   height: 36px;
   place-content: center;
   border-radius: 50%;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-weight: 800;
 }
 .action-person > div {
@@ -345,8 +345,8 @@ function runAction(
   cursor: pointer;
 }
 .action-option:hover:not(:disabled) {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: #f3b9c0;
+  background: #fffbfb;
 }
 .action-option:disabled {
   opacity: 0.5;
@@ -358,8 +358,8 @@ function runAction(
   height: 30px;
   place-content: center;
   border-radius: 8px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 .action-option > span {
   display: grid;

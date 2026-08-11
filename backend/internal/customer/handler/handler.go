@@ -17,8 +17,8 @@ import (
 )
 
 type Handler struct {
-	service       *service.Service
-	prospectSvc   *prospectservice.Service
+	service     *service.Service
+	prospectSvc *prospectservice.Service
 }
 
 func New(customerService *service.Service, prospectSvc *prospectservice.Service) *Handler {
@@ -224,7 +224,11 @@ func queryInt(c *fiber.Ctx, key string, fallback int) int {
 
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
-	return service.Actor{UserID: principal.UserID, Role: principal.Role}
+	var permissionKeys []string
+	if principal.SalesRole != nil {
+		permissionKeys = principal.SalesRole.PermissionKeys
+	}
+	return service.Actor{UserID: principal.UserID, Role: principal.Role, PermissionKeys: permissionKeys}
 }
 
 func writeError(c *fiber.Ctx, err error) error {

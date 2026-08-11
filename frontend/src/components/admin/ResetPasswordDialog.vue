@@ -273,7 +273,7 @@ function close() {
   height: 38px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--brand-blue, #2563eb);
+  background: var(--brand-blue, #d14350);
   color: #fff;
   display: grid;
   place-content: center;

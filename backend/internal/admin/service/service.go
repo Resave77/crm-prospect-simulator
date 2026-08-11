@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/mail"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -98,8 +99,11 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input model.Creat
 		return model.UserDetail{}, err
 	}
 
-	// Account creation only persists the account role. Team parent, effective
-	// month, and hierarchy history are managed separately in Sales Structure.
+	if input.Role != authmodel.RoleSuperAdmin {
+		if err := s.repo.SetCurrentSalesAssignment(ctx, userID, input.SalesRoleID, input.ManagerID, actor.UserID); err != nil {
+			return model.UserDetail{}, err
+		}
+	}
 	return s.repo.FindUserDetail(ctx, userID)
 }
 
@@ -132,7 +136,12 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 		}
 	}
 
-	if input.SalesRoleID.Present && input.SalesRoleID.Value != nil && (input.AccountType == nil || *input.AccountType == model.AccountTypeSalesAccount) {
+	if current.Role == authmodel.RoleSuperAdmin && input.SalesRoleID.Present {
+		input.SalesRoleID = model.OptionalUUID{Present: true, Value: nil}
+		input.ManagerID = model.OptionalUUID{Present: true, Value: nil}
+		role := authmodel.RoleSuperAdmin
+		input.Role = &role
+	} else if input.SalesRoleID.Present && input.SalesRoleID.Value != nil && (input.AccountType == nil || *input.AccountType == model.AccountTypeSalesAccount) {
 		role, err := s.repo.FindSalesRole(ctx, *input.SalesRoleID.Value)
 		if err != nil {
 			return model.UserDetail{}, err
@@ -141,12 +150,6 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 		derivedRole, err := deriveSystemRoleForSalesRole(role)
 		if err != nil {
 			return model.UserDetail{}, err
-		}
-
-		if current.Role == authmodel.RoleSuperAdmin || strings.EqualFold(current.Email, "admin@yummy.test") {
-			input.SalesRoleID = model.OptionalUUID{Present: true, Value: nil}
-			input.ManagerID = model.OptionalUUID{Present: true, Value: nil}
-			derivedRole = authmodel.RoleSuperAdmin
 		}
 
 		input.Role = &derivedRole
@@ -160,8 +163,32 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 		return model.UserDetail{}, err
 	}
 
-	// Do not rewrite Sales Structure here. Monthly parent/team changes belong
-	// to the Sales Structure module and must preserve hierarchy history.
+	if input.Role != nil && *input.Role == authmodel.RoleSuperAdmin {
+		if current.Role != authmodel.RoleSuperAdmin {
+			if err := s.repo.SetCurrentSalesAssignment(ctx, id, nil, nil, actor.UserID); err != nil {
+				return model.UserDetail{}, err
+			}
+		}
+	} else if input.SalesRoleID.Present || input.ManagerID.Present {
+		detail, err := s.repo.FindUserDetail(ctx, id)
+		if err != nil {
+			return model.UserDetail{}, err
+		}
+		var salesRoleID *uuid.UUID
+		if detail.OrganizationalRole != nil {
+			salesRoleID = &detail.OrganizationalRole.ID
+		}
+		if input.SalesRoleID.Present {
+			salesRoleID = input.SalesRoleID.Value
+		}
+		parentID := detail.ReportsToUserID
+		if input.ManagerID.Present {
+			parentID = input.ManagerID.Value
+		}
+		if err := s.repo.SetCurrentSalesAssignment(ctx, id, salesRoleID, parentID, actor.UserID); err != nil {
+			return model.UserDetail{}, err
+		}
+	}
 	return s.repo.FindUserDetail(ctx, id)
 }
 
@@ -235,7 +262,7 @@ func (s *Service) ensurePrimarySuperAdminMutable(ctx context.Context, actor Acto
 	if err != nil {
 		return err
 	}
-	if strings.EqualFold(target.Email, "admin@yummy.test") && target.Role == authmodel.RoleSuperAdmin {
+	if target.Role == authmodel.RoleSuperAdmin {
 		return ErrProtectedSuperAdmin
 	}
 	return nil
@@ -330,9 +357,6 @@ func (s *Service) validateCreate(ctx context.Context, input model.CreateUserInpu
 			return fmt.Errorf("%w: super admin requires no organizational role or manager", ErrInvalidOrganizationalRole)
 		}
 	} else {
-		if err := s.ensureManagerActive(ctx, input.ManagerID); err != nil {
-			return err
-		}
 		if err := s.validateAccountOrganizationalRole(ctx, input.Role, input.SalesRoleID, input.ManagerID); err != nil {
 			return err
 		}
@@ -469,6 +493,9 @@ func (s *Service) validateAccountOrganizationalRole(ctx context.Context, systemR
 	if !role.IsActive {
 		return fmt.Errorf("%w: organizational role is inactive", ErrInvalidOrganizationalRole)
 	}
+	if role.Level == 1 {
+		return fmt.Errorf("%w: level 1 is reserved for SUPER_ADMIN", ErrInvalidOrganizationalRole)
+	}
 
 	derivedRole, err := deriveSystemRoleForSalesRole(role)
 	if err != nil {
@@ -479,6 +506,19 @@ func (s *Service) validateAccountOrganizationalRole(ctx context.Context, systemR
 			"%w: account role does not match organizational role",
 			ErrInvalidOrganizationalRole,
 		)
+	}
+	if managerID == nil {
+		return fmt.Errorf("%w: reports to is required", ErrInvalidOrganizationalRole)
+	}
+	_, parentRole, err := s.repo.FindEffectiveSalesAssignment(ctx, *managerID, time.Now())
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return fmt.Errorf("%w: reports to user has no active hierarchy assignment", ErrInvalidOrganizationalRole)
+		}
+		return err
+	}
+	if parentRole.Level != role.Level-1 {
+		return fmt.Errorf("%w: parent must be hierarchy level %d", ErrInvalidOrganizationalRole, role.Level-1)
 	}
 
 	return nil
@@ -493,7 +533,12 @@ func deriveSystemRoleForSalesRole(role model.SalesRole) (authmodel.Role, error) 
 	}
 
 	switch role.Level {
-	case 1, 2, 3:
+	case 1:
+		return "", fmt.Errorf(
+			"%w: level 1 is reserved for SUPER_ADMIN",
+			ErrInvalidOrganizationalRole,
+		)
+	case 2, 3:
 		return authmodel.RoleSalesManager, nil
 	case 4:
 		return authmodel.RoleSalesExecutive, nil

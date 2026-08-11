@@ -1,5 +1,15 @@
 export type UserRole = 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SALES_MANAGER' | 'SALES_EXECUTIVE'
 
+export type SalesRoleLevel = 1 | 2 | 3 | 4
+
+export interface AuthSalesRole {
+  id: string
+  name: string
+  level: SalesRoleLevel
+  landingPage?: string | null
+  permissionKeys?: string[]
+}
+
 export interface AuthUser {
   id: string
   email: string
@@ -9,6 +19,7 @@ export interface AuthUser {
   role: UserRole
   mustChangePassword?: boolean
   managerId?: string
+  salesRole?: AuthSalesRole | null
 }
 
 export interface AuthPayload {

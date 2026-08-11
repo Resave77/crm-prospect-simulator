@@ -11,7 +11,7 @@ import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
 import type { ApiErrorEnvelope } from '../../../types/auth'
-import type { SalesRole } from '../../../types/admin'
+import type { SalesRole, SalesStructureItem } from '../../../types/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -52,13 +52,18 @@ const form = reactive({
   email: '',
   phone: '',
   salesRoleId: '',
+  reportsToUserId: '',
 })
 
 const accountTypeOptions = [
-  { label: 'Sales Account', value: 'SALES_ACCOUNT', description: 'Uses active roles from Role Management.' },
-  { label: 'Super Admin', value: 'SUPER_ADMIN', description: 'System administrator account outside Sales Structure.' },
+  { label: 'Sales Account', value: 'SALES_ACCOUNT', description: 'Uses an active Sales Level 1–3 role (hierarchy Level 2–4) and belongs to Sales Structure.' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN', description: 'System administrator access. The existing primary Super Admin remains the single Level 1 hierarchy root.' },
 ]
 const isSalesAccount = computed(() => form.accountType === 'SALES_ACCOUNT')
+const isPrimarySuperAdminRoot = computed(() =>
+  store.selectedUser?.role === 'SUPER_ADMIN'
+  && store.selectedUser?.organizationalRole?.level === 1
+)
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const selectedOrganizationalRole = computed(() => {
   const fromList = store.salesRoles.find((role) => role.id === form.salesRoleId)
@@ -67,6 +72,17 @@ const selectedOrganizationalRole = computed(() => {
   if (current?.id === form.salesRoleId) return current
   return null
 })
+const requiredParentLevel = computed(() => selectedOrganizationalRole.value ? selectedOrganizationalRole.value.level - 1 : null)
+const reportsToOptions = computed(() =>
+  store.salesStructure
+    .filter((item: SalesStructureItem) => item.salesRole.level === requiredParentLevel.value && item.userId !== id.value)
+    .map((item: SalesStructureItem) => ({
+      label: item.salesName,
+      value: item.userId,
+      searchText: `${item.salesName} ${item.salesRole.name} level ${item.salesRole.level}`,
+      item,
+    })),
+)
 const roleChanged = computed(() => Boolean(store.selectedUser?.organizationalRole?.id && form.salesRoleId && form.salesRoleId !== store.selectedUser.organizationalRole.id))
 const validOrganizationalSelection = computed(() => {
   const role = selectedOrganizationalRole.value
@@ -78,6 +94,7 @@ const isFormValid = computed(() => {
   if (!form.name.trim()) return false
   if (!emailPattern.test(form.email.trim())) return false
   if (isSalesAccount.value && !validOrganizationalSelection.value) return false
+  if (isSalesAccount.value && !form.reportsToUserId) return false
   return true
 })
 
@@ -97,6 +114,7 @@ async function load() {
     form.phone = user.phone
     form.accountType = user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'SALES_ACCOUNT'
     form.salesRoleId = user.organizationalRole?.id ?? ''
+    form.reportsToUserId = user.reportsToUserId ?? user.managerId ?? ''
     loaded.value = true
   } catch (e) {
     notFound.value = isNotFoundError(e)
@@ -114,15 +132,28 @@ function roleOptionMeta(role: SalesRole) {
 }
 
 function isAssignableSalesRole(role: SalesRole) {
-  return role.isActive && role.level >= 1 && role.level <= 4 && role.name.trim().toLowerCase() !== 'super admin'
+  return role.isActive && role.level >= 2 && role.level <= 4
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 watch(
   () => form.accountType,
   (accountType) => {
-    if (accountType === 'SUPER_ADMIN') {
+    if (accountType === 'SUPER_ADMIN' && !isPrimarySuperAdminRoot.value) {
       form.salesRoleId = ''
+      form.reportsToUserId = ''
     }
+  },
+)
+
+watch(
+  () => form.salesRoleId,
+  () => {
+    const stillValid = reportsToOptions.value.some((option) => option.value === form.reportsToUserId)
+    if (!stillValid) form.reportsToUserId = ''
   },
 )
 
@@ -137,7 +168,16 @@ async function handleSubmit() {
       email: form.email.trim(),
       phone: form.phone.trim(),
       accountType: form.accountType,
-      salesRoleId: isSalesAccount.value ? form.salesRoleId || null : null,
+      salesRoleId: isSalesAccount.value
+        ? form.salesRoleId || null
+        : isPrimarySuperAdminRoot.value
+          ? store.selectedUser?.organizationalRole?.id ?? null
+          : null,
+      managerId: isSalesAccount.value
+        ? form.reportsToUserId || null
+        : isPrimarySuperAdminRoot.value
+          ? store.selectedUser?.reportsToUserId ?? store.selectedUser?.managerId ?? null
+          : null,
     })
     toast.add({ severity: 'success', summary: 'Account Updated', detail: `Account for ${user.fullName} has been updated.`, life: 4000 })
     await new Promise((resolve) => setTimeout(resolve, 800))
@@ -158,7 +198,7 @@ async function handleSubmit() {
 onMounted(async () => {
   await load()
   if (!notFound.value) {
-    try { await Promise.all([store.fetchManagers(), store.fetchSalesRoles()]) } catch { /* optional */ }
+    try { await Promise.all([store.fetchManagers(), store.fetchSalesRoles(), store.fetchSalesStructure(todayDate())]) } catch { /* optional */ }
   }
 })
 </script>
@@ -244,7 +284,7 @@ onMounted(async () => {
                 <div class="form-card-icon si-violet"><i class="pi pi-lock" /></div>
                 <div>
                   <h3>Role &amp; Access</h3>
-                  <p>Adjust the account role. The existing reporting relationship is preserved.</p>
+                  <p>Adjust system access and organizational role without breaking the existing hierarchy assignment.</p>
                 </div>
               </div>
               <div class="form-grid">
@@ -285,16 +325,41 @@ onMounted(async () => {
                     </template>
                   </Select>
                 </div>
+                <div v-if="isSalesAccount" class="form-field full">
+                  <label>Reports To <span class="required">*</span></label>
+                  <Select
+                    v-model="form.reportsToUserId"
+                    :options="reportsToOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    filter
+                    :filterFields="['label', 'searchText']"
+                    :disabled="!selectedOrganizationalRole"
+                    :placeholder="selectedOrganizationalRole ? `Select Level ${requiredParentLevel} parent` : 'Select a role first'"
+                    :loading="store.salesStructureLoading"
+                  >
+                    <template #option="{ option }">
+                      <div class="role-option">
+                        <strong>{{ option.item.salesName }}</strong>
+                        <span>{{ option.item.salesRole.name }} - Level {{ option.item.salesRole.level }}</span>
+                      </div>
+                    </template>
+                  </Select>
+                </div>
                 <div class="access-preview full">
                   <strong>{{ isSalesAccount ? selectedOrganizationalRole?.name || 'No organizational role selected' : 'Super Admin' }}</strong>
-                  <span>Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : '-' }}</span>
+                  <span>Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : isPrimarySuperAdminRoot ? 1 : 'System' }}</span>
                   <span>Landing: {{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}</span>
                   <span>{{ isSalesAccount ? selectedOrganizationalRole?.permissionCount ?? 0 : 'System' }} permissions</span>
-                  <p>{{ isSalesAccount ? selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' : 'Super Admin is a system role and is not assigned to Sales Structure.' }}</p>
+                  <p>{{ isSalesAccount ? selectedOrganizationalRole?.description || 'Role controls landing page, hierarchy level, and future access rules.' : isPrimarySuperAdminRoot ? 'This is the primary Super Admin and the single Level 1 root of Sales Structure.' : 'This Super Admin has system access without creating another Level 1 hierarchy root.' }}</p>
+                </div>
+                <div v-if="isPrimarySuperAdminRoot" class="must-change-note full">
+                  <i class="pi pi-sitemap" />
+                  <span>This account is the primary Super Admin and the single Level 1 hierarchy root. Saving profile changes will preserve its root assignment.</span>
                 </div>
                 <div v-if="roleChanged" class="must-change-note full">
                   <i class="pi pi-exclamation-triangle" />
-                  <span>Changing this role may change available menus, landing page, allowed actions, and hierarchy level. The existing manager is not changed from this form.</span>
+                  <span>Changing this role may change available menus, landing page, allowed actions, hierarchy level, and the valid Reports To options.</span>
                 </div>
                 <div class="form-field">
                   <label>Status</label>
@@ -317,7 +382,7 @@ onMounted(async () => {
               <div class="role-scope">
                 <span class="role-title">{{ isSalesAccount ? selectedOrganizationalRole?.name || 'No role selected' : 'Super Admin' }}</span>
                 <ul>
-                  <li><i class="pi pi-check-circle" /> Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : '-' }}</li>
+                  <li><i class="pi pi-check-circle" /> Level {{ isSalesAccount ? selectedOrganizationalRole?.level ?? '-' : isPrimarySuperAdminRoot ? 1 : 'System' }}</li>
                   <li><i class="pi pi-check-circle" /> {{ isSalesAccount ? selectedOrganizationalRole?.permissionCount ?? 0 : 'System' }} permissions</li>
                   <li><i class="pi pi-check-circle" /> Landing: {{ isSalesAccount ? landingLabel(selectedOrganizationalRole?.landingPage) : 'admin / dashboard' }}</li>
                 </ul>
@@ -343,8 +408,8 @@ onMounted(async () => {
                   <strong>{{ isSalesAccount ? selectedOrganizationalRole?.name || '—' : 'Super Admin' }}</strong>
                 </div>
                 <div class="summary-row">
-                  <span>Current Manager</span>
-                  <strong>{{ store.selectedUser?.managerName || '—' }}</strong>
+                  <span>Reports To</span>
+                  <strong>{{ isPrimarySuperAdminRoot ? 'None (Hierarchy Root)' : store.selectedUser?.managerName || '—' }}</strong>
                 </div>
                 <div class="summary-row">
                   <span>Status</span>
@@ -455,8 +520,8 @@ onMounted(async () => {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #eff6ff; color: #2563eb; }
-.si-violet { background: #eef2ff; color: #6366f1; }
+.si-blue { background: #fff1f2; color: #d14350; }
+.si-violet { background: #fff5f6; color: #d15a66; }
 
 .form-card-header h3 {
   margin: 0;
@@ -513,9 +578,9 @@ onMounted(async () => {
   gap: 0.45rem;
   padding: 0.55rem 0.7rem;
   font-size: 0.75rem;
-  color: #1e40af;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  color: #ad3040;
+  background: #fff1f2;
+  border: 1px solid #f3b9c0;
   border-radius: var(--radius-sm);
   line-height: 1.45;
 }
@@ -548,9 +613,9 @@ onMounted(async () => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem 0.75rem;
   padding: 0.8rem 0.9rem;
-  border: 1px solid #dbeafe;
+  border: 1px solid #ffd9dd;
   border-radius: var(--radius-sm);
-  background: #f8fbff;
+  background: #fffbfb;
 }
 .access-preview strong,
 .access-preview p {
@@ -683,8 +748,8 @@ onMounted(async () => {
   word-break: break-all;
 }
 .code-blue {
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
 }
 
 /* ── STATE BOX ────────────────────────────────────────────────────── */

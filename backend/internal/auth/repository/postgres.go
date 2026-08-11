@@ -22,33 +22,51 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
+const userRoleColumns = `u.id, u.email, u.password_hash, u.full_name, u.employee_id, u.phone,
+	u.role::text, u.status::text, u.token_version, u.last_login_at,
+	u.must_change_password, u.manager_id, u.created_by, u.updated_by,
+	u.created_at, u.updated_at`
+
+const salesRoleColumns = `sr.id, sr.name, sr.level, sr.landing_page,
+	COALESCE((
+		SELECT array_agg(p.key ORDER BY p.sort_order, p.name)
+		FROM role_permissions rp
+		JOIN permissions p ON p.id = rp.permission_id
+		WHERE rp.sales_role_id = sr.id AND p.is_active = true
+	), '{}')`
+
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (model.User, error) {
 	return r.scanUser(r.pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, full_name, employee_id, phone,
-		       role::text, status::text, token_version, last_login_at,
-		       must_change_password, manager_id, created_by, updated_by,
-		       created_at, updated_at
-		FROM users WHERE email = $1 AND deleted_at IS NULL`, email))
+		SELECT `+userRoleColumns+`, `+salesRoleColumns+`
+		FROM users u
+		LEFT JOIN sales_roles sr ON sr.id = u.sales_role_id
+		WHERE u.email = $1 AND u.deleted_at IS NULL`, email))
 }
 
 func (r *PostgresRepository) FindUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
 	return r.scanUser(r.pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, full_name, employee_id, phone,
-		       role::text, status::text, token_version, last_login_at,
-		       must_change_password, manager_id, created_by, updated_by,
-		       created_at, updated_at
-		FROM users WHERE id = $1 AND deleted_at IS NULL`, id))
+		SELECT `+userRoleColumns+`, `+salesRoleColumns+`
+		FROM users u
+		LEFT JOIN sales_roles sr ON sr.id = u.sales_role_id
+		WHERE u.id = $1 AND u.deleted_at IS NULL`, id))
 }
 
 func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	var user model.User
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var salesRoleID *uuid.UUID
+	var salesRoleName *string
+	var salesRoleLevel *int
+	var salesRoleLandingPage *string
+	var salesRolePermissionKeys []string
 	err := row.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.FullName,
 		&employeeID, &phone,
 		&user.Role, &user.Status, &user.TokenVersion, &user.LastLoginAt,
 		&user.MustChangePassword, &user.ManagerID, &user.CreatedBy, &user.UpdatedBy,
-		&user.CreatedAt, &user.UpdatedAt)
+		&user.CreatedAt, &user.UpdatedAt,
+		&salesRoleID, &salesRoleName, &salesRoleLevel, &salesRoleLandingPage,
+		&salesRolePermissionKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.User{}, ErrNotFound
 	}
@@ -60,6 +78,15 @@ func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	}
 	if phone.Valid {
 		user.Phone = phone.String
+	}
+	if salesRoleID != nil {
+		user.SalesRole = &model.SalesRoleSummary{
+			ID:             *salesRoleID,
+			Name:           *salesRoleName,
+			Level:          *salesRoleLevel,
+			LandingPage:    salesRoleLandingPage,
+			PermissionKeys: salesRolePermissionKeys,
+		}
 	}
 	return user, nil
 }

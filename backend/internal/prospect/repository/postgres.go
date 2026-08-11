@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -745,6 +745,55 @@ func (r *PostgresRepository) ProspectAccessibleTo(ctx context.Context, prospectI
 		return false, fmt.Errorf("check prospect accessibility: %w", err)
 	}
 	return accessible, nil
+}
+
+func (r *PostgresRepository) ExistingCustomerPlaceIDs(ctx context.Context, placeIDs []string) (map[string]bool, error) {
+	result := make(map[string]bool, len(placeIDs))
+	if len(placeIDs) == 0 {
+		return result, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT source_google_place_id FROM customer_sites
+		WHERE source_google_place_id IS NOT NULL AND source_google_place_id = ANY($1)`, placeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list existing customer place ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan existing customer place id: %w", err)
+		}
+		result[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list existing customer place ids: %w", err)
+	}
+	return result, nil
+}
+
+func (r *PostgresRepository) ListCustomerMarkers(ctx context.Context) ([]model.CustomerMarker, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_code, COALESCE(source_google_place_id, ''), name, COALESCE(preview_address, ''), latitude, longitude
+		FROM customer_sites
+		WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+		ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list customer markers: %w", err)
+	}
+	defer rows.Close()
+	items := make([]model.CustomerMarker, 0)
+	for rows.Next() {
+		var item model.CustomerMarker
+		if err := rows.Scan(&item.CustomerID, &item.CustomerCode, &item.GooglePlaceID, &item.PlaceName, &item.FormattedAddress, &item.Latitude, &item.Longitude); err != nil {
+			return nil, fmt.Errorf("scan customer marker: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list customer markers: %w", err)
+	}
+	return items, nil
 }
 
 const visitSelect = `SELECT v.id,v.prospect_id,v.sales_executive_id,u.full_name,v.check_in_at,v.check_in_latitude,v.check_in_longitude,v.check_out_at,v.check_out_latitude,v.check_out_longitude,v.selfie_reference,v.visit_notes,v.follow_up_notes,v.visit_result,v.visit_outcome FROM prospect_visits v JOIN users u ON u.id=v.sales_executive_id`

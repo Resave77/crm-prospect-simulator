@@ -267,7 +267,7 @@ watch(() => props.allCount, () => nextTick(updateScrollState))
   border: 1px solid #dbe3ef;
   border-radius: 50%;
   background: rgba(255,255,255,0.96);
-  color: #2563eb;
+  color: #d14350;
   box-shadow: 0 2px 8px rgba(15,23,42,0.1);
   cursor: pointer;
   transition: background 0.12s, box-shadow 0.12s, opacity 0.15s;
@@ -323,8 +323,8 @@ watch(() => props.allCount, () => nextTick(updateScrollState))
   display: inline-grid;
   place-items: center;
   border-radius: 9999px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: #fff1f2;
+  color: #d14350;
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
@@ -333,10 +333,10 @@ watch(() => props.allCount, () => nextTick(updateScrollState))
 
 /* Active */
 .stage-chip.active {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #d14350;
+  border-color: #d14350;
   color: #fff;
-  box-shadow: 0 4px 14px rgba(37,99,235,0.22);
+  box-shadow: 0 4px 14px rgba(209,67,80,0.22);
 }
 
 .stage-chip.active .stage-chip-label {
@@ -379,7 +379,7 @@ watch(() => props.allCount, () => nextTick(updateScrollState))
 }
 
 .stage-hint i {
-  color: #93c5fd;
+  color: #e9909a;
   font-size: 0.68rem;
 }
 </style>

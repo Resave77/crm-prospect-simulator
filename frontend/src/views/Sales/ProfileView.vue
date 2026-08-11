@@ -22,6 +22,7 @@ const initials = computed(() => {
 })
 
 const roleLabel = computed(() => {
+  if (auth.user?.salesRole?.name) return auth.user.salesRole.name
   if (auth.user?.role === 'ADMINISTRATOR') return 'Administrator'
   if (auth.user?.role === 'SALES_MANAGER') return 'Sales Manager'
   if (auth.user?.role === 'SALES_EXECUTIVE') return 'Sales Executive'
@@ -115,22 +116,30 @@ onMounted(loadStats)
     <template v-else>
       <!-- Profile Identity Card -->
       <div class="profile-card">
-        <div class="profile-card-avatar" aria-hidden="true">{{ initials }}</div>
-        <h2 class="profile-card-name">{{ auth.user?.fullName ?? '—' }}</h2>
-        <p class="profile-card-role">{{ roleLabel }}</p>
+        <div class="profile-card-cover">
+          <span class="profile-card-kicker">Sales account</span>
+          <span class="profile-status"><i class="pi pi-circle-fill" /> Active</span>
+        </div>
+        <div class="profile-card-identity">
+          <div class="profile-card-avatar" aria-hidden="true">{{ initials }}</div>
+          <div class="profile-card-copy">
+            <h2 class="profile-card-name">{{ auth.user?.fullName ?? '—' }}</h2>
+            <p class="profile-card-role">{{ roleLabel }}</p>
+          </div>
+        </div>
 
         <div class="profile-card-strip">
           <div class="strip-item">
-            <span class="strip-label">Employee ID</span>
-            <span class="strip-value" :title="auth.user?.employeeId ?? ''">{{ auth.user?.employeeId ?? '—' }}</span>
+            <span class="strip-icon"><i class="pi pi-id-card" /></span>
+            <span class="strip-copy"><span class="strip-label">Employee ID</span><span class="strip-value" :title="auth.user?.employeeId ?? ''">{{ auth.user?.employeeId ?? '—' }}</span></span>
           </div>
           <div class="strip-item">
-            <span class="strip-label">Email</span>
-            <span class="strip-value" :title="auth.user?.email ?? ''">{{ auth.user?.email ?? '—' }}</span>
+            <span class="strip-icon"><i class="pi pi-envelope" /></span>
+            <span class="strip-copy"><span class="strip-label">Email address</span><span class="strip-value" :title="auth.user?.email ?? ''">{{ auth.user?.email ?? '—' }}</span></span>
           </div>
           <div class="strip-item">
-            <span class="strip-label">Phone</span>
-            <span class="strip-value">{{ auth.user?.phone ?? '—' }}</span>
+            <span class="strip-icon"><i class="pi pi-phone" /></span>
+            <span class="strip-copy"><span class="strip-label">Phone number</span><span class="strip-value">{{ auth.user?.phone ?? '—' }}</span></span>
           </div>
         </div>
       </div>
@@ -143,17 +152,20 @@ onMounted(loadStats)
 
       <!-- Performance Section -->
       <div class="perf-section">
-        <h2 class="perf-title">Performance</h2>
+        <div class="perf-heading"><div><span>Overview</span><h2 class="perf-title">Performance</h2></div><i class="pi pi-chart-line" /></div>
         <div class="perf-stats">
           <div class="stat-card stat-blue">
+            <span class="stat-icon"><i class="pi pi-map-marker" /></span>
             <span class="stat-value">{{ totalVisits }}</span>
             <span class="stat-label">Total Visits</span>
           </div>
           <div class="stat-card stat-green">
+            <span class="stat-icon"><i class="pi pi-trophy" /></span>
             <span class="stat-value">{{ wonProspects }}</span>
             <span class="stat-label">Won Prospects</span>
           </div>
           <div class="stat-card stat-purple">
+            <span class="stat-icon"><i class="pi pi-check-circle" /></span>
             <span class="stat-value">{{ completedVisits }}</span>
             <span class="stat-label">Completed Visits</span>
           </div>
@@ -176,9 +188,9 @@ onMounted(loadStats)
 .profile-header-left { display: flex; align-items: center; gap: 0.75rem; }
 .profile-header-avatar {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff;
+  background: linear-gradient(135deg, #d14350, #bb3342); color: #fff;
   font-size: 0.82rem; font-weight: 800; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(209, 67, 80, 0.25);
 }
 .profile-header-text h1 { margin: 0; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 .profile-header-text p { margin: 0; font-size: 0.72rem; color: var(--text-muted); }
@@ -236,17 +248,73 @@ onMounted(loadStats)
   border-radius: 12px; padding: 0.85rem 0.5rem;
   display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
 }
-.stat-blue { background: #eff6ff; }
+.stat-blue { background: #fff1f2; }
 .stat-green { background: #f0fdf4; }
 .stat-purple { background: #f5f3ff; }
 .stat-value { font-size: 1.5rem; font-weight: 800; line-height: 1; }
-.stat-blue .stat-value { color: #2563eb; }
+.stat-blue .stat-value { color: #d14350; }
 .stat-green .stat-value { color: #16a34a; }
-.stat-purple .stat-value { color: #7c3aed; }
+.stat-purple .stat-value { color: #c54b59; }
 .stat-label {
   font-size: 0.55rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.03em; text-align: center; color: var(--text-muted);
 }
+
+/* Refined account card */
+.profile-card {
+  position: relative;
+  overflow: hidden;
+  align-items: stretch;
+  padding: 0;
+  color: var(--text-primary);
+  background: #fff;
+  border: 1px solid #eee3e5;
+  box-shadow: 0 10px 26px rgba(73, 34, 41, 0.08);
+}
+.profile-card-cover {
+  min-height: 86px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem;
+  color: #fff;
+  background: linear-gradient(120deg, #df5a66 0%, #d14350 56%, #bb3342 100%);
+}
+.profile-card-cover::after {
+  content: '';
+  position: absolute;
+  top: -55px;
+  right: -35px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+}
+.profile-card-kicker { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+.profile-status { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.5rem; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.13); font-size: 0.62rem; font-weight: 750; }
+.profile-status i { font-size: 0.38rem; color: #bbf7d0; }
+.profile-card-identity { display: flex; align-items: flex-end; gap: 0.8rem; padding: 0 1rem; margin-top: -30px; position: relative; z-index: 1; }
+.profile-card-avatar { width: 68px; height: 68px; margin: 0; border-radius: 20px; border: 4px solid #fff; color: #fff; background: linear-gradient(135deg, #d14350, #bb3342); box-shadow: 0 6px 16px rgba(113,30,43,.2); }
+.profile-card-copy { min-width: 0; padding-bottom: 0.3rem; }
+.profile-card-name { color: var(--text-primary); }
+.profile-card-role { color: var(--text-muted); opacity: 1; }
+.profile-card-strip { width: auto; margin: 1rem; padding: 0; border: 1px solid #f1e8ea; border-radius: 14px; display: grid; grid-template-columns: 1fr; gap: 0; background: #fcf9f9; }
+.strip-item { min-width: 0; display: flex; align-items: center; gap: 0.7rem; padding: 0.72rem; text-align: left; border-bottom: 1px solid #f1e8ea; }
+.strip-item:last-child { border-bottom: 0; }
+.strip-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; color: #d14350; background: #fff1f2; }
+.strip-icon i { font-size: 0.8rem; }
+.strip-copy { min-width: 0; display: grid; gap: 0.08rem; }
+.strip-label { margin: 0; color: var(--text-muted); opacity: 1; }
+.strip-value { color: var(--text-primary); font-size: 0.73rem; }
+.perf-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
+.perf-heading > div { display: grid; gap: 0.08rem; }
+.perf-heading span { color: #d14350; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.perf-heading > i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #d14350; background: #fff1f2; }
+.perf-title { margin: 0; color: var(--text-primary); font-size: 0.92rem; text-transform: none; letter-spacing: -0.01em; }
+.stat-card { position: relative; align-items: flex-start; padding: 0.75rem; gap: 0.2rem; }
+.stat-icon { width: 28px; height: 28px; display: grid; place-items: center; margin-bottom: 0.35rem; border-radius: 8px; background: rgba(255,255,255,.7); }
+.stat-icon i { font-size: 0.72rem; }
+.stat-label { text-align: left; }
 
 /* ── Retry ───────────────────────────────────────────────── */
 .retry-btn { margin-left: 0.5rem; }
@@ -288,9 +356,14 @@ onMounted(loadStats)
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .profile-page { gap: 0.7rem; }
-  .profile-card { padding: 1.25rem 1rem; }
-  .profile-card-strip { gap: 0.35rem; }
+  .profile-page { gap: 0.8rem; }
+  .profile-header { padding: 0.8rem; border: 1px solid #eee3e5; border-radius: 16px; background: #fff; box-shadow: 0 5px 16px rgba(73,34,41,.06); }
+  .profile-card { padding: 0; border-radius: 20px; box-shadow: 0 12px 26px rgba(73,34,41,.08); }
+  .profile-card-avatar { width: 68px; height: 68px; border-radius: 20px; }
+  .profile-card-strip { gap: 0; margin: 1rem; padding: 0; border-radius: 14px; background: #fcf9f9; }
+  .perf-section { padding: 1rem; border: 1px solid #eee3e5; border-radius: 18px; background: #fff; }
+  .stats-grid { gap: 0.5rem; }
+  .stat-card { padding: 0.8rem 0.35rem; border-radius: 13px; }
   .strip-value { font-size: 0.65rem; }
   .stat-value { font-size: 1.3rem; }
 }
@@ -312,7 +385,7 @@ onMounted(loadStats)
   .profile-header-avatar { width: 44px; height: 44px; }
   .profile-header-text h1 { font-size: 1.4rem; }
 
-  .profile-card { padding: 2rem 1.5rem; }
+  .profile-card { padding: 0; }
   .profile-card-avatar { width: 76px; height: 76px; font-size: 1.5rem; }
   .profile-card-name { font-size: 1.3rem; }
 

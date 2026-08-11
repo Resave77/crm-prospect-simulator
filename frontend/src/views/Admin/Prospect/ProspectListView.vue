@@ -585,8 +585,8 @@ onMounted(async () => {
   color: #15803d;
 }
 
-.si-blue { color: #2563eb; }
-.si-violet { color: #6366f1; }
+.si-blue { color: #d14350; }
+.si-violet { color: #d15a66; }
 .si-emerald { color: #16a34a; }
 .si-red { color: #dc2626; }
 
@@ -632,9 +632,9 @@ onMounted(async () => {
 }
 
 .search-field:focus-within {
-  border-color: #2563eb;
+  border-color: #d14350;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
 }
 
 .search-field i { color: #94a3b8; font-size: 0.76rem; }
@@ -792,7 +792,7 @@ onMounted(async () => {
 }
 
 .data-table tbody tr:last-child td { border-bottom: 0; }
-.data-table tbody tr:hover { background: #f8fbff; }
+.data-table tbody tr:hover { background: #fffbfb; }
 .th-action { width: 100px; text-align: center; }
 
 .prospect-row-won {
@@ -837,7 +837,7 @@ onMounted(async () => {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  color: #1d4ed8;
+  color: #bb3342;
   font-weight: 750;
   text-decoration: none;
   text-overflow: ellipsis;
@@ -911,8 +911,8 @@ onMounted(async () => {
   min-height: 1.9rem;
 }
 
-.act-view { color: #2563eb !important; }
-.act-view:hover { background: #eff6ff !important; }
+.act-view { color: #d14350 !important; }
+.act-view:hover { background: #fff1f2 !important; }
 
 .act-convert {
   min-width: 84px !important;
@@ -960,7 +960,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-.state-icon { color: #2563eb; font-size: 1.5rem; }
+.state-icon { color: #d14350; font-size: 1.5rem; }
 
 .state-icon-wrap {
   display: grid;
@@ -1058,7 +1058,7 @@ onMounted(async () => {
 }
 
 .prospect-row:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #d14350;
   outline-offset: -2px;
 }
 
@@ -1165,8 +1165,8 @@ onMounted(async () => {
 
 .action-menu-item:hover {
   transform: translateY(-1px);
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: #f3b9c0;
+  background: #fffbfb;
 }
 
 .action-menu-item > span:first-child {

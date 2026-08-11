@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { getProspectPhotoTags, setProspectPhotoTag } from '../api/crm'
 import type { PhotoCategory, PlacePhoto } from '../types/crm'
 import type { UserRole } from '../types/auth'
@@ -8,11 +8,15 @@ const props = defineProps<{
   photos: PlacePhoto[]
   prospectId?: string | null
   role: UserRole
+  section?: 'menu' | 'photos'
 }>()
 
-const tags = ref<Record<number, PhotoCategory>>({})
+const sharedTags = reactive<Record<string, Record<number, PhotoCategory>>>({})
+const sharedSaving = reactive<Record<string, number | null>>({})
+
+const tags = computed(() => sharedTags[props.prospectId ?? ''] ?? {})
+const savingIndex = computed(() => (props.prospectId ? sharedSaving[props.prospectId] ?? null : null))
 const loading = ref(true)
-const savingIndex = ref<number | null>(null)
 const lightbox = ref<PlacePhoto | null>(null)
 const tagError = ref('')
 let pollId: number | undefined
@@ -27,6 +31,12 @@ function categoryOf(index: number): PhotoCategory {
   return tags.value[index] ?? 'PLACE'
 }
 
+function applyTags(prospectId: string, items: { photoIndex: number; category: PhotoCategory }[]) {
+  const map: Record<number, PhotoCategory> = { ...(sharedTags[prospectId] ?? {}) }
+  items.forEach((t) => { map[t.photoIndex] = t.category })
+  sharedTags[prospectId] = map
+}
+
 async function loadTags() {
   if (!taggable.value) {
     loading.value = false
@@ -36,11 +46,9 @@ async function loadTags() {
   tagError.value = ''
   try {
     const items = await getProspectPhotoTags(props.prospectId!, props.role)
-    const map: Record<number, PhotoCategory> = {}
-    items.forEach((t) => { map[t.photoIndex] = t.category })
-    tags.value = map
+    applyTags(props.prospectId!, items)
   } catch {
-    tags.value = {}
+    sharedTags[props.prospectId ?? ''] = {}
   } finally {
     loading.value = false
   }
@@ -48,16 +56,16 @@ async function loadTags() {
 
 async function setCategory(index: number, category: PhotoCategory) {
   if (savingIndex.value !== null || !taggable.value || !canTag.value) return
-  savingIndex.value = index
+  sharedSaving[props.prospectId!] = index
   tagError.value = ''
   try {
     const item = await setProspectPhotoTag(props.prospectId!, index, category, props.role)
-    tags.value = { ...tags.value, [item.photoIndex]: item.category }
+    applyTags(props.prospectId!, [item])
   } catch (caught) {
     tagError.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
       ?? 'Failed to save photo tag. Please try again.'
   } finally {
-    savingIndex.value = null
+    sharedSaving[props.prospectId!] = null
   }
 }
 
@@ -69,9 +77,7 @@ async function refreshTags() {
   if (!taggable.value) return
   try {
     const items = await getProspectPhotoTags(props.prospectId!, props.role)
-    const map: Record<number, PhotoCategory> = {}
-    items.forEach((t) => { map[t.photoIndex] = t.category })
-    tags.value = map
+    applyTags(props.prospectId!, items)
   } catch {
     // keep last known tags during background refresh
   }
@@ -88,7 +94,6 @@ onMounted(() => {
   window.addEventListener('focus', onResume)
 })
 watch(() => props.prospectId, () => {
-  tags.value = {}
   lightbox.value = null
   loadTags()
 })
@@ -104,8 +109,8 @@ onBeforeUnmount(() => {
   <div class="ppg">
     <div v-if="tagError" class="ppg-error">{{ tagError }}</div>
 
-    <section v-if="photos.length" class="ppg-section">
-      <h2><i class="pi pi-book" /> Menu</h2>
+    <section v-if="photos.length && (!section || section === 'menu')" class="ppg-section">
+      <h2 v-if="!section"><i class="pi pi-book" /> Menu</h2>
       <p v-if="menuPhotos.length" class="ppg-count">{{ menuPhotos.length }} photo{{ menuPhotos.length === 1 ? '' : 's' }} tagged as menu</p>
       <div v-if="menuPhotos.length" class="ppg-scroll">
         <div v-for="item in menuPhotos" :key="item.photo.name" class="ppg-item">
@@ -132,8 +137,8 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="photos.length" class="ppg-section">
-      <h2><i class="pi pi-images" /> Photos</h2>
+    <section v-if="photos.length && (!section || section === 'photos')" class="ppg-section">
+      <h2 v-if="!section"><i class="pi pi-images" /> Photos</h2>
       <p v-if="regularPhotos.length" class="ppg-count">{{ regularPhotos.length }} photo{{ regularPhotos.length === 1 ? '' : 's' }}</p>
       <div v-if="regularPhotos.length" class="ppg-scroll">
         <div v-for="item in regularPhotos" :key="item.photo.name" class="ppg-item">
@@ -215,7 +220,7 @@ onBeforeUnmount(() => {
   background: #fff; color: var(--brand-blue); font-size: 0.66rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s ease;
 }
-.ppg-tag-btn:hover:not(:disabled) { background: #eff6ff; border-color: #bfdbfe; }
+.ppg-tag-btn:hover:not(:disabled) { background: #fff1f2; border-color: #f3b9c0; }
 .ppg-tag-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .ppg-empty {

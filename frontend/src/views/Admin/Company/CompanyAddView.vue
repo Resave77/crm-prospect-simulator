@@ -285,7 +285,7 @@ function resetForm() {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #eff6ff; color: #2563eb; }
+.si-blue { background: #fff1f2; color: #d14350; }
 .si-emerald { background: #ecfdf5; color: #059669; }
 .si-amber { background: #fffbeb; color: #d97706; }
 .si-slate { background: #f1f5f9; color: #64748b; }
@@ -375,11 +375,11 @@ function resetForm() {
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
-  background: #eff6ff;
-  border-color: #bfdbfe;
+  background: #fff1f2;
+  border-color: #f3b9c0;
 }
 .tip-card i {
-  color: #2563eb;
+  color: #d14350;
   margin-top: 0.1rem;
   font-size: 0.95rem;
   flex-shrink: 0;
@@ -387,7 +387,7 @@ function resetForm() {
 .tip-card p {
   margin: 0;
   font-size: 0.78rem;
-  color: #1e40af;
+  color: #ad3040;
   line-height: 1.5;
 }
 .sidebar-actions {

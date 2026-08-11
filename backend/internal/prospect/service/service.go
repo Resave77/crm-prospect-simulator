@@ -21,13 +21,15 @@ var (
 	ErrProspectStatus   = errors.New("prospect is not eligible for this operation")
 	ErrFinderInput      = errors.New("prospect finder query is invalid")
 	ErrPlacesDisabled   = errors.New("Google Places server key is not configured")
+	ErrAlreadyCustomer  = errors.New("place is already an existing customer")
 	ErrVisitCoordinates = errors.New("visit GPS coordinates are invalid")
 	ErrPhotoTagInvalid  = errors.New("photo category must be MENU or PLACE")
 )
 
 type Actor struct {
-	UserID uuid.UUID
-	Role   authmodel.Role
+	UserID         uuid.UUID
+	Role           authmodel.Role
+	PermissionKeys []string
 }
 
 type Service struct {
@@ -50,14 +52,14 @@ func New(repo repository.Repository, placeClients ...Places) *Service {
 }
 
 func (s *Service) MyProspects(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_prospects") {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListAssigned(ctx, actor.UserID)
 }
 
 func (s *Service) Transition(ctx context.Context, actor Actor, id uuid.UUID, status prospectmodel.Status, notes string) (prospectmodel.Prospect, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("update_prospect_pipeline") {
 		return prospectmodel.Prospect{}, ErrForbidden
 	}
 	review, err := s.repository.FindReview(ctx, id)
@@ -107,7 +109,7 @@ func validTransition(from, to prospectmodel.Status) bool {
 }
 
 func (s *Service) CheckIn(ctx context.Context, actor Actor, prospectID uuid.UUID, input prospectmodel.CheckInInput) (prospectmodel.Visit, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("check_in_prospect") {
 		return prospectmodel.Visit{}, ErrForbidden
 	}
 	if !validCoordinates(input.Latitude, input.Longitude) {
@@ -122,7 +124,7 @@ func (s *Service) CheckIn(ctx context.Context, actor Actor, prospectID uuid.UUID
 }
 
 func (s *Service) CheckOut(ctx context.Context, actor Actor, prospectID, visitID uuid.UUID, input prospectmodel.CheckOutInput) (prospectmodel.Visit, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("check_out_prospect") {
 		return prospectmodel.Visit{}, ErrForbidden
 	}
 	if !validCoordinates(input.Latitude, input.Longitude) {
@@ -155,7 +157,7 @@ func (s *Service) Review(ctx context.Context, actor Actor, id uuid.UUID) (prospe
 }
 
 func (s *Service) MyProspect(ctx context.Context, actor Actor, id uuid.UUID) (prospectmodel.Review, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_prospect_detail") {
 		return prospectmodel.Review{}, ErrForbidden
 	}
 	review, err := s.repository.FindReview(ctx, id)
@@ -182,8 +184,15 @@ func (s *Service) SalesExecutives(ctx context.Context, actor Actor) ([]prospectm
 	return s.repository.ListSalesExecutives(ctx)
 }
 
+func (s *Service) CustomerMarkers(ctx context.Context, actor Actor) ([]prospectmodel.CustomerMarker, error) {
+	if !actor.Role.IsAdminRole() {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListCustomerMarkers(ctx)
+}
+
 func (s *Service) MentionUsers(ctx context.Context, actor Actor) ([]prospectmodel.SalesExecutive, error) {
-	if !actor.Role.IsAdminRole() && actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.Role.IsAdminRole() && !actor.can("view_my_prospects") {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListMentionUsers(ctx)
@@ -199,7 +208,26 @@ func (s *Service) SearchPlaces(ctx context.Context, actor Actor, input prospectm
 	if s.places == nil {
 		return nil, ErrPlacesDisabled
 	}
-	return s.places.Search(ctx, input)
+	results, err := s.places.Search(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > 0 {
+		ids := make([]string, 0, len(results))
+		for _, r := range results {
+			ids = append(ids, r.GooglePlaceID)
+		}
+		existing, err := s.repository.ExistingCustomerPlaceIDs(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range results {
+			if existing[results[i].GooglePlaceID] {
+				results[i].IsCustomer = true
+			}
+		}
+	}
+	return results, nil
 }
 
 func (s *Service) PlaceDetail(ctx context.Context, actor Actor, placeID string) (prospectmodel.PlaceResult, error) {
@@ -232,6 +260,13 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 	input.IndustryGroup = strings.TrimSpace(input.IndustryGroup)
 	if input.Place.GooglePlaceID == "" || input.Place.PlaceName == "" || input.Place.FormattedAddress == "" || input.IndustryGroup == "" || input.AssignedSalesExecutiveID == uuid.Nil {
 		return prospectmodel.Prospect{}, ErrFinderInput
+	}
+	existing, err := s.repository.ExistingCustomerPlaceIDs(ctx, []string{input.Place.GooglePlaceID})
+	if err != nil {
+		return prospectmodel.Prospect{}, err
+	}
+	if existing[input.Place.GooglePlaceID] {
+		return prospectmodel.Prospect{}, ErrAlreadyCustomer
 	}
 	return s.repository.Create(ctx, input, actor.UserID)
 }
@@ -356,7 +391,7 @@ func (s *Service) Report(ctx context.Context, actor Actor, filter prospectmodel.
 }
 
 func (s *Service) ListMyVisits(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_own_visits") {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListMyVisits(ctx, actor.UserID, filter)
@@ -370,7 +405,7 @@ func (s *Service) DeleteVisit(ctx context.Context, actor Actor, visitID uuid.UUI
 	if actor.Role.IsAdminRole() {
 		return s.repository.DeleteVisit(ctx, visitID, uuid.Nil)
 	}
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("delete_visit") {
 		return prospectmodel.Visit{}, ErrForbidden
 	}
 	return s.repository.DeleteVisit(ctx, visitID, actor.UserID)
@@ -384,7 +419,7 @@ func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID)
 }
 
 func (s *Service) RequestDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("request_prospect_deletion") {
 		return ErrForbidden
 	}
 	ownerID, err := s.repository.FindProspectOwner(ctx, id)
@@ -452,7 +487,7 @@ func (s *Service) ensureCommentAccess(ctx context.Context, actor Actor, prospect
 		_, err := s.repository.FindProspectOwner(ctx, prospectID)
 		return err
 	}
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_prospect_detail") {
 		return ErrForbidden
 	}
 	accessible, err := s.repository.ProspectAccessibleTo(ctx, prospectID, actor.UserID)
@@ -490,7 +525,7 @@ func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospec
 		_, err := s.repository.FindProspectOwner(ctx, prospectID)
 		return err
 	}
-	if actor.Role != authmodel.RoleSalesExecutive {
+	if !actor.can("view_my_prospect_detail") {
 		return ErrForbidden
 	}
 	accessible, err := s.repository.ProspectAccessibleTo(ctx, prospectID, actor.UserID)
@@ -501,4 +536,16 @@ func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospec
 		return ErrForbidden
 	}
 	return nil
+}
+
+func (actor Actor) can(permissionKey string) bool {
+	if actor.Role == authmodel.RoleSalesExecutive && actor.PermissionKeys == nil {
+		return true
+	}
+	for _, key := range actor.PermissionKeys {
+		if key == permissionKey {
+			return true
+		}
+	}
+	return false
 }

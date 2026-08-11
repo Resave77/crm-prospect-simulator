@@ -187,7 +187,7 @@ func TestManagerAndSalesGetForbidden(t *testing.T) {
 	}
 }
 
-func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
+func TestCreateSalesManagerRequiresHierarchyParent(t *testing.T) {
 	role := activeRole(2)
 	stub := &repoStub{
 		details: map[uuid.UUID]model.UserDetail{},
@@ -203,8 +203,8 @@ func TestCreateSalesManagerWithoutManagerSucceeds(t *testing.T) {
 		SalesRoleID: &role.ID,
 	}
 	_, err := svc.CreateUser(context.Background(), adminActor(), input)
-	if err != nil {
-		t.Fatalf("create sales manager: %v", err)
+	if !errors.Is(err, ErrValidation) {
+		t.Fatalf("create sales manager err=%v, want ErrValidation", err)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestCreateSalesAccountWithoutSalesRoleRejected(t *testing.T) {
 	}
 }
 
-func TestCreateLevel1SalesRoleCreatesSalesManager(t *testing.T) {
+func TestCreateLevel1SalesRoleRejectedForSalesAccount(t *testing.T) {
 	role := model.SalesRole{ID: uuid.New(), Name: "Super Admin", Level: 1, IsActive: true}
 	stub := &repoStub{
 		details:     map[uuid.UUID]model.UserDetail{},
@@ -241,14 +241,8 @@ func TestCreateLevel1SalesRoleCreatesSalesManager(t *testing.T) {
 		SalesRoleID:       &role.ID,
 	}
 	_, err := svc.CreateUser(context.Background(), adminActor(), input)
-	if err != nil {
-		t.Fatalf("create level 1 sales account: %v", err)
-	}
-	if stub.lastCreate == nil || stub.lastCreate.Role != authmodel.RoleSalesManager {
-		t.Fatalf("created role=%v, want SALES_MANAGER", stub.lastCreate)
-	}
-	if stub.lastCreate.ManagerID != nil {
-		t.Fatalf("manager must be nil, got %v", *stub.lastCreate.ManagerID)
+	if !errors.Is(err, ErrValidation) {
+		t.Fatalf("create level 1 sales account err=%v, want ErrValidation", err)
 	}
 }
 
@@ -257,18 +251,22 @@ func TestCreateSalesAccountMapsOrganizationalLevels(t *testing.T) {
 		level int
 		want  authmodel.Role
 	}{
-		{level: 1, want: authmodel.RoleSalesManager},
 		{level: 2, want: authmodel.RoleSalesManager},
 		{level: 3, want: authmodel.RoleSalesManager},
 		{level: 4, want: authmodel.RoleSalesExecutive},
 	} {
 		t.Run(fmt.Sprintf("level_%d", tc.level), func(t *testing.T) {
 			role := activeRole(tc.level)
+			parentID := uuid.New()
+			parentRole := activeRole(tc.level - 1)
 			stub := &repoStub{
 				details:     map[uuid.UUID]model.UserDetail{},
 				emails:      map[string]uuid.UUID{},
 				employeeIDs: map[string]uuid.UUID{},
 				roles:       map[uuid.UUID]model.SalesRole{role.ID: role},
+				effectiveRoles: map[uuid.UUID]model.SalesRole{
+					parentID: parentRole,
+				},
 			}
 			svc := newTestService(stub)
 			input := model.CreateUserInput{
@@ -278,6 +276,7 @@ func TestCreateSalesAccountMapsOrganizationalLevels(t *testing.T) {
 				Email:             fmt.Sprintf("mapped-l%d@yummy.test", tc.level),
 				TemporaryPassword: "Password123",
 				SalesRoleID:       &role.ID,
+				ManagerID:         &parentID,
 			}
 			if _, err := svc.CreateUser(context.Background(), adminActor(), input); err != nil {
 				t.Fatalf("create mapped sales: %v", err)

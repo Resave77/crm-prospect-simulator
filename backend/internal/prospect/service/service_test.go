@@ -145,6 +145,14 @@ func (f *fakeProspectRepository) FindProspectOwner(_ context.Context, _ uuid.UUI
 	return uuid.Nil, nil
 }
 
+func (f *fakeProspectRepository) ExistingCustomerPlaceIDs(_ context.Context, _ []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (f *fakeProspectRepository) ListCustomerMarkers(_ context.Context) ([]prospectmodel.CustomerMarker, error) {
+	return []prospectmodel.CustomerMarker{}, nil
+}
+
 func TestSalesExecutiveCanMarkOwnNegotiationProspectWon(t *testing.T) {
 	owner := uuid.New()
 	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: owner, Status: prospectmodel.StatusNegotiation}}
@@ -259,5 +267,30 @@ func TestSalesRoleCannotUseProspectFinder(t *testing.T) {
 	_, err := New(&fakeProspectRepository{}, &fakePlaces{}).SearchPlaces(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleSalesExecutive}, prospectmodel.PlaceSearchInput{Latitude: -6.2, Longitude: 106.8, Radius: 3000})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
+func TestChunkTypesSplitsOverMaxTypesPerRequest(t *testing.T) {
+	types := make([]string, 0, 60)
+	for i := 0; i < 60; i++ {
+		types = append(types, "type_"+string(rune('a'+i%26)))
+	}
+	chunks := chunkTypes(types, maxTypesPerRequest)
+	joined := make([]string, 0, len(types))
+	for _, chunk := range chunks {
+		if len(chunk) > maxTypesPerRequest {
+			t.Fatalf("chunk of size %d exceeds limit %d", len(chunk), maxTypesPerRequest)
+		}
+		joined = append(joined, chunk...)
+	}
+	if len(joined) != len(types) {
+		t.Fatalf("expected %d types total, got %d", len(types), len(joined))
+	}
+}
+
+func TestChunkTypesEmptyKeepsSingleChunk(t *testing.T) {
+	chunks := chunkTypes(nil, maxTypesPerRequest)
+	if len(chunks) != 1 || chunks[0] != nil {
+		t.Fatalf("expected single nil chunk, got %+v", chunks)
 	}
 }

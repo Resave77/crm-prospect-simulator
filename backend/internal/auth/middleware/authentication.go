@@ -76,6 +76,17 @@ func (m *Middleware) RequireRole(roles ...model.Role) fiber.Handler {
 
 }
 
+func (m *Middleware) RequirePermission(permissionKey string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		principal, ok := Principal(c)
+		if !ok || !hasPermission(principal, permissionKey) {
+			return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
+		}
+
+		return c.Next()
+	}
+}
+
 func roleAllowed(allowed map[model.Role]bool, actual model.Role) bool {
 
 	if allowed[actual] {
@@ -86,6 +97,24 @@ func roleAllowed(allowed map[model.Role]bool, actual model.Role) bool {
 
 	return actual == model.RoleSuperAdmin && allowed[model.RoleAdministrator]
 
+}
+
+func hasPermission(principal service.Principal, permissionKey string) bool {
+	if permissionKey == "" {
+		return true
+	}
+	if principal.Role == model.RoleSalesExecutive && principal.SalesRole == nil {
+		return true
+	}
+	if principal.SalesRole == nil {
+		return false
+	}
+	for _, key := range principal.SalesRole.PermissionKeys {
+		if key == permissionKey {
+			return true
+		}
+	}
+	return false
 }
 
 // TEMP DEMO: RequirePasswordChanged is temporarily disabled for demo/progress deployment.

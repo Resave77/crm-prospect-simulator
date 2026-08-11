@@ -70,6 +70,17 @@ type PlaceResult struct {
 	MarkerCategory   string   `json:"markerCategory"`
 	MarkerColor      string   `json:"markerColor"`
 	MarkerIcon       string   `json:"markerIcon"`
+	IsCustomer       bool     `json:"isCustomer"`
+}
+
+type CustomerMarker struct {
+	CustomerID       uuid.UUID `json:"customerId"`
+	CustomerCode     string    `json:"customerCode"`
+	GooglePlaceID    string    `json:"googlePlaceId"`
+	PlaceName        string    `json:"name"`
+	FormattedAddress string    `json:"address"`
+	Latitude         *float64  `json:"latitude"`
+	Longitude        *float64  `json:"longitude"`
 }
 
 type PlaceSearchInput struct {

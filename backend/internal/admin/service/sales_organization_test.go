@@ -218,7 +218,7 @@ func TestSalesRoleValidation(t *testing.T) {
 		t.Fatalf("empty name err=%v", err)
 	}
 	repo.nameExists = true
-	if _, err := svc.CreateSalesRole(context.Background(), actor, model.CreateSalesRoleInput{Name: "X", Level: 1}); !errors.Is(err, ErrSalesRoleNameExists) {
+	if _, err := svc.CreateSalesRole(context.Background(), actor, model.CreateSalesRoleInput{Name: "X", Level: 2}); !errors.Is(err, ErrSalesRoleNameExists) {
 		t.Fatalf("duplicate err=%v", err)
 	}
 }
@@ -228,9 +228,9 @@ func TestSalesAssignmentHierarchyAndMove(t *testing.T) {
 	svc := New(repo)
 	actor := adminActor()
 	u1, u2, u3 := uuid.New(), uuid.New(), uuid.New()
-	repo.users[u1] = authmodel.User{ID: u1}
-	repo.users[u2] = authmodel.User{ID: u2}
-	repo.users[u3] = authmodel.User{ID: u3}
+	repo.users[u1] = authmodel.User{ID: u1, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
+	repo.users[u2] = authmodel.User{ID: u2, Status: authmodel.UserActive}
+	repo.users[u3] = authmodel.User{ID: u3, Status: authmodel.UserActive}
 	a1, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: u1, SalesRoleID: l1, EffectiveFrom: salesDate("2026-08-01")})
 	if err != nil {
 		t.Fatalf("l1 assignment: %v", err)
@@ -261,7 +261,7 @@ func TestSalesAssignmentRejectsInactiveOverlapAndBadMonth(t *testing.T) {
 	svc := New(repo)
 	actor := adminActor()
 	u := uuid.New()
-	repo.users[u] = authmodel.User{ID: u}
+	repo.users[u] = authmodel.User{ID: u, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
 	role := repo.roles[l1]
 	role.IsActive = false
 	repo.roles[l1] = role
@@ -284,7 +284,8 @@ func TestSalesAssignmentMoveScenariosAndHistory(t *testing.T) {
 	svc := New(repo)
 	actor := adminActor()
 	root, managerA, managerB, supervisor, rep := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	for _, id := range []uuid.UUID{root, managerA, managerB, supervisor, rep} {
+	repo.users[root] = authmodel.User{ID: root, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
+	for _, id := range []uuid.UUID{managerA, managerB, supervisor, rep} {
 		repo.users[id] = authmodel.User{ID: id, Status: authmodel.UserActive}
 	}
 	repo.assignments[uuid.New()] = model.SalesStructureAssignment{ID: uuid.New(), UserID: root, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-08-01")}
@@ -396,7 +397,8 @@ func TestSalesAssignmentMoveRejectsRequiredRules(t *testing.T) {
 	svc := New(repo)
 	actor := adminActor()
 	root, manager, managerB, supervisor := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	for _, id := range []uuid.UUID{root, manager, managerB, supervisor} {
+	repo.users[root] = authmodel.User{ID: root, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
+	for _, id := range []uuid.UUID{manager, managerB, supervisor} {
 		repo.users[id] = authmodel.User{ID: id, Status: authmodel.UserActive}
 	}
 	rootAssignmentID := uuid.New()
@@ -428,49 +430,123 @@ func TestSalesAssignmentMoveRejectsRequiredRules(t *testing.T) {
 	}
 }
 
-func TestSalesAssignmentAllowsMultipleLevel1SalesRoots(t *testing.T) {
-	repo, l1, l2, _, _ := salesTestRepo()
+func TestSalesAssignmentRejectsSecondLevel1Root(t *testing.T) {
+	repo, l1, _, _, _ := salesTestRepo()
 	svc := New(repo)
 	actor := adminActor()
-	root, otherRoot, manager := uuid.New(), uuid.New(), uuid.New()
-	for _, id := range []uuid.UUID{root, otherRoot, manager} {
-		repo.users[id] = authmodel.User{ID: id, Status: authmodel.UserActive}
-	}
-	rootAssignmentID := uuid.New()
-	repo.assignments[rootAssignmentID] = model.SalesStructureAssignment{ID: rootAssignmentID, UserID: root, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-08-01")}
-	otherRootAssignmentID := uuid.New()
-	repo.assignments[otherRootAssignmentID] = model.SalesStructureAssignment{ID: otherRootAssignmentID, UserID: otherRoot, SalesRoleID: l1, EffectiveFrom: mustSalesTime("2026-09-01")}
-	repo.assignments[uuid.New()] = model.SalesStructureAssignment{ID: uuid.New(), UserID: manager, SalesRoleID: l2, ParentUserID: &root, EffectiveFrom: mustSalesTime("2026-08-01")}
 
-	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: uuid.New(), SalesRoleID: l1, EffectiveFrom: salesDate("2026-09-01")}); !errors.Is(err, repository.ErrNotFound) {
+	root := uuid.New()
+	repo.users[root] = authmodel.User{
+		ID:     root,
+		Role:   authmodel.RoleSuperAdmin,
+		Status: authmodel.UserActive,
+	}
+
+	rootAssignmentID := uuid.New()
+	repo.assignments[rootAssignmentID] = model.SalesStructureAssignment{
+		ID:            rootAssignmentID,
+		UserID:        root,
+		SalesRoleID:   l1,
+		EffectiveFrom: mustSalesTime("2026-08-01"),
+	}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        uuid.New(),
+		SalesRoleID:   l1,
+		EffectiveFrom: salesDate("2026-09-01"),
+	}); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("missing user should short-circuit root count, err=%v", err)
 	}
-	newRoot := uuid.New()
-	repo.users[newRoot] = authmodel.User{ID: newRoot, Status: authmodel.UserActive}
-	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: newRoot, SalesRoleID: l1, EffectiveFrom: salesDate("2026-09-01")}); err != nil {
-		t.Fatalf("second level 1 sales root: %v", err)
+
+	secondRoot := uuid.New()
+	repo.users[secondRoot] = authmodel.User{
+		ID:     secondRoot,
+		Role:   authmodel.RoleSuperAdmin,
+		Status: authmodel.UserActive,
 	}
 
+	repo.level1Roots = 1
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        secondRoot,
+		SalesRoleID:   l1,
+		EffectiveFrom: salesDate("2026-09-01"),
+	}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("second level 1 root err=%v, want ErrInvalidHierarchy", err)
+	}
+
+	repo.level1Roots = 0
 	repo.moveErr = repository.ErrConflict
 	before := repo.assignments[rootAssignmentID]
-	if _, err := svc.MoveSalesAssignment(context.Background(), actor, rootAssignmentID, model.MoveAssignmentInput{SalesRoleID: l1, EffectiveFrom: salesDate("2026-10-01")}); !errors.Is(err, repository.ErrConflict) {
+	if _, err := svc.MoveSalesAssignment(context.Background(), actor, rootAssignmentID, model.MoveAssignmentInput{
+		SalesRoleID:   l1,
+		EffectiveFrom: salesDate("2026-10-01"),
+	}); !errors.Is(err, repository.ErrConflict) {
 		t.Fatalf("move insert failure err=%v", err)
 	}
+
 	after := repo.assignments[rootAssignmentID]
 	if before.EffectiveTo != after.EffectiveTo {
 		t.Fatalf("failed move changed old close: before=%v after=%v", before.EffectiveTo, after.EffectiveTo)
 	}
 }
 
-func TestSalesAssignmentRejectsSuperAdminUser(t *testing.T) {
-	repo, l1, _, _, _ := salesTestRepo()
+func TestSalesAssignmentSuperAdminRootRules(t *testing.T) {
+	repo, l1, l2, _, _ := salesTestRepo()
 	svc := New(repo)
 	actor := adminActor()
-	superAdmin := uuid.New()
-	repo.users[superAdmin] = authmodel.User{ID: superAdmin, Role: authmodel.RoleSuperAdmin, Status: authmodel.UserActive}
 
-	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{UserID: superAdmin, SalesRoleID: l1, EffectiveFrom: salesDate("2026-08-01")}); !errors.Is(err, ErrInvalidHierarchy) {
-		t.Fatalf("super admin assignment err=%v, want ErrInvalidHierarchy", err)
+	superAdmin := uuid.New()
+	repo.users[superAdmin] = authmodel.User{
+		ID:     superAdmin,
+		Role:   authmodel.RoleSuperAdmin,
+		Status: authmodel.UserActive,
+	}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        superAdmin,
+		SalesRoleID:   l1,
+		EffectiveFrom: salesDate("2026-08-01"),
+	}); err != nil {
+		t.Fatalf("super admin level 1 root should be allowed: %v", err)
+	}
+
+	otherSuperAdmin := uuid.New()
+	repo.users[otherSuperAdmin] = authmodel.User{
+		ID:     otherSuperAdmin,
+		Role:   authmodel.RoleSuperAdmin,
+		Status: authmodel.UserActive,
+	}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        otherSuperAdmin,
+		SalesRoleID:   l2,
+		ParentUserID:  &superAdmin,
+		EffectiveFrom: salesDate("2026-08-01"),
+	}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("super admin level 2 err=%v, want ErrInvalidHierarchy", err)
+	}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        otherSuperAdmin,
+		SalesRoleID:   l1,
+		ParentUserID:  &superAdmin,
+		EffectiveFrom: salesDate("2026-08-01"),
+	}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("super admin level 1 with parent err=%v, want ErrInvalidHierarchy", err)
+	}
+
+	regularUser := uuid.New()
+	repo.users[regularUser] = authmodel.User{
+		ID:     regularUser,
+		Status: authmodel.UserActive,
+	}
+
+	if _, err := svc.CreateSalesAssignment(context.Background(), actor, model.CreateAssignmentInput{
+		UserID:        regularUser,
+		SalesRoleID:   l1,
+		EffectiveFrom: salesDate("2026-08-01"),
+	}); !errors.Is(err, ErrInvalidHierarchy) {
+		t.Fatalf("non-super-admin level 1 err=%v, want ErrInvalidHierarchy", err)
 	}
 }
 
@@ -595,17 +671,17 @@ func TestRolePermissionsCreateLandingAndAncestors(t *testing.T) {
 }
 
 func TestRolePermissionUpdateSemantics(t *testing.T) {
-	repo, l1, _, _, _ := salesTestRepo()
-	repo.roles[l1] = model.SalesRole{ID: l1, Name: "L1", Level: 1, IsActive: true, Permissions: []model.Permission{{Key: "view_roles"}}}
+	repo, _, l2, _, _ := salesTestRepo()
+	repo.roles[l2] = model.SalesRole{ID: l2, Name: "L2", Level: 2, IsActive: true, Permissions: []model.Permission{{Key: "view_roles"}}}
 	svc := New(repo)
-	updated, err := svc.UpdateSalesRole(context.Background(), adminActor(), l1, model.UpdateSalesRoleInput{Description: strPtr("kept")})
+	updated, err := svc.UpdateSalesRole(context.Background(), adminActor(), l2, model.UpdateSalesRoleInput{Description: strPtr("kept")})
 	if err != nil {
 		t.Fatalf("update preserve: %v", err)
 	}
 	if len(updated.Permissions) != 1 || updated.Permissions[0].Key != "view_roles" {
 		t.Fatalf("permissions not preserved: %+v", updated.Permissions)
 	}
-	updated, err = svc.UpdateSalesRole(context.Background(), adminActor(), l1, model.UpdateSalesRoleInput{PermissionKeys: []string{"view_admin_dashboard"}})
+	updated, err = svc.UpdateSalesRole(context.Background(), adminActor(), l2, model.UpdateSalesRoleInput{PermissionKeys: []string{"view_admin_dashboard"}})
 	if err != nil {
 		t.Fatalf("replace permissions: %v", err)
 	}
@@ -613,7 +689,7 @@ func TestRolePermissionUpdateSemantics(t *testing.T) {
 	if !keys["view_admin_dashboard"] || !keys["menu_admin_dashboard"] || keys["view_roles"] {
 		t.Fatalf("replace keys=%v", keys)
 	}
-	updated, err = svc.UpdateSalesRole(context.Background(), adminActor(), l1, model.UpdateSalesRoleInput{PermissionKeys: []string{}})
+	updated, err = svc.UpdateSalesRole(context.Background(), adminActor(), l2, model.UpdateSalesRoleInput{PermissionKeys: []string{}})
 	if err != nil {
 		t.Fatalf("clear permissions: %v", err)
 	}
