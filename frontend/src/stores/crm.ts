@@ -3,12 +3,13 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 import * as crmApi from '../api/crm'
 import type { ApiErrorEnvelope } from '../types/auth'
-import type { CustomerSite, CustomerDetail, Prospect, ProspectStatus } from '../types/crm'
+import type { CustomerSite, CustomerDetail, Prospect, ProspectStatus, TeamCustomers } from '../types/crm'
 
 export const useCrmStore = defineStore('crm', () => {
   const myProspects = ref<Prospect[]>([])
   const adminCustomers = ref<CustomerSite[]>([])
   const myCustomers = ref<CustomerSite[]>([])
+  const teamCustomers = ref<TeamCustomers | null>(null)
   const pipeline = ref<Prospect[]>([])
   const loading = ref(false)
 
@@ -103,6 +104,11 @@ export const useCrmStore = defineStore('crm', () => {
     myCustomers.value = await run(crmApi.getMyCustomers)
   }
 
+  async function loadTeamCustomers() {
+    teamCustomers.value = await run(crmApi.getTeamCustomers)
+    return teamCustomers.value
+  }
+
   async function loadAdminCustomer(id: string) {
     return await run(() => crmApi.getAdminCustomer(id))
   }
@@ -121,6 +127,7 @@ export const useCrmStore = defineStore('crm', () => {
     myProspects,
     adminCustomers,
     myCustomers,
+    teamCustomers,
     pipeline,
     loading,
     loadMyProspects,
@@ -128,6 +135,7 @@ export const useCrmStore = defineStore('crm', () => {
     loadPipeline,
     loadAdminCustomers,
     loadMyCustomers,
+    loadTeamCustomers,
     loadAdminCustomer,
     errorMessage,
   }

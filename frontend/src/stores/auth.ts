@@ -12,6 +12,7 @@ import type {
   ChangePasswordResult,
   UserRole,
 } from '../types/auth'
+import { hasPermission as userHasPermission, permissionKeysFor } from '../utils/navigation'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
@@ -22,6 +23,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   const authenticated = computed(() => user.value !== null)
   const role = computed<UserRole | null>(() => user.value?.role ?? null)
+  const permissionKeys = computed(() => user.value ? permissionKeysFor(user.value) : [])
+
+  function hasPermission(key: string) {
+    return user.value ? userHasPermission(user.value, key) : false
+  }
 
   function applySession(payload: AuthPayload | null) {
     user.value = payload?.user ?? null
@@ -94,6 +100,8 @@ export const useAuthStore = defineStore('auth', () => {
     changingPassword,
     authenticated,
     role,
+    permissionKeys,
+    hasPermission,
     bootstrap,
     login,
     logout,

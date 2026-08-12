@@ -670,6 +670,72 @@ func TestRolePermissionsCreateLandingAndAncestors(t *testing.T) {
 	}
 }
 
+func TestDefaultSalesRolePermissionsCoverOperationalSalesLevel(t *testing.T) {
+	keys := keysSet(DefaultPermissionKeys(4))
+	for _, required := range []string{
+		"menu_sales_pipeline",
+		"update_prospect_pipeline",
+		"view_own_visits",
+	} {
+		if !keys[required] {
+			t.Fatalf("level 4 defaults missing %s: %v", required, keys)
+		}
+	}
+}
+
+func TestDefaultPermissionSeedUsesActiveBaselineRoleIDs(t *testing.T) {
+	seed := defaultSalesRolePermissionSeed()
+	if _, ok := seed[uuid.MustParse("00000000-0000-0000-0000-000000000103")]; ok {
+		t.Fatal("retired legacy role 0103 must not receive default permission seed")
+	}
+	for _, id := range []string{
+		"00000000-0000-0000-0000-000000000100",
+		"00000000-0000-0000-0000-000000000101",
+		"00000000-0000-0000-0000-000000000102",
+		"00000000-0000-0000-0000-000000000104",
+	} {
+		if len(seed[uuid.MustParse(id)]) == 0 {
+			t.Fatalf("missing default permission seed for %s", id)
+		}
+	}
+}
+
+func TestSalesPipelineLandingUsesExistingPermission(t *testing.T) {
+	required := landingPagePermissions["/sales/pipeline"]
+	if required != "menu_sales_pipeline" {
+		t.Fatalf("pipeline landing requires %q, want menu_sales_pipeline", required)
+	}
+	found := false
+	for _, permission := range permissionCatalog {
+		if permission.Key == required {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("pipeline landing required permission %q is not in catalog", required)
+	}
+}
+
+func TestTeamDashboardPermissionIsDashboardCapabilityOnly(t *testing.T) {
+	for _, permission := range permissionCatalog {
+		if permission.Key != "view_team_dashboard" {
+			continue
+		}
+		if permission.NodeType != model.PermissionNodeAction {
+			t.Fatalf("view_team_dashboard node type=%s, want ACTION", permission.NodeType)
+		}
+		if permission.ParentKey == nil || *permission.ParentKey != "menu_sales_dashboard" {
+			t.Fatalf("view_team_dashboard parent=%v, want menu_sales_dashboard", permission.ParentKey)
+		}
+		if permission.RoutePath != nil {
+			t.Fatalf("view_team_dashboard routePath=%v, want nil", *permission.RoutePath)
+		}
+		return
+	}
+	t.Fatal("view_team_dashboard permission missing")
+}
+
 func TestRolePermissionUpdateSemantics(t *testing.T) {
 	repo, _, l2, _, _ := salesTestRepo()
 	repo.roles[l2] = model.SalesRole{ID: l2, Name: "L2", Level: 2, IsActive: true, Permissions: []model.Permission{{Key: "view_roles"}}}

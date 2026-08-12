@@ -52,6 +52,41 @@ type SalesExecutive struct {
 	ActiveProspectCount int       `json:"activeProspectCount"`
 }
 
+type TeamDashboard struct {
+	Lead                 TeamLeadInfo        `json:"lead"`
+	HasTeam              bool                `json:"hasTeam"`
+	DirectMemberCount    int                 `json:"directMemberCount"`
+	TotalDescendantCount int                 `json:"totalDescendantCount"`
+	ActiveProspects      int                 `json:"activeProspects"`
+	Customers            int                 `json:"customers"`
+	VisitsToday          int                 `json:"visitsToday"`
+	CompletedVisits      int                 `json:"completedVisits"`
+	PendingVisits        int                 `json:"pendingVisits"`
+	PipelineCounts       map[Status]int      `json:"pipelineCounts"`
+	Members              []TeamMemberSummary `json:"members"`
+}
+
+type TeamLeadInfo struct {
+	ID            uuid.UUID `json:"id"`
+	FullName      string    `json:"fullName"`
+	RoleName      string    `json:"roleName"`
+	RoleLevel     int       `json:"roleLevel"`
+	EffectiveFrom time.Time `json:"effectiveFrom"`
+}
+
+type TeamMemberSummary struct {
+	UserID          uuid.UUID `json:"userId"`
+	FullName        string    `json:"fullName"`
+	RoleName        string    `json:"roleName"`
+	RoleLevel       int       `json:"roleLevel"`
+	ParentUserID    uuid.UUID `json:"parentUserId"`
+	ActiveProspects int       `json:"activeProspects"`
+	Customers       int       `json:"customers"`
+	VisitsToday     int       `json:"visitsToday"`
+	CompletedVisits int       `json:"completedVisits"`
+	PendingVisits   int       `json:"pendingVisits"`
+}
+
 type PlaceResult struct {
 	GooglePlaceID    string   `json:"googlePlaceId"`
 	PlaceName        string   `json:"name"`
@@ -248,7 +283,7 @@ type CommentAttachment struct {
 	Size        int64     `json:"size"`
 	// Path is persisted with the comment so attachments can be served later.
 	// Repository responses clear it before returning JSON to clients.
-	Path        string    `json:"path,omitempty"`
+	Path string `json:"path,omitempty"`
 }
 
 type PhotoCategory string

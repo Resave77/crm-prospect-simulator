@@ -81,6 +81,21 @@ type CustomerSite struct {
 	ConvertedAt            time.Time          `json:"convertedAt"`
 	UpdatedAt              time.Time          `json:"updatedAt"`
 	ConvertedByAdminID     uuid.UUID          `json:"convertedByAdminId"`
+	AssignedSales          *AssignedSalesInfo `json:"assignedSales,omitempty"`
+}
+
+type AssignedSalesInfo struct {
+	UserID    uuid.UUID `json:"userId"`
+	FullName  string    `json:"fullName"`
+	RoleName  string    `json:"roleName"`
+	RoleLevel int       `json:"roleLevel"`
+}
+
+type TeamCustomers struct {
+	HasTeam              bool           `json:"hasTeam"`
+	DirectMemberCount    int            `json:"directMemberCount"`
+	TotalDescendantCount int            `json:"totalDescendantCount"`
+	Customers            []CustomerSite `json:"customers"`
 }
 
 type UserOption struct {
@@ -126,14 +141,14 @@ type ConversionInput struct {
 }
 
 type CustomerListParams struct {
-	Page    int    `json:"page"`
-	Limit   int    `json:"limit"`
-	Keyword string `json:"keyword"`
-	Segment string `json:"segment"`
+	Page     int    `json:"page"`
+	Limit    int    `json:"limit"`
+	Keyword  string `json:"keyword"`
+	Segment  string `json:"segment"`
 	Category string `json:"category"`
-	Sales   string `json:"sales"`
-	Region  string `json:"region"`
-	Sort    string `json:"sort"`
+	Sales    string `json:"sales"`
+	Region   string `json:"region"`
+	Sort     string `json:"sort"`
 }
 
 type CustomerListResult struct {
@@ -145,10 +160,10 @@ type CustomerListResult struct {
 }
 
 type ListFilterOptions struct {
-	Segments  []string       `json:"segments"`
-	Categories []string      `json:"categories"`
-	Regions   []string       `json:"regions"`
-	SalesExec []UserOption   `json:"salesExecutives"`
+	Segments   []string     `json:"segments"`
+	Categories []string     `json:"categories"`
+	Regions    []string     `json:"regions"`
+	SalesExec  []UserOption `json:"salesExecutives"`
 }
 
 type MasterOptions struct {
@@ -162,11 +177,11 @@ type MasterOptions struct {
 }
 
 type UpdateParentCompanyInput struct {
-	Name           string  `json:"name"`
-	TermOfPayment  string  `json:"termOfPayment"`
-	NPWPName       string  `json:"npwpName"`
-	NPWPAddress    string  `json:"npwpAddress"`
-	NPWPNumber     string  `json:"npwpNumber"`
-	CompanyAddress *Address `json:"companyAddress,omitempty"`
+	Name            string    `json:"name"`
+	TermOfPayment   string    `json:"termOfPayment"`
+	NPWPName        string    `json:"npwpName"`
+	NPWPAddress     string    `json:"npwpAddress"`
+	NPWPNumber      string    `json:"npwpNumber"`
+	CompanyAddress  *Address  `json:"companyAddress,omitempty"`
 	CompanyContacts []Contact `json:"companyContacts,omitempty"`
 }

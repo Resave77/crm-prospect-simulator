@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -49,6 +49,112 @@ func (r *PostgresRepository) ListAssigned(ctx context.Context, salesExecutiveID 
 	}
 	defer rows.Close()
 	return scanProspects(rows)
+}
+
+func (r *PostgresRepository) TeamDashboard(ctx context.Context, actorID uuid.UUID) (model.TeamDashboard, error) {
+	activeAssignment := func(alias string) string {
+		return alias + `.effective_from <= CURRENT_DATE AND (` + alias + `.effective_to IS NULL OR ` + alias + `.effective_to >= CURRENT_DATE)`
+	}
+	var item model.TeamDashboard
+	err := r.pool.QueryRow(ctx, `
+		SELECT u.id, u.full_name, sr.name, sr.level, a.effective_from
+		FROM sales_structure_assignments a
+		JOIN users u ON u.id = a.user_id
+		JOIN sales_roles sr ON sr.id = a.sales_role_id
+		WHERE a.user_id = $1 AND `+activeAssignment("a")+` AND u.deleted_at IS NULL
+		ORDER BY a.effective_from DESC
+		LIMIT 1`, actorID).Scan(&item.Lead.ID, &item.Lead.FullName, &item.Lead.RoleName, &item.Lead.RoleLevel, &item.Lead.EffectiveFrom)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.TeamDashboard{Lead: model.TeamLeadInfo{ID: actorID}, PipelineCounts: map[model.Status]int{}}, nil
+	}
+	if err != nil {
+		return model.TeamDashboard{}, fmt.Errorf("read team lead assignment: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		WITH RECURSIVE descendants AS (
+			SELECT a.user_id, a.parent_user_id, sr.name AS role_name, sr.level AS role_level, 1 AS depth
+			FROM sales_structure_assignments a
+			JOIN sales_roles sr ON sr.id = a.sales_role_id
+			JOIN users u ON u.id = a.user_id
+			WHERE a.parent_user_id = $1 AND `+activeAssignment("a")+` AND u.deleted_at IS NULL
+			UNION ALL
+			SELECT child.user_id, child.parent_user_id, child_role.name, child_role.level, d.depth + 1
+			FROM sales_structure_assignments child
+			JOIN sales_roles child_role ON child_role.id = child.sales_role_id
+			JOIN users child_user ON child_user.id = child.user_id
+			JOIN descendants d ON d.user_id = child.parent_user_id
+			WHERE `+activeAssignment("child")+` AND child_user.deleted_at IS NULL
+		)
+		SELECT d.user_id, u.full_name, d.role_name, d.role_level, d.parent_user_id,
+		       COUNT(DISTINCT p.id) FILTER (WHERE p.status IN ('NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION'))::int,
+		       COUNT(DISTINCT cs.id)::int,
+		       COUNT(DISTINCT v.id) FILTER (WHERE v.check_in_at::date = CURRENT_DATE)::int,
+		       COUNT(DISTINCT v.id) FILTER (WHERE v.check_in_at::date = CURRENT_DATE AND v.check_out_at IS NOT NULL)::int,
+		       COUNT(DISTINCT v.id) FILTER (WHERE v.check_in_at::date = CURRENT_DATE AND v.check_out_at IS NULL)::int
+		FROM descendants d
+		JOIN users u ON u.id = d.user_id
+		LEFT JOIN prospects p ON p.assigned_sales_executive_id = d.user_id
+		LEFT JOIN customer_sites cs ON cs.sales_executive_id = d.user_id
+		LEFT JOIN prospect_visits v ON v.sales_executive_id = d.user_id
+		GROUP BY d.user_id, u.full_name, d.role_name, d.role_level, d.parent_user_id, d.depth
+		ORDER BY d.depth, d.role_level, u.full_name`, actorID)
+	if err != nil {
+		return model.TeamDashboard{}, fmt.Errorf("read team descendants: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var member model.TeamMemberSummary
+		if err := rows.Scan(&member.UserID, &member.FullName, &member.RoleName, &member.RoleLevel, &member.ParentUserID, &member.ActiveProspects, &member.Customers, &member.VisitsToday, &member.CompletedVisits, &member.PendingVisits); err != nil {
+			return model.TeamDashboard{}, err
+		}
+		item.Members = append(item.Members, member)
+		item.TotalDescendantCount++
+		if member.ParentUserID == actorID {
+			item.DirectMemberCount++
+		}
+		item.ActiveProspects += member.ActiveProspects
+		item.Customers += member.Customers
+		item.VisitsToday += member.VisitsToday
+		item.CompletedVisits += member.CompletedVisits
+		item.PendingVisits += member.PendingVisits
+	}
+	if err := rows.Err(); err != nil {
+		return model.TeamDashboard{}, err
+	}
+	item.HasTeam = item.TotalDescendantCount > 0
+
+	item.PipelineCounts = map[model.Status]int{}
+	statusRows, err := r.pool.Query(ctx, `
+		WITH RECURSIVE descendants AS (
+			SELECT a.user_id
+			FROM sales_structure_assignments a
+			JOIN users u ON u.id = a.user_id
+			WHERE a.parent_user_id = $1 AND `+activeAssignment("a")+` AND u.deleted_at IS NULL
+			UNION ALL
+			SELECT child.user_id
+			FROM sales_structure_assignments child
+			JOIN users child_user ON child_user.id = child.user_id
+			JOIN descendants d ON d.user_id = child.parent_user_id
+			WHERE `+activeAssignment("child")+` AND child_user.deleted_at IS NULL
+		)
+		SELECT p.status::text, COUNT(*)::int
+		FROM prospects p
+		JOIN descendants d ON d.user_id = p.assigned_sales_executive_id
+		GROUP BY p.status`, actorID)
+	if err != nil {
+		return model.TeamDashboard{}, fmt.Errorf("read team pipeline counts: %w", err)
+	}
+	defer statusRows.Close()
+	for statusRows.Next() {
+		var status model.Status
+		var count int
+		if err := statusRows.Scan(&status, &count); err != nil {
+			return model.TeamDashboard{}, err
+		}
+		item.PipelineCounts[status] = count
+	}
+	return item, statusRows.Err()
 }
 
 func (r *PostgresRepository) ListAll(ctx context.Context) ([]model.Prospect, error) {

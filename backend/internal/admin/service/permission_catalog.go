@@ -13,6 +13,17 @@ type permissionSeed struct {
 	SortOrder   int
 }
 
+type PermissionCatalogEntry struct {
+	Key         string
+	Name        string
+	Description string
+	GroupKey    string
+	ParentKey   *string
+	NodeType    model.PermissionNodeType
+	RoutePath   *string
+	SortOrder   int
+}
+
 func strPtr(v string) *string { return &v }
 
 var permissionCatalog = []permissionSeed{
@@ -20,6 +31,7 @@ var permissionCatalog = []permissionSeed{
 	{Key: "view_admin_dashboard", Name: "View Admin Dashboard", GroupKey: "dashboard", ParentKey: strPtr("menu_admin_dashboard"), NodeType: model.PermissionNodeAction, RoutePath: strPtr("/admin/dashboard"), SortOrder: 11},
 	{Key: "menu_sales_dashboard", Name: "Sales Dashboard", GroupKey: "dashboard", NodeType: model.PermissionNodeMenu, RoutePath: strPtr("/sales/dashboard"), SortOrder: 12},
 	{Key: "view_sales_dashboard", Name: "View Sales Dashboard", GroupKey: "dashboard", ParentKey: strPtr("menu_sales_dashboard"), NodeType: model.PermissionNodeAction, RoutePath: strPtr("/sales/dashboard"), SortOrder: 13},
+	{Key: "view_team_dashboard", Name: "View Team Dashboard", GroupKey: "dashboard", ParentKey: strPtr("menu_sales_dashboard"), NodeType: model.PermissionNodeAction, SortOrder: 14},
 	{Key: "menu_accounts", Name: "Accounts", GroupKey: "accounts", NodeType: model.PermissionNodeMenu, RoutePath: strPtr("/admin/accounts"), SortOrder: 20},
 	{Key: "view_accounts", Name: "View Accounts", GroupKey: "accounts", ParentKey: strPtr("menu_accounts"), NodeType: model.PermissionNodeAction, RoutePath: strPtr("/admin/accounts"), SortOrder: 21},
 	{Key: "view_account_detail", Name: "View Account Detail", GroupKey: "accounts", ParentKey: strPtr("menu_accounts"), NodeType: model.PermissionNodeAction, SortOrder: 22},
@@ -89,6 +101,23 @@ var permissionCatalog = []permissionSeed{
 	{Key: "change_own_password", Name: "Change Own Password", GroupKey: "profile", NodeType: model.PermissionNodeAction, SortOrder: 114},
 }
 
+func DefaultPermissionCatalog() []PermissionCatalogEntry {
+	items := make([]PermissionCatalogEntry, 0, len(permissionCatalog))
+	for _, item := range permissionCatalog {
+		items = append(items, PermissionCatalogEntry{
+			Key:         item.Key,
+			Name:        item.Name,
+			Description: item.Description,
+			GroupKey:    item.GroupKey,
+			ParentKey:   item.ParentKey,
+			NodeType:    item.NodeType,
+			RoutePath:   item.RoutePath,
+			SortOrder:   item.SortOrder,
+		})
+	}
+	return items
+}
+
 var landingPagePermissions = map[string]string{
 	"/admin/dashboard":          "view_admin_dashboard",
 	"/admin/accounts":           "view_accounts",
@@ -102,7 +131,7 @@ var landingPagePermissions = map[string]string{
 	"/admin/reports":            "view_reports",
 	"/sales/dashboard":          "view_sales_dashboard",
 	"/sales/my-prospects":       "view_my_prospects",
-	"/sales/pipeline":           "view_sales_pipeline",
+	"/sales/pipeline":           "menu_sales_pipeline",
 	"/sales/my-customers":       "view_my_customers",
 	"/sales/history":            "view_sales_history",
 	"/sales/profile":            "view_own_profile",

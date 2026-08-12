@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import Message from 'primevue/message'
+import { getTeamDashboard } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
-import type { Prospect } from '../../../types/crm'
+import type { Prospect, TeamDashboard } from '../../../types/crm'
 import { isActiveProspectStatus } from '../../../utils/prospectPipeline'
 
 const auth = useAuthStore()
 const crm = useCrmStore()
 const error = ref('')
+const teamDashboard = ref<TeamDashboard | null>(null)
 
 const currentTime = ref(new Date())
 let clockTimer: ReturnType<typeof setInterval> | undefined
@@ -30,6 +32,14 @@ const firstName = computed(() => {
   if (!name) return 'there'
   return name.split(' ')[0] || 'there'
 })
+
+const permissionKeys = computed(() => auth.user?.salesRole?.permissionKeys ?? [])
+const canViewTeamDashboard = computed(() => permissionKeys.value.includes('view_team_dashboard'))
+const canViewSalesHistory = computed(() => permissionKeys.value.includes('view_sales_history'))
+const canViewMyProspects = computed(() => permissionKeys.value.includes('view_my_prospects'))
+const canViewMyCustomers = computed(() => permissionKeys.value.includes('view_my_customers'))
+const canViewSalesPipeline = computed(() => permissionKeys.value.includes('menu_sales_pipeline'))
+const showTeamDashboard = computed(() => canViewTeamDashboard.value && teamDashboard.value?.hasTeam)
 
 const formattedDate = computed(() =>
   new Intl.DateTimeFormat(undefined, {
@@ -74,6 +84,29 @@ const pendingCount = computed(() =>
   ).length,
 )
 
+const teamPipelineEntries = computed(() => {
+  const counts = teamDashboard.value?.pipelineCounts ?? {}
+  return Object.entries(counts)
+    .filter(([, count]) => Number(count) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+})
+
+const teamPipelineMax = computed(() =>
+  teamPipelineEntries.value.reduce((max, [, count]) => Math.max(max, Number(count)), 0),
+)
+
+function formatPipelineStage(status: string): string {
+  return status
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function pipelineBarWidth(count: number): string {
+  if (!teamPipelineMax.value) return '0%'
+  return `${Math.max(8, Math.round((Number(count) / teamPipelineMax.value) * 100))}%`
+}
+
 function formatVisitTime(p: Prospect): string {
   if (!p.updatedAt) return 'Time not scheduled'
   const d = new Date(p.updatedAt)
@@ -82,6 +115,10 @@ function formatVisitTime(p: Prospect): string {
 
 onMounted(async () => {
   try {
+    if (canViewTeamDashboard.value) {
+      teamDashboard.value = await getTeamDashboard()
+      if (teamDashboard.value.hasTeam) return
+    }
     await Promise.all([crm.loadMyProspects(), crm.loadMyCustomers()])
   } catch (e: unknown) {
     error.value = crm.errorMessage(e)
@@ -109,6 +146,142 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error">{{ error }}</Message>
 
+    <template v-if="showTeamDashboard && teamDashboard">
+      <div class="team-dashboard-shell">
+      <section class="team-overview-header">
+        <div class="team-overview-copy">
+          <small>{{ greeting }}, {{ auth.user?.fullName || firstName }}</small>
+          <strong>Team Sales Dashboard</strong>
+          <span>
+            {{ teamDashboard.lead.roleName || 'Team Lead' }} · {{ formattedDate }} · Team Overview
+          </span>
+          <p>{{ teamDashboard.totalDescendantCount }} team member{{ teamDashboard.totalDescendantCount !== 1 ? 's' : '' }} in your reporting line.</p>
+        </div>
+        <div class="team-hero-actions">
+          <RouterLink v-if="canViewSalesHistory" to="/sales/history"><i class="pi pi-clock" /> History</RouterLink>
+          <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline"><i class="pi pi-chart-line" /> Pipeline</RouterLink>
+        </div>
+      </section>
+
+      <div class="team-kpi-grid">
+        <div class="team-kpi-card">
+          <span class="team-kpi-icon"><i class="pi pi-users" /></span>
+          <small>Team Members</small>
+          <strong>{{ teamDashboard.totalDescendantCount }}</strong>
+          <span>{{ teamDashboard.directMemberCount }} direct</span>
+        </div>
+        <div class="team-kpi-card">
+          <span class="team-kpi-icon"><i class="pi pi-briefcase" /></span>
+          <small>Active Prospects</small>
+          <strong>{{ teamDashboard.activeProspects }}</strong>
+          <span>Open pipeline work</span>
+        </div>
+        <div class="team-kpi-card">
+          <span class="team-kpi-icon"><i class="pi pi-building" /></span>
+          <small>Customers</small>
+          <strong>{{ teamDashboard.customers }}</strong>
+          <span>Assigned to team</span>
+        </div>
+        <div class="team-kpi-card">
+          <span class="team-kpi-icon team-kpi-icon-green"><i class="pi pi-calendar" /></span>
+          <small>Visits Today</small>
+          <strong>{{ teamDashboard.visitsToday }}</strong>
+          <span>{{ teamDashboard.pendingVisits }} pending</span>
+        </div>
+      </div>
+
+      <div class="team-main-grid">
+      <section class="team-card team-card-members">
+        <div class="team-card-header">
+          <div>
+            <small>Team Performance</small>
+            <strong>Member Summary</strong>
+          </div>
+          <span>{{ teamDashboard.members.length }} visible</span>
+        </div>
+        <div class="team-member-list">
+          <article v-for="member in teamDashboard.members" :key="member.userId" class="team-member-row">
+            <div class="team-member-main">
+              <strong>{{ member.fullName }}</strong>
+              <small>{{ member.roleName }}</small>
+            </div>
+            <div class="team-member-metrics">
+              <span><b>{{ member.activeProspects }}</b> prospects</span>
+              <span><b>{{ member.customers }}</b> customers</span>
+              <span><b>{{ member.visitsToday }}</b> visits</span>
+            </div>
+            <div class="team-status-strip">
+              <span class="team-status-positive">{{ member.completedVisits }} done</span>
+              <span>{{ member.pendingVisits }} pending</span>
+            </div>
+          </article>
+          <div v-if="!teamDashboard.members.length" class="empty-state team-empty-state">
+            <strong>No active subordinates</strong>
+            <span>Team members will appear here when active assignments are available.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="team-card">
+        <div class="team-card-header">
+          <div>
+            <small>Pipeline Distribution</small>
+            <strong>Stage Summary</strong>
+          </div>
+        </div>
+        <div class="pipeline-bars">
+          <div v-for="[status, count] in teamPipelineEntries" :key="status" class="pipeline-row">
+            <div>
+              <span>{{ formatPipelineStage(String(status)) }}</span>
+              <strong>{{ count }}</strong>
+            </div>
+            <i :style="{ width: pipelineBarWidth(Number(count)) }" />
+          </div>
+          <div v-if="!teamPipelineEntries.length" class="empty-state team-empty-state">
+            <strong>No pipeline data</strong>
+            <span>No team prospects are currently assigned.</span>
+          </div>
+        </div>
+      </section>
+      </div>
+
+      <div class="team-secondary-grid">
+        <section class="team-card">
+          <div class="team-card-header">
+            <div>
+              <small>Recent Team Activity</small>
+              <strong>Visits Today</strong>
+            </div>
+          </div>
+          <div class="visit-summary-grid">
+            <div>
+              <small>Completed</small>
+              <strong>{{ teamDashboard.completedVisits }}</strong>
+            </div>
+            <div>
+              <small>Pending</small>
+              <strong>{{ teamDashboard.pendingVisits }}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="team-card">
+          <div class="team-card-header">
+            <div>
+              <small>Subordinate Team</small>
+              <strong>Reporting Scope</strong>
+            </div>
+          </div>
+          <div class="team-scope-row">
+            <span><b>{{ teamDashboard.directMemberCount }}</b> direct reports</span>
+            <span><b>{{ teamDashboard.totalDescendantCount }}</b> total members</span>
+          </div>
+        </section>
+      </div>
+      </div>
+    </template>
+
+    <template v-else>
     <div class="dashboard-overview">
       <!-- Your day is ready -->
       <RouterLink class="ready-card" to="/sales/my-prospects">
@@ -131,26 +304,26 @@ onMounted(async () => {
             <small>Performance</small>
             <strong>Quick statistics</strong>
           </div>
-          <RouterLink to="/sales/history">View report <i class="pi pi-angle-right" /></RouterLink>
+          <RouterLink v-if="canViewSalesHistory" to="/sales/history">View report <i class="pi pi-angle-right" /></RouterLink>
         </div>
 
         <div class="quick-stats">
-          <RouterLink to="/sales/my-customers">
+          <RouterLink v-if="canViewMyCustomers" to="/sales/my-customers">
             <span class="stat-icon blue-dot"><i class="pi pi-users" /></span>
             <div class="quick-stats-info"><small>Total customers</small><strong>{{ crm.myCustomers.length }}</strong></div>
           </RouterLink>
 
-          <RouterLink to="/sales/my-prospects">
+          <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
             <span class="stat-icon amber-dot"><i class="pi pi-briefcase" /></span>
             <div class="quick-stats-info"><small>Today's prospects</small><strong>{{ todayVisits.length }}</strong></div>
           </RouterLink>
 
-          <RouterLink to="/sales/history">
+          <RouterLink v-if="canViewSalesHistory" to="/sales/history">
             <span class="stat-icon green-dot"><i class="pi pi-check" /></span>
             <div class="quick-stats-info"><small>Completed visits</small><strong>{{ completed }}</strong></div>
           </RouterLink>
 
-          <RouterLink to="/sales/my-prospects">
+          <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
             <span class="stat-icon red-dot"><i class="pi pi-clock" /></span>
             <div class="quick-stats-info"><small>Pending visits</small><strong>{{ pendingCount }}</strong></div>
           </RouterLink>
@@ -161,29 +334,29 @@ onMounted(async () => {
     <!-- Quick actions -->
     <div class="section-title">
       <strong>Quick actions</strong>
-      <RouterLink :to="{ name: 'SalesPipeline' }" class="pipeline-link">
+      <RouterLink v-if="canViewSalesPipeline" :to="{ name: 'SalesPipeline' }" class="pipeline-link">
         <i class="pi pi-chart-bar" />
         Sales Pipeline
       </RouterLink>
     </div>
 
     <div class="quick-actions">
-      <RouterLink to="/sales/my-prospects" class="action-primary">
+      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects" class="action-primary">
         <span class="action-icon action-icon-primary"><i class="pi pi-play" /></span>
         <span>Start visit</span>
       </RouterLink>
 
-      <RouterLink to="/sales/my-prospects">
+      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
         <span class="action-icon action-icon-mint"><i class="pi pi-map-marker" /></span>
         <span>Open maps</span>
       </RouterLink>
 
-      <RouterLink to="/sales/my-customers">
+      <RouterLink v-if="canViewMyCustomers" to="/sales/my-customers">
         <span class="action-icon action-icon-indigo"><i class="pi pi-users" /></span>
         <span>Customer</span>
       </RouterLink>
 
-      <RouterLink to="/sales/my-prospects">
+      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
         <span class="action-icon action-icon-amber"><i class="pi pi-briefcase" /></span>
         <span>Prospect</span>
       </RouterLink>
@@ -192,7 +365,7 @@ onMounted(async () => {
     <!-- Today's visits -->
     <div class="section-title">
       <strong>Today's visits</strong>
-      <RouterLink to="/sales/my-prospects">See route</RouterLink>
+      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">See route</RouterLink>
     </div>
 
     <div class="today-list">
@@ -218,6 +391,7 @@ onMounted(async () => {
         <span>No prospects updated today yet.</span>
       </div>
     </div>
+    </template>
   </section>
 </template>
 
@@ -300,6 +474,270 @@ onMounted(async () => {
 .section-title strong { font-size: 0.92rem; font-weight: 800; color: #0f172a; letter-spacing: -0.01em; }
 .section-title a { color: #d14350; font-size: 0.8rem; text-decoration: none; font-weight: 800; transition: opacity 0.15s ease; }
 .section-title a:hover { opacity: 0.75; }
+
+.team-dashboard-shell {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.team-overview-header,
+.team-card,
+.team-kpi-card {
+  border: 1px solid #dbeafe;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.team-overview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+}
+
+.team-overview-copy { display: grid; gap: 0.18rem; min-width: 0; }
+.team-overview-copy small,
+.team-card-header small,
+.team-kpi-card small,
+.visit-summary-grid small {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.team-overview-copy strong {
+  color: #0f172a;
+  font-size: 1.3rem;
+  font-weight: 850;
+  line-height: 1.15;
+}
+.team-overview-copy span,
+.team-overview-copy p {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.team-overview-copy p { margin: 0.28rem 0 0; }
+
+.team-hero-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.team-hero-actions a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.team-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.team-kpi-card {
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-content: center;
+  gap: 0.24rem 0.55rem;
+  padding: 0.95rem;
+  border-radius: 14px;
+}
+.team-kpi-card small,
+.team-kpi-card strong,
+.team-kpi-card > span:not(.team-kpi-icon) { grid-column: 1; }
+.team-kpi-card strong {
+  color: #0f172a;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.team-kpi-card > span:not(.team-kpi-icon) {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+.team-kpi-icon {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  align-self: start;
+  border-radius: 12px;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+.team-kpi-icon-green { color: #16a34a; background: #f0fdf4; }
+
+.team-main-grid,
+.team-secondary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.team-card {
+  min-width: 0;
+  padding: 0.9rem;
+  border-radius: 16px;
+}
+.team-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid #dbeafe;
+}
+.team-card-header > div { display: grid; gap: 0.08rem; }
+.team-card-header strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 850;
+}
+.team-card-header > span {
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 0.26rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.team-member-list,
+.pipeline-bars { display: grid; gap: 0; }
+.team-member-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(5, minmax(76px, auto));
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.72rem 0.15rem;
+  border-bottom: 1px solid #eaf2ff;
+}
+.team-member-row:last-child { border-bottom: 0; }
+.team-member-main { display: grid; gap: 0.12rem; min-width: 0; }
+.team-member-main strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-member-main small,
+.team-member-metrics span,
+.team-status-strip span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.team-member-metrics {
+  display: contents;
+}
+.team-member-metrics span {
+  display: grid;
+  gap: 0.05rem;
+  white-space: nowrap;
+}
+.team-member-metrics b,
+.team-scope-row b { color: #0f172a; font-size: 0.9rem; }
+.team-status-strip {
+  display: contents;
+}
+.team-status-strip span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0.25rem 0.48rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  white-space: nowrap;
+}
+.team-status-strip .team-status-positive {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.pipeline-row {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.72rem 0.1rem;
+  border-bottom: 1px solid #eaf2ff;
+}
+.pipeline-row:last-child { border-bottom: 0; }
+.pipeline-row div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pipeline-row span { color: #475569; font-size: 0.78rem; font-weight: 750; }
+.pipeline-row strong { color: #0f172a; font-size: 0.86rem; }
+.pipeline-row i {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+
+.visit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding-top: 0.75rem;
+}
+.visit-summary-grid div,
+.team-scope-row span {
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 0.18rem;
+  padding: 0.75rem;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+.visit-summary-grid strong {
+  color: #0f172a;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.visit-summary-grid div:first-child strong { color: #15803d; }
+.team-scope-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding-top: 0.75rem;
+}
+.team-scope-row span {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.team-empty-state {
+  min-height: 84px;
+  border-radius: 12px;
+  background: #f8fbff;
+}
 
 .pipeline-link { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.65rem; border-radius: 9999px; background: #fff1f2; color: #d14350; font-size: 0.72rem; font-weight: 700; text-decoration: none; transition: all 0.15s ease; }
 .pipeline-link:hover { background: #ffd9dd; opacity: 1; }
@@ -520,6 +958,12 @@ onMounted(async () => {
   .dashboard-overview { grid-template-columns: minmax(270px, 0.8fr) minmax(420px, 1.2fr); }
 }
 
+@media (min-width: 768px) and (max-width: 1023px) {
+  .team-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .team-main-grid,
+  .team-secondary-grid { grid-template-columns: 1fr; }
+}
+
 @media (min-width: 1024px) {
   .sales-dash-header { padding: 0.9rem 1.1rem; }
   .sales-avatar { width: 64px; height: 46px; }
@@ -542,6 +986,23 @@ onMounted(async () => {
 
 @media (max-width: 767px) {
   .sales-home { gap: 0.9rem; }
+  .team-dashboard-shell { gap: 0.7rem; }
+  .team-overview-header { flex-direction: column; padding: 0.85rem; border-radius: 14px; }
+  .team-overview-copy strong { font-size: 1.12rem; }
+  .team-hero-actions { width: 100%; justify-content: flex-start; }
+  .team-hero-actions a { flex: 1 1 120px; justify-content: center; }
+  .team-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+  .team-kpi-card { min-height: 104px; padding: 0.78rem; }
+  .team-kpi-card strong { font-size: 1.45rem; }
+  .team-kpi-icon { width: 34px; height: 34px; border-radius: 10px; }
+  .team-main-grid,
+  .team-secondary-grid { grid-template-columns: 1fr; gap: 0.7rem; }
+  .team-card { padding: 0.78rem; border-radius: 14px; }
+  .team-member-row { grid-template-columns: 1fr; gap: 0.55rem; padding: 0.75rem 0.05rem; }
+  .team-member-main strong { white-space: normal; }
+  .team-member-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+  .team-member-metrics span { min-height: 40px; padding: 0.38rem; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+  .team-status-strip { display: flex; justify-content: flex-start; gap: 0.35rem; }
   .sales-dash-header { padding: 0.8rem; border-radius: 17px; box-shadow: 0 6px 18px rgba(73,34,41,.06); }
   .dashboard-overview { gap: 0.7rem; }
   .ready-card { min-height: 190px; padding: 1.1rem; border-radius: 19px; }
@@ -554,6 +1015,10 @@ onMounted(async () => {
 
 @media (max-width: 380px) {
   .sales-home { gap: 1rem; }
+  .team-kpi-grid,
+  .team-member-metrics,
+  .visit-summary-grid,
+  .team-scope-row { grid-template-columns: 1fr; }
   .ready-card { min-height: 112px; padding: 1.1rem; }
   .ready-card strong { font-size: 1.1rem; }
   .quick-stats > a { min-height: 104px; padding: 0.85rem; }

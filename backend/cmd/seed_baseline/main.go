@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
 
+	adminservice "crm-prospect-simulator/backend/internal/admin/service"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -49,132 +51,10 @@ const (
 	passwordHashSandy  = "$2a$10$hoRg4AHVKo0Bhn/vPm78QuA.KIfBGzFV/u1L76he2brBQpdgufAKy"
 )
 
-var levelOnePermissions = []string{
-	"approve_prospect_deletion",
-	"change_own_password",
-	"check_in_customer",
-	"check_in_prospect",
-	"check_out_customer",
-	"check_out_prospect",
-	"convert_prospect",
-	"create_account",
-	"create_customer",
-	"create_prospect",
-	"create_role",
-	"create_sales_assignment",
-	"delete_customer",
-	"delete_prospect",
-	"delete_role",
-	"delete_visit",
-	"manage_prospect_comments",
-	"manage_role_permissions",
-	"menu_accounts",
-	"menu_admin_dashboard",
-	"menu_customers",
-	"menu_my_customers",
-	"menu_my_prospects",
-	"menu_profile",
-	"menu_prospect_finder",
-	"menu_prospect_list",
-	"menu_prospect_pipeline",
-	"menu_reports",
-	"menu_roles",
-	"menu_sales_dashboard",
-	"menu_sales_history",
-	"menu_sales_pipeline",
-	"menu_sales_structure",
-	"menu_visit_monitoring",
-	"move_sales_assignment",
-	"reject_prospect_deletion",
-	"request_prospect_deletion",
-	"reset_account_password",
-	"update_account",
-	"update_account_status",
-	"update_company",
-	"update_customer",
-	"update_prospect_pipeline",
-	"update_role",
-	"update_role_status",
-	"update_visit_result",
-	"view_account_detail",
-	"view_accounts",
-	"view_admin_dashboard",
-	"view_company_detail",
-	"view_customer_detail",
-	"view_customers",
-	"view_my_customer_detail",
-	"view_my_customers",
-	"view_my_prospect_detail",
-	"view_my_prospects",
-	"view_own_profile",
-	"view_own_visits",
-	"view_prospect_detail",
-	"view_prospect_finder",
-	"view_prospect_list",
-	"view_prospect_pipeline",
-	"view_reports",
-	"view_role_detail",
-	"view_roles",
-	"view_sales_assignment_history",
-	"view_sales_dashboard",
-	"view_sales_history",
-	"view_sales_structure",
-	"view_visit_evidence",
-	"view_visit_monitoring",
-}
-
-var levelTwoPermissions = []string{
-	"change_own_password",
-	"menu_my_customers",
-	"menu_my_prospects",
-	"menu_profile",
-	"menu_sales_dashboard",
-	"menu_sales_history",
-	"menu_sales_structure",
-	"view_my_customers",
-	"view_my_prospects",
-	"view_own_profile",
-	"view_sales_dashboard",
-	"view_sales_history",
-	"view_sales_structure",
-}
-
-var levelThreePermissions = []string{
-	"change_own_password",
-	"menu_my_customers",
-	"menu_my_prospects",
-	"menu_profile",
-	"menu_sales_dashboard",
-	"menu_sales_history",
-	"view_my_customer_detail",
-	"view_my_customers",
-	"view_my_prospect_detail",
-	"view_my_prospects",
-	"view_own_profile",
-	"view_sales_dashboard",
-	"view_sales_history",
-}
-
-var levelFourPermissions = []string{
-	"change_own_password",
-	"check_in_customer",
-	"check_in_prospect",
-	"check_out_customer",
-	"check_out_prospect",
-	"menu_my_customers",
-	"menu_my_prospects",
-	"menu_profile",
-	"menu_sales_dashboard",
-	"menu_sales_history",
-	"update_visit_result",
-	"view_my_customer_detail",
-	"view_my_customers",
-	"view_my_prospect_detail",
-	"view_my_prospects",
-	"view_own_profile",
-	"view_sales_dashboard",
-	"view_sales_history",
-}
+var levelOnePermissions = adminservice.DefaultPermissionKeys(1)
+var levelTwoPermissions = adminservice.DefaultPermissionKeys(2)
+var levelThreePermissions = adminservice.DefaultPermissionKeys(3)
+var levelFourPermissions = adminservice.DefaultPermissionKeys(4)
 
 type baselineUser struct {
 	ID                 uuid.UUID
@@ -541,6 +421,9 @@ func deactivateLegacyBaselineRoles(ctx context.Context, tx pgx.Tx) error {
 }
 
 func seedRolePermissions(ctx context.Context, tx pgx.Tx, roleIDMap map[uuid.UUID]uuid.UUID) (int, error) {
+	if _, err := syncPermissionCatalog(ctx, tx); err != nil {
+		return 0, err
+	}
 	resolvedIDs := make([]uuid.UUID, 0, len(buildRoles()))
 	for _, r := range buildRoles() {
 		resolvedIDs = append(resolvedIDs, roleIDMap[r.ID])
@@ -558,6 +441,137 @@ func seedRolePermissions(ctx context.Context, tx pgx.Tx, roleIDMap map[uuid.UUID
 			return total, fmt.Errorf("seed permissions for role %s: %w", r.Name, err)
 		}
 		total += int(tag.RowsAffected())
+	}
+	return total, nil
+}
+
+func syncPermissionCatalog(ctx context.Context, tx pgx.Tx) (int, error) {
+	total := 0
+
+	for _, p := range adminservice.DefaultPermissionCatalog() {
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO permissions (
+				id,
+				key,
+				name,
+				description,
+				group_key,
+				parent_key,
+				node_type,
+				route_path,
+				is_active,
+				sort_order,
+				created_at,
+				updated_at
+			)
+			VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8,
+				true, $9, now(), now()
+			)
+			ON CONFLICT (key) DO UPDATE SET
+				name = EXCLUDED.name,
+				description = EXCLUDED.description,
+				group_key = EXCLUDED.group_key,
+				parent_key = EXCLUDED.parent_key,
+				node_type = EXCLUDED.node_type,
+				route_path = EXCLUDED.route_path,
+				is_active = true,
+				sort_order = EXCLUDED.sort_order,
+				updated_at = now()
+		`,
+			uuid.New(),
+			p.Key,
+			p.Name,
+			p.Description,
+			p.GroupKey,
+			p.ParentKey,
+			string(p.NodeType),
+			p.RoutePath,
+			p.SortOrder,
+		)
+
+		if err != nil {
+			return total, fmt.Errorf(
+				"sync permission catalog %s: %w",
+				p.Key,
+				err,
+			)
+		}
+
+		total += int(tag.RowsAffected())
+	}
+
+	return total, nil
+}
+
+// syncRolePermissionsAdditive adds only missing baseline permission grants.
+// Existing grants are preserved. No users, roles, hierarchy, or assignments are modified.
+func syncRolePermissionsAdditive(ctx context.Context, tx pgx.Tx) (int, error) {
+	if _, err := syncPermissionCatalog(ctx, tx); err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, r := range buildRoles() {
+		actualRoleID, existed, err := resolveRoleID(ctx, tx, r.ID, normalizeRoleName(r.Name))
+		if err != nil {
+			return total, fmt.Errorf("resolve role %s: %w", r.Name, err)
+		}
+		if !existed {
+			return total, fmt.Errorf("role %s (%s) does not exist; run the full baseline seed first on a fresh local database", r.Name, r.ID)
+		}
+
+		var active bool
+		if err := tx.QueryRow(ctx, `SELECT is_active FROM sales_roles WHERE id = $1`, actualRoleID).Scan(&active); err != nil {
+			return total, fmt.Errorf("check role %s: %w", r.Name, err)
+		}
+		if !active {
+			return total, fmt.Errorf("refusing to sync inactive role %s (%s)", r.Name, actualRoleID)
+		}
+
+		rows, err := tx.Query(ctx, `
+			SELECT requested.key
+			FROM unnest($1::text[]) AS requested(key)
+			LEFT JOIN permissions p ON p.key = requested.key AND p.is_active = true
+			WHERE p.id IS NULL
+			ORDER BY requested.key
+		`, r.PermissionKeys)
+		if err != nil {
+			return total, fmt.Errorf("validate permissions for role %s: %w", r.Name, err)
+		}
+
+		var missing []string
+		for rows.Next() {
+			var key string
+			if err := rows.Scan(&key); err != nil {
+				rows.Close()
+				return total, fmt.Errorf("scan missing permission for role %s: %w", r.Name, err)
+			}
+			missing = append(missing, key)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return total, fmt.Errorf("read missing permissions for role %s: %w", r.Name, err)
+		}
+		rows.Close()
+
+		if len(missing) > 0 {
+			return total, fmt.Errorf("role %s references missing/inactive permission keys: %s", r.Name, strings.Join(missing, ", "))
+		}
+
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO role_permissions (sales_role_id, permission_id)
+			SELECT $1, id
+			FROM permissions
+			WHERE key = ANY($2) AND is_active = true
+			ON CONFLICT DO NOTHING
+		`, actualRoleID, r.PermissionKeys)
+		if err != nil {
+			return total, fmt.Errorf("sync permissions for role %s: %w", r.Name, err)
+		}
+
+		added := int(tag.RowsAffected())
+		total += added
+		fmt.Printf("Permission sync: %s added=%d\n", r.Name, added)
 	}
 	return total, nil
 }
@@ -637,6 +651,13 @@ func isLocalDatabase(databaseURL string) bool {
 }
 
 func run() error {
+	permissionsOnly := flag.Bool(
+		"permissions-only",
+		false,
+		"only add missing baseline role permissions; does not modify users, roles, assignments, or remove existing grants",
+	)
+	flag.Parse()
+
 	ctx := context.Background()
 
 	cfg, err := config.Load()
@@ -650,7 +671,7 @@ func run() error {
 	defer pool.Close()
 
 	if !isLocalDatabase(cfg.DatabaseURL) {
-		return fmt.Errorf("refusing to seed baseline on non-local database %q", cfg.DatabaseURL)
+		return fmt.Errorf("refusing to seed/sync baseline on non-local database %q", cfg.DatabaseURL)
 	}
 
 	conn, err := pool.Acquire(ctx)
@@ -664,6 +685,18 @@ func run() error {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	if *permissionsOnly {
+		permissionGrants, err := syncRolePermissionsAdditive(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit permission sync: %w", err)
+		}
+		fmt.Printf("Permission sync completed. missing grants added=%d; existing grants preserved\n", permissionGrants)
+		return nil
+	}
 
 	userIDMap, users, err := seedUsers(ctx, tx)
 	if err != nil {
@@ -685,11 +718,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-
 	if err := deactivateLegacyBaselineRoles(ctx, tx); err != nil {
 		return err
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { getProspectPhotoTags, setProspectPhotoTag } from '../api/crm'
+import { getPlacePhotoBlob, getProspectPhotoTags, setProspectPhotoTag } from '../api/crm'
 import type { PhotoCategory, PlacePhoto } from '../types/crm'
 import type { UserRole } from '../types/auth'
 
@@ -19,7 +19,12 @@ const savingIndex = computed(() => (props.prospectId ? sharedSaving[props.prospe
 const loading = ref(true)
 const lightbox = ref<PlacePhoto | null>(null)
 const tagError = ref('')
+const photoUrls = reactive<Record<string, string>>({})
+const photoLoading = reactive<Record<string, boolean>>({})
+const photoFailed = reactive<Record<string, boolean>>({})
+const photoRequests = new Map<string, Promise<void>>()
 let pollId: number | undefined
+let disposed = false
 
 const taggable = computed(() => !!props.prospectId)
 const canTag = computed(() => props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR')
@@ -82,6 +87,78 @@ function onLightboxKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') lightbox.value = null
 }
 
+function photoKey(photo: PlacePhoto) {
+  return photo.name || photo.photoUrl
+}
+
+function resolvedPhotoUrl(photo: PlacePhoto) {
+  return photoUrls[photoKey(photo)] ?? ''
+}
+
+function isPhotoLoading(photo: PlacePhoto) {
+  return photoLoading[photoKey(photo)] === true
+}
+
+function didPhotoFail(photo: PlacePhoto) {
+  return photoFailed[photoKey(photo)] === true
+}
+
+function revokePhotoUrl(key: string) {
+  const url = photoUrls[key]
+  if (url) URL.revokeObjectURL(url)
+  delete photoUrls[key]
+  delete photoLoading[key]
+  delete photoFailed[key]
+  photoRequests.delete(key)
+}
+
+function revokeUnusedPhotoUrls() {
+  const active = new Set(props.photos.map(photoKey))
+  Object.keys(photoUrls).forEach((key) => {
+    if (!active.has(key)) revokePhotoUrl(key)
+  })
+  Object.keys(photoLoading).forEach((key) => {
+    if (!active.has(key)) delete photoLoading[key]
+  })
+  Object.keys(photoFailed).forEach((key) => {
+    if (!active.has(key)) delete photoFailed[key]
+  })
+}
+
+function hasActivePhotoKey(key: string) {
+  return props.photos.some((photo) => photoKey(photo) === key)
+}
+
+async function loadPhoto(photo: PlacePhoto) {
+  const key = photoKey(photo)
+  if (!key || photoUrls[key] || photoFailed[key] || photoRequests.has(key)) return
+  photoLoading[key] = true
+  const request = getPlacePhotoBlob(photo.photoUrl)
+    .then((blob) => {
+      if (disposed || !hasActivePhotoKey(key)) return
+      const oldUrl = photoUrls[key]
+      if (oldUrl) URL.revokeObjectURL(oldUrl)
+      photoUrls[key] = URL.createObjectURL(blob)
+      delete photoFailed[key]
+    })
+    .catch(() => {
+      photoFailed[key] = true
+    })
+    .finally(() => {
+      photoLoading[key] = false
+      photoRequests.delete(key)
+    })
+  photoRequests.set(key, request)
+  await request
+}
+
+function loadPhotos() {
+  revokeUnusedPhotoUrls()
+  props.photos.forEach((photo) => {
+    void loadPhoto(photo)
+  })
+}
+
 async function refreshTags() {
   if (!taggable.value) return
   try {
@@ -97,7 +174,9 @@ function onResume() {
 }
 
 onMounted(() => {
+  disposed = false
   loadTags()
+  loadPhotos()
   pollId = window.setInterval(refreshTags, 30000)
   document.addEventListener('visibilitychange', onResume)
   window.addEventListener('focus', onResume)
@@ -106,11 +185,14 @@ watch(() => props.prospectId, () => {
   lightbox.value = null
   loadTags()
 })
+watch(() => props.photos, loadPhotos, { deep: true })
 onBeforeUnmount(() => {
+  disposed = true
   if (pollId) window.clearInterval(pollId)
   document.removeEventListener('visibilitychange', onResume)
   window.removeEventListener('focus', onResume)
   lightbox.value = null
+  Object.keys(photoUrls).forEach(revokePhotoUrl)
 })
 </script>
 
@@ -124,7 +206,11 @@ onBeforeUnmount(() => {
       <div v-if="menuPhotos.length" class="ppg-scroll">
         <div v-for="item in menuPhotos" :key="item.photo.name" class="ppg-item">
           <div class="ppg-thumb" @click="lightbox = item.photo">
-            <img :src="item.photo.photoUrl" :alt="'Menu photo'" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+            <img v-if="resolvedPhotoUrl(item.photo)" :src="resolvedPhotoUrl(item.photo)" :alt="'Menu photo'" loading="lazy" />
+            <span v-else class="ppg-photo-placeholder">
+              <i v-if="isPhotoLoading(item.photo)" class="pi pi-spin pi-spinner" />
+              <i v-else-if="didPhotoFail(item.photo)" class="pi pi-image" />
+            </span>
             <span class="ppg-badge ppg-badge-menu"><i class="pi pi-book" /> Menu</span>
           </div>
           <button
@@ -152,7 +238,11 @@ onBeforeUnmount(() => {
       <div v-if="regularPhotos.length" class="ppg-scroll">
         <div v-for="item in regularPhotos" :key="item.photo.name" class="ppg-item">
           <div class="ppg-thumb" @click="lightbox = item.photo">
-            <img :src="item.photo.photoUrl" :alt="'Place photo'" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+            <img v-if="resolvedPhotoUrl(item.photo)" :src="resolvedPhotoUrl(item.photo)" :alt="'Place photo'" loading="lazy" />
+            <span v-else class="ppg-photo-placeholder">
+              <i v-if="isPhotoLoading(item.photo)" class="pi pi-spin pi-spinner" />
+              <i v-else-if="didPhotoFail(item.photo)" class="pi pi-image" />
+            </span>
             <span v-if="categoryOf(item.index) === 'PLACE'" class="ppg-badge ppg-badge-place"><i class="pi pi-images" /> Photo</span>
           </div>
           <button
@@ -175,7 +265,11 @@ onBeforeUnmount(() => {
 
     <div v-if="lightbox" class="ppg-lightbox" @click.self="lightbox = null">
       <button class="ppg-lightbox-close" aria-label="Close" @click="lightbox = null"><i class="pi pi-times" /></button>
-      <img :src="lightbox.photoUrl" :alt="'Photo preview'" @keydown="onLightboxKeydown" />
+      <img v-if="resolvedPhotoUrl(lightbox)" :src="resolvedPhotoUrl(lightbox)" :alt="'Photo preview'" @keydown="onLightboxKeydown" />
+      <div v-else class="ppg-lightbox-placeholder">
+        <i v-if="isPhotoLoading(lightbox)" class="pi pi-spin pi-spinner" />
+        <i v-else class="pi pi-image" />
+      </div>
       <small v-if="lightbox.attribution" class="ppg-lightbox-attr">Photo: {{ lightbox.attribution }}</small>
     </div>
   </div>
@@ -213,6 +307,11 @@ onBeforeUnmount(() => {
   cursor: zoom-in; border: 1px solid var(--border-light); background: #f1f5f9;
 }
 .ppg-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ppg-photo-placeholder {
+  width: 100%; height: 100%; display: grid; place-items: center;
+  color: #94a3b8; background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+}
+.ppg-photo-placeholder i { font-size: 1rem; }
 .ppg-badge {
   position: absolute; left: 0.4rem; bottom: 0.4rem;
   display: inline-flex; align-items: center; gap: 0.25rem;
@@ -250,6 +349,12 @@ onBeforeUnmount(() => {
   max-width: 100%; max-height: calc(100dvh - 5rem); border-radius: 12px;
   object-fit: contain; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
+.ppg-lightbox-placeholder {
+  width: min(720px, 90vw); height: min(480px, 70dvh); border-radius: 12px;
+  display: grid; place-items: center; color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+}
+.ppg-lightbox-placeholder i { font-size: 1.6rem; }
 .ppg-lightbox-close {
   position: absolute; top: 1rem; right: 1rem; width: 40px; height: 40px;
   display: grid; place-items: center; border: 0; border-radius: 50%;

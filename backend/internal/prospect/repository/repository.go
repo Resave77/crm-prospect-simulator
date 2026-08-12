@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -21,6 +21,7 @@ var (
 
 type Repository interface {
 	ListAssigned(context.Context, uuid.UUID) ([]model.Prospect, error)
+	TeamDashboard(context.Context, uuid.UUID) (model.TeamDashboard, error)
 	ListWon(context.Context) ([]model.Prospect, error)
 	ListAll(context.Context) ([]model.Prospect, error)
 	ListSalesExecutives(context.Context) ([]model.SalesExecutive, error)

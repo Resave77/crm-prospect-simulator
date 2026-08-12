@@ -72,7 +72,7 @@ async function logout() {
 
         <small v-show="!sidebarCollapsed" class="nav-caption">MANAGEMENT</small>
         <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
-          <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Accounts</span>
+          <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Employee Management</span>
         </RouterLink>
         <RouterLink to="/admin/role-management" @click="closeSidebar" :title="sidebarCollapsed ? 'Role Management' : ''">
           <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Role Management</span>

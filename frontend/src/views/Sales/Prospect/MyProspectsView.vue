@@ -4,7 +4,6 @@ import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
-import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
 import { requestProspectDeletion } from '../../../api/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
@@ -21,8 +20,8 @@ import {
 } from '../../../utils/prospectPipeline'
 import { haversineKm, formatDistance } from '../../../utils/maps'
 import { initials } from '../../../utils/format'
+import ProspectPageSwitcher from '../../../components/sales/ProspectPageSwitcher.vue'
 
-const auth = useAuthStore()
 const crm = useCrmStore()
 const error = ref('')
 const searchQuery = ref('')
@@ -347,45 +346,44 @@ onMounted(async () => {
     <RouterLink class="mp-back" to="/sales/dashboard"><i class="pi pi-arrow-left" /></RouterLink>
     <!-- 1. Header -->
     <div class="mp-header">
-      <div class="mp-header-left">
-        <span class="mp-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
-        <div class="mp-header-text">
-          <strong>My prospects</strong>
-          <small>{{ activeProspects.length }} active &middot; {{ displayedProspects.length }} shown</small>
-        </div>
-      </div>
-      <div class="mp-header-actions">
-        <RouterLink class="mp-pipeline-btn" :to="{ name: PIPELINE_ROUTE_NAME }">
-          <i class="pi pi-chart-bar" />
-          <span>Sales Pipeline</span>
-        </RouterLink>
-        <button class="mp-header-action" @click="openFilterSheet" aria-label="Open filters">
-          <i class="pi pi-sliders-h" />
-          <span v-if="activeFilterCount()" class="mp-notif-dot">{{ activeFilterCount() }}</span>
-        </button>
+      <div class="mp-header-text">
+        <p class="mp-eyebrow">Track and manage your assigned prospects</p>
+        <h1 class="mp-title">My Prospects</h1>
+        <span class="mp-total-text">{{ activeProspects.length }} active prospects</span>
       </div>
     </div>
 
-    <!-- 2. Pipeline summary mini card -->
-    <RouterLink class="mp-pipeline-summary" :to="{ name: PIPELINE_ROUTE_NAME }">
-      <div class="mp-pipeline-summary-label"><i class="pi pi-chart-bar" /> Sales Pipeline</div>
+    <!-- 2. Workspace switcher -->
+    <div class="mp-switcher-bar">
+      <ProspectPageSwitcher />
+      <span class="mp-total-badge">{{ activeProspects.length }} active</span>
+    </div>
+
+    <!-- 3. Prospect summary -->
+    <div class="mp-pipeline-summary" aria-label="Prospect summary">
+      <div class="mp-pipeline-summary-label"><i class="pi pi-th-large" /> Prospect Summary</div>
       <div class="mp-pipeline-summary-counts">
         <span v-for="tab in TAB_ORDER" :key="tab" class="mp-ps-item">
           {{ tabLabel(tab) }} <strong>{{ tabCounts[tab] }}</strong>
         </span>
       </div>
-    </RouterLink>
+    </div>
 
-    <!-- 3. Search -->
+    <!-- 4. Search -->
     <div class="mp-search">
       <i class="pi pi-search" />
       <input v-model="searchQuery" placeholder="Search business, category or area" aria-label="Search prospects" />
       <button v-if="searchQuery" class="mp-search-clear" aria-label="Clear search" @click="searchQuery = ''">
         <i class="pi pi-times" />
       </button>
+      <button class="mp-filter-trigger" @click="openFilterSheet" aria-label="Open filters">
+        <i class="pi pi-sliders-h" />
+        <span>Filter</span>
+        <b v-if="activeFilterCount()">{{ activeFilterCount() }}</b>
+      </button>
     </div>
 
-    <!-- 4. Tabs -->
+    <!-- 5. Tabs -->
     <div class="mp-tabs">
       <button v-for="tab in TAB_ORDER" :key="tab" class="mp-tab" :class="{ active: activeTab === tab }" @click="selectTab(tab)">
         {{ tabLabel(tab) }} <span class="mp-tab-badge">{{ tabCounts[tab] }}</span>
@@ -656,38 +654,46 @@ onMounted(async () => {
 
 <style scoped>
 /* ── Page ───────────────────────────────────────────────────── */
-.mp-page { display: flex; flex-direction: column; gap: 0.85rem; padding-bottom: 1.5rem; }
-.mp-back { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; color: var(--brand-blue); background: var(--brand-blue-bg); border: 1px solid transparent; border-radius: var(--radius-md); text-decoration: none; font-size: 0.9rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
+.mp-page { display: flex; flex-direction: column; gap: 0; padding-bottom: 1.5rem; }
+.mp-back { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; color: var(--brand-blue); background: var(--brand-blue-bg); border: 1px solid transparent; border-radius: var(--radius-md); text-decoration: none; font-size: 0.9rem; margin-bottom: 0.1rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
 .mp-back:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── 1. Header ─────────────────────────────────────────────── */
-.mp-header { display: flex; align-items: center; justify-content: space-between; padding: 0.15rem 0; }
-.mp-header-left { display: flex; align-items: center; gap: 0.7rem; }
-.mp-header-actions { display: flex; align-items: center; gap: 0.5rem; }
-.mp-avatar {
-  width: 38px; height: 38px; display: grid; place-items: center;
-  border-radius: 50%; background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: #fff; font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+.mp-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 0.75rem;
+  border: 1px solid #eee3e5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(73, 34, 41, 0.05);
 }
-.mp-header-text { display: flex; flex-direction: column; gap: 0.05rem; }
-.mp-header-text strong { font-size: 1rem; font-weight: 800; color: #0f172a; }
-.mp-header-text small { color: #64748b; font-size: 0.7rem; font-weight: 500; }
-.mp-pipeline-btn {
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  padding: 0.4rem 0.75rem; border-radius: 9999px;
-  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
-  font-size: 0.7rem; font-weight: 700; text-decoration: none; white-space: nowrap;
-  transition: all 0.15s ease;
+.mp-header-text { flex: 1; min-width: 0; }
+.mp-eyebrow { margin: 0; font-size: 0.68rem; color: #64748b; font-weight: 500; }
+.mp-title { margin: 2px 0 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; line-height: 1.3; }
+.mp-total-text { display: block; margin-top: 2px; font-size: 0.72rem; color: #64748b; font-weight: 600; }
+.mp-total-badge {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
-.mp-pipeline-btn:hover { background: #dbeafe; border-color: #93c5fd; }
-.mp-pipeline-btn i { font-size: 0.7rem; }
-.mp-header-action {
-  position: relative; width: 36px; height: 36px; display: grid; place-items: center;
-  border-radius: 50%; border: 1px solid #e2e8f0; background: #fff; color: #64748b;
-  cursor: pointer; font-size: 0.9rem; transition: all 0.15s ease;
+.mp-switcher-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 10px;
 }
-.mp-header-action:hover { color: #2563eb; border-color: #cbd5e1; background: #eff6ff; }
+.mp-switcher-bar .psw { width: min(100%, 26rem); }
 .mp-notif-dot {
   position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px;
   display: grid; place-items: center; border-radius: 9999px; background: #dc2626;
@@ -696,11 +702,11 @@ onMounted(async () => {
 
 /* ── 2. Pipeline summary ────────────────────────────────────── */
 .mp-pipeline-summary {
-  display: flex; flex-direction: column; gap: 0.5rem;
-  padding: 0.75rem 1rem; background: #f0f7ff; border: 1px solid #bfdbfe;
-  border-radius: 14px; text-decoration: none; color: inherit; transition: all 0.15s ease;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem; background: #f8fbff; border: 1px solid #dbeafe;
+  border-radius: 14px;
 }
-.mp-pipeline-summary:hover { background: #e0efff; border-color: #93c5fd; }
 .mp-pipeline-summary-label {
   display: flex; align-items: center; gap: 0.35rem;
   font-size: 0.72rem; font-weight: 700; color: #2563eb;
@@ -713,6 +719,7 @@ onMounted(async () => {
 /* ── 3. Search ─────────────────────────────────────────────── */
 .mp-search {
   display: flex; align-items: center; gap: 0.5rem;
+  margin-bottom: 0.75rem;
   padding: 0.55rem 0.8rem; background: #fff; border: 1px solid #e2e8f0;
   border-radius: 14px; transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -729,9 +736,35 @@ onMounted(async () => {
   cursor: pointer; font-size: 0.65rem; transition: background 0.15s ease;
 }
 .mp-search-clear:hover { background: #e2e8f0; }
+.mp-filter-trigger {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-filter-trigger b {
+  min-width: 17px;
+  height: 17px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #d14350;
+  color: #ffffff;
+  font-size: 0.58rem;
+}
 
 /* ── 4. Tabs ───────────────────────────────────────────────── */
-.mp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.35rem; }
+.mp-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.35rem; margin-bottom: 0.75rem; }
 .mp-tab {
   display: flex; align-items: center; justify-content: center; gap: 0.3rem;
   padding: 0.5rem 0; border-radius: 10px; border: 1px solid #e2e8f0;
@@ -747,7 +780,7 @@ onMounted(async () => {
 .mp-tab.active .mp-tab-badge { background: #dbeafe; color: #2563eb; }
 
 /* ── 5. Section header + sort ──────────────────────────────── */
-.mp-section-header { display: flex; align-items: center; justify-content: space-between; }
+.mp-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; }
 .mp-section-header strong { font-size: 0.82rem; font-weight: 800; color: #0f172a; }
 .mp-sort-trigger {
   display: flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.6rem;
@@ -990,31 +1023,42 @@ onMounted(async () => {
 @keyframes mp-sheet-up { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
 
 /* ── Responsive ────────────────────────────────────────────── */
-@media (max-width: 767px) {
-  .mp-pipeline-btn span { display: none; }
-  .mp-pipeline-btn { padding: 0.4rem; }
-}
 
 /* ── Desktop ───────────────────────────────────────────────── */
 @media (min-width: 769px) {
   .mp-back { display: none; }
-  .mp-page { gap: 1.1rem; }
+  .mp-page {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 0 0 32px;
+    overflow-x: hidden;
+  }
 
-  .mp-header { padding: 0.25rem 0; }
-  .mp-avatar { width: 42px; height: 42px; }
-  .mp-header-text strong { font-size: 1.15rem; }
-  .mp-pipeline-btn { padding: 0.45rem 0.9rem; font-size: 0.74rem; }
-
-  .mp-pipeline-summary {
+  .mp-header {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    padding: 0.85rem 1.15rem;
+    margin-bottom: 0.45rem;
+    padding: 0.64rem 0.82rem;
+    border: 1px solid #e5eaf0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+  .mp-title { font-size: 1.5rem; }
+  .mp-eyebrow { font-size: 0.75rem; }
+  .mp-total-text { display: none; }
+  .mp-total-badge { font-size: 0.75rem; }
+  .mp-switcher-bar { margin-bottom: 0.45rem; }
+  .mp-switcher-bar .psw { width: min(100%, 26rem); }
+
+  .mp-pipeline-summary {
+    padding: 0.58rem 0.85rem;
   }
   .mp-pipeline-summary-counts { gap: 1.1rem; }
   .mp-ps-item { font-size: 0.7rem; }
 
-  .mp-search { padding: 0.65rem 0.95rem; }
+  .mp-search { padding: 0.56rem 0.7rem; border-radius: 12px; }
   .mp-search input { font-size: 0.85rem; }
 
   .mp-tabs { gap: 0.5rem; }
@@ -1049,6 +1093,35 @@ onMounted(async () => {
 @media (min-width: 1280px) {
   .mp-card-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .mp-total-badge {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .mp-switcher-bar {
+    align-items: stretch;
+  }
+  .mp-switcher-bar .psw {
+    width: 100%;
+  }
+  .mp-pipeline-summary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .mp-search {
+    flex-wrap: wrap;
+  }
+  .mp-search input {
+    min-width: 0;
+  }
+  .mp-filter-trigger {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }
 </style>

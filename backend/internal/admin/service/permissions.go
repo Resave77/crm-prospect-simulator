@@ -179,7 +179,7 @@ func (s *Service) roleWithPermissions(ctx context.Context, role model.SalesRole)
 	return role, nil
 }
 
-func defaultPermissionKeys(level int) []string {
+func DefaultPermissionKeys(level int) []string {
 	switch level {
 	case 1:
 		keys := make([]string, 0, len(permissionCatalog))
@@ -188,14 +188,18 @@ func defaultPermissionKeys(level int) []string {
 		}
 		return keys
 	case 2:
-		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_sales_structure", "view_sales_structure", "menu_my_prospects", "view_my_prospects", "menu_my_customers", "view_my_customers", "menu_sales_history", "view_sales_history", "menu_profile", "view_own_profile", "change_own_password"}
+		return []string{"menu_sales_dashboard", "view_sales_dashboard", "view_team_dashboard", "menu_sales_structure", "view_sales_structure", "menu_my_prospects", "view_my_prospects", "menu_my_customers", "view_my_customers", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	case 3:
-		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "menu_sales_history", "view_sales_history", "menu_profile", "view_own_profile", "change_own_password"}
+		return []string{"menu_sales_dashboard", "view_sales_dashboard", "view_team_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	case 4:
-		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "check_in_prospect", "check_out_prospect", "update_visit_result", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "check_in_customer", "check_out_customer", "menu_sales_history", "view_sales_history", "menu_profile", "view_own_profile", "change_own_password"}
+		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "check_in_prospect", "check_out_prospect", "menu_sales_pipeline", "update_prospect_pipeline", "update_visit_result", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "check_in_customer", "check_out_customer", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	default:
 		return []string{}
 	}
+}
+
+func defaultPermissionKeys(level int) []string {
+	return DefaultPermissionKeys(level)
 }
 
 func defaultLandingPage(level int) *string {
@@ -211,9 +215,9 @@ func defaultLandingPage(level int) *string {
 
 func defaultSalesRolePermissionSeed() map[uuid.UUID][]string {
 	return map[uuid.UUID][]string{
-		uuid.MustParse("00000000-0000-0000-0000-000000000101"): defaultPermissionKeys(1),
-		uuid.MustParse("00000000-0000-0000-0000-000000000102"): defaultPermissionKeys(2),
-		uuid.MustParse("00000000-0000-0000-0000-000000000103"): defaultPermissionKeys(3),
+		uuid.MustParse("00000000-0000-0000-0000-000000000100"): defaultPermissionKeys(1),
+		uuid.MustParse("00000000-0000-0000-0000-000000000101"): defaultPermissionKeys(2),
+		uuid.MustParse("00000000-0000-0000-0000-000000000102"): defaultPermissionKeys(3),
 		uuid.MustParse("00000000-0000-0000-0000-000000000104"): defaultPermissionKeys(4),
 	}
 }

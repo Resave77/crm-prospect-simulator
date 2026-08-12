@@ -12,8 +12,9 @@ import (
 )
 
 type fakeProspectRepository struct {
-	prospect prospectmodel.Prospect
-	history  []prospectmodel.StatusHistory
+	prospect      prospectmodel.Prospect
+	history       []prospectmodel.StatusHistory
+	teamDashboard prospectmodel.TeamDashboard
 }
 
 type fakePlaces struct{ calls int }
@@ -32,11 +33,19 @@ func (f *fakePlaces) SearchMenuImages(_ context.Context, _ string, _ int) ([]pro
 	return nil, nil
 }
 
+func (f *fakePlaces) FetchPhoto(_ context.Context, _ string) ([]byte, string, error) {
+	return []byte("photo"), "image/jpeg", nil
+}
+
 func (f *fakeProspectRepository) ListAssigned(_ context.Context, owner uuid.UUID) ([]prospectmodel.Prospect, error) {
 	if f.prospect.AssignedSalesExecutiveID != owner {
 		return []prospectmodel.Prospect{}, nil
 	}
 	return []prospectmodel.Prospect{f.prospect}, nil
+}
+
+func (f *fakeProspectRepository) TeamDashboard(_ context.Context, _ uuid.UUID) (prospectmodel.TeamDashboard, error) {
+	return f.teamDashboard, nil
 }
 
 func (f *fakeProspectRepository) ListWon(context.Context) ([]prospectmodel.Prospect, error) {
@@ -162,6 +171,30 @@ func TestSalesExecutiveCanMarkOwnNegotiationProspectWon(t *testing.T) {
 	result, err := New(repo).Transition(context.Background(), Actor{UserID: owner, Role: authmodel.RoleSalesExecutive}, repo.prospect.ID, prospectmodel.StatusWon, "Commercial terms accepted")
 	if err != nil || result.Status != prospectmodel.StatusWon {
 		t.Fatalf("expected WON decision, result=%+v err=%v", result, err)
+	}
+}
+
+func TestTeamDashboardRequiresPermission(t *testing.T) {
+	repo := &fakeProspectRepository{}
+	_, err := New(repo).TeamDashboard(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleSalesManager})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected forbidden without view_team_dashboard, got %v", err)
+	}
+}
+
+func TestTeamDashboardAllowsNoSubordinateActorWithPermission(t *testing.T) {
+	actorID := uuid.New()
+	repo := &fakeProspectRepository{teamDashboard: prospectmodel.TeamDashboard{
+		Lead:           prospectmodel.TeamLeadInfo{ID: actorID, FullName: "Leaf Manager"},
+		HasTeam:        false,
+		PipelineCounts: map[prospectmodel.Status]int{},
+	}}
+	item, err := New(repo).TeamDashboard(context.Background(), Actor{UserID: actorID, Role: authmodel.RoleSalesManager, PermissionKeys: []string{"view_team_dashboard"}})
+	if err != nil {
+		t.Fatalf("team dashboard: %v", err)
+	}
+	if item.HasTeam || item.TotalDescendantCount != 0 {
+		t.Fatalf("expected no-subordinate dashboard, got %+v", item)
 	}
 }
 

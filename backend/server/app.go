@@ -79,6 +79,13 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	dashboard.Get("/sales", authMiddleware.RequirePermission("view_sales_dashboard"), func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "sales-executive"})
 	})
+	dashboard.Get("/sales/team", authMiddleware.RequirePermission("view_team_dashboard"), prospectHandler.TeamDashboard)
+
+	places := api.Group("/places", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
+	places.Get("/photo", prospectHandler.PlacePhoto)
+
+	customers := api.Group("/customers", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
+	customers.Get("/team", authMiddleware.RequirePermission("view_team_dashboard"), customerHandler.TeamCustomers)
 
 	sales := api.Group("/sales", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
 	sales.Get("/prospects", authMiddleware.RequirePermission("view_my_prospects"), prospectHandler.MyProspects)

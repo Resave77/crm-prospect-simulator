@@ -390,6 +390,79 @@ func (r *PostgresRepository) ListCustomersForSales(ctx context.Context, salesExe
 	return r.listCustomers(ctx, customerSelect+` WHERE cs.sales_executive_id = $1 ORDER BY cs.converted_at DESC`, salesExecutiveID)
 }
 
+func (r *PostgresRepository) ListTeamCustomers(ctx context.Context, actorID uuid.UUID) (model.TeamCustomers, error) {
+	activeAssignment := func(alias string) string {
+		return alias + `.effective_from <= CURRENT_DATE AND (` + alias + `.effective_to IS NULL OR ` + alias + `.effective_to >= CURRENT_DATE)`
+	}
+
+	var result model.TeamCustomers
+	rows, err := r.pool.Query(ctx, `
+		WITH RECURSIVE descendants AS (
+			SELECT a.user_id, a.parent_user_id, sr.name AS role_name, sr.level AS role_level, 1 AS depth
+			FROM sales_structure_assignments a
+			JOIN sales_roles sr ON sr.id = a.sales_role_id
+			JOIN users u ON u.id = a.user_id
+			WHERE a.parent_user_id = $1 AND `+activeAssignment("a")+` AND u.deleted_at IS NULL
+			UNION ALL
+			SELECT child.user_id, child.parent_user_id, child_role.name, child_role.level, d.depth + 1
+			FROM sales_structure_assignments child
+			JOIN sales_roles child_role ON child_role.id = child.sales_role_id
+			JOIN users child_user ON child_user.id = child.user_id
+			JOIN descendants d ON d.user_id = child.parent_user_id
+			WHERE `+activeAssignment("child")+` AND child_user.deleted_at IS NULL
+		)
+		SELECT user_id, parent_user_id, role_name, role_level
+		FROM descendants`, actorID)
+	if err != nil {
+		return model.TeamCustomers{}, fmt.Errorf("read team customer descendants: %w", err)
+	}
+	descendantIDs := make([]uuid.UUID, 0)
+	assignedByUser := make(map[uuid.UUID]model.AssignedSalesInfo)
+	defer rows.Close()
+	for rows.Next() {
+		var userID, parentID uuid.UUID
+		var roleName string
+		var roleLevel int
+		if err := rows.Scan(&userID, &parentID, &roleName, &roleLevel); err != nil {
+			return model.TeamCustomers{}, fmt.Errorf("scan team customer descendant: %w", err)
+		}
+		descendantIDs = append(descendantIDs, userID)
+		assignedByUser[userID] = model.AssignedSalesInfo{UserID: userID, RoleName: roleName, RoleLevel: roleLevel}
+		result.TotalDescendantCount++
+		if parentID == actorID {
+			result.DirectMemberCount++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return model.TeamCustomers{}, fmt.Errorf("read team customer descendants: %w", err)
+	}
+	result.HasTeam = result.TotalDescendantCount > 0
+	if !result.HasTeam {
+		result.Customers = []model.CustomerSite{}
+		return result, nil
+	}
+
+	customerRows, err := r.pool.Query(ctx, customerSelect+`
+		WHERE cs.sales_executive_id = ANY($1)
+		ORDER BY cs.converted_at DESC`, descendantIDs)
+	if err != nil {
+		return model.TeamCustomers{}, fmt.Errorf("list team customer sites: %w", err)
+	}
+	defer customerRows.Close()
+	result.Customers = make([]model.CustomerSite, 0)
+	for customerRows.Next() {
+		item, err := scanCustomer(customerRows)
+		if err != nil {
+			return model.TeamCustomers{}, err
+		}
+		assigned := assignedByUser[item.SalesExecutiveID]
+		assigned.FullName = item.SalesExecutiveName
+		item.AssignedSales = &assigned
+		result.Customers = append(result.Customers, item)
+	}
+	return result, customerRows.Err()
+}
+
 func (r *PostgresRepository) FindCustomerForSales(ctx context.Context, id, salesExecutiveID uuid.UUID) (model.CustomerDetail, error) {
 	customer, err := scanCustomer(r.pool.QueryRow(ctx, customerSelect+` WHERE cs.id=$1 AND cs.sales_executive_id=$2`, id, salesExecutiveID))
 	if err != nil {
@@ -748,23 +821,35 @@ func (r *PostgresRepository) FindParentCompanyByCode(ctx context.Context, code s
 }
 
 func addrField(a *model.Address, field string) string {
-	if a == nil { return "" }
+	if a == nil {
+		return ""
+	}
 	switch field {
-	case "Mode": return a.Mode
-	case "Province": return a.Province
-	case "District": return a.District
-	case "SubDistrict": return a.SubDistrict
-	case "Village": return a.Village
-	case "PreviewAddress": return a.PreviewAddress
+	case "Mode":
+		return a.Mode
+	case "Province":
+		return a.Province
+	case "District":
+		return a.District
+	case "SubDistrict":
+		return a.SubDistrict
+	case "Village":
+		return a.Village
+	case "PreviewAddress":
+		return a.PreviewAddress
 	}
 	return ""
 }
 
 func addrPtr(a *model.Address, field string) interface{} {
-	if a == nil { return nil }
+	if a == nil {
+		return nil
+	}
 	switch field {
-	case "Latitude": return a.Latitude
-	case "Longitude": return a.Longitude
+	case "Latitude":
+		return a.Latitude
+	case "Longitude":
+		return a.Longitude
 	}
 	return nil
 }

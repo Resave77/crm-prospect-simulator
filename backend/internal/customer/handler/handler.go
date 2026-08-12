@@ -103,6 +103,14 @@ func (h *Handler) MyCustomers(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) TeamCustomers(c *fiber.Ctx) error {
+	items, err := h.service.TeamCustomers(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func (h *Handler) MyCustomer(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

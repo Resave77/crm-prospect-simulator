@@ -51,6 +51,12 @@ const LEVEL_OPTIONS: { label: string; value: SalesRoleLevel }[] = [
   { label: 'Level 4 - Operational/self-scope role', value: 4 },
 ]
 
+const RECOMMENDED_PERMISSION_KEYS: Record<2 | 3 | 4, string[]> = {
+  2: ['menu_sales_dashboard', 'view_sales_dashboard', 'view_team_dashboard', 'menu_sales_structure', 'view_sales_structure', 'menu_my_prospects', 'view_my_prospects', 'menu_my_customers', 'view_my_customers', 'menu_sales_history', 'view_sales_history', 'view_own_visits', 'menu_profile', 'view_own_profile', 'change_own_password'],
+  3: ['menu_sales_dashboard', 'view_sales_dashboard', 'view_team_dashboard', 'menu_my_prospects', 'view_my_prospects', 'view_my_prospect_detail', 'menu_my_customers', 'view_my_customers', 'view_my_customer_detail', 'menu_sales_history', 'view_sales_history', 'view_own_visits', 'menu_profile', 'view_own_profile', 'change_own_password'],
+  4: ['menu_sales_dashboard', 'view_sales_dashboard', 'menu_my_prospects', 'view_my_prospects', 'view_my_prospect_detail', 'check_in_prospect', 'check_out_prospect', 'menu_sales_pipeline', 'update_prospect_pipeline', 'update_visit_result', 'menu_my_customers', 'view_my_customers', 'view_my_customer_detail', 'check_in_customer', 'check_out_customer', 'menu_sales_history', 'view_sales_history', 'view_own_visits', 'menu_profile', 'view_own_profile', 'change_own_password'],
+}
+
 const GROUP_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   accounts: 'Accounts',
@@ -106,8 +112,22 @@ function ancestorsOf(key: string): string[] {
   return out
 }
 
+function descendantsOf(menuKey: string): AdminPermission[] {
+  const out: AdminPermission[] = []
+  const queue = [...childrenOf(menuKey)]
+  const seen = new Set<string>()
+  while (queue.length) {
+    const perm = queue.shift()!
+    if (seen.has(perm.key)) continue
+    seen.add(perm.key)
+    out.push(perm)
+    for (const child of childrenOf(perm.key)) queue.push(child)
+  }
+  return out
+}
+
 function hasSelectedDescendant(menuKey: string) {
-  return childrenOf(menuKey).some((c) => selectedKeys.value.has(c.key))
+  return descendantsOf(menuKey).some((c) => selectedKeys.value.has(c.key))
 }
 
 const groups = computed<ExplorerGroup[]>(() => {
@@ -165,6 +185,13 @@ watch(catalog, () => {
 const totalPermissions = computed(() => catalog.value.length)
 const selectedCount = computed(() => selectedKeys.value.size)
 const allSelected = computed(() => totalPermissions.value > 0 && catalog.value.every((p) => selectedKeys.value.has(p.key)))
+const recommendedKeys = computed(() => {
+  if (form.level !== 2 && form.level !== 3 && form.level !== 4) return []
+  return RECOMMENDED_PERMISSION_KEYS[form.level].filter((key) => byKey.value.has(key))
+})
+const recommendedSelectedCount = computed(() => recommendedKeys.value.filter((key) => selectedKeys.value.has(key)).length)
+const hasRecommendedLevel = computed(() => form.level === 2 || form.level === 3 || form.level === 4)
+const recommendedComplete = computed(() => recommendedKeys.value.length > 0 && recommendedSelectedCount.value === recommendedKeys.value.length)
 
 const searchActive = computed(() => searchQuery.value.trim().length > 0)
 
@@ -189,43 +216,57 @@ function isSelected(key: string) {
   return selectedKeys.value.has(key)
 }
 
-function toggleAll() {
-  if (allSelected.value) selectedKeys.value.clear()
-  else for (const p of catalog.value) selectedKeys.value.add(p.key)
+function toggleAll(checked: boolean) {
+  if (checked) {
+    for (const p of catalog.value) selectedKeys.value.add(p.key)
+  } else {
+    selectedKeys.value.clear()
+  }
 }
 
 function menuState(menuKey: string): 'checked' | 'indeterminate' | 'unchecked' {
-  const children = childrenOf(menuKey)
-  const selected = children.filter((c) => selectedKeys.value.has(c.key))
-  if (selected.length === 0) return 'unchecked'
-  if (selected.length === children.length) return 'checked'
-  return 'indeterminate'
+  const descendants = descendantsOf(menuKey)
+  const ownSelected = selectedKeys.value.has(menuKey)
+  if (descendants.length === 0) return ownSelected ? 'checked' : 'unchecked'
+  const selectedDescendants = descendants.filter((c) => selectedKeys.value.has(c.key)).length
+  if (ownSelected && selectedDescendants === descendants.length) return 'checked'
+  if (ownSelected || selectedDescendants > 0) return 'indeterminate'
+  return 'unchecked'
 }
 
 function visibleChildrenOf(menuKey: string) {
   return childrenOf(menuKey).filter((c) => visibleKeySet.value.has(c.key))
 }
 
-function togglePermission(perm: AdminPermission) {
-  if (selectedKeys.value.has(perm.key)) {
-    selectedKeys.value.delete(perm.key)
-    for (const ancestor of ancestorsOf(perm.key)) {
-      if (!hasSelectedDescendant(ancestor)) selectedKeys.value.delete(ancestor)
-    }
-  } else {
+function togglePermission(perm: AdminPermission, checked: boolean) {
+  if (checked) {
     selectedKeys.value.add(perm.key)
     for (const ancestor of ancestorsOf(perm.key)) selectedKeys.value.add(ancestor)
+    return
+  }
+
+  selectedKeys.value.delete(perm.key)
+
+  for (const ancestor of ancestorsOf(perm.key)) {
+    if (!hasSelectedDescendant(ancestor)) selectedKeys.value.delete(ancestor)
   }
 }
 
-function toggleMenu(menu: ExplorerMenu) {
-  const visible = visibleChildrenOf(menu.key)
-  if (menuState(menu.key) === 'checked') {
-    selectedKeys.value.delete(menu.key)
-    for (const child of visible) selectedKeys.value.delete(child.key)
-  } else {
+function toggleMenu(menu: ExplorerMenu, checked: boolean) {
+  const descendants = descendantsOf(menu.key)
+
+  if (checked) {
     selectedKeys.value.add(menu.key)
-    for (const child of visible) selectedKeys.value.add(child.key)
+    for (const child of descendants) selectedKeys.value.add(child.key)
+    for (const ancestor of ancestorsOf(menu.key)) selectedKeys.value.add(ancestor)
+    return
+  }
+
+  selectedKeys.value.delete(menu.key)
+  for (const child of descendants) selectedKeys.value.delete(child.key)
+
+  for (const ancestor of ancestorsOf(menu.key)) {
+    if (!hasSelectedDescendant(ancestor)) selectedKeys.value.delete(ancestor)
   }
 }
 
@@ -256,6 +297,28 @@ function clearVisible() {
 function clearAll() {
   selectedKeys.value.clear()
 }
+
+function normalizedPermissionSet(keys: string[]) {
+  const next = new Set<string>()
+  for (const key of keys) {
+    if (!byKey.value.has(key)) continue
+    next.add(key)
+    for (const ancestor of ancestorsOf(key)) next.add(ancestor)
+  }
+  return next
+}
+
+function applyRecommendedPermissions() {
+  selectedKeys.value = normalizedPermissionSet(recommendedKeys.value)
+}
+
+watch(
+  () => form.level,
+  () => {
+    if (isEdit.value || selectedKeys.value.size > 0 || !hasRecommendedLevel.value) return
+    applyRecommendedPermissions()
+  },
+)
 
 function groupHasVisible(group: ExplorerGroup) {
   return group.menus.some((m) => visibleKeySet.value.has(m.key)) || group.orphans.some((o) => visibleKeySet.value.has(o.key))
@@ -288,6 +351,7 @@ const landingOptions = computed<LandingOption[]>(() => {
   const options: LandingOption[] = []
   for (const perm of catalog.value) {
     if (perm.nodeType !== 'ACTION' || !perm.routePath || !perm.routePath.trim()) continue
+    if (perm.key === 'view_team_dashboard') continue
     if (seen.has(perm.routePath)) continue
     seen.add(perm.routePath)
     const parent = perm.parentKey ? byKey.value.get(perm.parentKey) : undefined
@@ -452,6 +516,22 @@ onMounted(async () => {
                   <label>Hierarchy Level <span class="required">*</span></label>
                   <Select v-model="form.level" :options="LEVEL_OPTIONS" optionLabel="label" optionValue="value" placeholder="Select level" />
                 </div>
+                <div v-if="hasRecommendedLevel" class="recommended-panel">
+                  <div class="recommended-copy">
+                    <span>Recommended permissions for Level {{ form.level }}</span>
+                    <strong>{{ recommendedSelectedCount }} / {{ recommendedKeys.length }} applied</strong>
+                    <small v-if="isEdit">Saved custom selections are kept until you apply or reset explicitly.</small>
+                    <small v-else>Use the recommended baseline, then adjust permissions manually as needed.</small>
+                  </div>
+                  <div class="recommended-actions">
+                    <Button label="Apply Recommended" icon="pi pi-sparkles" size="small" outlined @click="applyRecommendedPermissions" />
+                    <Button label="Reset to Recommended" size="small" severity="secondary" text @click="applyRecommendedPermissions" />
+                  </div>
+                  <span class="recommended-state" :class="{ ready: recommendedComplete }">
+                    <i :class="recommendedComplete ? 'pi pi-check-circle' : 'pi pi-info-circle'" />
+                    {{ recommendedComplete ? 'Recommended set applied' : 'Custom or partial selection' }}
+                  </span>
+                </div>
                 <div class="form-field">
                   <label>Initial Open Menu / Landing Page <span class="required">*</span></label>
                   <Select
@@ -508,8 +588,8 @@ onMounted(async () => {
                     <Button label="Clear Visible" size="small" severity="secondary" text @click="clearVisible" />
                     <Button label="Clear All" size="small" severity="danger" text @click="clearAll" />
                     <div class="select-all">
-                      <Checkbox :model-value="allSelected" binary @click="toggleAll" />
-                      <button type="button" class="select-all-label" @click="toggleAll">Select All</button>
+                      <Checkbox :model-value="allSelected" binary @update:model-value="(checked) => toggleAll(Boolean(checked))" />
+                      <button type="button" class="select-all-label" @click="toggleAll(!allSelected)">Select All</button>
                     </div>
                   </div>
                 </div>
@@ -536,7 +616,7 @@ onMounted(async () => {
                     <template v-for="menu in group.menus" :key="menu.key">
                       <div class="perm-menu">
                         <div class="perm-menu-header">
-                          <Checkbox :model-value="menuState(menu.key) === 'checked'" :indeterminate="menuState(menu.key) === 'indeterminate'" binary @click="toggleMenu(menu)" />
+                          <Checkbox :model-value="menuState(menu.key) === 'checked'" :indeterminate="menuState(menu.key) === 'indeterminate'" binary @update:model-value="(checked) => toggleMenu(menu, Boolean(checked))" />
                           <span class="perm-name perm-menu-name">{{ menu.permission.name }}</span>
                           <code class="key-badge">{{ menu.permission.key }}</code>
                           <button type="button" class="chevron-btn" :title="isMenuOpen(menu) ? 'Collapse' : 'Expand'" @click="toggleMenuOpen(menu)">
@@ -545,7 +625,7 @@ onMounted(async () => {
                         </div>
                         <div v-if="isMenuOpen(menu)" class="perm-children">
                           <div v-for="child in visibleChildrenOf(menu.key)" :key="child.key" class="perm-row">
-                            <Checkbox :model-value="isSelected(child.key)" binary @click="togglePermission(child)" />
+                            <Checkbox :model-value="isSelected(child.key)" binary @update:model-value="(checked) => togglePermission(child, Boolean(checked))" />
                             <div class="perm-info">
                               <span class="perm-name">{{ child.name }}</span>
                               <span v-if="child.description" class="perm-desc">{{ child.description }}</span>
@@ -557,7 +637,7 @@ onMounted(async () => {
                       </div>
                     </template>
                     <div v-for="orphan in group.orphans" :key="orphan.key" class="perm-row perm-row-orphan">
-                      <Checkbox :model-value="isSelected(orphan.key)" binary @click="togglePermission(orphan)" />
+                      <Checkbox :model-value="isSelected(orphan.key)" binary @update:model-value="(checked) => togglePermission(orphan, Boolean(checked))" />
                       <div class="perm-info">
                         <span class="perm-name">{{ orphan.name }}</span>
                         <span v-if="orphan.description" class="perm-desc">{{ orphan.description }}</span>
@@ -582,7 +662,7 @@ onMounted(async () => {
   gap: 1rem;
   padding: 1.4rem 1.6rem;
   min-height: 100vh;
-  background: #ffffff;
+  background: linear-gradient(180deg, #f3f7fd 0%, #f8fafc 48%, #f8fafc 100%);
 }
 .page-heading {
   display: flex;
@@ -593,10 +673,10 @@ onMounted(async () => {
 }
 .page-title-wrapper .eyebrow {
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #0b7766;
+  color: #2563eb;
 }
 h1 {
   margin: 0.2rem 0 0.2rem;
@@ -624,9 +704,9 @@ h1 {
 
 .panel {
   background: #ffffff;
-  border: 1px solid #edf1f6;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 .info-column {
   display: flex;
@@ -654,8 +734,8 @@ h1 {
   font-size: 0.95rem;
 }
 .si-teal {
-  background: #ecfdf5;
-  color: #047857;
+  background: #eff6ff;
+  color: #2563eb;
 }
 .panel-header h3 {
   margin: 0;
@@ -735,6 +815,58 @@ h1 {
   color: #94a3b8;
 }
 
+.recommended-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+.recommended-copy {
+  display: grid;
+  gap: 0.14rem;
+}
+.recommended-copy span {
+  color: #2563eb;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.recommended-copy strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+.recommended-copy small {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+.recommended-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.recommended-state {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+.recommended-state.ready {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
 .counter-panel {
   display: flex;
   flex-direction: column;
@@ -802,8 +934,8 @@ h1 {
   flex-direction: column;
   gap: 0.55rem;
   padding: 0.7rem 0.8rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #eef2f6;
+  background: #f8fbff;
+  border-bottom: 1px solid #dbeafe;
 }
 .toolbar-row {
   display: flex;
@@ -914,7 +1046,7 @@ h1 {
   border: 0;
   border-radius: 8px;
   padding: 0.5rem 0.55rem;
-  background: #f8fafc;
+  background: #eff6ff;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -924,7 +1056,7 @@ h1 {
   margin-top: 0;
 }
 .perm-group-header:hover {
-  background: #f1f5f9;
+  background: #dbeafe;
 }
 .perm-group-header > i {
   color: #94a3b8;
@@ -935,7 +1067,7 @@ h1 {
   font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #334155;
+  color: #0f172a;
 }
 .perm-group-count {
   margin-left: auto;
@@ -945,7 +1077,7 @@ h1 {
 }
 .perm-group-body {
   padding: 0.25rem 0 0.35rem 0.35rem;
-  border-left: 2px solid #eef2f6;
+  border-left: 2px solid #bfdbfe;
   margin-left: 0.95rem;
 }
 
@@ -959,16 +1091,19 @@ h1 {
   min-height: 2.5rem;
   padding: 0.3rem 0.4rem 0.3rem 0.25rem;
   border-radius: 8px;
+  background: #ffffff;
 }
 .perm-menu-header:hover {
   background: #f8fafc;
 }
 .perm-menu-name {
-  font-weight: 750;
+  font-weight: 850;
   color: #0f172a;
 }
 .perm-children {
-  padding-left: 1.45rem;
+  padding-left: 1.35rem;
+  margin-left: 0.7rem;
+  border-left: 1px solid #dbeafe;
 }
 .perm-row {
   display: flex;
@@ -1013,10 +1148,10 @@ h1 {
   font-size: 0.66rem;
   font-weight: 600;
   color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e8edf4;
-  border-radius: 5px;
-  padding: 0.12rem 0.4rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.16rem 0.45rem;
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: right;
@@ -1045,8 +1180,8 @@ h1 {
 }
 .explorer-panel :deep(.p-checkbox-checked .p-checkbox-box),
 .explorer-panel :deep(.p-checkbox-indeterminate .p-checkbox-box) {
-  background: #0b7766;
-  border-color: #0b7766;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 .explorer-panel :deep(.p-checkbox-indeterminate .p-checkbox-box .p-checkbox-icon) {
   color: #ffffff;
@@ -1065,7 +1200,7 @@ h1 {
 }
 .state-icon {
   font-size: 1.75rem;
-  color: #0b7766;
+  color: #2563eb;
   margin-bottom: 0.25rem;
 }
 .state-icon-wrap {
@@ -1136,9 +1271,16 @@ h1 {
     align-items: stretch;
   }
   .explorer-panel {
-    height: 65vh;
-    min-height: 65vh;
-    max-height: 65vh;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+  .explorer-toolbar {
+    position: static;
+  }
+  .explorer-tree {
+    overflow: visible;
   }
   .perm-menu-header,
   .perm-row {

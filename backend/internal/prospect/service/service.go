@@ -15,16 +15,18 @@ import (
 )
 
 var (
-	ErrForbidden        = errors.New("prospect operation forbidden")
-	ErrTransition       = errors.New("invalid prospect stage transition")
-	ErrNotesRequired    = errors.New("a win note or loss reason is required")
-	ErrProspectStatus   = errors.New("prospect is not eligible for this operation")
-	ErrFinderInput      = errors.New("prospect finder query is invalid")
-	ErrPlacesDisabled   = errors.New("Google Places server key is not configured")
-	ErrMenuImagesDisabled = errors.New("Google Custom Search is not configured")
-	ErrAlreadyCustomer  = errors.New("place is already an existing customer")
-	ErrVisitCoordinates = errors.New("visit GPS coordinates are invalid")
-	ErrPhotoTagInvalid  = errors.New("photo category must be MENU or PLACE")
+	ErrForbidden             = errors.New("prospect operation forbidden")
+	ErrTransition            = errors.New("invalid prospect stage transition")
+	ErrNotesRequired         = errors.New("a win note or loss reason is required")
+	ErrProspectStatus        = errors.New("prospect is not eligible for this operation")
+	ErrFinderInput           = errors.New("prospect finder query is invalid")
+	ErrPlacesDisabled        = errors.New("Google Places server key is not configured")
+	ErrMenuImagesDisabled    = errors.New("Google Custom Search is not configured")
+	ErrPlacePhotoInvalid     = errors.New("Google Places photo resource name is invalid")
+	ErrPlacePhotoUnavailable = errors.New("Google Places photo is unavailable")
+	ErrAlreadyCustomer       = errors.New("place is already an existing customer")
+	ErrVisitCoordinates      = errors.New("visit GPS coordinates are invalid")
+	ErrPhotoTagInvalid       = errors.New("photo category must be MENU or PLACE")
 )
 
 type Actor struct {
@@ -43,6 +45,7 @@ type Places interface {
 	Detail(context.Context, string) (prospectmodel.PlaceResult, error)
 	DetailFull(context.Context, string) (prospectmodel.PlaceDetails, error)
 	SearchMenuImages(context.Context, string, int) ([]prospectmodel.MenuImage, error)
+	FetchPhoto(context.Context, string) ([]byte, string, error)
 }
 
 func New(repo repository.Repository, placeClients ...Places) *Service {
@@ -58,6 +61,13 @@ func (s *Service) MyProspects(ctx context.Context, actor Actor) ([]prospectmodel
 		return nil, ErrForbidden
 	}
 	return s.repository.ListAssigned(ctx, actor.UserID)
+}
+
+func (s *Service) TeamDashboard(ctx context.Context, actor Actor) (prospectmodel.TeamDashboard, error) {
+	if !actor.can("view_team_dashboard") {
+		return prospectmodel.TeamDashboard{}, ErrForbidden
+	}
+	return s.repository.TeamDashboard(ctx, actor.UserID)
 }
 
 func (s *Service) Transition(ctx context.Context, actor Actor, id uuid.UUID, status prospectmodel.Status, notes string) (prospectmodel.Prospect, error) {
@@ -263,6 +273,17 @@ func (s *Service) MenuImages(ctx context.Context, query string, limit int) ([]pr
 		return nil, ErrMenuImagesDisabled
 	}
 	return s.places.SearchMenuImages(ctx, query, limit)
+}
+
+func (s *Service) PlacePhoto(ctx context.Context, name string) ([]byte, string, error) {
+	name = strings.TrimSpace(name)
+	if !ValidGooglePlacePhotoName(name) {
+		return nil, "", ErrPlacePhotoInvalid
+	}
+	if s.places == nil {
+		return nil, "", ErrPlacesDisabled
+	}
+	return s.places.FetchPhoto(ctx, name)
 }
 
 func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.SaveProspectInput) (prospectmodel.Prospect, error) {

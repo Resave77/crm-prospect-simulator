@@ -54,6 +54,14 @@ func (h *Handler) MyProspects(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) TeamDashboard(c *fiber.Ctx) error {
+	item, err := h.service.TeamDashboard(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
+}
+
 func (h *Handler) MyProspect(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -235,6 +243,16 @@ func (h *Handler) PlaceDetail(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, item)
+}
+
+func (h *Handler) PlacePhoto(c *fiber.Ctx) error {
+	data, contentType, err := h.service.PlacePhoto(c.UserContext(), c.Query("name"))
+	if err != nil {
+		return writeError(c, err)
+	}
+	c.Set(fiber.HeaderContentType, contentType)
+	c.Set(fiber.HeaderCacheControl, "private, max-age=86400")
+	return c.Send(data)
 }
 
 func (h *Handler) Save(c *fiber.Ctx) error {
@@ -644,12 +662,14 @@ func writeError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
-	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates), errors.Is(err, service.ErrPhotoTagInvalid):
+	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates), errors.Is(err, service.ErrPhotoTagInvalid), errors.Is(err, service.ErrPlacePhotoInvalid):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())
 	case errors.Is(err, service.ErrMenuImagesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "MENU_IMAGES_NOT_CONFIGURED", err.Error())
+	case errors.Is(err, service.ErrPlacePhotoUnavailable):
+		return response.Error(c, fiber.StatusBadGateway, "PLACE_PHOTO_UNAVAILABLE", "The place photo is temporarily unavailable.")
 	case errors.Is(err, repository.ErrPhotoTagSchemaUnsupported):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PHOTO_TAGGING_UNAVAILABLE", "Photo tagging is unavailable with the current database schema.")
 	case errors.Is(err, service.ErrAlreadyCustomer):

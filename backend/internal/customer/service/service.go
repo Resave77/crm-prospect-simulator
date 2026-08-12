@@ -130,6 +130,13 @@ func (s *Service) MyCustomers(ctx context.Context, actor Actor) ([]customermodel
 	return s.repository.ListCustomersForSales(ctx, actor.UserID)
 }
 
+func (s *Service) TeamCustomers(ctx context.Context, actor Actor) (customermodel.TeamCustomers, error) {
+	if !actor.can("view_team_dashboard") {
+		return customermodel.TeamCustomers{}, ErrForbidden
+	}
+	return s.repository.ListTeamCustomers(ctx, actor.UserID)
+}
+
 func (s *Service) MyCustomer(ctx context.Context, actor Actor, id uuid.UUID) (customermodel.CustomerDetail, error) {
 	if !actor.can("view_my_customer_detail") {
 		return customermodel.CustomerDetail{}, ErrForbidden

@@ -11,20 +11,8 @@
         </RouterLink>
       </div>
       <nav class="sidebar-nav" aria-label="Sales navigation">
-        <RouterLink to="/sales/dashboard" class="sidebar-link">
-          <i class="pi pi-home" /><span>Home</span>
-        </RouterLink>
-        <RouterLink to="/sales/my-customers" class="sidebar-link">
-          <i class="pi pi-users" /><span>Customer</span>
-        </RouterLink>
-        <RouterLink to="/sales/my-prospects" class="sidebar-link">
-          <i class="pi pi-briefcase" /><span>Prospect</span>
-        </RouterLink>
-        <RouterLink to="/sales/history" class="sidebar-link">
-          <i class="pi pi-history" /><span>History</span>
-        </RouterLink>
-        <RouterLink to="/sales/profile" class="sidebar-link">
-          <i class="pi pi-user" /><span>Profile</span>
+        <RouterLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="sidebar-link">
+          <i :class="item.icon" /><span>{{ item.label }}</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">
@@ -74,20 +62,8 @@
 
     <!-- Mobile bottom navigation -->
     <nav class="sales-nav" aria-label="Sales navigation">
-      <RouterLink to="/sales/dashboard" class="nav-item">
-        <i class="pi pi-home" /><span>Home</span>
-      </RouterLink>
-      <RouterLink to="/sales/my-customers" class="nav-item">
-        <i class="pi pi-users" /><span>Customer</span>
-      </RouterLink>
-      <RouterLink to="/sales/my-prospects" class="nav-item">
-        <i class="pi pi-briefcase" /><span>Prospect</span>
-      </RouterLink>
-      <RouterLink to="/sales/history" class="nav-item">
-        <i class="pi pi-history" /><span>History</span>
-      </RouterLink>
-      <RouterLink to="/sales/profile" class="nav-item">
-        <i class="pi pi-user" /><span>Profile</span>
+      <RouterLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="nav-item">
+        <i :class="item.icon" /><span>{{ item.label }}</span>
       </RouterLink>
     </nav>
   </div>
@@ -103,6 +79,16 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
+const salesNavItems = [
+  { label: 'Home', to: '/sales/dashboard', icon: 'pi pi-home', permission: 'view_sales_dashboard' },
+  { label: 'Customer', to: '/sales/my-customers', icon: 'pi pi-users', permission: 'view_my_customers' },
+  { label: 'Prospect Pipeline', to: '/sales/pipeline', icon: 'pi pi-chart-line', permission: 'menu_sales_pipeline' },
+  { label: 'History', to: '/sales/history', icon: 'pi pi-history', permission: 'view_sales_history' },
+  { label: 'Profile', to: '/sales/profile', icon: 'pi pi-user', permission: 'view_own_profile' },
+]
+
+const visibleNavItems = computed(() => salesNavItems.filter((item) => auth.hasPermission(item.permission)))
+
 const pageTitle = computed(() => {
   const p = route.path
   if (p.includes('/check-in')) return 'Check In'
@@ -114,7 +100,7 @@ const pageTitle = computed(() => {
     '/sales/dashboard': 'Home',
     '/sales/my-customers': 'My Customers',
     '/sales/my-prospects': 'My Prospects',
-    '/sales/pipeline': 'Pipeline',
+    '/sales/pipeline': 'Prospect Pipeline',
     '/sales/history': 'Visit History',
     '/sales/profile': 'My Profile',
   }
@@ -297,7 +283,7 @@ function refreshPage() {
   border: 1px solid rgba(219, 226, 237, 0.9);
   border-radius: 24px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   min-height: var(--mobile-bottom-nav-height);
   padding: 0.42rem 0.45rem;
   box-shadow:

@@ -60,6 +60,46 @@ export interface CustomerMarker {
 
 export interface SalesExecutiveOption { id: string; fullName: string; activeProspectCount: number }
 
+export interface TeamDashboardMember {
+  userId: string
+  fullName: string
+  roleName: string
+  roleLevel: number
+  parentUserId: string
+  activeProspects: number
+  customers: number
+  visitsToday: number
+  completedVisits: number
+  pendingVisits: number
+}
+
+export interface TeamDashboard {
+  lead: {
+    id: string
+    fullName: string
+    roleName: string
+    roleLevel: number
+    effectiveFrom: string
+  }
+  hasTeam: boolean
+  directMemberCount: number
+  totalDescendantCount: number
+  activeProspects: number
+  customers: number
+  visitsToday: number
+  completedVisits: number
+  pendingVisits: number
+  pipelineCounts: Partial<Record<ProspectStatus, number>>
+  members: TeamDashboardMember[]
+}
+
+export interface AssignedSalesInfo {
+  userId: string
+  fullName: string
+  roleName: string
+  roleLevel: number
+}
+
 export interface ProspectHistory {
   id: string
   fromStatus: ProspectStatus | null
@@ -149,8 +189,16 @@ export interface CustomerSite {
   contacts: Contact[]
   salesExecutiveId: string
   salesExecutiveName: string
+  assignedSales?: AssignedSalesInfo | null
   convertedAt: string
   updatedAt: string
+}
+
+export interface TeamCustomers {
+  hasTeam: boolean
+  directMemberCount: number
+  totalDescendantCount: number
+  customers: CustomerSite[]
 }
 
 export interface CustomerDetail {

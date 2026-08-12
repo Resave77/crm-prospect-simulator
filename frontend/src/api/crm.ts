@@ -1,9 +1,13 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
+}
+
+export async function getTeamDashboard() {
+  return (await api.get<ApiEnvelope<TeamDashboard>>('/dashboard/sales/team')).data.data
 }
 
 export async function transitionProspect(id: string, status: ProspectStatus, notes: string) {
@@ -41,6 +45,8 @@ export async function getCustomerMarkers() { return (await api.get<ApiEnvelope<C
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
 export async function getPlaceDetails(googlePlaceId: string) { return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/prospect-finder/place-details/${googlePlaceId}`)).data.data }
 export async function getMenuImages(query: string, limit = 8) { return (await api.get<ApiEnvelope<MenuImage[]>>('/admin/prospect-finder/menu-images', { params: { query, limit } })).data.data }
+export function apiClientPath(path: string) { return path.replace(/^\/api\/v1(?=\/)/, '') }
+export async function getPlacePhotoBlob(photoUrl: string) { return (await api.get(apiClientPath(photoUrl), { responseType: 'blob' })).data as Blob }
 export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
 
 
@@ -66,6 +72,10 @@ export async function getAdminCustomers() {
 
 export async function getMyCustomers() {
   return (await api.get<ApiEnvelope<CustomerSite[]>>('/sales/customers')).data.data
+}
+
+export async function getTeamCustomers() {
+  return (await api.get<ApiEnvelope<TeamCustomers>>('/customers/team')).data.data
 }
 
 export async function getMyCustomer(id: string) {

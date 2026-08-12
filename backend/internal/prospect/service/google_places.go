@@ -9,13 +9,19 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 )
 
-const placesBaseURL = "https://places.googleapis.com/v1"
 const customSearchBaseURL = "https://www.googleapis.com/customsearch/v1"
+
+var placesBaseURL = "https://places.googleapis.com/v1"
+
+const defaultPhotoMaxWidth = 800
+
+var googlePlacePhotoNamePattern = regexp.MustCompile(`^places/[^/?#]+/photos/[^/?#]+$`)
 
 type GooglePlacesClient struct {
 	key    string
@@ -24,7 +30,15 @@ type GooglePlacesClient struct {
 	http   *http.Client
 }
 
-func NewGooglePlacesClient(key, cseID, cseKey string) *GooglePlacesClient {
+func NewGooglePlacesClient(key string, customSearch ...string) *GooglePlacesClient {
+	cseID := ""
+	cseKey := ""
+	if len(customSearch) > 0 {
+		cseID = customSearch[0]
+	}
+	if len(customSearch) > 1 {
+		cseKey = customSearch[1]
+	}
 	if strings.TrimSpace(cseKey) == "" {
 		cseKey = key
 	}
@@ -357,6 +371,39 @@ func (c *GooglePlacesClient) postPlaces(ctx context.Context, endpoint string, bo
 	return payload.Places, payload.NextPageToken, nil
 }
 
+func (c *GooglePlacesClient) FetchPhoto(ctx context.Context, name string) ([]byte, string, error) {
+	if c.key == "" {
+		return nil, "", ErrPlacesDisabled
+	}
+	name = strings.TrimSpace(name)
+	if !ValidGooglePlacePhotoName(name) {
+		return nil, "", ErrPlacePhotoInvalid
+	}
+	endpoint := placesBaseURL + "/" + name + "/media?maxWidthPx=" + fmt.Sprint(defaultPhotoMaxWidth)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create Google Place photo request: %w", err)
+	}
+	req.Header.Set("X-Goog-Api-Key", c.key)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("Google Place photo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("%w: HTTP %d", ErrPlacePhotoUnavailable, resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("read Google Place photo response: %w", err)
+	}
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	return data, contentType, nil
+}
+
 func hasAnyType(placeTypes, allowed []string) bool {
 	for _, t := range placeTypes {
 		for _, a := range allowed {
@@ -462,7 +509,7 @@ func (c *GooglePlacesClient) DetailFull(ctx context.Context, placeID string) (pr
 	if err := json.NewDecoder(resp.Body).Decode(&place); err != nil {
 		return prospectmodel.PlaceDetails{}, err
 	}
-	return mapPlaceDetails(place, c.key), nil
+	return mapPlaceDetails(place), nil
 }
 
 var categoryLabels = map[string]string{
@@ -651,7 +698,7 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return math.Round(radius * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a)))
 }
 
-func mapPlaceDetails(place googlePlace, apiKey string) prospectmodel.PlaceDetails {
+func mapPlaceDetails(place googlePlace) prospectmodel.PlaceDetails {
 	lat, lng := place.Location.Latitude, place.Location.Longitude
 	category := place.PrimaryTypeDisplayName.Text
 	if _, label := appCategory(place.Types); label != "" {
@@ -665,7 +712,7 @@ func mapPlaceDetails(place googlePlace, apiKey string) prospectmodel.PlaceDetail
 		if len(p.Attributions) > 0 {
 			att = p.Attributions[0].DisplayName
 		}
-		photoURL := fmt.Sprintf("https://places.googleapis.com/v1/%s/media?maxWidthPx=800&key=%s", p.Name, apiKey)
+		photoURL := "/api/v1/places/photo?name=" + url.QueryEscape(p.Name)
 		photos = append(photos, prospectmodel.PlacePhoto{
 			Name: p.Name, PhotoURL: photoURL, WidthPx: p.WidthPx, HeightPx: p.HeightPx, Attribution: att, IsMenu: false,
 		})
@@ -745,4 +792,9 @@ func mapPlaceDetails(place googlePlace, apiKey string) prospectmodel.PlaceDetail
 			WheelchairAccessibleSeating:  place.AccessibilityOptions.WheelchairAccessibleSeating,
 		},
 	}
+}
+
+func ValidGooglePlacePhotoName(name string) bool {
+	name = strings.TrimSpace(name)
+	return googlePlacePhotoNamePattern.MatchString(name)
 }

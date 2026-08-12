@@ -27,6 +27,16 @@ export function roleAllowed(required: UserRole, actual: UserRole, hasSalesRole =
   return required === actual
 }
 
+export function permissionKeysFor(user: Pick<AuthUser, 'role' | 'salesRole'>) {
+  return user.salesRole?.permissionKeys ?? []
+}
+
+export function hasPermission(user: Pick<AuthUser, 'role' | 'salesRole'>, key?: string | null) {
+  if (!key) return true
+  if (user.role === 'SUPER_ADMIN') return true
+  return permissionKeysFor(user).includes(key)
+}
+
 export function routeExists(router: Router, path: string) {
   const resolved = router.resolve(path)
   return resolved.matched.length > 0 && resolved.name !== 'NotFound'
@@ -37,7 +47,8 @@ export function routePermitted(router: Router, path: string, user: AuthUser) {
   if (resolved.matched.length === 0 || resolved.name === 'NotFound') return false
   return resolved.matched.every((record) => {
     const required = record.meta.role as UserRole | undefined
-    return !required || roleAllowed(required, user.role, Boolean(user.salesRole))
+    const permission = record.meta.permission as string | undefined
+    return (!required || roleAllowed(required, user.role, Boolean(user.salesRole))) && hasPermission(user, permission)
   })
 }
 

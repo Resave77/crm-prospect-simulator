@@ -28,6 +28,7 @@ type Repository interface {
 	ListCustomersPaged(context.Context, model.CustomerListParams) (model.CustomerListResult, error)
 	ListFilterOptions(context.Context) (model.ListFilterOptions, error)
 	ListCustomersForSales(context.Context, uuid.UUID) ([]model.CustomerSite, error)
+	ListTeamCustomers(context.Context, uuid.UUID) (model.TeamCustomers, error)
 	FindCustomerForSales(context.Context, uuid.UUID, uuid.UUID) (model.CustomerDetail, error)
 	FindCustomer(context.Context, uuid.UUID) (model.CustomerDetail, error)
 	UpdateParentCompany(context.Context, uuid.UUID, model.UpdateParentCompanyInput) (model.ParentCompany, error)

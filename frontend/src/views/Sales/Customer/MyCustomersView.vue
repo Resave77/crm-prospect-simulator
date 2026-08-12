@@ -16,6 +16,7 @@ const sortBy = ref<'distance' | 'name-asc' | 'name-desc'>('distance')
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 const gpsDenied = ref(false)
 const showSortMenu = ref(false)
+const teamMode = ref(false)
 
 const showFilterSheet = ref(false)
 const filterSegment = ref('')
@@ -134,7 +135,12 @@ const draftFilteredCount = computed(() => {
   return list.length
 })
 
-const allCustomers = computed(() => crm.myCustomers)
+const allCustomers = computed(() => teamMode.value ? crm.teamCustomers?.customers ?? [] : crm.myCustomers)
+const pageTitle = computed(() => teamMode.value ? 'Team Customers' : 'My Customers')
+const pageSubtitle = computed(() => {
+  if (teamMode.value) return `Customers assigned across your sales team · ${crm.teamCustomers?.totalDescendantCount ?? 0} members`
+  return `${allCustomers.value.length} customers · ${todayCustomers.value.length} updated today`
+})
 
 const availableSegments = computed(() =>
   [...new Set(allCustomers.value.map((c) => c.segment).filter(Boolean))].sort(),
@@ -150,7 +156,9 @@ const filteredCustomers = computed(() => {
   if (q) {
     list = list.filter((c) => {
       const phone = customerPhone(c)
-      const hay = `${c.name} ${c.address?.previewAddress} ${c.segment} ${c.category} ${phone} ${c.salesExecutiveName} ${c.parentCompanyName} ${c.region}`.toLowerCase()
+      const assigned = c.assignedSales?.fullName || c.salesExecutiveName
+      const role = c.assignedSales?.roleName || ''
+      const hay = `${c.name} ${c.address?.previewAddress} ${c.segment} ${c.category} ${phone} ${assigned} ${role} ${c.parentCompanyName} ${c.region}`.toLowerCase()
       return hay.includes(q)
     })
   }
@@ -212,7 +220,17 @@ onUnmounted(() => { document.body.style.overflow = ''; document.removeEventListe
 
 onMounted(async () => {
   acquireGPS()
-  try { await crm.loadMyCustomers() } catch (e: unknown) { error.value = crm.errorMessage(e) }
+  try {
+    if (auth.hasPermission('view_team_dashboard')) {
+      const team = await crm.loadTeamCustomers()
+      if (team?.hasTeam) {
+        teamMode.value = true
+        return
+      }
+    }
+    teamMode.value = false
+    await crm.loadMyCustomers()
+  } catch (e: unknown) { error.value = crm.errorMessage(e) }
 })
 </script>
 
@@ -223,8 +241,8 @@ onMounted(async () => {
       <div class="mc-header-left">
         <span class="mc-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
         <div class="mc-header-text">
-          <strong>My Customers</strong>
-          <small>{{ allCustomers.length }} customers &middot; {{ todayCustomers.length }} updated today</small>
+          <strong>{{ pageTitle }}</strong>
+          <small>{{ pageSubtitle }}</small>
         </div>
       </div>
       <button class="mc-header-action" @click="openFilterSheet" aria-label="Open filters">
@@ -315,6 +333,13 @@ onMounted(async () => {
               <span v-if="customer.customerCode" class="mc-meta-item"><i class="pi pi-id-card" /> {{ customer.customerCode }}</span>
               <span v-if="customer.parentCompanyName" class="mc-meta-item"><i class="pi pi-building" /> {{ customer.parentCompanyName }}</span>
               <span v-if="customerPhone(customer)" class="mc-meta-item"><i class="pi pi-phone" /> {{ customerPhone(customer) }}</span>
+              <span v-if="teamMode" class="mc-meta-item mc-assigned-sales">
+                <i class="pi pi-user" />
+                {{ customer.assignedSales?.fullName || customer.salesExecutiveName }}
+                <small v-if="customer.assignedSales?.roleName">
+                  {{ customer.assignedSales.roleName }}<template v-if="customer.assignedSales.roleLevel"> · L{{ customer.assignedSales.roleLevel }}</template>
+                </small>
+              </span>
             </div>
             <div class="mc-card-tags">
               <span v-if="customer.segment" class="mc-tag mc-tag-segment">{{ customer.segment }}</span>
@@ -322,14 +347,14 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="mc-card-actions">
+          <div class="mc-card-actions" :class="{ 'mc-card-actions-team': teamMode }">
             <button class="mc-action-btn mc-action-navigate" :disabled="!hasCoordinates(customer) && !customer.address?.previewAddress" @click="openGoogleMaps(customer)" :title="hasCoordinates(customer) || customer.address?.previewAddress ? 'Navigate with Google Maps' : 'No location data available'">
               <i class="pi pi-directions" /> Navigate
             </button>
-            <RouterLink class="mc-action-btn mc-action-detail" :to="`/sales/my-customers/${customer.id}`">
+            <RouterLink v-if="!teamMode" class="mc-action-btn mc-action-detail" :to="`/sales/my-customers/${customer.id}`">
               <i class="pi pi-eye" /> View detail
             </RouterLink>
-            <RouterLink class="mc-action-btn mc-action-checkin" :to="`/sales/my-customers/${customer.id}/check-in`">
+            <RouterLink v-if="!teamMode" class="mc-action-btn mc-action-checkin" :to="`/sales/my-customers/${customer.id}/check-in`">
               <i class="pi pi-sign-in" /> Check in
             </RouterLink>
           </div>
@@ -532,6 +557,18 @@ onMounted(async () => {
 .mc-card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; }
 .mc-meta-item { display: flex; align-items: center; gap: 0.25rem; color: #475569; font-size: 0.65rem; font-weight: 500; }
 .mc-meta-item i { font-size: 0.55rem; color: #94a3b8; }
+.mc-assigned-sales {
+  padding: 0.18rem 0.5rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 750;
+}
+.mc-assigned-sales small {
+  color: #64748b;
+  font-size: 0.58rem;
+}
 .mc-card-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .mc-tag {
   display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px;
@@ -544,6 +581,7 @@ onMounted(async () => {
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem;
   padding-top: 0.45rem; border-top: 1px solid #f1f5f9;
 }
+.mc-card-actions-team { grid-template-columns: minmax(0, 1fr); }
 .mc-action-btn {
   display: flex; align-items: center; justify-content: center; gap: 0.3rem;
   padding: 0.45rem 0; border-radius: 10px; border: 1px solid #e2e8f0;

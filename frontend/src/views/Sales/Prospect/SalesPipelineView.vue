@@ -7,9 +7,11 @@ import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Textarea from 'primevue/textarea'
 import { BOARD_STATUSES, PIPELINE_STAGES, nextStage, previousStage } from '../../../domain/pipeline'
+import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 import PipelineProspectCard from '../../../components/sales/pipeline/PipelineProspectCard.vue'
+import ProspectPageSwitcher from '../../../components/sales/ProspectPageSwitcher.vue'
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
 
 type PipelineGroup = 'ALL' | 'NEW_LEAD' | 'IN_PROGRESS' | 'WON' | 'LOST'
@@ -28,6 +30,7 @@ const SECONDARY_OPTIONS: { value: SecondaryStage; label: string }[] = [
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const crm = useCrmStore()
 const toast = useToast()
 
@@ -191,6 +194,14 @@ const needsAttentionProspects = computed(() => {
     return prospects.value.filter(p => p.status === 'NEW_LEAD').slice(0, 3)
   }
   return []
+})
+
+const canViewMyProspects = computed(() => auth.hasPermission('view_my_prospects'))
+
+const switcherDestinations = computed<('pipeline' | 'my-prospects')[]>(() => {
+  const destinations: ('pipeline' | 'my-prospects')[] = ['pipeline']
+  if (canViewMyProspects.value) destinations.push('my-prospects')
+  return destinations
 })
 
 watch([activeGroup, secondaryStage, searchQuery, appliedFilters, sortOption], () => {
@@ -395,8 +406,13 @@ onBeforeUnmount(() => {
       <div class="pl-header-text">
         <p class="pl-eyebrow">Track assigned prospects by stage</p>
         <h1 class="pl-title">Sales Pipeline</h1>
+        <span v-if="!isDesktop" class="pl-total-text">{{ prospects.length }} active prospects</span>
       </div>
-      <span class="pl-total-badge">{{ prospects.length }} active</span>
+    </div>
+
+    <div class="pl-switcher-bar">
+      <ProspectPageSwitcher :destinations="switcherDestinations" />
+      <span v-if="isDesktop" class="pl-total-badge">{{ prospects.length }} active</span>
     </div>
 
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
@@ -694,14 +710,36 @@ onBeforeUnmount(() => {
 .pl-back:hover { background: #dbeafe; border-color: var(--brand-blue); }
 
 /* ── HEADER ── */
-.pl-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.pl-header-text { flex: 1; }
+.pl-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 0.75rem;
+  border: 1px solid #eee3e5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(73, 34, 41, 0.05);
+}
+.pl-header-text { flex: 1; min-width: 0; }
 .pl-eyebrow { margin: 0; font-size: 0.68rem; color: #64748b; font-weight: 500; }
 .pl-title { margin: 2px 0 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; line-height: 1.3; }
+.pl-total-text { display: block; margin-top: 2px; font-size: 0.72rem; color: #64748b; font-weight: 600; }
 .pl-total-badge {
   flex-shrink: 0; padding: 5px 12px; background: #eff6ff; color: #2563eb;
   border: 1px solid #bfdbfe; border-radius: 20px; font-size: 0.72rem; font-weight: 700; white-space: nowrap;
 }
+
+/* ── WORKSPACE SWITCHER BAR ── */
+.pl-switcher-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 10px;
+}
+.pl-switcher-bar .psw { width: min(100%, 26rem); }
 .pl-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: #94a3b8; font-size: 0.82rem; font-weight: 600; }
 .pl-view-target-btn { margin-top: 6px; }
 
@@ -1092,17 +1130,21 @@ onBeforeUnmount(() => {
   .pl-desktop-only { display: block; }
   .pl-mobile-only { display: none !important; }
   .pl-header {
+    flex-direction: row;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 0.45rem;
     padding: 0.64rem 0.82rem;
     border: 1px solid #e5eaf0;
-    border-radius: 12px;
+    border-radius: 16px;
     background: #fff;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
   }
   .pl-title { font-size: 1.5rem; }
   .pl-eyebrow { font-size: 0.75rem; }
+  .pl-total-text { display: none; }
   .pl-total-badge { font-size: 0.75rem; }
+  .pl-switcher-bar { margin-bottom: 0.45rem; }
   .pl-toolbar {
     gap: 0.5rem;
     margin-bottom: 0.45rem;
