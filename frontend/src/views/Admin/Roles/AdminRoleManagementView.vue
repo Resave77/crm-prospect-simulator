@@ -652,8 +652,8 @@ onMounted(load)
 }
 
 .search-field:focus-within {
-  border-color: #d14350;
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
+  border-color: #e63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
 .search-field i {
@@ -771,7 +771,7 @@ onMounted(load)
   font-weight: 850;
 }
 
-.level-1 { background: #fff1f2; color: #bb3342; }
+.level-1 { background: #fff0f1; color: #d62839; }
 .level-2 { background: #ecfdf5; color: #047857; }
 .level-3 { background: #fff7ed; color: #c2410c; }
 .level-4 { background: #f1f5f9; color: #475569; }
@@ -891,10 +891,10 @@ onMounted(load)
   overflow: hidden;
   max-width: 100%;
   padding: 0.16rem 0.42rem;
-  border: 1px solid #ffd9dd;
+  border: 1px solid #ffd9dc;
   border-radius: 6px;
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 0.65rem;
   text-overflow: ellipsis;
@@ -1016,7 +1016,7 @@ onMounted(load)
 }
 
 .action-card:hover {
-  border-color: #f3b9c0;
+  border-color: #f4b3ba;
   background: #fffbfb;
 }
 
@@ -1029,7 +1029,7 @@ onMounted(load)
   border-radius: 8px;
 }
 
-.view-icon { background: #fff1f2; color: #d14350; }
+.view-icon { background: #fff0f1; color: #e63946; }
 .edit-icon { background: #fff7ed; color: #ea580c; }
 
 .action-card > span:last-child {

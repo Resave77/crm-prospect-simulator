@@ -16,7 +16,6 @@ var (
 	ErrVisitOpen                 = errors.New("prospect already has an open visit")
 	ErrVisitClosed               = errors.New("visit is already checked out")
 	ErrConflict                  = errors.New("prospect is still referenced by existing records")
-	ErrPhotoTagSchemaUnsupported = errors.New("prospect photo tagging is unavailable with this database schema")
 )
 
 type Repository interface {
@@ -45,7 +44,7 @@ type Repository interface {
 	FindCommentAttachment(context.Context, uuid.UUID, uuid.UUID) (model.CommentAttachment, error)
 	FindProspectOwner(context.Context, uuid.UUID) (uuid.UUID, error)
 	ListPhotoTags(context.Context, uuid.UUID) ([]model.ProspectPhotoTag, error)
-	UpsertPhotoTag(context.Context, uuid.UUID, int, model.PhotoCategory, uuid.UUID) (model.ProspectPhotoTag, error)
+	UpsertPhotoTag(context.Context, uuid.UUID, string, model.PhotoCategory, uuid.UUID) (model.ProspectPhotoTag, error)
 	ProspectAccessibleTo(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 	ExistingCustomerPlaceIDs(context.Context, []string) (map[string]bool, error)
 	ListCustomerMarkers(context.Context) ([]model.CustomerMarker, error)

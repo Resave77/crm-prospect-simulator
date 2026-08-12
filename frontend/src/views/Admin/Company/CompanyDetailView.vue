@@ -314,7 +314,7 @@ async function executeDelete() {
   background: #f1f5f9;
   color: var(--text-secondary);
 }
-.code-blue { background: #fff1f2; color: #d14350; }
+.code-blue { background: #fff0f1; color: #e63946; }
 
 /* ── SUMMARY STRIP ─────────────────────────────────────────────────── */
 .summary-strip {
@@ -428,18 +428,18 @@ async function executeDelete() {
   text-align: left;
   font: inherit;
   font-weight: 600;
-  color: #d14350;
+  color: #e63946;
   transition: color 0.15s;
 }
-.link-btn:hover { color: #bb3342; text-decoration: underline; }
+.link-btn:hover { color: #d62839; text-decoration: underline; }
 .cell-text { font-size: 0.84rem; color: var(--text-secondary); }
 .cell-date { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
 
 /* ── ROW ACTIONS ──────────────────────────────────────────────────── */
 .td-action { text-align: center; }
 .row-actions { display: flex; align-items: center; justify-content: center; gap: 0.15rem; }
-.act-view { color: #d14350 !important; }
-.act-view:hover { background: #fff1f2 !important; }
+.act-view { color: #e63946 !important; }
+.act-view:hover { background: #fff0f1 !important; }
 .act-edit { color: #059669 !important; }
 .act-edit:hover { background: #ecfdf5 !important; }
 

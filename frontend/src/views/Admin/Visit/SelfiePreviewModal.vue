@@ -48,7 +48,7 @@ function close() {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--brand-blue-bg, #fff1f2);
+  background: var(--brand-blue-bg, #fff0f1);
   color: var(--brand-blue);
   font-size: 1.4rem;
   font-weight: 800;

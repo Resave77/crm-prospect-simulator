@@ -188,9 +188,9 @@ onMounted(loadStats)
 .profile-header-left { display: flex; align-items: center; gap: 0.75rem; }
 .profile-header-avatar {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
-  background: linear-gradient(135deg, #d14350, #bb3342); color: #fff;
+  background: linear-gradient(135deg, #e63946, #d62839); color: #fff;
   font-size: 0.82rem; font-weight: 800; flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(209, 67, 80, 0.25);
+  box-shadow: 0 2px 8px rgba(230, 57, 70, 0.25);
 }
 .profile-header-text h1 { margin: 0; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 .profile-header-text p { margin: 0; font-size: 0.72rem; color: var(--text-muted); }
@@ -248,11 +248,11 @@ onMounted(loadStats)
   border-radius: 12px; padding: 0.85rem 0.5rem;
   display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
 }
-.stat-blue { background: #fff1f2; }
+.stat-blue { background: #fff0f1; }
 .stat-green { background: #f0fdf4; }
 .stat-purple { background: #f5f3ff; }
 .stat-value { font-size: 1.5rem; font-weight: 800; line-height: 1; }
-.stat-blue .stat-value { color: #d14350; }
+.stat-blue .stat-value { color: #e63946; }
 .stat-green .stat-value { color: #16a34a; }
 .stat-purple .stat-value { color: #c54b59; }
 .stat-label {
@@ -278,7 +278,7 @@ onMounted(loadStats)
   justify-content: space-between;
   padding: 1rem;
   color: #fff;
-  background: linear-gradient(120deg, #df5a66 0%, #d14350 56%, #bb3342 100%);
+  background: linear-gradient(120deg, #ef4e5d 0%, #e63946 56%, #d62839 100%);
 }
 .profile-card-cover::after {
   content: '';
@@ -294,22 +294,22 @@ onMounted(loadStats)
 .profile-status { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.5rem; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.13); font-size: 0.62rem; font-weight: 750; }
 .profile-status i { font-size: 0.38rem; color: #bbf7d0; }
 .profile-card-identity { display: flex; align-items: flex-end; gap: 0.8rem; padding: 0 1rem; margin-top: -30px; position: relative; z-index: 1; }
-.profile-card-avatar { width: 68px; height: 68px; margin: 0; border-radius: 20px; border: 4px solid #fff; color: #fff; background: linear-gradient(135deg, #d14350, #bb3342); box-shadow: 0 6px 16px rgba(113,30,43,.2); }
+.profile-card-avatar { width: 68px; height: 68px; margin: 0; border-radius: 20px; border: 4px solid #fff; color: #fff; background: linear-gradient(135deg, #e63946, #d62839); box-shadow: 0 6px 16px rgba(135,28,40,.2); }
 .profile-card-copy { min-width: 0; padding-bottom: 0.3rem; }
 .profile-card-name { color: var(--text-primary); }
 .profile-card-role { color: var(--text-muted); opacity: 1; }
 .profile-card-strip { width: auto; margin: 1rem; padding: 0; border: 1px solid #f1e8ea; border-radius: 14px; display: grid; grid-template-columns: 1fr; gap: 0; background: #fcf9f9; }
 .strip-item { min-width: 0; display: flex; align-items: center; gap: 0.7rem; padding: 0.72rem; text-align: left; border-bottom: 1px solid #f1e8ea; }
 .strip-item:last-child { border-bottom: 0; }
-.strip-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; color: #d14350; background: #fff1f2; }
+.strip-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; color: #e63946; background: #fff0f1; }
 .strip-icon i { font-size: 0.8rem; }
 .strip-copy { min-width: 0; display: grid; gap: 0.08rem; }
 .strip-label { margin: 0; color: var(--text-muted); opacity: 1; }
 .strip-value { color: var(--text-primary); font-size: 0.73rem; }
 .perf-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
 .perf-heading > div { display: grid; gap: 0.08rem; }
-.perf-heading span { color: #d14350; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-.perf-heading > i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #d14350; background: #fff1f2; }
+.perf-heading span { color: #e63946; font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.perf-heading > i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #e63946; background: #fff0f1; }
 .perf-title { margin: 0; color: var(--text-primary); font-size: 0.92rem; text-transform: none; letter-spacing: -0.01em; }
 .stat-card { position: relative; align-items: flex-start; padding: 0.75rem; gap: 0.2rem; }
 .stat-icon { width: 28px; height: 28px; display: grid; place-items: center; margin-bottom: 0.35rem; border-radius: 8px; background: rgba(255,255,255,.7); }

@@ -1,0 +1,134 @@
+<script setup lang="ts">
+defineProps<{
+  prospectName?: string
+}>()
+</script>
+
+<template>
+  <article class="ai-card ai-summary-card">
+    <div class="ai-card-head">
+      <div>
+        <p class="ai-eyebrow"><i class="pi pi-sparkles" /> AI Summary</p>
+        <h2>Prospect insight</h2>
+      </div>
+      <button class="ai-icon-btn" type="button" disabled aria-label="Expand AI summary"><i class="pi pi-window-maximize" /></button>
+    </div>
+
+    <div class="ai-state ai-empty">
+      <i class="pi pi-file-edit" />
+      <div>
+        <strong>AI Summary belum dibuat.</strong>
+        <span>{{ prospectName || 'Prospect' }} siap untuk diringkas ketika AI generation diaktifkan.</span>
+      </div>
+    </div>
+
+    <button class="ai-primary-btn" type="button" disabled>
+      <i class="pi pi-sparkles" />
+      Generate summary
+    </button>
+  </article>
+</template>
+
+<style scoped>
+.ai-card {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #eadde0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(73, 34, 41, 0.06);
+}
+
+.ai-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ai-card-head h2 {
+  margin: 0.1rem 0 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.ai-eyebrow {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #d62839;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ai-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid #eadde0;
+  border-radius: 10px;
+  background: #fcf9f9;
+  color: #9b8b8f;
+}
+
+.ai-state {
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px dashed #e6dadd;
+  border-radius: 12px;
+  background: #fcf9f9;
+}
+
+.ai-state > i {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #fff0f1;
+  color: #e63946;
+}
+
+.ai-state div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ai-state strong {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.ai-state span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.ai-primary-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 12px;
+  background: #f1e8ea;
+  color: #9b8b8f;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: not-allowed;
+}
+</style>

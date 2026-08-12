@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -714,8 +714,8 @@ async function executeDelete() {
   color: var(--text-secondary);
 }
 .code-blue {
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
 }
 
 /* ── SUMMARY STRIP ─────────────────────────────────────────────────── */
@@ -866,10 +866,10 @@ async function executeDelete() {
   text-align: left;
   font: inherit;
   font-weight: 600;
-  color: #d14350;
+  color: #e63946;
   transition: color 0.15s;
 }
-.link-btn:hover { color: #bb3342; text-decoration: underline; }
+.link-btn:hover { color: #d62839; text-decoration: underline; }
 
 /* ── EMPTY / INLINE ────────────────────────────────────────────────── */
 .empty-card {
@@ -924,8 +924,8 @@ async function executeDelete() {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
   display: grid;
   place-content: center;
   font-weight: 800;
@@ -993,8 +993,8 @@ async function executeDelete() {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #fff5f6;
-  color: #d15a66;
+  background: #fff5f5;
+  color: #ef4e5d;
   display: grid;
   place-content: center;
   font-weight: 700;
@@ -1063,7 +1063,7 @@ async function executeDelete() {
 .rating-stars { display: flex; gap: 1px; }
 .rating-stars .pi { font-size: 0.7rem; color: #f59e0b; }
 .rating-count { color: var(--text-muted); font-size: 0.75rem; }
-.info-link { color: #d14350; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
+.info-link { color: #e63946; text-decoration: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
 .info-link:hover { text-decoration: underline; }
 .types-wrap { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .type-tag { font-size: 0.68rem !important; }
@@ -1073,7 +1073,7 @@ async function executeDelete() {
 .hours-dot.closed { background: #ef4444; }
 .hours-list { display: grid; gap: 0.3rem; }
 .hours-row { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; }
-.hours-toggle { background: none; border: none; color: #d14350; font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
+.hours-toggle { background: none; border: none; color: #e63946; font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 0.2rem 0; text-align: left; }
 .hours-toggle:hover { text-decoration: underline; }
 .reviews-list { display: grid; gap: 0.85rem; }
 .review-item { padding-bottom: 0.75rem; border-bottom: 1px solid #f0f3f7; }
@@ -1090,7 +1090,7 @@ async function executeDelete() {
 .reviews-maps-link {
   display: inline-flex; align-items: center; gap: 0.35rem;
   margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #f0f3f7;
-  color: #d14350; text-decoration: none; font-size: 0.78rem; font-weight: 600;
+  color: #e63946; text-decoration: none; font-size: 0.78rem; font-weight: 600;
 }
 .reviews-maps-link:hover { text-decoration: underline; }
 .address-maps-link { margin-top: 0.85rem; }
@@ -1115,7 +1115,7 @@ async function executeDelete() {
   color: #fff;
 }
 .fs-google {
-  background: #df5a66;
+  background: #ef4e5d;
   color: #fff;
 }
 .fs-manual {

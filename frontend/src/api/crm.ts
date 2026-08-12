@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AIStatus, AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -8,6 +8,10 @@ export async function getMyProspects() {
 
 export async function getTeamDashboard() {
   return (await api.get<ApiEnvelope<TeamDashboard>>('/dashboard/sales/team')).data.data
+}
+
+export async function getAIStatus() {
+  return (await api.get<ApiEnvelope<AIStatus>>('/ai/status')).data.data
 }
 
 export async function transitionProspect(id: string, status: ProspectStatus, notes: string) {
@@ -188,7 +192,7 @@ export async function getProspectPhotoTags(prospectId: string, role: UserRole) {
   return (await api.get<ApiEnvelope<ProspectPhotoTag[]>>(`${base}/prospects/${prospectId}/photo-tags`)).data.data
 }
 
-export async function setProspectPhotoTag(prospectId: string, photoIndex: number, category: PhotoCategory, role: UserRole) {
+export async function setProspectPhotoTag(prospectId: string, photoName: string, category: PhotoCategory, role: UserRole) {
   const base = crmBaseForRole(role)
-  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoIndex, category })).data.data
+  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoName, category })).data.data
 }

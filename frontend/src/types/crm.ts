@@ -1,6 +1,12 @@
 export type ProspectStatus = 'NEW_LEAD' | 'CONTACTED' | 'INTERESTED' | 'QUALIFIED' | 'PROPOSAL_SENT' | 'NEGOTIATION' | 'WON' | 'LOST' | 'CONVERTED'
 export type ParentMethod = 'MANUAL_ENTRY' | 'MATCH_CUSTOMER_NAME' | 'EXISTING_COMPANY'
 
+export interface AIStatus {
+  enabled: boolean
+  configured: boolean
+  modelConfigured: boolean
+}
+
 export interface Prospect {
   id: string
   googlePlaceId: string
@@ -454,7 +460,7 @@ export type PhotoCategory = 'MENU' | 'PLACE'
 export interface ProspectPhotoTag {
   id: string
   prospectId: string
-  photoIndex: number
+  photoName: string
   category: PhotoCategory
   updatedBy: string
   createdAt: string

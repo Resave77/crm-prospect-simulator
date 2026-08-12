@@ -585,8 +585,8 @@ onMounted(async () => {
   color: #15803d;
 }
 
-.si-blue { color: #d14350; }
-.si-violet { color: #d15a66; }
+.si-blue { color: #e63946; }
+.si-violet { color: #ef4e5d; }
 .si-emerald { color: #16a34a; }
 .si-red { color: #dc2626; }
 
@@ -632,9 +632,9 @@ onMounted(async () => {
 }
 
 .search-field:focus-within {
-  border-color: #d14350;
+  border-color: #e63946;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
 .search-field i { color: #94a3b8; font-size: 0.76rem; }
@@ -837,7 +837,7 @@ onMounted(async () => {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  color: #bb3342;
+  color: #d62839;
   font-weight: 750;
   text-decoration: none;
   text-overflow: ellipsis;
@@ -911,8 +911,8 @@ onMounted(async () => {
   min-height: 1.9rem;
 }
 
-.act-view { color: #d14350 !important; }
-.act-view:hover { background: #fff1f2 !important; }
+.act-view { color: #e63946 !important; }
+.act-view:hover { background: #fff0f1 !important; }
 
 .act-convert {
   min-width: 84px !important;
@@ -960,7 +960,7 @@ onMounted(async () => {
   text-align: center;
 }
 
-.state-icon { color: #d14350; font-size: 1.5rem; }
+.state-icon { color: #e63946; font-size: 1.5rem; }
 
 .state-icon-wrap {
   display: grid;
@@ -1058,7 +1058,7 @@ onMounted(async () => {
 }
 
 .prospect-row:focus-visible {
-  outline: 2px solid #d14350;
+  outline: 2px solid #e63946;
   outline-offset: -2px;
 }
 
@@ -1165,7 +1165,7 @@ onMounted(async () => {
 
 .action-menu-item:hover {
   transform: translateY(-1px);
-  border-color: #f3b9c0;
+  border-color: #f4b3ba;
   background: #fffbfb;
 }
 

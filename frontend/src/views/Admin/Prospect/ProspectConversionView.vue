@@ -828,7 +828,7 @@ async function executeConvert() {
 /* Snapshot */
 .snapshot-card {
   padding: 1.25rem; margin-bottom: 0.5rem;
-  border: 1px solid #fbd6da; border-radius: var(--radius-xl);
+  border: 1px solid #f8c9ce; border-radius: var(--radius-xl);
   background: linear-gradient(135deg, #f8faff 0%, #f0f5ff 100%);
   box-shadow: var(--shadow-xs);
 }
@@ -853,7 +853,7 @@ async function executeConvert() {
   border-radius: var(--radius-sm); cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-.suggestion-item:hover { background: var(--brand-blue-50); border-color: #f3b9c0; }
+.suggestion-item:hover { background: var(--brand-blue-50); border-color: #f4b3ba; }
 .suggestion-item strong { display: block; font-size: 0.75rem; }
 .suggestion-item span { display: block; color: var(--text-muted); font-size: 0.6rem; margin-top: 0.1rem; }
 

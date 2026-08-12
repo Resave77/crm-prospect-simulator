@@ -12,17 +12,17 @@ import { pinia } from './stores/pinia'
 const RefinedAura = definePreset(Aura, {
   semantic: {
     primary: {
-      50: '#fff1f2',
-      100: '#ffd9dd',
-      200: '#ffc7cd',
-      300: '#f49ba5',
-      400: '#e47781',
-      500: '#df5a66',
-      600: '#d14350',
-      700: '#bb3342',
-      800: '#a92c39',
-      900: '#922833',
-      950: '#591923'
+      50: '#fff0f1',
+      100: '#ffd9dc',
+      200: '#fdb3b9',
+      300: '#f98a94',
+      400: '#f36070',
+      500: '#e63946',
+      600: '#d62839',
+      700: '#c12334',
+      800: '#a51e2d',
+      900: '#871c28',
+      950: '#5c1520'
     },
     colorScheme: {
       light: {
@@ -41,10 +41,10 @@ const RefinedAura = definePreset(Aura, {
           950: '#140e10'
         },
         highlight: {
-          background: '#fff1f2',
-          focusBackground: '#ffd9dd',
-          color: '#d14350',
-          focusColor: '#bb3342'
+          background: '#fff0f1',
+          focusBackground: '#ffd9dc',
+          color: '#e63946',
+          focusColor: '#d62839'
         }
       }
     },

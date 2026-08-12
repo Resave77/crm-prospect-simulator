@@ -454,8 +454,8 @@ onBeforeUnmount(() => {
 .cocard-summary-top { display: flex; align-items: flex-start; gap: 0.85rem; }
 .cocard-avatar {
   width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px;
-  background: linear-gradient(135deg, #d14350, #bb3342); color: #fff; font-weight: 800;
-  font-size: 0.9rem; flex-shrink: 0; box-shadow: 0 3px 10px rgba(209, 67, 80, 0.25);
+  background: linear-gradient(135deg, #e63946, #d62839); color: #fff; font-weight: 800;
+  font-size: 0.9rem; flex-shrink: 0; box-shadow: 0 3px 10px rgba(230, 57, 70, 0.25);
 }
 .cocard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .cocard-identity .eyebrow { margin: 0; }
@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
   background: #fff; color: var(--text-muted); cursor: pointer; display: grid; place-items: center;
   font-size: 0.72rem; transition: all 0.15s ease;
 }
-.cocard-refresh-btn:hover { color: var(--brand-blue); border-color: #f3b9c0; background: #fff1f2; }
+.cocard-refresh-btn:hover { color: var(--brand-blue); border-color: #f4b3ba; background: #fff0f1; }
 .cocard-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .cocard-location-rows { display: grid; gap: 0.4rem; }
@@ -492,7 +492,7 @@ onBeforeUnmount(() => {
   background: #fff; color: var(--brand-blue); font-size: 0.75rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s ease; margin-top: 0.25rem;
 }
-.cocard-edit-btn:hover { background: var(--brand-blue-bg); border-color: #f3b9c0; }
+.cocard-edit-btn:hover { background: var(--brand-blue-bg); border-color: #f4b3ba; }
 .cocard-missing { text-align: center; }
 .cocard-missing-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: #fef2f2; color: #dc2626; font-size: 1rem; margin: 0 auto 0.5rem; }
 .cocard-missing strong { display: block; font-size: 0.85rem; color: var(--text-primary); }

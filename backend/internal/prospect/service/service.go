@@ -26,7 +26,7 @@ var (
 	ErrPlacePhotoUnavailable = errors.New("Google Places photo is unavailable")
 	ErrAlreadyCustomer       = errors.New("place is already an existing customer")
 	ErrVisitCoordinates      = errors.New("visit GPS coordinates are invalid")
-	ErrPhotoTagInvalid       = errors.New("photo category must be MENU or PLACE")
+	ErrPhotoTagInvalid       = errors.New("photo tag is invalid: category must be MENU or PLACE and photoName must be a valid Google photo resource name")
 )
 
 type Actor struct {
@@ -540,17 +540,17 @@ func (s *Service) ListPhotoTags(ctx context.Context, actor Actor, prospectID uui
 	return s.repository.ListPhotoTags(ctx, prospectID)
 }
 
-func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoIndex int, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
+func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
 	if err := s.ensurePhotoTagAccess(ctx, actor, prospectID); err != nil {
 		return prospectmodel.ProspectPhotoTag{}, err
 	}
 	if category != prospectmodel.PhotoCategoryMenu && category != prospectmodel.PhotoCategoryPlace {
 		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
 	}
-	if photoIndex < 0 {
+	if !ValidGooglePlacePhotoName(photoName) {
 		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
 	}
-	return s.repository.UpsertPhotoTag(ctx, prospectID, photoIndex, category, actor.UserID)
+	return s.repository.UpsertPhotoTag(ctx, prospectID, photoName, category, actor.UserID)
 }
 
 func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {

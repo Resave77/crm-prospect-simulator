@@ -47,7 +47,7 @@ defineProps<{
   text-decoration: none; text-align: center; transition: all 0.15s ease; border: none; cursor: pointer;
 }
 .vs-btn-primary { background: var(--brand-blue); color: #fff; }
-.vs-btn-primary:hover { background: #bb3342; }
+.vs-btn-primary:hover { background: #d62839; }
 .vs-btn-secondary { background: #f8fafc; color: var(--text-primary); border: 1px solid var(--border-light); }
 .vs-btn-secondary:hover { background: #f1f5f9; }
 .vs-btn-tertiary { background: transparent; color: var(--text-muted); font-weight: 600; }

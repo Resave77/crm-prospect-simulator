@@ -7,14 +7,33 @@
 /* ── Design Tokens ─────────────────────────────────────────────── */
 :root {
   /* Kept as compatibility aliases because page styles already consume these names. */
-  --brand-blue: #d14350;
-  --brand-blue-light: #df5a66;
-  --brand-blue-50: #fff1f2;
-  --brand-blue-100: #ffd9dd;
-  --brand-blue-bg: #fff5f6;
-  --brand-green: #bb3342;
-  --brand-green-light: #c63d4b;
-  --brand-green-bg: #fff8f8;
+  --brand-blue: #e63946;
+  --brand-blue-light: #ef4e5d;
+  --brand-blue-50: #fff0f1;
+  --brand-blue-100: #ffd9dc;
+  --brand-blue-bg: #fff5f5;
+  --brand-green: #d62839;
+  --brand-green-light: #e63946;
+  --brand-green-bg: #fff7f7;
+
+  /* Yummy Red — canonical brand palette (matches Yummy ERP reference #1) */
+  --brand-red: #e63946;
+  --brand-red-light: #ef4e5d;
+  --brand-red-hover: #d62839;
+  --brand-red-active: #c12334;
+  --brand-red-50: #fff0f1;
+  --brand-red-100: #ffd9dc;
+  --brand-red-200: #fdb3b9;
+  --brand-red-300: #f98a94;
+  --brand-red-400: #f36070;
+  --brand-red-500: #e63946;
+  --brand-red-600: #d62839;
+  --brand-red-700: #c12334;
+  --brand-red-800: #a51e2d;
+  --brand-red-900: #871c28;
+  --brand-red-bg: #fff5f5;
+  --brand-red-border: #f4b3ba;
+  --brand-red-soft: #f8c9ce;
 
   --surface-page: #fcf9f9;
   --surface-card: #ffffff;
@@ -99,7 +118,7 @@ button, input, select, textarea { font: inherit; }
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.back-link:hover { background: #ffd9dd; border-color: var(--brand-blue); }
+.back-link:hover { background: var(--brand-red-100); border-color: var(--brand-blue); }
 
 /* ── Global Layout ─────────────────────────────────────────────── */
 .admin-page {
@@ -510,7 +529,7 @@ td span {
    ================================================================ */
 @media (max-width: 767px) {
   .sales-layout {
-    background: linear-gradient(180deg, #fff8f8 0, #fcf9f9 180px, #f8f6f7 100%);
+    background: linear-gradient(180deg, var(--brand-red-bg) 0, #fcf9f9 180px, #f8f6f7 100%);
   }
 
   .sales-layout .sales-content {
@@ -540,8 +559,8 @@ td span {
 
   .sales-layout .sales-nav .nav-item i { font-size: 1.08rem; }
   .sales-layout .sales-nav .nav-item.router-link-active {
-    background: linear-gradient(145deg, #fff1f2, #ffe7e9);
-    box-shadow: inset 0 0 0 1px rgba(209, 67, 80, 0.08);
+    background: linear-gradient(145deg, var(--brand-red-50), #ffe3e5);
+    box-shadow: inset 0 0 0 1px rgba(230, 57, 70, 0.08);
   }
 
   /* Dashboard */
@@ -559,7 +578,7 @@ td span {
     min-height: 205px;
     padding: 1.15rem;
     border-radius: 18px;
-    box-shadow: 0 14px 28px -18px rgba(173, 48, 64, 0.85);
+    box-shadow: 0 14px 28px -18px rgba(214, 40, 57, 0.85);
   }
   .sales-layout .ready-card strong { font-size: 1.3rem; }
   .sales-layout .ready-card .ready-open { top: 1rem; right: 1rem; }
@@ -587,7 +606,7 @@ td span {
   .sales-layout .profile-card {
     padding: 1.4rem 1rem;
     border-radius: 18px;
-    box-shadow: 0 14px 28px -20px rgba(173, 48, 64, 0.8);
+    box-shadow: 0 14px 28px -20px rgba(214, 40, 57, 0.8);
   }
   .sales-layout .profile-card-avatar { width: 68px; height: 68px; border-radius: 20px; }
   .sales-layout .profile-card-strip { margin-top: 1.15rem; border-radius: 13px; }
@@ -633,7 +652,7 @@ td span {
   .sales-layout .mc-tab,
   .sales-layout .mp-tab { min-height: 38px; padding: 0.48rem 0.65rem; border: 0; border-radius: 10px; white-space: nowrap; }
   .sales-layout .mc-tab.active,
-  .sales-layout .mp-tab.active { background: #fff1f2; color: #d14350; box-shadow: inset 0 0 0 1px #ffd9dd; }
+  .sales-layout .mp-tab.active { background: var(--brand-red-50); color: var(--brand-red); box-shadow: inset 0 0 0 1px var(--brand-red-100); }
   .sales-layout .mc-card-list,
   .sales-layout .mp-card-list { gap: 0.7rem; }
   .sales-layout .mc-card,
@@ -669,7 +688,7 @@ td span {
     border-radius: 16px;
     box-shadow: 0 5px 16px rgba(73, 34, 41, 0.045);
   }
-  .sales-layout .detail-page .dcard-summary { padding: 1rem; background: linear-gradient(145deg, #fff1f2 0%, #fff 72%); }
+  .sales-layout .detail-page .dcard-summary { padding: 1rem; background: linear-gradient(145deg, var(--brand-red-50) 0%, #fff 72%); }
   .sales-layout .detail-page .dcard-summary-top { align-items: flex-start; gap: 0.7rem; }
   .sales-layout .detail-page .dcard-avatar { width: 48px; height: 48px; border-radius: 14px; }
   .sales-layout .detail-page .dcard-identity { min-width: 0; }

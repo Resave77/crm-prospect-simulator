@@ -403,8 +403,8 @@ onMounted(async () => {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #fff1f2; color: #d14350; }
-.si-violet { background: #fff5f6; color: #d15a66; }
+.si-blue { background: #fff0f1; color: #e63946; }
+.si-violet { background: #fff5f5; color: #ef4e5d; }
 .si-emerald { background: #ecfdf5; color: #059669; }
 .si-amber { background: #fffbeb; color: #d97706; }
 .si-slate { background: #f1f5f9; color: #64748b; }
@@ -523,11 +523,11 @@ onMounted(async () => {
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
-  background: #fff1f2;
-  border-color: #f3b9c0;
+  background: #fff0f1;
+  border-color: #f4b3ba;
 }
 .tip-card i {
-  color: #d14350;
+  color: #e63946;
   margin-top: 0.1rem;
   font-size: 0.95rem;
   flex-shrink: 0;
@@ -535,11 +535,11 @@ onMounted(async () => {
 .tip-card p {
   margin: 0;
   font-size: 0.78rem;
-  color: #ad3040;
+  color: #d62839;
   line-height: 1.5;
 }
 .tip-card code {
-  background: rgba(209, 67, 80, 0.1);
+  background: rgba(230, 57, 70, 0.1);
   padding: 0.1rem 0.3rem;
   border-radius: 3px;
   font-size: 0.72rem;

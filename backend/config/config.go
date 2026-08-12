@@ -26,6 +26,13 @@ type Config struct {
 	GoogleMapsAPIKey string
 	GoogleCSEID      string
 	GoogleCSEAPIKey  string
+	AIEnabled        bool
+	OpenAIAPIKey     string
+	OpenAIModel      string
+	OpenAITimeout    time.Duration
+	OpenAIMaxTokens  int
+	AIChatMaxLength  int
+	AIChatMaxHistory int
 }
 
 func Load() (Config, error) {
@@ -43,6 +50,26 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("COOKIE_SECURE must be true or false: %w", err)
 	}
+	aiEnabled, err := strconv.ParseBool(value("AI_ENABLED", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AI_ENABLED must be true or false: %w", err)
+	}
+	openAITimeout, err := duration("OPENAI_TIMEOUT", 20*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	openAIMaxTokens, err := positiveInt("OPENAI_MAX_OUTPUT_TOKENS", 800)
+	if err != nil {
+		return Config{}, err
+	}
+	chatMaxLength, err := positiveInt("AI_CHAT_MAX_MESSAGE_LENGTH", 1000)
+	if err != nil {
+		return Config{}, err
+	}
+	chatMaxHistory, err := positiveInt("AI_CHAT_MAX_HISTORY_MESSAGES", 6)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Environment:      value("APP_ENV", "development"),
@@ -58,6 +85,13 @@ func Load() (Config, error) {
 		GoogleMapsAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
 		GoogleCSEID:      strings.TrimSpace(os.Getenv("GOOGLE_CSE_ID")),
 		GoogleCSEAPIKey:  strings.TrimSpace(os.Getenv("GOOGLE_CSE_API_KEY")),
+		AIEnabled:        aiEnabled,
+		OpenAIAPIKey:     strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIModel:      strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
+		OpenAITimeout:    openAITimeout,
+		OpenAIMaxTokens:  openAIMaxTokens,
+		AIChatMaxLength:  chatMaxLength,
+		AIChatMaxHistory: chatMaxHistory,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -67,6 +101,10 @@ func Load() (Config, error) {
 		return Config{}, errors.New("JWT_SECRET must contain at least 32 characters")
 	}
 	return cfg, nil
+}
+
+func (cfg Config) AIConfigured() bool {
+	return cfg.AIEnabled && strings.TrimSpace(cfg.OpenAIAPIKey) != "" && strings.TrimSpace(cfg.OpenAIModel) != ""
 }
 
 func loadDotenv() {
@@ -103,4 +141,16 @@ func value(name, fallback string) string {
 		return current
 	}
 	return fallback
+}
+
+func positiveInt(name string, fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", name)
+	}
+	return parsed, nil
 }

@@ -643,7 +643,7 @@ onMounted(() => {
 .summary-item i { grid-row: 1 / 3; align-self: center; font-size: 0.72rem; }
 .summary-item span { color: #94a3b8; font-size: 0.5rem; font-weight: 800; text-transform: uppercase; }
 .summary-item strong { color: #0f172a; font-size: 0.8rem; }
-.si-blue { color: #d14350; }
+.si-blue { color: #e63946; }
 .si-emerald { color: #059669; }
 .si-red { color: #dc2626; }
 .si-amber { color: #d97706; }
@@ -715,8 +715,8 @@ onMounted(() => {
 }
 
 .date-input:focus {
-  border-color: #d14350;
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
+  border-color: #e63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
 .table-panel {
@@ -813,7 +813,7 @@ onMounted(() => {
 
 .prospect-name {
   overflow: hidden;
-  color: #bb3342;
+  color: #d62839;
   font-size: 0.74rem;
   font-weight: 750;
   text-overflow: ellipsis;
@@ -860,8 +860,8 @@ onMounted(() => {
   padding: 0 0.35rem;
   place-content: center;
   border-radius: 999px;
-  background: #fff5f6;
-  color: #a92f3d;
+  background: #fff5f5;
+  color: #a51e2d;
   font-size: 0.66rem;
   font-weight: 800;
 }
@@ -896,8 +896,8 @@ onMounted(() => {
 .act-detail:hover { background: #f0fdfa !important; }
 .act-prospect { color: #c54b59 !important; }
 .act-prospect:hover { background: #f5f3ff !important; }
-.act-view { color: #d14350 !important; }
-.act-view:hover { background: #fff1f2 !important; }
+.act-view { color: #e63946 !important; }
+.act-view:hover { background: #fff0f1 !important; }
 .act-edit { color: #059669 !important; }
 .act-edit:hover { background: #ecfdf5 !important; }
 .act-map { color: #ea580c !important; }
@@ -917,7 +917,7 @@ onMounted(() => {
   text-align: center;
 }
 
-.state-icon { color: #d14350; font-size: 1.5rem; }
+.state-icon { color: #e63946; font-size: 1.5rem; }
 
 .state-icon-wrap {
   display: grid;

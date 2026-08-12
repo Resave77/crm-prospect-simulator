@@ -33,8 +33,8 @@ type createCommentRequest struct {
 }
 
 type setPhotoTagRequest struct {
-	PhotoIndex int    `json:"photoIndex"`
-	Category   string `json:"category"`
+	PhotoName string `json:"photoName"`
+	Category  string `json:"category"`
 }
 
 func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
@@ -577,7 +577,7 @@ func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
 	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
 	}
-	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoIndex, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
+	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoName, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -670,8 +670,6 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusServiceUnavailable, "MENU_IMAGES_NOT_CONFIGURED", err.Error())
 	case errors.Is(err, service.ErrPlacePhotoUnavailable):
 		return response.Error(c, fiber.StatusBadGateway, "PLACE_PHOTO_UNAVAILABLE", "The place photo is temporarily unavailable.")
-	case errors.Is(err, repository.ErrPhotoTagSchemaUnsupported):
-		return response.Error(c, fiber.StatusServiceUnavailable, "PHOTO_TAGGING_UNAVAILABLE", "Photo tagging is unavailable with the current database schema.")
 	case errors.Is(err, service.ErrAlreadyCustomer):
 		return response.Error(c, fiber.StatusConflict, "ALREADY_CUSTOMER", "This place is already an existing customer and cannot be assigned to sales.")
 	case errors.Is(err, service.ErrProspectStatus), errors.Is(err, repository.ErrInvalidStatus):

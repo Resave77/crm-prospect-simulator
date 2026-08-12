@@ -14,6 +14,7 @@ import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
+import { getPlacePhotoBlob } from '../../../api/crm'
 import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
 const toast = useToast()
@@ -78,6 +79,8 @@ const success = ref('')
 const detailOpen = ref(false)
 const previewOpen = ref(false)
 const previewPhoto = ref<{ url: string; alt: string; attribution?: string } | null>(null)
+const photoObjectUrls = ref<Record<string, string>>({})
+const failedPhotoNames = ref<Set<string>>(new Set())
 const pinOpen = ref(false)
 const pinName = ref('')
 const pinLat = ref(0)
@@ -107,6 +110,45 @@ const selectedSalesCount = computed(() => {
 // those values incorrectly classified storefront and street photos as menus.
 const menuPhotos = computed<PlacePhoto[]>(() => [])
 const regularPhotos = computed(() => placeDetails.value?.photos ?? [])
+
+let photoLoadToken = 0
+
+function revokePlacePhotoObjectUrls() {
+  photoLoadToken += 1
+  Object.values(photoObjectUrls.value).forEach((url) => URL.revokeObjectURL(url))
+  photoObjectUrls.value = {}
+  failedPhotoNames.value = new Set()
+}
+
+function resolvedPlacePhotoUrl(photo: PlacePhoto) {
+  return photoObjectUrls.value[photo.name] ?? ''
+}
+
+function canShowPlacePhoto(photo: PlacePhoto) {
+  return !!resolvedPlacePhotoUrl(photo) && !failedPhotoNames.value.has(photo.name)
+}
+
+async function loadPlacePhotoObjectUrls(photos: PlacePhoto[]) {
+  revokePlacePhotoObjectUrls()
+  const token = photoLoadToken
+  if (!photos.length) return
+
+  await Promise.all(photos.map(async (photo) => {
+    try {
+      const blob = await getPlacePhotoBlob(photo.photoUrl)
+      if (token !== photoLoadToken) {
+        return
+      }
+      const objectUrl = URL.createObjectURL(blob)
+      photoObjectUrls.value = { ...photoObjectUrls.value, [photo.name]: objectUrl }
+    } catch {
+      if (token !== photoLoadToken) return
+      const next = new Set(failedPhotoNames.value)
+      next.add(photo.name)
+      failedPhotoNames.value = next
+    }
+  }))
+}
 
 function menuImageQuery() {
   const d = placeDetails.value
@@ -238,6 +280,14 @@ watch([placeDetails, placeDetailsLoading], async () => {
   }
 })
 
+watch(
+  () => (placeDetails.value?.photos ?? []).map((photo) => `${photo.name}:${photo.photoUrl}`).join('|'),
+  () => {
+    loadPlacePhotoObjectUrls(placeDetails.value?.photos ?? [])
+  },
+  { immediate: true },
+)
+
 const filteredResults = ref<PlaceResult[]>([])
 
 const menuBearingPrimaryTypes = new Set([
@@ -298,7 +348,7 @@ function markerIcon(item: PlaceResult, active = false) {
     return customerMarkerIcon(active)
   }
   const safeIcon = /^pi pi-[a-z-]+$/.test(item.markerIcon) ? item.markerIcon : 'pi pi-map-marker'
-  const safeColor = /^#[0-9a-f]{6}$/i.test(item.markerColor) ? item.markerColor : '#d14350'
+  const safeColor = /^#[0-9a-f]{6}$/i.test(item.markerColor) ? item.markerColor : '#e63946'
   return L.divIcon({
     className: 'finder-leaflet-icon-host',
     html: `<span class="finder-leaflet-marker${active ? ' is-selected' : ''}" style="--marker-color:${safeColor}"><i class="${safeIcon}"></i></span>`,
@@ -531,9 +581,9 @@ function drawSearchArea() {
   } else {
     searchCircle = L.circle(latlng, {
       radius: radius.value,
-      color: '#d14350',
+      color: '#e63946',
       weight: 1,
-      fillColor: '#df5a66',
+      fillColor: '#ef4e5d',
       fillOpacity: 0.06,
     }).addTo(map)
   }
@@ -723,6 +773,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  revokePlacePhotoObjectUrls()
   map?.remove()
   map = null
   centerMarker = null
@@ -1104,10 +1155,12 @@ onBeforeUnmount(() => {
         <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-book" /> Menu Photos</h3>
           <div v-if="menuPhotos.length" class="detail-photos-row">
-            <button v-for="photo in menuPhotos" :key="photo.name" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(photo.photoUrl, 'Menu photo', photo.attribution)">
-              <img :src="photo.photoUrl" alt="Menu photo" class="detail-photo" loading="lazy" />
-              <span class="detail-photo-badge"><i class="pi pi-book" /> Menu</span>
-            </button>
+            <template v-for="photo in menuPhotos" :key="photo.name">
+              <button v-if="canShowPlacePhoto(photo)" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(resolvedPlacePhotoUrl(photo), 'Menu photo', photo.attribution)">
+                <img :src="resolvedPlacePhotoUrl(photo)" alt="Menu photo" class="detail-photo" loading="lazy" />
+                <span class="detail-photo-badge"><i class="pi pi-book" /> Menu</span>
+              </button>
+            </template>
           </div>
           <div v-else-if="menuImagesLoading" class="detail-photo-empty"><i class="pi pi-spin pi-spinner" /> Mencari foto menu harga...</div>
           <div v-else-if="menuImages.length" class="menu-images">
@@ -1126,10 +1179,12 @@ onBeforeUnmount(() => {
         <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
           <div v-if="regularPhotos.length" class="detail-photos-row">
-            <button v-for="photo in regularPhotos" :key="photo.name" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(photo.photoUrl, 'Place photo', photo.attribution)">
-              <img :src="photo.photoUrl" alt="Place photo" class="detail-photo" loading="lazy" />
-              <span class="detail-photo-badge"><i class="pi pi-images" /> Photo</span>
-            </button>
+            <template v-for="photo in regularPhotos" :key="photo.name">
+              <button v-if="canShowPlacePhoto(photo)" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(resolvedPlacePhotoUrl(photo), 'Place photo', photo.attribution)">
+                <img :src="resolvedPlacePhotoUrl(photo)" alt="Place photo" class="detail-photo" loading="lazy" />
+                <span class="detail-photo-badge"><i class="pi pi-images" /> Photo</span>
+              </button>
+            </template>
           </div>
           <div v-else class="detail-photo-empty"><i class="pi pi-images" /> No photos available</div>
         </div>
@@ -1367,11 +1422,11 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand-blue) 0%, #bb3342 100%);
+  background: linear-gradient(135deg, var(--brand-blue) 0%, #d62839 100%);
   border-radius: 0.7rem;
   font-size: 0.85rem;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px -2px rgba(209, 67, 80, 0.45);
+  box-shadow: 0 4px 12px -2px rgba(230, 57, 70, 0.45);
 }
 
 .finder-panel-title h1 {
@@ -1470,7 +1525,7 @@ onBeforeUnmount(() => {
 
 .keyword-input-wrap :deep(.p-inputtext:focus) {
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
+  box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.10);
 }
 
 /* Categories */
@@ -1524,9 +1579,9 @@ onBeforeUnmount(() => {
 .category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); transform: translateY(-1px); }
 
 .category-chip.active {
-  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff5f6 100%);
+  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff5f5 100%);
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 1px rgba(209, 67, 80, 0.14), 0 2px 6px -2px rgba(209, 67, 80, 0.25);
+  box-shadow: 0 0 0 1px rgba(230, 57, 70, 0.14), 0 2px 6px -2px rgba(230, 57, 70, 0.25);
 }
 
 .category-chip-icon {
@@ -1561,7 +1616,7 @@ onBeforeUnmount(() => {
 .radius-value {
   padding: 0.16rem 0.55rem;
   color: var(--brand-blue);
-  background: linear-gradient(135deg, var(--brand-blue-50), #fff5f6);
+  background: linear-gradient(135deg, var(--brand-blue-50), #fff5f5);
   border: 1px solid var(--brand-blue-100);
   border-radius: 999px;
   font-size: 0.65rem;
@@ -1607,7 +1662,7 @@ onBeforeUnmount(() => {
 .coordinate-grid input:focus {
   outline: none;
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
+  box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.10);
 }
 
 .gps-button {
@@ -1646,7 +1701,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, var(--brand-blue) 0%, #b13a48 100%);
   border-color: var(--brand-blue);
   color: #fff;
-  box-shadow: 0 2px 8px -2px rgba(209, 67, 80, 0.45);
+  box-shadow: 0 2px 8px -2px rgba(230, 57, 70, 0.45);
 }
 
 /* Filter Actions */
@@ -1815,7 +1870,7 @@ onBeforeUnmount(() => {
 
 .floating-results-search input:focus {
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
+  box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.10);
 }
 
 .floating-results-search input::placeholder { color: var(--text-faint); }
@@ -1868,14 +1923,14 @@ onBeforeUnmount(() => {
 .result-card:hover {
   border-color: var(--brand-blue-100);
   background: #f8faff;
-  box-shadow: 0 4px 14px -4px rgba(209, 67, 80, 0.16);
+  box-shadow: 0 4px 14px -4px rgba(230, 57, 70, 0.16);
   transform: translateY(-1px);
 }
 
 .result-card.selected {
   border-color: var(--brand-blue);
   background: linear-gradient(135deg, #f5f8ff 0%, #eef3ff 100%);
-  box-shadow: 0 0 0 2px rgba(209, 67, 80, 0.12), 0 6px 16px -4px rgba(209, 67, 80, 0.18);
+  box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.12), 0 6px 16px -4px rgba(230, 57, 70, 0.18);
 }
 
 .result-marker {
@@ -2115,8 +2170,8 @@ onBeforeUnmount(() => {
   height: 42px;
   place-content: center;
   border-radius: 12px;
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
 }
 
 .map-empty-state strong,
@@ -2126,8 +2181,8 @@ onBeforeUnmount(() => {
 .map-loading-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #ffd9dd;
-  border-top-color: #d14350;
+  border: 3px solid #ffd9dc;
+  border-top-color: #e63946;
   border-radius: 50%;
   animation: finder-spin 0.75s linear infinite;
 }
@@ -2868,7 +2923,7 @@ onBeforeUnmount(() => {
 .finder-leaflet-marker.is-selected {
   width: 44px;
   height: 44px;
-  box-shadow: 0 0 0 6px rgba(209, 67, 80, 0.16),
+  box-shadow: 0 0 0 6px rgba(230, 57, 70, 0.16),
               0 8px 22px rgba(22, 41, 67, 0.38);
 }
 

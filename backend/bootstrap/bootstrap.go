@@ -7,6 +7,7 @@ import (
 	"crm-prospect-simulator/backend/config"
 	adminrepository "crm-prospect-simulator/backend/internal/admin/repository"
 	adminservice "crm-prospect-simulator/backend/internal/admin/service"
+	aiservice "crm-prospect-simulator/backend/internal/ai/service"
 	"crm-prospect-simulator/backend/internal/auth/repository"
 	"crm-prospect-simulator/backend/internal/auth/service"
 	customerrepository "crm-prospect-simulator/backend/internal/customer/repository"
@@ -38,6 +39,8 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	authService := service.NewAuthService(repo, repo, tokens, cfg.RefreshTokenTTL)
 	prospectRepo := prospectrepository.NewPostgresRepository(pool)
 	placesClient := prospectservice.NewGooglePlacesClient(cfg.GoogleMapsAPIKey, cfg.GoogleCSEID, cfg.GoogleCSEAPIKey)
+	aiClient := aiservice.NewClient(cfg)
+	_ = aiservice.NewProspectAI(aiClient, cfg.AIChatMaxLength, cfg.AIChatMaxHistory)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)

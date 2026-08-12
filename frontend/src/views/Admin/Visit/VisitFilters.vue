@@ -93,7 +93,7 @@ const customerSelect = computed({
 .filter-search:focus-within {
   background: var(--surface-card);
   border-color: var(--brand-blue);
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
 .filter-search i {

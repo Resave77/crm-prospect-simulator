@@ -15,6 +15,8 @@ type fakeProspectRepository struct {
 	prospect      prospectmodel.Prospect
 	history       []prospectmodel.StatusHistory
 	teamDashboard prospectmodel.TeamDashboard
+	photoTags     []prospectmodel.ProspectPhotoTag
+	upsertedTag   *prospectmodel.ProspectPhotoTag
 }
 
 type fakePlaces struct{ calls int }
@@ -144,11 +146,23 @@ func (f *fakeProspectRepository) DeleteComment(_ context.Context, _ uuid.UUID, _
 func (f *fakeProspectRepository) FindCommentAttachment(_ context.Context, _ uuid.UUID, _ uuid.UUID) (prospectmodel.CommentAttachment, error) {
 	return prospectmodel.CommentAttachment{}, nil
 }
-func (f *fakeProspectRepository) ListPhotoTags(_ context.Context, _ uuid.UUID) ([]prospectmodel.ProspectPhotoTag, error) {
-	return []prospectmodel.ProspectPhotoTag{}, nil
+func (f *fakeProspectRepository) ListPhotoTags(_ context.Context, prospectID uuid.UUID) ([]prospectmodel.ProspectPhotoTag, error) {
+	if f.prospect.ID != prospectID {
+		return []prospectmodel.ProspectPhotoTag{}, nil
+	}
+	return f.photoTags, nil
 }
-func (f *fakeProspectRepository) UpsertPhotoTag(_ context.Context, prospectID uuid.UUID, photoIndex int, category prospectmodel.PhotoCategory, userID uuid.UUID) (prospectmodel.ProspectPhotoTag, error) {
-	return prospectmodel.ProspectPhotoTag{ProspectID: prospectID, PhotoIndex: photoIndex, Category: category, UpdatedBy: &userID}, nil
+func (f *fakeProspectRepository) UpsertPhotoTag(_ context.Context, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory, userID uuid.UUID) (prospectmodel.ProspectPhotoTag, error) {
+	item := prospectmodel.ProspectPhotoTag{ProspectID: prospectID, PhotoName: photoName, Category: category, UpdatedBy: &userID}
+	f.upsertedTag = &item
+	for i, existing := range f.photoTags {
+		if existing.PhotoName == photoName {
+			f.photoTags[i] = item
+			return item, nil
+		}
+	}
+	f.photoTags = append(f.photoTags, item)
+	return item, nil
 }
 func (f *fakeProspectRepository) ProspectAccessibleTo(_ context.Context, _ uuid.UUID, _ uuid.UUID) (bool, error) {
 	return true, nil
@@ -406,5 +420,107 @@ func TestChunkTypesEmptyKeepsSingleChunk(t *testing.T) {
 	chunks := chunkTypes(nil, maxTypesPerRequest)
 	if len(chunks) != 1 || chunks[0] != nil {
 		t.Fatalf("expected single nil chunk, got %+v", chunks)
+	}
+}
+
+const validTestPhotoName = "places/ChIJTestPlace/photos/AUyValidPhotoRef"
+
+func TestSetPhotoTagStoresPhotoName(t *testing.T) {
+	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: uuid.New()}}
+	actor := Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}
+	item, err := New(repo).SetPhotoTag(context.Background(), actor, repo.prospect.ID, validTestPhotoName, prospectmodel.PhotoCategoryMenu)
+	if err != nil {
+		t.Fatalf("set photo tag: %v", err)
+	}
+	if repo.upsertedTag == nil {
+		t.Fatal("expected repository upsert to be called")
+	}
+	if repo.upsertedTag.PhotoName != validTestPhotoName {
+		t.Fatalf("expected photoName %q to be stored, got %q", validTestPhotoName, repo.upsertedTag.PhotoName)
+	}
+	if repo.upsertedTag.Category != prospectmodel.PhotoCategoryMenu {
+		t.Fatalf("expected MENU category, got %q", repo.upsertedTag.Category)
+	}
+	if item.PhotoName != validTestPhotoName {
+		t.Fatalf("returned tag photoName mismatch: %q", item.PhotoName)
+	}
+}
+
+func TestSetPhotoTagUpsertsSamePhotoName(t *testing.T) {
+	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: uuid.New()}}
+	actor := Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}
+	svc := New(repo)
+	if _, err := svc.SetPhotoTag(context.Background(), actor, repo.prospect.ID, validTestPhotoName, prospectmodel.PhotoCategoryMenu); err != nil {
+		t.Fatalf("first tag: %v", err)
+	}
+	if _, err := svc.SetPhotoTag(context.Background(), actor, repo.prospect.ID, validTestPhotoName, prospectmodel.PhotoCategoryPlace); err != nil {
+		t.Fatalf("second tag: %v", err)
+	}
+	if len(repo.photoTags) != 1 {
+		t.Fatalf("expected a single upserted row for the same photoName, got %d", len(repo.photoTags))
+	}
+	if repo.photoTags[0].Category != prospectmodel.PhotoCategoryPlace {
+		t.Fatalf("expected PLACE after re-tag, got %q", repo.photoTags[0].Category)
+	}
+}
+
+func TestSetPhotoTagRejectsInvalidCategory(t *testing.T) {
+	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: uuid.New()}}
+	_, err := New(repo).SetPhotoTag(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}, repo.prospect.ID, validTestPhotoName, prospectmodel.PhotoCategory("FOOD"))
+	if !errors.Is(err, ErrPhotoTagInvalid) {
+		t.Fatalf("expected ErrPhotoTagInvalid for bad category, got %v", err)
+	}
+	if repo.upsertedTag != nil {
+		t.Fatal("repository must not be called for an invalid category")
+	}
+}
+
+func TestSetPhotoTagRejectsInvalidPhotoName(t *testing.T) {
+	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: uuid.New()}}
+	for _, name := range []string{"", "not-a-photo", "places/ChIJTestPlace", "places//photos/ref"} {
+		_, err := New(repo).SetPhotoTag(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}, repo.prospect.ID, name, prospectmodel.PhotoCategoryMenu)
+		if !errors.Is(err, ErrPhotoTagInvalid) {
+			t.Fatalf("photoName %q: expected ErrPhotoTagInvalid, got %v", name, err)
+		}
+	}
+	if repo.upsertedTag != nil {
+		t.Fatal("repository must not be called for an invalid photoName")
+	}
+}
+
+func TestListPhotoTagsReturnsStoredPhotoName(t *testing.T) {
+	repo := &fakeProspectRepository{
+		prospect:  prospectmodel.Prospect{ID: uuid.New(), AssignedSalesExecutiveID: uuid.New()},
+		photoTags: []prospectmodel.ProspectPhotoTag{{ID: uuid.New(), ProspectID: uuid.New(), PhotoName: validTestPhotoName, Category: prospectmodel.PhotoCategoryMenu}},
+	}
+	items, err := New(repo).ListPhotoTags(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}, repo.prospect.ID)
+	if err != nil {
+		t.Fatalf("list photo tags: %v", err)
+	}
+	if len(items) != 1 || items[0].PhotoName != validTestPhotoName || items[0].Category != prospectmodel.PhotoCategoryMenu {
+		t.Fatalf("expected stored photoName/category to round-trip, got %+v", items)
+	}
+}
+
+func TestSetPhotoTagAccessControl(t *testing.T) {
+	prospectID := uuid.New()
+	repo := &fakeProspectRepository{prospect: prospectmodel.Prospect{ID: prospectID, AssignedSalesExecutiveID: uuid.New()}}
+	admin := Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}
+	if _, err := New(repo).SetPhotoTag(context.Background(), admin, prospectID, validTestPhotoName, prospectmodel.PhotoCategoryMenu); err != nil {
+		t.Fatalf("admin must be allowed to tag: %v", err)
+	}
+	salesWithoutPermission := Actor{UserID: uuid.New(), Role: authmodel.RoleSalesExecutive, PermissionKeys: []string{}}
+	if _, err := New(repo).SetPhotoTag(context.Background(), salesWithoutPermission, prospectID, validTestPhotoName, prospectmodel.PhotoCategoryMenu); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected forbidden for sales without permission, got %v", err)
+	}
+	salesWithPermission := Actor{UserID: uuid.New(), Role: authmodel.RoleSalesExecutive, PermissionKeys: []string{"view_my_prospect_detail"}}
+	if _, err := New(repo).SetPhotoTag(context.Background(), salesWithPermission, prospectID, validTestPhotoName, prospectmodel.PhotoCategoryMenu); err != nil {
+		t.Fatalf("expected sales with view permission to tag, got %v", err)
+	}
+	if _, err := New(repo).ListPhotoTags(context.Background(), salesWithoutPermission, prospectID); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected forbidden read for sales without permission, got %v", err)
+	}
+	if _, err := New(repo).ListPhotoTags(context.Background(), salesWithPermission, prospectID); err != nil {
+		t.Fatalf("expected sales with view permission to read tags, got %v", err)
 	}
 }

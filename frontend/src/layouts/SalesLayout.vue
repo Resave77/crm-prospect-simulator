@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="sales-layout">
     <!-- Desktop sidebar -->
     <aside class="sales-sidebar">
@@ -322,9 +322,9 @@ function refreshPage() {
 
 .sales-nav .nav-item.router-link-active {
   color: var(--brand-blue);
-  background: #fff1f2;
+  background: #fff0f1;
   font-weight: 700;
-  box-shadow: inset 0 0 0 1px rgba(209, 67, 80, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(230, 57, 70, 0.05);
 }
 
 .sales-nav .nav-item.router-link-active i {
@@ -466,12 +466,12 @@ function refreshPage() {
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand-blue), #bb3342);
+  background: linear-gradient(135deg, var(--brand-blue), #d62839);
   border-radius: 50%;
   font-size: 0.72rem;
   font-weight: 800;
   flex-shrink: 0;
-  box-shadow: 0 3px 8px -2px rgba(209, 67, 80, 0.45);
+  box-shadow: 0 3px 8px -2px rgba(230, 57, 70, 0.45);
 }
 
 .profile-menu summary .profile-info {
@@ -632,7 +632,7 @@ function refreshPage() {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--brand-blue), #bb3342);
+  background: linear-gradient(135deg, var(--brand-blue), #d62839);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 800;

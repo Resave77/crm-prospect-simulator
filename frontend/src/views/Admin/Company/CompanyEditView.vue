@@ -207,14 +207,14 @@ onMounted(async () => {
 .subtitle-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.1rem; }
 .page-heading-actions { display: flex; gap: 0.5rem; align-items: center; padding-top: 0.15rem; }
 .code-tag { display: inline-block; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.78rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; background: #f1f5f9; color: var(--text-secondary); }
-.code-blue { background: #fff1f2; color: #d14350; }
+.code-blue { background: #fff0f1; color: #e63946; }
 
 .form-layout { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; align-items: start; }
 .form-stack { display: flex; flex-direction: column; gap: 1.25rem; }
 .form-card { background: var(--surface-card); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-xs); }
 .form-card-header { display: flex; align-items: flex-start; gap: 0.85rem; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid #f0f3f7; }
 .form-card-icon { width: 40px; height: 40px; border-radius: var(--radius-md); display: grid; place-content: center; font-size: 1rem; flex-shrink: 0; }
-.si-blue { background: #fff1f2; color: #d14350; }
+.si-blue { background: #fff0f1; color: #e63946; }
 .si-amber { background: #fffbeb; color: #d97706; }
 .si-slate { background: #f1f5f9; color: #64748b; }
 .form-card-header h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); }

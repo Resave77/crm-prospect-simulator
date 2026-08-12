@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { getMyProspect, getProspectPlaceDetails } from '../../../api/crm'
+import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
 import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
+import AISummaryCard from '../../../components/prospect-ai/AISummaryCard.vue'
+import AIMenuProfilingCard from '../../../components/prospect-ai/AIMenuProfilingCard.vue'
+import TanyaAICard from '../../../components/prospect-ai/TanyaAICard.vue'
 import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { formatPlaceType, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
@@ -15,6 +19,8 @@ import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../
 import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const review = ref<ProspectReview | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
 const error = ref('')
@@ -25,6 +31,7 @@ const showLegend = ref(false)
 const showAllVisits = ref(false)
 const showAllStatusHistory = ref(false)
 const showAllReviews = ref(false)
+const expandedPanel = ref<'summary' | 'discussion' | 'chat' | null>(null)
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
@@ -34,6 +41,10 @@ let geoWatchId: number | null = null
 let desktopQuery: MediaQueryList | null = null
 
 const openVisit = computed(() => review.value?.visits.find((v) => !v.checkOutAt) ?? null)
+const canViewAISummary = computed(() => auth.hasPermission('view_ai_summary'))
+const canViewAIMenuProfiling = computed(() => auth.hasPermission('view_ai_menu_profiling'))
+const canUseProspectAIChat = computed(() => auth.hasPermission('use_prospect_ai_chat'))
+const hasPhotos = computed(() => (placeDetails.value?.photos?.length ?? 0) > 0)
 
 const statusSeverity = computed(() => {
   const s = review.value?.prospect.status
@@ -66,8 +77,31 @@ const displayedReviews = computed(() => {
   return showAllReviews.value ? items : items.slice(0, 4)
 })
 
+
+function openExpandedPanel(panel: 'summary' | 'discussion' | 'chat') {
+  expandedPanel.value = panel
+  document.body.style.overflow = 'hidden'
+}
+
+function closeExpandedPanel() {
+  expandedPanel.value = null
+  document.body.style.overflow = ''
+}
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && expandedPanel.value) closeExpandedPanel()
+}
+
 function syncDesktop(value: MediaQueryList | MediaQueryListEvent) {
   isDesktop.value = value.matches
+}
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/sales/my-prospects')
 }
 
 function navigate() {
@@ -124,6 +158,7 @@ onMounted(async () => {
   desktopQuery = window.matchMedia('(min-width: 1024px)')
   syncDesktop(desktopQuery)
   desktopQuery.addEventListener('change', syncDesktop)
+  window.addEventListener('keydown', onGlobalKeydown)
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
@@ -139,20 +174,30 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (geoWatchId != null) navigator.geolocation?.clearWatch(geoWatchId)
   desktopQuery?.removeEventListener('change', syncDesktop)
+  window.removeEventListener('keydown', onGlobalKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
 <template>
   <section class="detail-page">
-    <RouterLink class="back-link" to="/sales/my-prospects"><i class="pi pi-arrow-left" /></RouterLink>
+    <button
+      class="back-link"
+      type="button"
+      aria-label="Back to previous page"
+      title="Back"
+      @click="goBack"
+    >
+      <i class="pi pi-arrow-left" />
+    </button>
 
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
 
-    <!-- Data Source Legend -->
     <div class="ds-legend">
-      <button class="ds-legend-toggle" @click="showLegend = !showLegend">
-        <i class="pi pi-info-circle" /> Data source legend
+      <button class="ds-legend-toggle" type="button" @click="showLegend = !showLegend">
+        <i class="pi pi-info-circle" />
+        <span>Data source legend</span>
         <i :class="showLegend ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
       </button>
       <div v-if="showLegend" class="ds-legend-body">
@@ -164,10 +209,9 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>
-      <div class="sk-gallery" />
       <div class="sk-card"><div class="sk-line w60" /><div class="sk-line w80" /><div class="sk-line w50" /></div>
       <div class="sk-card"><div class="sk-map" /><div class="sk-line w70" /></div>
-      <div class="sk-card"><div class="sk-line w40" /><div class="sk-line w80" /></div>
+      <div class="sk-gallery" />
     </div>
 
     <div v-else-if="!review" class="detail-empty">
@@ -178,102 +222,63 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <!-- Summary Card -->
-      <div class="dcard dcard-summary">
-        <div class="dcard-summary-top">
-          <div class="dcard-avatar dcard-avatar-prospect">{{ initials(review.prospect.placeName || 'Prospect') }}</div>
+      <!-- Reference-style header: identity + actions, not a duplicated detail card -->
+      <header class="prospect-hero">
+        <div class="hero-breadcrumb"><span>Prospect</span><i class="pi pi-angle-right" /><strong>Detail</strong></div>
 
-          <div class="dcard-identity">
-            <div class="dcard-title-line">
-              <div>
-                <p class="eyebrow">Prospect Detail</p>
-                <h1>
-                  {{ review.prospect.placeName || 'Unnamed Prospect' }}
-                  <DataSourceBadge source="google" label="Google" />
-                </h1>
-              </div>
-              <Tag
-                class="summary-status"
-                :value="review.prospect.status.replaceAll('_', ' ')"
-                :severity="statusSeverity"
-              />
+        <div class="hero-row">
+          <div class="hero-identity">
+            <div class="hero-title-row">
+              <h1>{{ review.prospect.placeName || 'Unnamed Prospect' }}</h1>
+              <DataSourceBadge source="google" label="Google" />
             </div>
-
-            <div v-if="review.prospect.formattedAddress" class="summary-address">
+            <div v-if="review.prospect.formattedAddress" class="hero-address">
               <i class="pi pi-map-marker" />
               <span>{{ review.prospect.formattedAddress }}</span>
             </div>
           </div>
+
+          <div class="hero-actions">
+            <button
+              class="hero-action hero-action-nav"
+              type="button"
+              :disabled="review.prospect.latitude == null && review.prospect.longitude == null && !review.prospect.formattedAddress"
+              @click="navigate"
+            >
+              <i class="pi pi-directions" /> Navigate
+            </button>
+            <a
+              v-if="review.prospect.phoneNumber && isValidPhone(review.prospect.phoneNumber)"
+              :href="`tel:${review.prospect.phoneNumber}`"
+              class="hero-action hero-action-call"
+            >
+              <i class="pi pi-phone" /> Call
+            </a>
+            <span v-else class="hero-action hero-action-call hero-action-disabled"><i class="pi pi-phone" /> Call</span>
+            <RouterLink
+              v-if="openVisit"
+              class="hero-action hero-action-visit"
+              :to="`/sales/my-prospects/${review.prospect.id}/check-out`"
+            >
+              <i class="pi pi-sign-out" /> Check out
+            </RouterLink>
+            <RouterLink
+              v-else
+              class="hero-action hero-action-visit"
+              :to="`/sales/my-prospects/${review.prospect.id}/check-in`"
+            >
+              <i class="pi pi-sign-in" /> Check in
+            </RouterLink>
+          </div>
+
+          <Tag
+            class="hero-status"
+            :value="review.prospect.status.replaceAll('_', ' ')"
+            :severity="statusSeverity"
+          />
         </div>
+      </header>
 
-        <div class="summary-meta-grid">
-          <div class="summary-meta-item">
-            <span class="summary-meta-label">
-              <i class="pi pi-user" /> Assigned Sales
-              <DataSourceBadge source="manual" label="Manual" />
-            </span>
-            <strong>{{ review.prospect.assignedSalesExecutive || 'Unassigned' }}</strong>
-          </div>
-
-          <div class="summary-meta-item">
-            <span class="summary-meta-label">
-              <i class="pi pi-phone" /> Phone
-              <DataSourceBadge source="google" label="Google" />
-            </span>
-            <strong>{{ review.prospect.phoneNumber || 'Not provided' }}</strong>
-          </div>
-
-          <div class="summary-meta-item">
-            <span class="summary-meta-label">
-              <i class="pi pi-tag" /> Category
-              <DataSourceBadge source="google" label="Google" />
-            </span>
-            <strong>{{ review.prospect.placeCategory || 'Not provided' }}</strong>
-          </div>
-
-          <div class="summary-meta-item">
-            <span class="summary-meta-label">
-              <i class="pi pi-briefcase" /> Industry
-              <DataSourceBadge source="google" label="Google" />
-            </span>
-            <strong>{{ review.prospect.industryGroup || 'Not provided' }}</strong>
-          </div>
-        </div>
-
-        <div class="dcard-codes">
-          <div class="dcard-code-item">
-            <span>Google Place ID <DataSourceBadge source="google" label="Google" /></span>
-            <strong>{{ review.prospect.googlePlaceId || '-' }}</strong>
-          </div>
-          <div class="dcard-code-item">
-            <span>Last Updated <DataSourceBadge source="system" label="CRM" /></span>
-            <strong>{{ new Date(review.prospect.updatedAt).toLocaleString() }}</strong>
-          </div>
-        </div>
-
-        <div class="dcard-tags">
-          <Tag v-if="review.prospect.placeCategory" :value="review.prospect.placeCategory" severity="secondary" />
-          <Tag v-if="review.prospect.industryGroup" :value="review.prospect.industryGroup" />
-          <template v-if="placeDetails">
-            <Tag
-              v-if="placeDetails.businessStatus"
-              :value="businessStatusLabel(placeDetails.businessStatus)"
-              :severity="businessStatusSeverity(placeDetails.businessStatus)"
-            />
-            <Tag
-              v-if="placeDetails.priceLevel"
-              :value="priceLevelLabel(placeDetails.priceLevel)"
-              :severity="priceLevelSeverity(placeDetails.priceLevel)"
-            />
-          </template>
-        </div>
-
-        <div v-if="displayTypes.length" class="dcard-type-badges">
-          <span v-for="t in displayTypes" :key="t" class="dcard-type-badge">{{ formatPlaceType(t) }}</span>
-        </div>
-      </div>
-
-      <!-- Active Visit Alert -->
       <div v-if="openVisit" class="dcard dcard-active-visit">
         <div class="dcard-active-visit-row">
           <i class="pi pi-sign-in" />
@@ -285,1057 +290,956 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="detail-content-grid">
-        <div class="detail-column detail-column-main">
-      <!-- Google Maps Info Card -->
-      <div v-if="placeDetails" class="dcard dcard-google-info">
-        <h2>Google Maps Info <DataSourceBadge source="google" label="Google" /></h2>
-        <p v-if="placeDetails.editorialSummary" class="dcard-editorial">{{ placeDetails.editorialSummary }}</p>
-        <div class="dcard-info-grid">
-          <div v-if="placeDetails.rating > 0" class="dcard-info-item">
-            <div class="dcard-rating">
-              <span class="dcard-rating-num">{{ placeDetails.rating.toFixed(1) }}</span>
-              <div class="dcard-stars">
-                <i v-for="(s, i) in stars(placeDetails.rating)" :key="i" :class="['pi', s]" />
+        <!-- LEFT / MAIN: kept long so empty menu/photo states can never leave a tall dead zone -->
+        <main class="detail-column detail-column-main">
+          <section class="dcard dcard-prospect-core">
+            <div class="section-heading">
+              <h2>Prospect Detail</h2>
+              <DataSourceBadge source="manual" label="CRM" />
+            </div>
+
+            <div class="prospect-detail-grid">
+              <div class="detail-field">
+                <span><i class="pi pi-user" /> Assigned Sales</span>
+                <strong>{{ review.prospect.assignedSalesExecutive || 'Unassigned' }}</strong>
+                <DataSourceBadge source="manual" label="Manual" />
               </div>
-              <span class="dcard-rating-count">({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
-            </div>
-          </div>
-          <div v-if="placeDetails.websiteUrl" class="dcard-info-item">
-            <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener" class="dcard-link">
-              <i class="pi pi-external-link" /> Website
-            </a>
-          </div>
-          <div v-if="placeDetails.googleMapsUrl" class="dcard-info-item">
-            <a :href="placeDetails.googleMapsUrl" target="_blank" rel="noopener" class="dcard-link">
-              <i class="pi pi-map" /> View on Google Maps
-            </a>
-          </div>
-          <div v-if="placeDetails.phoneNumber" class="dcard-info-item">
-            <a :href="`tel:${placeDetails.phoneNumber}`" class="dcard-link">
-              <i class="pi pi-phone" /> {{ placeDetails.phoneNumber }}
-            </a>
-            <span v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber" class="dcard-intl-phone">
-              International: {{ placeDetails.internationalPhone }}
-            </span>
-          </div>
-        </div>
-        <div v-if="placeDetails.placeTypes?.length" class="dcard-types">
-          <span class="dcard-types-label">Categories:</span>
-          <Tag v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t" :value="t.replace(/_/g, ' ')" severity="secondary" class="dcard-type-tag" />
-        </div>
-        <div class="dcard-rows">
-          <div v-if="placeDetails.placeName" class="dcard-row">
-            <i class="pi pi-building" />
-            <span><strong>Google place:</strong> {{ placeDetails.placeName }}</span>
-          </div>
-          <div v-if="placeDetails.placeCategory" class="dcard-row">
-            <i class="pi pi-tag" />
-            <span><strong>Category:</strong> {{ placeDetails.placeCategory }}</span>
-          </div>
-          <div v-if="placeDetails.formattedAddress" class="dcard-row">
-            <i class="pi pi-map-marker" />
-            <span><strong>Google address:</strong> {{ placeDetails.formattedAddress }}</span>
-          </div>
-          <div v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== placeDetails.phoneNumber" class="dcard-row">
-            <i class="pi pi-phone" />
-            <span><strong>International phone:</strong> {{ placeDetails.internationalPhone }}</span>
-          </div>
-          <div v-if="placeDetails.googlePlaceId" class="dcard-row">
-            <i class="pi pi-id-card" />
-            <span class="dcard-place-id"><span>Google Place ID</span><code>{{ placeDetails.googlePlaceId }}</code></span>
-            <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
-          </div>
-          <div v-if="placeDetails.utcOffsetMinutes != null" class="dcard-row">
-            <i class="pi pi-globe" />
-            <span><strong>Time zone:</strong> {{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }} ({{ placeDetails.utcOffsetMinutes >= 0 ? '+' : '' }}{{ placeDetails.utcOffsetMinutes }} min from UTC)</span>
-          </div>
-          <div v-if="placeDetails.latitude != null && placeDetails.longitude != null" class="dcard-row dcard-row-coords">
-            <i class="pi pi-compass" />
-            <span>Google GPS: {{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Location Card -->
-      <div class="dcard dcard-location">
-        <div class="dcard-header-row">
-          <h2>Location <DataSourceBadge source="google" label="Google" /></h2>
-          <span v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords" class="dcard-distance-pill">
-            <i class="pi pi-compass" /> {{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away
-          </span>
-        </div>
-        <EntityLocationMap
-          :latitude="review.prospect.latitude"
-          :longitude="review.prospect.longitude"
-          :label="review.prospect.placeName"
-          :interactive="false"
-          height="200px"
-        />
-        <div class="dcard-location-rows">
-          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ review.prospect.formattedAddress || 'No address' }}</span></div>
-          <div v-if="review.prospect.latitude != null && review.prospect.longitude != null" class="dcard-row dcard-row-coords">
-            <i class="pi pi-compass" />
-            <span>GPS: {{ review.prospect.latitude?.toFixed(6) }}, {{ review.prospect.longitude?.toFixed(6) }}</span>
-            <button class="dcard-copy-btn" title="Copy coordinates" aria-label="Copy coordinates" @click="handleCopy(`${review.prospect.latitude}, ${review.prospect.longitude}`)"><i class="pi pi-copy" /></button>
-          </div>
-          <a v-if="review.prospect.googleMapsUrl" :href="review.prospect.googleMapsUrl" target="_blank" rel="noopener noreferrer" class="dcard-row dcard-row-link">
-            <i class="pi pi-external-link" /><span>Open in Google Maps</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Contact & Address -->
-      <div class="dcard dcard-contact">
-        <h2>Contact & Address</h2>
-        <div class="dcard-rows">
-          <div class="dcard-row"><i class="pi pi-building" /><span><strong>Place name:</strong> {{ review.prospect.placeName || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
-          <div class="dcard-row"><i class="pi pi-phone" /><span><strong>Phone:</strong> <a v-if="review.prospect.phoneNumber" :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a><template v-else>Not provided</template> <DataSourceBadge source="google" label="Google" /></span></div>
-          <div class="dcard-row"><i class="pi pi-globe" /><span><strong>Website:</strong> <a v-if="review.prospect.websiteUrl && isValidWebsite(review.prospect.websiteUrl)" :href="review.prospect.websiteUrl" target="_blank" rel="noopener">{{ websiteDisplayUrl(review.prospect.websiteUrl) }}</a><template v-else>Not provided</template> <DataSourceBadge source="google" label="Google" /></span></div>
-          <div class="dcard-row"><i class="pi pi-map-marker" /><span><strong>Address:</strong> {{ review.prospect.formattedAddress || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
-        </div>
-      </div>
-
-      <!-- Business Information -->
-      <div class="dcard dcard-business">
-        <h2>Business Information</h2>
-        <div class="dcard-rows">
-          <div class="dcard-row"><i class="pi pi-tag" /><span><strong>Category:</strong> {{ review.prospect.placeCategory || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
-          <div class="dcard-row"><i class="pi pi-briefcase" /><span><strong>Industry group:</strong> {{ review.prospect.industryGroup || 'Not provided' }} <DataSourceBadge source="google" label="Google" /></span></div>
-          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales executive:</strong> {{ review.prospect.assignedSalesExecutive || 'Unassigned' }} <DataSourceBadge source="manual" label="Manual" /></span></div>
-          <div class="dcard-row">
-            <i class="pi pi-id-card" />
-            <span class="dcard-place-id"><span>Google Place ID <DataSourceBadge source="google" label="Google" /></span><code>{{ review.prospect.googlePlaceId || 'Not provided' }}</code></span>
-            <button v-if="review.prospect.googlePlaceId" class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(review.prospect.googlePlaceId)"><i class="pi pi-copy" /></button>
-          </div>
-          <div class="dcard-row"><i class="pi pi-calendar-plus" /><span><strong>Created:</strong> {{ new Date(review.prospect.createdAt).toLocaleString() }} <DataSourceBadge source="system" label="CRM" /></span></div>
-          <div class="dcard-row"><i class="pi pi-refresh" /><span><strong>Updated:</strong> {{ new Date(review.prospect.updatedAt).toLocaleString() }} <DataSourceBadge source="system" label="CRM" /></span></div>
-        </div>
-      </div>
-
-        
-
-      <!-- Visit History -->
-      <div class="dcard dcard-visits history-card">
-        <div class="history-card-header">
-          <h2>Visit History</h2>
-          <span class="history-count">{{ review.visits.length }}</span>
-        </div>
-        <div v-if="review.visits.length" class="dcard-visit-list">
-          <div v-for="visit in displayedVisits" :key="visit.id" class="dcard-visit">
-            <div class="dcard-visit-header">
-              <Tag :value="visit.checkOutAt ? 'Completed' : 'Active'" :severity="visit.checkOutAt ? 'secondary' : 'success'" />
-              <span>{{ formatVisitDate(visit.checkInAt) }}</span>
-            </div>
-            <div class="dcard-visit-body">
-              <div class="dcard-visit-detail"><i class="pi pi-sign-in" /><span>Check-in: {{ visit.checkInLatitude.toFixed(4) }}, {{ visit.checkInLongitude.toFixed(4) }}</span></div>
-              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-sign-out" /><span>Check-out: {{ visit.checkOutLatitude?.toFixed(4) }}, {{ visit.checkOutLongitude?.toFixed(4) }}</span></div>
-              <div v-if="visit.checkOutAt" class="dcard-visit-detail"><i class="pi pi-clock" /><span>Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</span></div>
-              <div v-if="visit.visitNotes" class="dcard-visit-detail"><i class="pi pi-comment" /><span>{{ visit.visitNotes }}</span></div>
-              <div v-if="visit.followUpNotes" class="dcard-visit-detail"><i class="pi pi-directions" /><span>Follow-up: {{ visit.followUpNotes }}</span></div>
-              <div v-if="visit.selfieReference && visit.selfieReference !== 'SIMULATED_SELFIE_PLACEHOLDER'" class="dcard-visit-selfie">
-                <img :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference" alt="Visit selfie" />
+              <div class="detail-field">
+                <span><i class="pi pi-phone" /> Phone</span>
+                <strong>{{ review.prospect.phoneNumber || 'Not provided' }}</strong>
+                <DataSourceBadge source="google" label="Google" />
               </div>
-              <div class="dcard-visit-detail dcard-visit-exec"><i class="pi pi-user" /><span>{{ visit.salesExecutiveName }}</span></div>
+              <div class="detail-field">
+                <span><i class="pi pi-tag" /> Category</span>
+                <strong>{{ review.prospect.placeCategory || 'Not provided' }}</strong>
+                <DataSourceBadge source="google" label="Google" />
+              </div>
+              <div class="detail-field">
+                <span><i class="pi pi-briefcase" /> Industry</span>
+                <strong>{{ review.prospect.industryGroup || 'Not provided' }}</strong>
+                <DataSourceBadge source="google" label="Google" />
+              </div>
+              <div class="detail-field detail-field-wide">
+                <span><i class="pi pi-id-card" /> Google Place ID</span>
+                <strong class="wrap-anywhere">{{ review.prospect.googlePlaceId || '-' }}</strong>
+                <DataSourceBadge source="google" label="Google" />
+              </div>
+              <div class="detail-field detail-field-wide">
+                <span><i class="pi pi-refresh" /> Last Updated</span>
+                <strong>{{ new Date(review.prospect.updatedAt).toLocaleString() }}</strong>
+                <DataSourceBadge source="system" label="CRM" />
+              </div>
             </div>
-          </div>
-        </div>
-        <p v-else class="dcard-empty-text">No visits recorded yet.</p>
-        <button
-          v-if="review.visits.length > 2"
-          type="button"
-          class="section-toggle-btn"
-          @click="showAllVisits = !showAllVisits"
-        >
-          <span>{{ showAllVisits ? 'Show less' : `Show all ${review.visits.length} visits` }}</span>
-          <i :class="showAllVisits ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
-        </button>
-      </div>
-      </div>
 
-        <div class="detail-column detail-column-side">
-      <!-- Photos (Menu vs Photo, taggable) -->
-      <div v-if="placeDetails?.photos?.length" class="dcard dcard-photos">
-        <div class="photo-gallery-header">
-          <h2><i class="pi pi-images" /> Photos <DataSourceBadge source="google" label="Google" /></h2>
-          <div class="photo-gallery-controls" aria-label="Photo gallery navigation">
-            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos left" @click="scrollPhotos(-1)">
-              <i class="pi pi-chevron-left" />
-            </button>
-            <button type="button" class="photo-scroll-btn" aria-label="Scroll photos right" @click="scrollPhotos(1)">
-              <i class="pi pi-chevron-right" />
-            </button>
-          </div>
-        </div>
-        <div ref="photoGalleryShell" class="photo-gallery-shell">
-          <PlacePhotoGallery :photos="placeDetails.photos" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" />
-        </div>
-      </div>
-
-      <!-- Opening Hours Card -->
-      <div v-if="placeDetails?.openingHours" class="dcard dcard-hours">
-        <h2><i class="pi pi-clock" /> Opening Hours <DataSourceBadge source="google" label="Google" /></h2>
-        <div class="dcard-hours-status">
-          <span :class="['dcard-hours-dot', placeDetails.openingHours.openNow ? 'open' : 'closed']" />
-          <strong>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</strong>
-        </div>
-        <div v-if="placeDetails.openingHours.weekdays?.length" class="dcard-hours-list">
-          <div
-            v-for="(day, i) in (showAllHours ? placeDetails.openingHours.weekdays : placeDetails.openingHours.weekdays.slice(0, 3))"
-            :key="i"
-            class="dcard-hours-row"
-            v-html="day"
-          />
-          <button v-if="placeDetails.openingHours.weekdays.length > 3" class="dcard-hours-toggle" @click="showAllHours = !showAllHours">
-            {{ showAllHours ? 'Show less' : `Show all ${placeDetails.openingHours.weekdays.length} days` }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Service Options -->
-      <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="dcard dcard-services dcard-service-options">
-        <h2><i class="pi pi-shopping-bag" /> Service Options <DataSourceBadge source="google" label="Google" /></h2>
-        <div class="dcard-service-tags">
-          <Tag v-if="placeDetails.dineIn" value="Dine In" severity="success" />
-          <Tag v-if="placeDetails.takeout" value="Takeout" severity="info" />
-          <Tag v-if="placeDetails.delivery" value="Delivery" severity="warn" />
-          <Tag v-if="placeDetails.curbsidePickup" value="Curbside Pickup" severity="secondary" />
-        </div>
-      </div>
-
-      <!-- Amenities -->
-      <div v-if="(placeDetails?.parkingOptions) || (placeDetails?.paymentOptions) || (placeDetails?.accessibilityOptions)" class="dcard dcard-services dcard-amenities">
-        <h2><i class="pi pi-building" /> Amenities <DataSourceBadge source="google" label="Google" /></h2>
-        <div class="dcard-amenities-grid">
-          <div v-if="placeDetails?.parkingOptions" class="dcard-amenity-section">
-            <strong><i class="pi pi-directions" /> Parking</strong>
-            <div class="dcard-amenity-list">
-              <span v-if="placeDetails.parkingOptions.freeParkingLot" class="dcard-amenity-chip"><i class="pi pi-check" /> Free Lot</span>
-              <span v-if="placeDetails.parkingOptions.freeStreetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Free Street</span>
-              <span v-if="placeDetails.parkingOptions.paidParkingLot" class="dcard-amenity-chip"><i class="pi pi-check" /> Paid Lot</span>
-              <span v-if="placeDetails.parkingOptions.paidStreetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Paid Street</span>
-              <span v-if="placeDetails.parkingOptions.garageParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Garage</span>
-              <span v-if="placeDetails.parkingOptions.valetParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Valet</span>
+            <div class="prospect-tags">
+              <Tag v-if="review.prospect.placeCategory" :value="review.prospect.placeCategory" severity="secondary" />
+              <Tag v-if="review.prospect.industryGroup" :value="review.prospect.industryGroup" />
+              <Tag
+                v-if="placeDetails?.businessStatus"
+                :value="businessStatusLabel(placeDetails.businessStatus)"
+                :severity="businessStatusSeverity(placeDetails.businessStatus)"
+              />
+              <Tag
+                v-if="placeDetails?.priceLevel"
+                :value="priceLevelLabel(placeDetails.priceLevel)"
+                :severity="priceLevelSeverity(placeDetails.priceLevel)"
+              />
+              <span v-for="t in displayTypes" :key="t" class="type-chip">{{ formatPlaceType(t) }}</span>
             </div>
-          </div>
-          <div v-if="placeDetails?.paymentOptions && (placeDetails.paymentOptions.cashOnly || placeDetails.paymentOptions.creditCardOnly || placeDetails.paymentOptions.debitCardOnly || placeDetails.paymentOptions.nfcOnly)" class="dcard-amenity-section">
-            <strong><i class="pi pi-wallet" /> Payment</strong>
-            <div class="dcard-amenity-list">
-              <span v-if="placeDetails.paymentOptions.cashOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Cash</span>
-              <span v-if="placeDetails.paymentOptions.creditCardOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Credit Card</span>
-              <span v-if="placeDetails.paymentOptions.debitCardOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> Debit Card</span>
-              <span v-if="placeDetails.paymentOptions.nfcOnly" class="dcard-amenity-chip"><i class="pi pi-check" /> NFC</span>
+          </section>
+
+          <!-- Combined Google Maps Information like the reference -->
+          <section v-if="placeDetails" class="dcard dcard-google-info">
+            <div class="section-heading">
+              <h2>Google Maps Information</h2>
+              <DataSourceBadge source="google" label="Google" />
             </div>
-          </div>
-          <div v-if="placeDetails?.accessibilityOptions" class="dcard-amenity-section">
-            <strong><i class="pi pi-verified" /> Accessibility</strong>
-            <div class="dcard-amenity-list">
-              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleEntrance" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Entrance</span>
-              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleParking" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Parking</span>
-              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleRestroom" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Restroom</span>
-              <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleSeating" class="dcard-amenity-chip"><i class="pi pi-check" /> Wheelchair Seating</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Sales Notes -->
-      <div v-if="review.prospect.visitNotes || review.prospect.followUpNotes" class="dcard dcard-sales-notes">
-        <h2>Sales Notes</h2>
-        <div class="dcard-rows">
-          <div v-if="review.prospect.visitNotes" class="dcard-row"><i class="pi pi-comment" /><span><strong>Visit notes:</strong> {{ review.prospect.visitNotes }} <DataSourceBadge source="manual" label="Manual" /></span></div>
-          <div v-if="review.prospect.followUpNotes" class="dcard-row"><i class="pi pi-directions" /><span><strong>Follow-up:</strong> {{ review.prospect.followUpNotes }} <DataSourceBadge source="manual" label="Manual" /></span></div>
-        </div>
-      </div>
+            <div class="google-layout">
+              <div class="google-map-pane">
+                <EntityLocationMap
+                  :latitude="review.prospect.latitude"
+                  :longitude="review.prospect.longitude"
+                  :label="review.prospect.placeName"
+                  :interactive="false"
+                  height="245px"
+                />
+                <div class="map-footer">
+                  <a
+                    v-if="review.prospect.googleMapsUrl"
+                    :href="review.prospect.googleMapsUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View on Google Maps <i class="pi pi-external-link" />
+                  </a>
+                  <span
+                    v-if="review.prospect.latitude != null && review.prospect.longitude != null && userCoords"
+                    class="distance-pill"
+                  >
+                    {{ formatDistance(getDistanceTo(review.prospect.latitude, review.prospect.longitude, userCoords.lat, userCoords.lng)!) }} away
+                  </span>
+                </div>
+              </div>
 
-      <!-- Status History -->
-      <div class="dcard dcard-status-history history-card">
-        <div class="history-card-header">
-          <h2>Status History</h2>
-          <span class="history-count">{{ review.history.length }}</span>
-        </div>
-        <div v-if="review.history.length" class="dcard-timeline">
-          <div v-for="entry in displayedStatusHistory" :key="entry.id" class="dcard-timeline-entry">
-            <div class="dcard-timeline-dot" />
-            <div class="dcard-timeline-content">
-              <strong>{{ (entry.fromStatus || 'Created').replaceAll('_', ' ') }} → {{ entry.toStatus.replaceAll('_', ' ') }}</strong>
-              <span>{{ new Date(entry.createdAt).toLocaleString() }} · {{ entry.changedByName }}</span>
-              <p v-if="entry.notes">{{ entry.notes }}</p>
-            </div>
-          </div>
-        </div>
-        <p v-else class="dcard-empty-text">No status changes recorded.</p>
-        <button
-          v-if="review.history.length > 6"
-          type="button"
-          class="section-toggle-btn"
-          @click="showAllStatusHistory = !showAllStatusHistory"
-        >
-          <span>{{ showAllStatusHistory ? 'Show less' : `Show all ${review.history.length} changes` }}</span>
-          <i :class="showAllStatusHistory ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
-        </button>
-      </div>
-      
+              <div class="google-detail-pane">
+                <div v-if="placeDetails.rating > 0" class="rating-line">
+                  <strong>{{ placeDetails.rating.toFixed(1) }}</strong>
+                  <span class="stars"><i v-for="(s, i) in stars(placeDetails.rating)" :key="i" :class="['pi', s]" /></span>
+                  <span>({{ placeDetails.userRatingCount.toLocaleString() }} reviews)</span>
+                </div>
 
-        </div>
-      </div>
+                <p v-if="placeDetails.editorialSummary" class="google-editorial">{{ placeDetails.editorialSummary }}</p>
 
-      <!-- Reviews -->
-      <div class="detail-reviews-section">
-      <div v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
-        <div class="dcard-header-row">
-          <h2><i class="pi pi-comments" /> Reviews</h2>
-          <span class="section-count">{{ placeDetails.reviews.length }}</span>
-        </div>
-        <div class="dcard-reviews-list">
-          <div v-for="(item, i) in displayedReviews" :key="i" class="dcard-review">
-            <div class="dcard-review-header">
-              <img v-if="item.authorPhoto" :src="item.authorPhoto" class="dcard-review-avatar" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
-              <div v-else class="dcard-review-avatar-placeholder">{{ item.authorName?.charAt(0) || '?' }}</div>
-              <div class="dcard-review-meta">
-                <strong>{{ item.authorName }}</strong>
-                <div class="dcard-review-stars">
-                  <i v-for="(s, j) in stars(item.rating)" :key="j" :class="['pi', s]" />
-                  <span class="dcard-review-time">{{ item.time }}</span>
+                <div v-if="placeDetails.placeTypes?.length" class="category-line">
+                  <strong>Categories:</strong>
+                  <span v-for="t in placeDetails.placeTypes.slice(0, 6)" :key="t">{{ t.replace(/_/g, ' ') }}</span>
+                </div>
+
+                <div class="google-rows">
+                  <div v-if="placeDetails.placeName"><i class="pi pi-building" /><strong>Google place:</strong><span>{{ placeDetails.placeName }}</span></div>
+                  <div v-if="placeDetails.formattedAddress"><i class="pi pi-map-marker" /><strong>Google address:</strong><span>{{ placeDetails.formattedAddress }}</span></div>
+                  <div v-if="placeDetails.googlePlaceId">
+                    <i class="pi pi-id-card" /><strong>Google Place ID:</strong><span class="wrap-anywhere">{{ placeDetails.googlePlaceId }}</span>
+                    <button class="copy-mini" type="button" aria-label="Copy Google Place ID" @click="handleCopy(placeDetails.googlePlaceId)"><i class="pi pi-copy" /></button>
+                  </div>
+                  <div v-if="placeDetails.latitude != null && placeDetails.longitude != null">
+                    <i class="pi pi-compass" /><strong>Google GPS:</strong><span>{{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}</span>
+                  </div>
+                  <div v-if="placeDetails.placeCategory"><i class="pi pi-tag" /><strong>Category:</strong><span>{{ placeDetails.placeCategory }}</span></div>
+                  <div v-if="placeDetails.internationalPhone"><i class="pi pi-phone" /><strong>International phone:</strong><span>{{ placeDetails.internationalPhone }}</span></div>
+                  <div v-if="placeDetails.utcOffsetMinutes != null"><i class="pi pi-globe" /><strong>Time zone:</strong><span>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}</span></div>
+                  <div v-if="placeDetails.websiteUrl && isValidWebsite(placeDetails.websiteUrl)">
+                    <i class="pi pi-external-link" /><strong>Website:</strong>
+                    <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener">{{ websiteDisplayUrl(placeDetails.websiteUrl) }}</a>
+                  </div>
                 </div>
               </div>
             </div>
-            <p v-if="item.text" class="dcard-review-text">{{ item.text }}</p>
+          </section>
+
+          <!-- Completely omit the media card if Google returned no photos: no artificial blank box -->
+          <section v-if="hasPhotos" class="dcard dcard-photos">
+            <div class="section-heading section-heading-between">
+              <div class="section-title-inline">
+                <h2><i class="pi pi-images" /> Photos</h2>
+                <DataSourceBadge source="google" label="Google" />
+              </div>
+              <div class="photo-gallery-controls" aria-label="Photo gallery navigation">
+                <button type="button" class="photo-scroll-btn" aria-label="Scroll photos left" @click="scrollPhotos(-1)"><i class="pi pi-chevron-left" /></button>
+                <button type="button" class="photo-scroll-btn" aria-label="Scroll photos right" @click="scrollPhotos(1)"><i class="pi pi-chevron-right" /></button>
+              </div>
+            </div>
+            <div ref="photoGalleryShell" class="photo-gallery-shell">
+              <PlacePhotoGallery :photos="(placeDetails?.photos ?? [])" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" section="photos" />
+            </div>
+          </section>
+
+          <!-- Keep a compact menu state only when photo resources exist; it collapses instead of reserving a tall blank area -->
+          <section v-if="hasPhotos" class="dcard dcard-menu">
+            <div class="section-heading">
+              <h2><i class="pi pi-book" /> Menu</h2>
+              <DataSourceBadge source="google" label="Google" />
+            </div>
+            <PlacePhotoGallery :photos="(placeDetails?.photos ?? [])" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" section="menu" />
+          </section>
+
+          <AIMenuProfilingCard
+            v-if="canViewAIMenuProfiling"
+            class="detail-ai-menu"
+            :place-details="placeDetails"
+          />
+
+          <!-- Reviews and histories stay INSIDE the main stack. This prevents a shorter media/menu stack
+               from creating the long blank column seen in the screenshots. -->
+          <section v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
+            <div class="section-heading section-heading-between">
+              <h2><i class="pi pi-comments" /> Reviews</h2>
+              <span class="section-count">{{ placeDetails.reviews.length }}</span>
+            </div>
+            <div class="reviews-grid">
+              <article v-for="(item, i) in displayedReviews" :key="i" class="review-card">
+                <div class="review-head">
+                  <img v-if="item.authorPhoto" :src="item.authorPhoto" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
+                  <span v-else class="review-avatar">{{ item.authorName?.charAt(0) || '?' }}</span>
+                  <div>
+                    <strong>{{ item.authorName }}</strong>
+                    <div class="review-rating"><span class="stars"><i v-for="(s, j) in stars(item.rating)" :key="j" :class="['pi', s]" /></span><small>{{ item.time }}</small></div>
+                  </div>
+                </div>
+                <p v-if="item.text">{{ item.text }}</p>
+              </article>
+            </div>
+            <button v-if="placeDetails.reviews.length > 4" class="section-toggle-btn" type="button" @click="showAllReviews = !showAllReviews">
+              {{ showAllReviews ? 'Show less' : `Show all ${placeDetails.reviews.length} reviews` }}
+              <i :class="showAllReviews ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+            </button>
+          </section>
+
+          <section class="dcard history-card">
+            <div class="section-heading section-heading-between">
+              <h2>Visit History</h2>
+              <span class="section-count">{{ review.visits.length }}</span>
+            </div>
+            <div v-if="review.visits.length" class="visit-grid">
+              <article v-for="visit in displayedVisits" :key="visit.id" class="visit-card">
+                <div class="visit-head">
+                  <Tag :value="visit.checkOutAt ? 'Completed' : 'Active'" :severity="visit.checkOutAt ? 'secondary' : 'success'" />
+                  <span>{{ formatVisitDate(visit.checkInAt) }}</span>
+                </div>
+                <div class="visit-body">
+                  <div><i class="pi pi-sign-in" /> Check-in: {{ visit.checkInLatitude.toFixed(4) }}, {{ visit.checkInLongitude.toFixed(4) }}</div>
+                  <div v-if="visit.checkOutAt"><i class="pi pi-sign-out" /> Check-out: {{ visit.checkOutLatitude?.toFixed(4) }}, {{ visit.checkOutLongitude?.toFixed(4) }}</div>
+                  <div v-if="visit.checkOutAt"><i class="pi pi-clock" /> Duration: {{ calcDuration(visit.checkInAt, visit.checkOutAt) }}</div>
+                  <div v-if="visit.visitNotes"><i class="pi pi-comment" /> {{ visit.visitNotes }}</div>
+                  <div v-if="visit.followUpNotes"><i class="pi pi-directions" /> Follow-up: {{ visit.followUpNotes }}</div>
+                  <img
+                    v-if="visit.selfieReference && visit.selfieReference !== 'SIMULATED_SELFIE_PLACEHOLDER'"
+                    class="visit-selfie"
+                    :src="visit.selfieReference.startsWith('/') ? `${apiBase}${visit.selfieReference}` : visit.selfieReference"
+                    alt="Visit selfie"
+                  />
+                  <div class="visit-user"><i class="pi pi-user" /> {{ visit.salesExecutiveName }}</div>
+                </div>
+              </article>
+            </div>
+            <div v-else class="compact-empty"><i class="pi pi-calendar-times" /><span>No visits recorded yet.</span></div>
+            <button v-if="review.visits.length > 2" class="section-toggle-btn" type="button" @click="showAllVisits = !showAllVisits">
+              {{ showAllVisits ? 'Show less' : `Show all ${review.visits.length} visits` }}
+              <i :class="showAllVisits ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+            </button>
+          </section>
+
+          <section class="dcard history-card">
+            <div class="section-heading section-heading-between">
+              <h2>Status History</h2>
+              <span class="section-count">{{ review.history.length }}</span>
+            </div>
+            <div v-if="review.history.length" class="timeline">
+              <div v-for="entry in displayedStatusHistory" :key="entry.id" class="timeline-entry">
+                <span class="timeline-dot" />
+                <div>
+                  <strong>{{ (entry.fromStatus || 'Created').replaceAll('_', ' ') }} → {{ entry.toStatus.replaceAll('_', ' ') }}</strong>
+                  <small>{{ new Date(entry.createdAt).toLocaleString() }} · {{ entry.changedByName }}</small>
+                  <p v-if="entry.notes">{{ entry.notes }}</p>
+                </div>
+              </div>
+            </div>
+            <div v-else class="compact-empty"><i class="pi pi-history" /><span>No status changes recorded.</span></div>
+            <button v-if="review.history.length > 6" class="section-toggle-btn" type="button" @click="showAllStatusHistory = !showAllStatusHistory">
+              {{ showAllStatusHistory ? 'Show less' : `Show all ${review.history.length} changes` }}
+              <i :class="showAllStatusHistory ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+            </button>
+          </section>
+        </main>
+
+        <!-- RIGHT / SIDEBAR -->
+        <aside class="detail-column detail-column-side">
+          <div v-if="canViewAISummary" class="ai-shell ai-shell-summary">
+            <button class="expand-control" type="button" title="Expand AI Summary" aria-label="Expand AI Summary" @click="openExpandedPanel('summary')">
+              <i class="pi pi-window-maximize" /><span>Expand</span>
+            </button>
+            <AISummaryCard class="detail-ai-summary" :prospect-name="review.prospect.placeName" />
           </div>
-        </div>
-        <button
-          v-if="placeDetails.reviews.length > 4"
-          type="button"
-          class="section-toggle-btn"
-          @click="showAllReviews = !showAllReviews"
-        >
-          <span>{{ showAllReviews ? 'Show less' : `Show all ${placeDetails.reviews.length} reviews` }}</span>
-          <i :class="showAllReviews ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
-        </button>
 
+          <section class="dcard business-contact-card">
+            <div class="section-heading"><h2>Business &amp; Contact Details</h2></div>
+            <dl class="business-list">
+              <div><dt>Business name</dt><dd>{{ review.prospect.placeName || 'Not provided' }}</dd></div>
+              <div><dt>Phone (Primary)</dt><dd><a v-if="review.prospect.phoneNumber" :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a><span v-else>Not provided</span></dd></div>
+              <div v-if="placeDetails?.internationalPhone"><dt>Phone (International)</dt><dd>{{ placeDetails.internationalPhone }}</dd></div>
+              <div><dt>Category</dt><dd>{{ review.prospect.placeCategory || 'Not provided' }}</dd></div>
+              <div><dt>Industry</dt><dd>{{ review.prospect.industryGroup || 'Not provided' }}</dd></div>
+              <div v-if="placeDetails?.openingHours"><dt>Operating hours</dt><dd>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</dd></div>
+              <div v-if="placeDetails?.priceLevel"><dt>Price level</dt><dd>{{ priceLevelLabel(placeDetails.priceLevel) }}</dd></div>
+              <div><dt>Source</dt><dd>Google Maps / CRM</dd></div>
+              <div><dt>Added by</dt><dd>{{ review.prospect.assignedSalesExecutive || 'CRM' }}</dd></div>
+              <div><dt>Status</dt><dd>{{ review.prospect.status.replaceAll('_', ' ') }}</dd></div>
+            </dl>
+
+            <div v-if="placeDetails?.openingHours?.weekdays?.length" class="hours-compact">
+              <div v-for="(day, i) in (showAllHours ? placeDetails.openingHours.weekdays : placeDetails.openingHours.weekdays.slice(0, 3))" :key="i" v-html="day" />
+              <button v-if="placeDetails.openingHours.weekdays.length > 3" type="button" @click="showAllHours = !showAllHours">
+                {{ showAllHours ? 'Show less' : 'Show all operating hours' }}
+              </button>
+            </div>
+
+            <div v-if="placeDetails && (placeDetails.delivery || placeDetails.dineIn || placeDetails.takeout || placeDetails.curbsidePickup)" class="service-chips">
+              <Tag v-if="placeDetails.dineIn" value="Dine In" severity="success" />
+              <Tag v-if="placeDetails.takeout" value="Takeout" severity="info" />
+              <Tag v-if="placeDetails.delivery" value="Delivery" severity="warn" />
+              <Tag v-if="placeDetails.curbsidePickup" value="Curbside Pickup" severity="secondary" />
+            </div>
+          </section>
+
+          <div class="discussion-shell ai-shell ai-shell-discussion">
+            <button class="expand-control" type="button" title="Expand Discussion" aria-label="Expand Discussion" @click="openExpandedPanel('discussion')">
+              <i class="pi pi-window-maximize" /><span>Expand</span>
+            </button>
+            <ProspectComments class="detail-comments" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" :embedded="isDesktop" />
+          </div>
+
+          <div v-if="canUseProspectAIChat" class="ai-shell ai-shell-chat">
+            <button class="expand-control" type="button" title="Expand Tanya AI" aria-label="Expand Tanya AI" @click="openExpandedPanel('chat')">
+              <i class="pi pi-window-maximize" /><span>Expand</span>
+            </button>
+            <TanyaAICard class="detail-tanya-ai" />
+          </div>
+
+          <!-- Optional supporting data only renders when it has actual content -->
+          <section v-if="review.prospect.visitNotes || review.prospect.followUpNotes" class="dcard supporting-card">
+            <div class="section-heading"><h2>Sales Notes</h2></div>
+            <div class="supporting-rows">
+              <p v-if="review.prospect.visitNotes"><strong>Visit notes</strong>{{ review.prospect.visitNotes }}</p>
+              <p v-if="review.prospect.followUpNotes"><strong>Follow-up</strong>{{ review.prospect.followUpNotes }}</p>
+            </div>
+          </section>
+
+          <section
+            v-if="placeDetails?.parkingOptions || placeDetails?.paymentOptions || placeDetails?.accessibilityOptions"
+            class="dcard supporting-card"
+          >
+            <div class="section-heading"><h2>Amenities</h2><DataSourceBadge source="google" label="Google" /></div>
+            <div class="amenity-groups">
+              <div v-if="placeDetails?.parkingOptions">
+                <strong>Parking</strong>
+                <div>
+                  <span v-if="placeDetails.parkingOptions.freeParkingLot">Free Lot</span>
+                  <span v-if="placeDetails.parkingOptions.freeStreetParking">Free Street</span>
+                  <span v-if="placeDetails.parkingOptions.paidParkingLot">Paid Lot</span>
+                  <span v-if="placeDetails.parkingOptions.paidStreetParking">Paid Street</span>
+                  <span v-if="placeDetails.parkingOptions.garageParking">Garage</span>
+                  <span v-if="placeDetails.parkingOptions.valetParking">Valet</span>
+                </div>
+              </div>
+              <div v-if="placeDetails?.paymentOptions">
+                <strong>Payment</strong>
+                <div>
+                  <span v-if="placeDetails.paymentOptions.cashOnly">Cash</span>
+                  <span v-if="placeDetails.paymentOptions.creditCardOnly">Credit Card</span>
+                  <span v-if="placeDetails.paymentOptions.debitCardOnly">Debit Card</span>
+                  <span v-if="placeDetails.paymentOptions.nfcOnly">NFC</span>
+                </div>
+              </div>
+              <div v-if="placeDetails?.accessibilityOptions">
+                <strong>Accessibility</strong>
+                <div>
+                  <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleEntrance">Wheelchair Entrance</span>
+                  <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleParking">Wheelchair Parking</span>
+                  <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleRestroom">Wheelchair Restroom</span>
+                  <span v-if="placeDetails.accessibilityOptions.wheelchairAccessibleSeating">Wheelchair Seating</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
-      </div>
 
-      <!-- Comments / Ticketing -->
-      <ProspectComments class="detail-comments" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" :embedded="isDesktop" />
-
-      <!-- Bottom Action Bar -->
+      <!-- Mobile sticky action bar only -->
       <div class="detail-bottom-bar">
-        <button class="dbar-btn dbar-navigate" :disabled="review.prospect.latitude == null && review.prospect.longitude == null && !review.prospect.formattedAddress" @click="navigate">
+        <button
+          class="dbar-btn dbar-navigate"
+          type="button"
+          :disabled="review.prospect.latitude == null && review.prospect.longitude == null && !review.prospect.formattedAddress"
+          @click="navigate"
+        >
           <i class="pi pi-directions" /> Navigate
         </button>
         <a v-if="review.prospect.phoneNumber && isValidPhone(review.prospect.phoneNumber)" :href="`tel:${review.prospect.phoneNumber}`" class="dbar-btn dbar-call">
           <i class="pi pi-phone" /> Call
         </a>
         <span v-else class="dbar-btn dbar-call dbar-disabled"><i class="pi pi-phone" /> Call</span>
-        <RouterLink v-if="openVisit" class="dbar-btn dbar-checkout" :to="`/sales/my-prospects/${review.prospect.id}/check-out`">
-          <i class="pi pi-sign-out" /> Check out
-        </RouterLink>
-        <RouterLink v-else class="dbar-btn dbar-checkin" :to="`/sales/my-prospects/${review.prospect.id}/check-in`">
-          <i class="pi pi-sign-in" /> Check in
-        </RouterLink>
+        <RouterLink v-if="openVisit" class="dbar-btn dbar-checkin" :to="`/sales/my-prospects/${review.prospect.id}/check-out`"><i class="pi pi-sign-out" /> Check out</RouterLink>
+        <RouterLink v-else class="dbar-btn dbar-checkin" :to="`/sales/my-prospects/${review.prospect.id}/check-in`"><i class="pi pi-sign-in" /> Check in</RouterLink>
       </div>
+
+      <!-- Functional expand overlay. No OpenAI generation is triggered by opening/closing it. -->
+      <Teleport to="body">
+        <div v-if="expandedPanel" class="expand-overlay" @click.self="closeExpandedPanel">
+          <section class="expand-dialog" role="dialog" aria-modal="true">
+            <header class="expand-dialog-header">
+              <div>
+                <span>{{ expandedPanel === 'summary' ? 'AI Summary' : expandedPanel === 'discussion' ? 'Discussion' : 'Tanya AI' }}</span>
+                <strong>{{ review.prospect.placeName }}</strong>
+              </div>
+              <button type="button" aria-label="Close expanded panel" @click="closeExpandedPanel"><i class="pi pi-times" /></button>
+            </header>
+            <div class="expand-dialog-body">
+              <AISummaryCard v-if="expandedPanel === 'summary'" :prospect-name="review.prospect.placeName" />
+              <ProspectComments v-else-if="expandedPanel === 'discussion'" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" :embedded="true" />
+              <TanyaAICard v-else-if="expandedPanel === 'chat'" />
+            </div>
+          </section>
+        </div>
+      </Teleport>
     </template>
   </section>
 </template>
 
 <style scoped>
-.detail-page { display: grid; gap: 0.6rem; width: 100%; padding-bottom: 5.5rem; align-content: start; }
-.detail-content-grid,
-.detail-column { display: contents; }
+.detail-page {
+  --detail-accent: var(--brand-red);
+  --detail-accent-strong: var(--brand-red-hover);
+  --detail-soft: var(--brand-red-50);
+  --detail-soft-strong: #ffeaed;
+  --detail-border: #e8e4e5;
+  --detail-red-border: var(--brand-red-200);
+  --detail-muted: #766c6e;
+  --brand-blue: var(--detail-accent);
+  --brand-blue-50: var(--detail-soft);
+  --brand-blue-bg: var(--detail-soft-strong);
 
-
-.detail-reviews-section {
-  min-width: 0;
-}
-
-.detail-reviews-section > .dcard {
-  margin: 0;
-}
-
-.history-card {
-  min-width: 0;
-  align-content: start;
-}
-
-.history-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.history-card-header h2 { margin: 0; }
-
-.history-count {
-  min-width: 28px;
-  height: 24px;
-  padding: 0 0.45rem;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 9999px;
-  background: #eff6ff;
-  color: var(--brand-blue);
-  font-size: 0.65rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-
-.detail-skeleton { display: grid; gap: 0.85rem; }
-.sk-header { display: flex; align-items: center; gap: 0.7rem; }
-.sk-circle { width: 48px; height: 48px; border-radius: 50%; background: #e2e8f0; flex-shrink: 0; }
-.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
-.sk-card { padding: 1rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl); background: var(--surface-card); display: flex; flex-direction: column; gap: 0.5rem; }
-.sk-line { height: 12px; border-radius: 6px; background: #e2e8f0; }
-.sk-line.w70 { width: 70%; }
-.sk-line.w60 { width: 60%; }
-.sk-line.w50 { width: 50%; }
-.sk-line.w40 { width: 40%; }
-.sk-line.w80 { width: 80%; }
-.sk-map { height: 180px; border-radius: 12px; background: #e2e8f0; }
-.sk-gallery { height: 160px; border-radius: var(--radius-xl); background: #e2e8f0; }
-
-.detail-empty { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2.5rem 1rem; text-align: center; }
-.detail-empty-icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: #f1f5f9; color: #94a3b8; font-size: 1.4rem; }
-.detail-empty strong { color: var(--text-primary); font-size: 0.95rem; }
-.detail-empty span { color: var(--text-muted); font-size: 0.8rem; max-width: 260px; }
-.detail-empty-btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.5rem 1rem; border-radius: 12px; background: var(--brand-blue); color: #fff; text-decoration: none; font-size: 0.8rem; font-weight: 600; margin-top: 0.5rem; }
-
-.dcard {
-  padding: 1.15rem; border: 1px solid var(--border-light); border-radius: var(--radius-xl);
-  background: var(--surface-card); box-shadow: var(--shadow-sm); display: grid; gap: 0.75rem; min-width: 0;
-}
-.dcard h2 { margin: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-.dcard h2 { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
-
-
-.dcard-summary {
-  background: linear-gradient(135deg, var(--brand-blue-50) 0%, var(--surface-card) 100%);
-  gap: 0.7rem;
-}
-.dcard-summary-top { display: flex; align-items: flex-start; gap: 0.85rem; }
-.dcard-title-line {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  min-width: 0;
-}
-.dcard-title-line > div { min-width: 0; }
-.summary-status { flex-shrink: 0; }
-.summary-address {
-  margin-top: 0.35rem;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  color: var(--text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-.summary-address i {
-  color: var(--brand-blue);
-  font-size: 0.72rem;
-  margin-top: 0.15rem;
-  flex-shrink: 0;
-}
-.summary-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.45rem;
-}
-.summary-meta-item {
-  min-width: 0;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid rgba(191, 219, 254, 0.72);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.78);
-  display: grid;
-  gap: 0.22rem;
-}
-.summary-meta-label {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-  color: var(--text-muted);
-  font-size: 0.57rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.summary-meta-label > i {
-  color: var(--brand-blue);
-  font-size: 0.64rem;
-}
-.summary-meta-item strong {
-  color: var(--text-primary);
-  font-size: 0.76rem;
-  font-weight: 700;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.dcard-avatar { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #fff; font-weight: 800; font-size: 1rem; flex-shrink: 0; }
-.dcard-avatar-prospect { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25); }
-.dcard-identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-.dcard-identity .eyebrow { margin: 0; }
-.dcard-identity h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: 0; color: var(--text-primary); line-height: 1.3; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-
-.dcard-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.dcard-code-item { padding: 0.55rem 0.65rem; background: rgba(255,255,255,0.7); border-radius: 10px; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
-.dcard-code-item span { color: var(--text-muted); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-.dcard-code-item strong { font-size: 0.78rem; color: var(--text-primary); font-weight: 700; overflow-wrap: anywhere; }
-
-.dcard-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-
-.dcard-type-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.dcard-type-badge {
-  display: inline-block; padding: 0.15rem 0.5rem; border-radius: 6px;
-  background: #eff6ff; color: #1d4ed8; font-size: 0.58rem; font-weight: 600; line-height: 1.5;
-}
-
-.dcard-active-visit { border-color: #fbbf24; background: #fffbeb; }
-.dcard-active-visit-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #92400e; flex-wrap: wrap; }
-.dcard-active-visit-row > i { font-size: 1rem; color: #f59e0b; }
-.dcard-active-visit-link {
-  display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto;
-  padding: 0.35rem 0.75rem; border-radius: 10px; background: #f59e0b; color: #fff;
-  font-size: 0.7rem; font-weight: 700; text-decoration: none; white-space: nowrap;
-}
-.dcard-active-visit-link:hover { background: #d97706; }
-
-/* Google Info */
-.dcard-google-info { border: 1px solid #e0e7ff; background: linear-gradient(135deg, #f5f3ff 0%, var(--surface-card) 100%); }
-.dcard-editorial { margin: 0; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.55; font-style: italic; }
-.dcard-info-grid { display: grid; gap: 0.4rem; }
-.dcard-info-item { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.dcard-link { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--brand-blue); text-decoration: none; font-size: 0.8rem; font-weight: 600; }
-.dcard-link:hover { text-decoration: underline; }
-.dcard-intl-phone { color: var(--text-muted); font-size: 0.72rem; }
-.dcard-rating { display: flex; align-items: center; gap: 0.35rem; }
-.dcard-rating-num { font-size: 0.95rem; font-weight: 800; color: #f59e0b; }
-.dcard-stars { display: flex; gap: 1px; }
-.dcard-stars .pi { font-size: 0.6rem; color: #f59e0b; }
-.dcard-rating-count { color: var(--text-muted); font-size: 0.72rem; }
-.dcard-types { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
-.dcard-types-label { color: var(--text-muted); font-size: 0.68rem; font-weight: 600; margin-right: 0.2rem; }
-.dcard-type-tag { font-size: 0.62rem !important; }
-
-/* Photo Gallery */
-.dcard-photos { border: 1px solid #e0e7ff; }
-.dcard-photos h2 { display: flex; align-items: center; gap: 0.4rem; }
-.dcard-photos h2 i { color: var(--brand-blue); font-size: 0.75rem; }
-
-.photo-gallery-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.photo-gallery-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
-
-.photo-scroll-btn {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: #fff;
-  color: var(--text-secondary);
-  cursor: pointer;
-  box-shadow: var(--shadow-xs);
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
-}
-
-.photo-scroll-btn:hover {
-  color: var(--brand-blue);
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  transform: translateY(-1px);
-}
-
-.photo-scroll-btn:active { transform: translateY(0); }
-.photo-scroll-btn i { font-size: 0.72rem; line-height: 1; }
-.photo-gallery-shell { min-width: 0; overflow: hidden; }
-.dcard-photo-scroll {
-  display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch; padding-bottom: 0.3rem;
-}
-.dcard-photo-scroll::-webkit-scrollbar { height: 4px; }
-.dcard-photo-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-.dcard-photo-item {
-  flex: 0 0 200px; height: 150px; border-radius: 12px; overflow: hidden;
-  cursor: pointer; scroll-snap-align: start; border: 2px solid transparent;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-.dcard-photo-item:hover { transform: scale(1.02); }
-.dcard-photo-item.active { border-color: var(--brand-blue); }
-.dcard-photo-item img { width: 100%; height: 100%; object-fit: cover; }
-.dcard-photo-attribution { color: var(--text-muted); font-size: 0.62rem; font-style: italic; }
-.dcard-menu-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
-  padding: 2rem 1rem; color: var(--text-muted); text-align: center;
-  background: var(--surface-subtle); border-radius: 12px;
-}
-.dcard-menu-empty i { font-size: 1.5rem; color: #cbd5e1; }
-.dcard-menu-empty span { font-size: 0.82rem; font-weight: 600; }
-
-/* Opening Hours */
-.dcard-hours { border: 1px solid #fef3c7; background: linear-gradient(135deg, #fffbeb 0%, var(--surface-card) 100%); }
-.dcard-hours-status { display: flex; align-items: center; gap: 0.4rem; }
-.dcard-hours-dot { width: 8px; height: 8px; border-radius: 50%; }
-.dcard-hours-dot.open { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
-.dcard-hours-dot.closed { background: #ef4444; }
-.dcard-hours-list { display: grid; gap: 0.3rem; }
-.dcard-hours-row { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; }
-.dcard-hours-toggle {
-  background: none; border: none; color: var(--brand-blue); font-size: 0.72rem; font-weight: 600;
-  cursor: pointer; padding: 0.2rem 0; text-align: left;
-}
-.dcard-hours-toggle:hover { text-decoration: underline; }
-
-/* Reviews */
-.dcard-reviews {
-  border: 1px solid #e0e7ff;
-  min-height: 0;
-  align-content: start;
-}
-.dcard-reviews-list { display: grid; gap: 0.75rem; min-height: 0; }
-.dcard-review { padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-light); }
-.dcard-review:last-child { border-bottom: none; padding-bottom: 0; }
-.dcard-review-header { display: flex; align-items: center; gap: 0.6rem; }
-.dcard-review-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-.dcard-review-avatar-placeholder {
-  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
-  background: #e2e8f0; color: var(--text-muted); font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
-}
-.dcard-review-meta { flex: 1; min-width: 0; }
-.dcard-review-meta strong { font-size: 0.78rem; color: var(--text-primary); }
-.dcard-review-stars { display: flex; align-items: center; gap: 1px; }
-.dcard-review-stars .pi { font-size: 0.55rem; color: #f59e0b; }
-.dcard-review-time { color: var(--text-muted); font-size: 0.65rem; margin-left: 0.4rem; }
-.dcard-review-text { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.5; }
-
-/* Services & Amenities */
-.dcard-services { border: 1px solid #fef3c7; background: linear-gradient(135deg, #fffbeb 0%, var(--surface-card) 100%); }
-.dcard-service-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.dcard-amenities-grid { display: grid; gap: 0.65rem; }
-.dcard-amenity-section { display: flex; flex-direction: column; gap: 0.3rem; }
-.dcard-amenity-section strong { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--text-primary); }
-.dcard-amenity-section strong i { color: var(--brand-blue); font-size: 0.7rem; }
-.dcard-amenity-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.dcard-amenity-chip {
-  display: inline-flex; align-items: center; gap: 0.2rem;
-  padding: 0.2rem 0.5rem; border-radius: 9999px;
-  background: #f0fdf4; color: #059669;
-  font-size: 0.62rem; font-weight: 600;
-}
-.dcard-amenity-chip i { font-size: 0.5rem; }
-
-.dcard-header-row { display: flex; align-items: center; justify-content: space-between; }
-.dcard-header-row h2 { margin: 0; }
-.section-count {
-  min-width: 34px;
-  height: 24px;
-  padding: 0 0.45rem;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 9999px;
-  background: #f8fafc;
-  color: var(--text-muted);
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1;
-  border: 1px solid var(--border-light);
-}
-
-.dcard-distance-pill {
-  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.55rem;
-  border-radius: 9999px; background: #eff6ff; color: var(--brand-blue);
-  font-size: 0.62rem; font-weight: 700; white-space: nowrap;
-}
-.dcard-distance-pill i,
-.dcard-link i,
-.dcard-amenity-section strong i,
-.dcard-amenity-chip i {
-  line-height: 1;
-}
-
-.dcard-location-rows, .dcard-rows { display: grid; gap: 0.45rem; }
-.dcard-row { display: flex; align-items: flex-start; gap: 0.5rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
-.dcard-row i { color: var(--text-muted); font-size: 0.78rem; width: 1rem; text-align: center; flex-shrink: 0; margin-top: 0.08rem; line-height: 1; }
-.dcard-row a { color: var(--brand-blue); text-decoration: none; }
-.dcard-row a:hover { text-decoration: underline; }
-.dcard-row-link { cursor: pointer; }
-.dcard-row-coords { color: var(--text-muted); font-size: 0.75rem; }
-.dcard-row-coords code { font-size: 0.7rem; color: var(--text-muted); background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 4px; }
-
-.dcard-place-id { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
-.dcard-place-id span { color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-.dcard-place-id code {
-  font-size: 0.7rem; color: var(--text-secondary); background: #f1f5f9;
-  padding: 0.2rem 0.4rem; border-radius: 6px; word-break: break-all; line-height: 1.4;
-}
-.dcard-copy-btn {
-  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
-  border-radius: 8px; border: 1px solid var(--border-light); background: #fff;
-  color: var(--text-muted); cursor: pointer; font-size: 0.82rem; flex-shrink: 0; transition: all 0.15s ease;
-}
-.dcard-copy-btn:hover { color: var(--brand-blue); border-color: #bfdbfe; background: #eff6ff; }
-
-.dcard-visit-list { display: grid; gap: 0.65rem; }
-.dcard-visit { border: 1px solid var(--border-light); border-radius: 14px; overflow: hidden; }
-.dcard-visit-header { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 0.85rem; background: #f8fafc; border-bottom: 1px solid var(--border-light); }
-.dcard-visit-header span { color: var(--text-muted); font-size: 0.72rem; }
-.dcard-visit-body { padding: 0.65rem 0.85rem; display: grid; gap: 0.35rem; }
-.dcard-visit-detail { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
-.dcard-visit-detail i { color: var(--text-muted); font-size: 0.68rem; margin-top: 0.18rem; flex-shrink: 0; }
-.dcard-visit-exec { margin-top: 0.25rem; padding-top: 0.35rem; border-top: 1px solid var(--border-light); }
-.dcard-visit-selfie { margin-top: 0.25rem; }
-.dcard-visit-selfie img { width: 100%; max-width: 240px; border-radius: 10px; border: 1px solid var(--border-light); }
-
-.dcard-timeline { display: grid; }
-.dcard-timeline-entry { display: grid; grid-template-columns: 16px 1fr; gap: 0.75rem; padding-bottom: 1rem; position: relative; }
-.dcard-timeline-entry:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 18px; bottom: 0; width: 2px; background: var(--border-light); }
-.dcard-timeline-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--brand-blue); border: 3px solid var(--brand-blue-bg); flex-shrink: 0; }
-.dcard-timeline-content { display: grid; gap: 0.1rem; }
-.dcard-timeline-content strong { font-size: 0.78rem; color: var(--text-primary); text-transform: capitalize; }
-.dcard-timeline-content span { color: var(--text-muted); font-size: 0.68rem; }
-.dcard-timeline-content p { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
-
-.dcard-empty-text { margin: 0; color: var(--text-muted); font-size: 0.82rem; text-align: center; padding: 1.5rem 0; }
-
-.section-toggle-btn {
   width: 100%;
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  margin-top: 0.15rem;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: #f8fafc;
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.section-toggle-btn:hover {
-  color: var(--brand-blue);
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-.section-toggle-btn i { font-size: 0.62rem; }
-
-.detail-comments {
   min-width: 0;
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  padding-bottom: 5.5rem;
+  overflow-x: clip;
 }
 
-.detail-comments :deep(.pc-wrap) {
-  margin: 0;
+.back-link {
+  width: 38px; height: 38px; display: inline-grid; place-items: center;
+  border: 1px solid var(--detail-border); border-radius: 10px;
+  padding: 0;
+  background: #fff; color: var(--detail-accent); text-decoration: none;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
+}
+.back-link:hover {
+  border-color: var(--detail-red-border);
+  background: var(--detail-soft);
+  color: var(--detail-accent-strong);
+}
+.back-link:active { transform: translateY(1px); }
+.back-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--detail-accent) 28%, transparent);
+  outline-offset: 2px;
 }
 
-.detail-bottom-bar {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  width: 100%; z-index: 1000;
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
-  padding: 0.75rem 1rem; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  background: var(--surface-card); border-top: 1px solid var(--border-light);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
-}
-.dbar-btn {
-  min-height: 44px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
-  padding: 0.65rem 0.45rem; border-radius: 12px; border: none;
-  font-size: 0.72rem; font-weight: 700; cursor: pointer;
-  line-height: 1; text-decoration: none; text-align: center; transition: all 0.15s ease;
-}
-.dbar-btn i { width: 16px; height: 16px; display: inline-grid; place-items: center; font-size: 0.9rem; line-height: 1; flex-shrink: 0; }
-.dbar-navigate { background: var(--brand-blue); color: #fff; }
-.dbar-navigate:hover { background: #1d4ed8; }
-.dbar-navigate:disabled { background: #cbd5e1; cursor: not-allowed; }
-.dbar-call { background: #f0fdf4; color: #059669; border: 1px solid #a7f3d0; }
-.dbar-call:hover { background: #dcfce7; }
-.dbar-disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
-.dbar-checkin { background: #eff6ff; color: var(--brand-blue); border: 1px solid #bfdbfe; }
-.dbar-checkin:hover { background: #dbeafe; }
-.dbar-checkout { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-.dbar-checkout:hover { background: #ffedd5; }
-
-/* Data Source Legend */
 .ds-legend {
-  border: 1px solid var(--border-light); border-radius: var(--radius-xl);
-  background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden;
+  overflow: hidden; border: 1px solid var(--detail-border); border-radius: 11px;
+  background: #fff; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.025);
 }
 .ds-legend-toggle {
-  width: 100%; display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.65rem 1rem; border: 0; background: transparent;
-  color: var(--text-muted); font-size: 0.72rem; font-weight: 600;
-  cursor: pointer; transition: color 0.15s ease;
+  width: 100%; min-height: 42px; display: flex; align-items: center; gap: .5rem;
+  padding: .6rem .9rem; border: 0; background: transparent; cursor: pointer;
+  color: #5f585a; font-size: .72rem; font-weight: 650;
 }
-.ds-legend-toggle:hover { color: var(--text-primary); }
-.ds-legend-toggle i:first-child { font-size: 0.8rem; color: var(--brand-blue); }
-.ds-legend-toggle i:last-child { margin-left: auto; font-size: 0.6rem; }
-.ds-legend-body { display: grid; gap: 0.45rem; padding: 0 1rem 0.75rem; }
-.ds-legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; }
+.ds-legend-toggle i:first-child { color: var(--detail-accent); }
+.ds-legend-toggle i:last-child { margin-left: auto; font-size: .62rem; }
+.ds-legend-body { display: grid; gap: .45rem; padding: 0 .9rem .8rem; }
+.ds-legend-item { display: flex; align-items: center; gap: .5rem; color: var(--text-secondary); font-size: .72rem; }
 
-@media (max-width: 767px) {
-  .detail-content-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.6rem;
-  }
-  .detail-column { display: contents; }
-  .dcard-visit-list,
-  .dcard-timeline,
-  .dcard-reviews-list {
-    max-height: none !important;
-    overflow: visible !important;
-    padding-right: 0 !important;
-  }
-  .detail-content-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.6rem;
-  }
-  .detail-column {
-    display: grid;
-    gap: 0.6rem;
-  }
-  .dcard-visit-list,
-  .dcard-timeline,
-  .dcard-reviews-list {
-    max-height: none !important;
-    overflow: visible !important;
-    padding-right: 0 !important;
-  }
-  .detail-content-grid { display: block; column-count: 1; }
-  .detail-column { display: contents; }
+.detail-skeleton { display: grid; gap: .75rem; }
+.sk-header { display: flex; gap: .7rem; align-items: center; }
+.sk-circle { width: 48px; height: 48px; border-radius: 50%; background: #ece8e9; }
+.sk-lines { flex: 1; display: grid; gap: .4rem; }
+.sk-line { height: 12px; border-radius: 6px; background: #ece8e9; }
+.sk-line.w70 { width: 70%; } .sk-line.w60 { width: 60%; } .sk-line.w50 { width: 50%; }
+.sk-line.w40 { width: 40%; } .sk-line.w80 { width: 80%; }
+.sk-card { padding: 1rem; border: 1px solid var(--detail-border); border-radius: 11px; background: #fff; display: grid; gap: .5rem; }
+.sk-map { height: 180px; border-radius: 10px; background: #ece8e9; }
+.sk-gallery { height: 150px; border-radius: 11px; background: #ece8e9; }
 
-  .history-scroll-region,
-  .dcard-visit-list,
-  .dcard-timeline,
-  .detail-reviews-section .dcard-reviews-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .detail-page { gap: 0.7rem; }
-  .dcard { padding: 1rem; }
-  .dcard-identity h1 { font-size: 1.05rem; }
-  .dcard-title-line { flex-direction: column; gap: 0.45rem; }
-  .summary-status { align-self: flex-start; }
-  .summary-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dcard-codes { grid-template-columns: minmax(0, 1fr); }
-  .dcard-photo-item { flex: 0 0 160px; height: 120px; }
-  .photo-scroll-btn { width: 32px; height: 32px; }
+.detail-empty {
+  min-height: 260px; display: grid; place-items: center; align-content: center; gap: .5rem;
+  padding: 2rem; text-align: center;
+}
+.detail-empty-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 14px; background: var(--detail-soft); color: var(--detail-accent); }
+.detail-empty span { color: var(--text-muted); font-size: .8rem; }
+.detail-empty-btn { padding: .55rem .9rem; border-radius: 9px; background: var(--detail-accent); color: #fff; text-decoration: none; font-size: .75rem; font-weight: 700; }
+
+/* Header mirrors the reference: identity left, actions/status right, no duplicated detail data. */
+.prospect-hero {
+  display: grid; gap: .7rem; padding: .1rem .15rem .35rem;
+}
+.hero-breadcrumb { display: flex; align-items: center; gap: .35rem; color: var(--text-muted); font-size: .68rem; font-weight: 650; }
+.hero-breadcrumb span { color: var(--detail-accent); }
+.hero-breadcrumb i { font-size: .55rem; }
+.hero-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: .8rem; }
+.hero-identity { min-width: 0; }
+.hero-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.hero-title-row h1 { margin: 0; color: var(--text-primary); font-size: 1.28rem; line-height: 1.2; font-weight: 800; }
+.hero-address { margin-top: .35rem; display: flex; align-items: flex-start; gap: .42rem; color: #625b5d; font-size: .74rem; line-height: 1.45; }
+.hero-address i { margin-top: .12rem; flex-shrink: 0; color: var(--detail-accent); font-size: .72rem; }
+.hero-actions { display: flex; align-items: center; gap: .45rem; }
+.hero-action {
+  min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .55rem .78rem; border: 1px solid var(--detail-red-border); border-radius: 8px;
+  background: #fff; color: var(--detail-accent); font-size: .7rem; font-weight: 750;
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.hero-action-nav:hover, .hero-action-visit:hover { background: var(--detail-soft); }
+.hero-action-call { border-color: #b8e7d0; color: #087a50; }
+.hero-action-call:hover { background: #f0fdf7; }
+.hero-action:disabled { opacity: .45; cursor: not-allowed; }
+.hero-action-disabled { opacity: .45; pointer-events: none; }
+.hero-status { align-self: start; }
+
+/* Cards */
+.dcard {
+  min-width: 0; display: grid; align-content: start; gap: .65rem; padding: .9rem;
+  border: 1px solid var(--detail-border); border-radius: 10px; background: #fff;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, .03);
+}
+.section-heading { min-width: 0; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.section-heading h2, .dcard h2 {
+  margin: 0; color: #40383a; font-size: .67rem; line-height: 1.2;
+  font-weight: 800; letter-spacing: .035em; text-transform: uppercase;
+}
+.section-heading h2 > i, .dcard h2 > i { color: var(--detail-accent); }
+.section-heading-between { justify-content: space-between; }
+.section-title-inline { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+
+.dcard-active-visit { border-color: #f2cd87; background: #fffbeb; }
+.dcard-active-visit-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; color: #8b5314; font-size: .76rem; }
+.dcard-active-visit-link { margin-left: auto; color: #9a5a12; font-size: .7rem; font-weight: 800; text-decoration: none; }
+
+/* Prospect detail card */
+.prospect-detail-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden; border: 1px solid #eee6e7; border-radius: 9px;
+}
+.detail-field {
+  min-width: 0; display: grid; gap: .2rem; padding: .68rem .72rem;
+  border-right: 1px solid #eee6e7; border-bottom: 1px solid #eee6e7;
+}
+.detail-field:nth-child(4) { border-right: 0; }
+.detail-field-wide { grid-column: span 2; border-bottom: 0; }
+.detail-field-wide:nth-last-child(1) { border-right: 0; }
+.detail-field > span { display: flex; align-items: center; gap: .3rem; color: var(--detail-muted); font-size: .55rem; font-weight: 800; text-transform: uppercase; }
+.detail-field > span i { color: var(--detail-accent); font-size: .62rem; }
+.detail-field strong { color: var(--text-primary); font-size: .73rem; line-height: 1.35; }
+.prospect-tags { display: flex; flex-wrap: wrap; gap: .32rem; }
+.type-chip { padding: .15rem .45rem; border-radius: 6px; background: var(--detail-soft); color: var(--detail-accent-strong); font-size: .57rem; font-weight: 650; }
+.wrap-anywhere { overflow-wrap: anywhere; }
+
+/* Google block */
+.dcard-google-info { border-color: #eadfe1; }
+.google-layout { display: grid; grid-template-columns: minmax(240px, 38%) minmax(0, 1fr); gap: .9rem; align-items: start; }
+.google-map-pane { min-width: 0; }
+.map-footer { margin-top: .4rem; display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
+.map-footer a { color: var(--detail-accent); font-size: .68rem; font-weight: 700; text-decoration: none; }
+.distance-pill { padding: .18rem .45rem; border-radius: 999px; background: var(--detail-soft); color: var(--detail-accent); font-size: .6rem; font-weight: 700; }
+.google-detail-pane { min-width: 0; display: grid; gap: .55rem; }
+.rating-line { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; font-size: .68rem; color: var(--text-muted); }
+.rating-line > strong { color: #d69215; font-size: .9rem; }
+.stars { display: inline-flex; gap: 1px; color: #f6a700; }
+.stars i { font-size: .58rem; }
+.google-editorial { margin: 0; color: var(--text-secondary); font-size: .72rem; line-height: 1.45; }
+.category-line { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; font-size: .61rem; }
+.category-line span { padding: .12rem .38rem; border-radius: 999px; background: #f7f5f5; color: #5f585a; }
+.google-rows { display: grid; gap: .35rem; }
+.google-rows > div {
+  min-width: 0; display: grid; grid-template-columns: 16px max-content minmax(0, 1fr) auto;
+  align-items: start; gap: .35rem; color: var(--text-secondary); font-size: .68rem; line-height: 1.4;
+}
+.google-rows > div > i { margin-top: .12rem; color: #8e8587; font-size: .65rem; }
+.google-rows a { color: var(--detail-accent); text-decoration: none; }
+.copy-mini { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 6px; background: #fff; color: var(--detail-accent); cursor: pointer; }
+
+/* Media */
+.photo-gallery-shell { min-width: 0; overflow: hidden; }
+.photo-gallery-controls { display: inline-flex; gap: .35rem; }
+.photo-scroll-btn { width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 8px; background: #fff; color: var(--detail-accent); cursor: pointer; }
+.photo-scroll-btn:hover { border-color: var(--detail-red-border); background: var(--detail-soft); }
+
+/* Critically keep empty menu/photo states compact. */
+.detail-page :deep(.ppg-empty) {
+  min-height: 0 !important;
+  padding: .75rem !important;
+  gap: .25rem !important;
+  border-radius: 8px !important;
+}
+.detail-page :deep(.ppg-empty i) { font-size: 1rem !important; }
+.detail-page :deep(.ppg-empty span) { font-size: .7rem !important; }
+.detail-page :deep(.ppg-empty small) { font-size: .62rem !important; }
+
+/* Main/sidebar independent stacks: reviews/history belong to main, so a short empty menu cannot hold them down. */
+.detail-content-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; min-width: 0; align-items: start; }
+.detail-column { min-width: 0; display: grid; gap: .75rem; align-content: start; }
+.detail-column > *, .ai-shell { min-width: 0; max-width: 100%; align-self: start; }
+
+/* AI / Discussion wrappers and functional expand */
+.ai-shell {
+  position: relative;
+  min-width: 0;
 }
 
-/* ── Desktop ───────────────────────────────────────────────── */
-@media (min-width: 1024px) {
+/*
+ * The AI prep components still contain their old decorative expand affordance.
+ * A small white mask keeps that old control from showing underneath the real button.
+ * This avoids editing/re-breaking the child components.
+ */
+.ai-shell::after {
+  content: '';
+  position: absolute;
+  top: .42rem;
+  right: .42rem;
+  z-index: 24;
+  width: 5.7rem;
+  height: 2.05rem;
+  border-radius: 8px;
+  background: #fff;
+  pointer-events: none;
+}
+
+.ai-shell > .expand-control {
+  position: absolute;
+  top: .58rem;
+  right: .58rem;
+  z-index: 30;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .28rem .48rem;
+  border: 1px solid var(--detail-red-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--detail-accent);
+  font-size: .57rem;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(53, 30, 35, .07);
+}
+.ai-shell > .expand-control:hover {
+  border-color: #e4a6ae;
+  background: var(--detail-soft);
+  color: var(--detail-accent-strong);
+}
+.ai-shell > .expand-control i { font-size: .61rem; }
+.ai-shell > :deep(*) { min-width: 0; }
+.detail-page :deep(.ai-card),
+.detail-page :deep(.pai-card),
+.detail-page :deep(.tanya-ai-card) { min-width: 0; }
+
+/* Business & Contact like reference */
+.business-list { margin: 0; display: grid; gap: .48rem; }
+.business-list > div { display: grid; grid-template-columns: minmax(110px, 42%) minmax(0, 1fr); gap: .5rem; font-size: .66rem; line-height: 1.35; }
+.business-list dt { color: var(--text-muted); }
+.business-list dd { margin: 0; color: var(--text-primary); font-weight: 600; overflow-wrap: anywhere; }
+.business-list a { color: var(--detail-accent); text-decoration: none; }
+.hours-compact { display: grid; gap: .25rem; padding-top: .55rem; border-top: 1px solid var(--detail-border); color: var(--text-secondary); font-size: .63rem; }
+.hours-compact button { width: max-content; padding: 0; border: 0; background: transparent; color: var(--detail-accent); font-size: .62rem; font-weight: 700; cursor: pointer; }
+.service-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+
+/* Supporting sections only exist when actual values exist. */
+.supporting-rows { display: grid; gap: .5rem; }
+.supporting-rows p { margin: 0; display: grid; gap: .15rem; color: var(--text-secondary); font-size: .68rem; line-height: 1.45; }
+.supporting-rows strong { color: var(--text-primary); font-size: .62rem; }
+.amenity-groups { display: grid; gap: .55rem; }
+.amenity-groups > div { display: grid; gap: .28rem; }
+.amenity-groups strong { font-size: .65rem; }
+.amenity-groups > div > div { display: flex; flex-wrap: wrap; gap: .25rem; }
+.amenity-groups span { padding: .15rem .4rem; border-radius: 999px; background: #f7f5f5; color: #655d5f; font-size: .58rem; }
+
+/* Reviews */
+.section-count { min-width: 28px; height: 22px; display: grid; place-items: center; padding: 0 .4rem; border: 1px solid var(--detail-red-border); border-radius: 999px; background: var(--detail-soft); color: var(--detail-accent); font-size: .6rem; font-weight: 800; }
+.reviews-grid { display: grid; gap: .6rem; }
+.review-card { min-width: 0; padding: .68rem; border: 1px solid var(--detail-border); border-radius: 9px; background: #fff; }
+.review-head { display: flex; align-items: center; gap: .5rem; }
+.review-head img, .review-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.review-avatar { display: grid; place-items: center; background: var(--detail-soft); color: var(--detail-accent); font-size: .68rem; font-weight: 800; }
+.review-head strong { font-size: .7rem; }
+.review-rating { display: flex; align-items: center; gap: .3rem; }
+.review-rating small { color: var(--text-muted); font-size: .58rem; }
+.review-card p { margin: .35rem 0 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.5; }
+
+/* Visit/status */
+.visit-grid { display: grid; gap: .6rem; }
+.visit-card { overflow: hidden; border: 1px solid var(--detail-border); border-radius: 9px; }
+.visit-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .5rem .65rem; background: #faf8f8; border-bottom: 1px solid var(--detail-border); }
+.visit-head > span { color: var(--text-muted); font-size: .62rem; }
+.visit-body { display: grid; gap: .3rem; padding: .6rem .65rem; color: var(--text-secondary); font-size: .67rem; line-height: 1.4; }
+.visit-body > div { display: flex; align-items: flex-start; gap: .38rem; }
+.visit-body i { margin-top: .12rem; color: var(--detail-accent); font-size: .62rem; }
+.visit-selfie { width: min(220px, 100%); border: 1px solid var(--detail-border); border-radius: 8px; }
+.visit-user { padding-top: .35rem; border-top: 1px solid var(--detail-border); }
+.timeline { display: grid; }
+.timeline-entry { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: .6rem; padding-bottom: .8rem; }
+.timeline-entry:not(:last-child)::before { content: ''; position: absolute; left: 6px; top: 14px; bottom: 0; width: 2px; background: #ead9db; }
+.timeline-dot { width: 13px; height: 13px; margin-top: .1rem; border: 3px solid var(--detail-soft-strong); border-radius: 50%; background: var(--detail-accent); }
+.timeline-entry > div { display: grid; gap: .08rem; }
+.timeline-entry strong { font-size: .69rem; }
+.timeline-entry small { color: var(--text-muted); font-size: .59rem; }
+.timeline-entry p { margin: .2rem 0 0; color: var(--text-secondary); font-size: .67rem; line-height: 1.45; }
+.compact-empty { min-height: 62px; display: flex; align-items: center; justify-content: center; gap: .45rem; padding: .65rem; border: 1px dashed var(--detail-border); border-radius: 8px; color: var(--text-muted); font-size: .68rem; }
+.compact-empty i { color: var(--detail-accent); }
+
+.section-toggle-btn {
+  width: 100%; min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .45rem .6rem; border: 1px solid var(--detail-border); border-radius: 8px; background: #faf8f8;
+  color: #625b5d; font-size: .65rem; font-weight: 700; cursor: pointer;
+}
+.section-toggle-btn:hover { border-color: var(--detail-red-border); background: var(--detail-soft); color: var(--detail-accent); }
+
+/* Mobile sticky bar */
+.detail-bottom-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem;
+  padding: .65rem .8rem calc(.65rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--detail-border); background: rgba(255,255,255,.97);
+  box-shadow: 0 -4px 14px rgba(15,23,42,.06); backdrop-filter: blur(10px);
+}
+.dbar-btn {
+  min-width: 0; min-height: 43px; display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+  padding: .55rem .35rem; border: 1px solid var(--detail-red-border); border-radius: 9px;
+  background: #fff; color: var(--detail-accent); font-size: .67rem; font-weight: 800; text-decoration: none; cursor: pointer;
+}
+.dbar-navigate { background: var(--detail-accent); color: #fff; }
+.dbar-call { border-color: #b8e7d0; background: #f0fdf7; color: #087a50; }
+.dbar-checkin { background: var(--detail-soft); }
+.dbar-disabled { opacity: .45; pointer-events: none; }
+
+/* Expand overlay */
+.expand-overlay {
+  position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center;
+  padding: 1rem; background: rgba(24, 18, 20, .55); backdrop-filter: blur(4px);
+}
+.expand-dialog {
+  width: min(920px, 96vw); max-height: min(820px, 92vh); overflow: hidden;
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid #eadfe1; border-radius: 14px; background: #fff;
+  box-shadow: 0 28px 80px rgba(15,23,42,.25);
+}
+.expand-dialog-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: .8rem 1rem; border-bottom: 1px solid var(--detail-border); background: #fffafa;
+}
+.expand-dialog-header > div { display: grid; gap: .1rem; }
+.expand-dialog-header span { color: var(--detail-accent); font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.expand-dialog-header strong { font-size: .82rem; }
+.expand-dialog-header button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 9px; background: #fff; color: var(--detail-accent); cursor: pointer; }
+.expand-dialog-body { min-height: 0; overflow: auto; padding: 1rem; }
+.expand-dialog-body :deep(.pc-list) { max-height: none !important; overflow: visible !important; }
+
+/* Desktop */
+@media (min-width: 1200px) {
   .detail-page {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.6rem;
-    padding-bottom: 7rem;
-    align-items: start;
-    align-content: start;
+    padding-bottom: 1rem;
+    min-height: 0;
   }
 
-  .back-link { display: none; }
 
   /*
-   * Stable dense document flow.
-   * We intentionally use one full-width card flow for variable-height sections.
-   * This removes the dead-space problem permanently: no section has to wait
-   * for a taller card in the opposite column.
-   *
-   * The page stays compact by using multi-column DATA GRIDS inside the cards,
-   * not by placing variable-height cards side-by-side.
+   * Desktop workspace:
+   * left CRM/prospect content and right AI/business sidebar scroll independently.
+   * The two stacks never stretch each other, so a short/empty card cannot create
+   * a fake vertical gap in the opposite column.
    */
   .detail-content-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.6rem;
-    min-width: 0;
-    align-items: start;
-  }
-
-  .detail-column {
-    display: contents;
-  }
-
-  .detail-content-grid > *,
-  .detail-column > .dcard {
-    width: 100%;
-    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+    gap: .75rem;
+    height: clamp(460px, calc(100dvh - 210px), 780px);
     min-height: 0;
-    align-self: start;
+    overflow: hidden;
+    align-items: stretch;
   }
 
-  /* Keep the reading order predictable even though the original template
-     stores cards in two wrappers. */
-  .dcard-google-info { order: 1; }
-  .dcard-photos { order: 2; }
-  .dcard-location { order: 3; }
-  .dcard-contact { order: 4; }
-  .dcard-business { order: 5; }
-  .dcard-hours { order: 6; }
-  .dcard-service-options { order: 7; }
-  .dcard-amenities { order: 8; }
-  .dcard-sales-notes { order: 9; }
-  .dcard-visits { order: 10; }
-  .dcard-status-history { order: 11; }
-
-  /* Use horizontal space INSIDE cards so the page remains compact. */
-  .dcard-info-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.55rem 1rem;
-  }
-
-  .dcard-google-info .dcard-rows,
-  .dcard-contact .dcard-rows,
-  .dcard-business .dcard-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem 1rem;
-  }
-
-  .dcard-location .dcard-location-rows,
-  .dcard-sales-notes .dcard-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem 1rem;
-  }
-
-  .dcard-amenities-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.7rem 1rem;
-  }
-
-  /* Visit/Status/Reviews grow naturally. No nested scroll areas. */
-  .dcard-visit-list,
-  .dcard-timeline,
-  .dcard-reviews-list {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
-  }
-
-  .dcard-visits .dcard-visit-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-
-  .detail-reviews-section {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .detail-reviews-section .dcard-reviews-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
-  }
-
-  .detail-reviews-section .dcard-review {
-    min-width: 0;
-    padding: 0.7rem;
-    border: 1px solid var(--border-light);
-    border-radius: 12px;
-    background: #fff;
-  }
-
-  .detail-reviews-section .dcard-review:last-child {
-    border-bottom: 1px solid var(--border-light);
-    padding-bottom: 0.7rem;
-  }
-
-  .detail-comments {
-    width: 100%;
-    min-width: 0;
-    margin-top: 0;
-  }
-
-  .detail-page :deep(.pc-wrap) {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .photo-gallery-shell :deep(*) {
-    min-width: 0;
-  }
-}
-
-@media (min-width: 769px) {
-  .detail-bottom-bar {
-    left: var(--sidebar-width, 240px);
-    right: 0;
-    width: auto;
-    min-height: var(--desktop-action-bar-height, 72px);
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.65rem 2rem;
-  }
-
-  .dbar-btn {
-    width: 100%;
-    min-width: 0;
-    min-height: 44px;
-    height: 44px;
-    box-sizing: border-box;
-    border-radius: 12px;
-    white-space: nowrap;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1023px) {
-  .detail-content-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.65rem;
-  }
-  .detail-column { display: contents; }
-  .dcard-visit-list,
-  .dcard-timeline,
-  .dcard-reviews-list {
-    max-height: none !important;
-    overflow: visible !important;
-    padding-right: 0 !important;
-  }
-  .detail-content-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.65rem;
-  }
   .detail-column {
-    display: grid;
-    gap: 0.65rem;
+    min-height: 0;
+    height: 100%;
+    gap: .75rem;
+    align-content: start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    padding-right: .34rem;
+
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(209, 67, 80, .70) rgba(209, 67, 80, .07);
   }
-  .dcard-visit-list,
-  .dcard-timeline,
-  .dcard-reviews-list {
+
+  /* Chromium / Edge / Safari: compact modern scroll indicator */
+  .detail-column::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .detail-column::-webkit-scrollbar-track {
+    margin-block: .35rem;
+    border-radius: 999px;
+    background: rgba(209, 67, 80, .06);
+  }
+
+  .detail-column::-webkit-scrollbar-thumb {
+    min-height: 42px;
+    border: 1px solid rgba(255, 255, 255, .78);
+    border-radius: 999px;
+    background: rgba(209, 67, 80, .78);
+  }
+
+  .detail-column::-webkit-scrollbar-thumb:hover {
+    background: rgba(184, 50, 64, .94);
+  }
+
+  .detail-column-main { padding-left: .02rem; }
+  .detail-column-side { position: static; }
+
+  .reviews-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .visit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-bottom-bar { display: none; }
+
+  /*
+   * The sidebar itself owns the scroll. Avoid a second large nested scrollbar
+   * inside Discussion, which is confusing on desktop.
+   */
+  .detail-comments :deep(.pc-list) {
     max-height: none !important;
-    overflow: visible !important;
-    padding-right: 0 !important;
+    overflow-y: visible !important;
   }
-  .detail-content-grid { display: block; column-count: 1; }
+}
+
+/* Tablet */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .detail-page { padding-bottom: 1.5rem; }
+  .detail-bottom-bar { display: none; }
+
+  .hero-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .hero-status { grid-column: 2; grid-row: 1; margin-right: .1rem; }
+  .hero-actions { grid-column: 1 / -1; justify-content: flex-start; }
+
+  .prospect-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-field:nth-child(2n) { border-right: 0; }
+  .detail-field:nth-child(3), .detail-field:nth-child(4) { border-bottom: 1px solid #eee6e7; }
+  .google-layout { grid-template-columns: minmax(220px, 42%) minmax(0, 1fr); }
+
+  /*
+   * Tablet becomes one coherent work stream.
+   * display:contents lets children from left/right stacks share one grid order.
+   */
+  .detail-content-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .7rem;
+  }
   .detail-column { display: contents; }
 
-  .history-scroll-region,
-  .dcard-visit-list,
-  .dcard-timeline,
-  .detail-reviews-section .dcard-reviews-list {
+  .dcard-prospect-core { order: 10; }
+  .business-contact-card { order: 20; }
+  .dcard-google-info { order: 30; }
+  .dcard-photos { order: 40; }
+  .dcard-menu { order: 41; }
+  .ai-shell-summary { order: 50; }
+  .detail-ai-menu { order: 51; }
+  .ai-shell-discussion { order: 60; }
+  .ai-shell-chat { order: 61; }
+  .supporting-card { order: 70; }
+  .dcard-reviews { order: 80; }
+  .history-card { order: 90; }
+
+  .ai-shell::after { width: 5.5rem; }
+}
+
+/* Mobile */
+@media (max-width: 767px) {
+  .detail-page {
+    gap: .6rem;
+    padding-bottom: calc(5.6rem + env(safe-area-inset-bottom));
+  }
+
+  .prospect-hero { padding-inline: 0; }
+  .hero-row { grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+  .hero-title-row h1 { font-size: 1.06rem; }
+  .hero-status { grid-column: 2; grid-row: 1; }
+  .hero-actions { display: none; }
+
+  /*
+   * Mobile is a single sales workflow, not desktop columns stacked blindly.
+   * AI insight categories are intentionally kept ABOVE reviews/visit/status history.
+   */
+  .detail-content-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: .62rem;
+  }
+  .detail-column { display: contents; }
+
+  .dcard-prospect-core { order: 10; }
+  .business-contact-card { order: 20; }
+  .dcard-google-info { order: 30; }
+  .dcard-photos { order: 40; }
+  .dcard-menu { order: 41; }
+
+  /* One AI category block after another */
+  .ai-shell-summary { order: 50; }
+  .detail-ai-menu { order: 51; }
+  .ai-shell-discussion { order: 60; }
+  .ai-shell-chat { order: 61; }
+
+  .supporting-card { order: 70; }
+  .dcard-reviews { order: 80; }
+  .history-card { order: 90; }
+
+  .prospect-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-field,
+  .detail-field-wide {
+    grid-column: auto;
+    border-right: 0;
+    border-bottom: 1px solid #eee6e7;
+    padding: .62rem .68rem;
+  }
+  .detail-field:last-child { border-bottom: 0; }
+
+  .google-layout { grid-template-columns: minmax(0, 1fr); }
+  .google-rows > div {
+    grid-template-columns: 16px minmax(92px, max-content) minmax(0, 1fr) auto;
+  }
+
+  .reviews-grid,
+  .visit-grid { grid-template-columns: minmax(0, 1fr); }
+
+  .business-list > div {
+    grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+  }
+
+  /* AI cards remain compact and visually grouped on mobile. */
+  .ai-shell,
+  .detail-ai-menu {
+    width: 100%;
+    min-width: 0;
+  }
+  .ai-shell::after {
+    top: .35rem;
+    right: .35rem;
+    width: 2.25rem;
+    height: 2.1rem;
+  }
+  .ai-shell > .expand-control {
+    top: .47rem;
+    right: .47rem;
+    width: 29px;
+    height: 29px;
+    min-height: 29px;
+    padding: 0;
+    justify-content: center;
+  }
+  .ai-shell > .expand-control span { display: none; }
+
+  .expand-dialog {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 12px;
+  }
+
+  .dcard {
+    padding: .78rem;
+    border-radius: 10px;
+  }
+
+  .detail-page :deep(.ppg-scroll) {
+    scroll-padding-inline: .2rem;
   }
 }
 
-@media (min-width: 768px) and (max-width: 1199px) {
-  .summary-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 390px) {
+  .business-list > div { grid-template-columns: minmax(0, 1fr); gap: .12rem; }
+  .google-rows > div { grid-template-columns: 16px minmax(0, 1fr); }
+  .google-rows > div > strong,
+  .google-rows > div > span,
+  .google-rows > div > a { grid-column: 2; }
+  .google-rows > div > .copy-mini { grid-column: 2; }
 }
-
 </style>

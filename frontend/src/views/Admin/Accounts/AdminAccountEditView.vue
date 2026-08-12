@@ -520,8 +520,8 @@ onMounted(async () => {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #fff1f2; color: #d14350; }
-.si-violet { background: #fff5f6; color: #d15a66; }
+.si-blue { background: #fff0f1; color: #e63946; }
+.si-violet { background: #fff5f5; color: #ef4e5d; }
 
 .form-card-header h3 {
   margin: 0;
@@ -578,9 +578,9 @@ onMounted(async () => {
   gap: 0.45rem;
   padding: 0.55rem 0.7rem;
   font-size: 0.75rem;
-  color: #ad3040;
-  background: #fff1f2;
-  border: 1px solid #f3b9c0;
+  color: #d62839;
+  background: #fff0f1;
+  border: 1px solid #f4b3ba;
   border-radius: var(--radius-sm);
   line-height: 1.45;
 }
@@ -613,7 +613,7 @@ onMounted(async () => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem 0.75rem;
   padding: 0.8rem 0.9rem;
-  border: 1px solid #ffd9dd;
+  border: 1px solid #ffd9dc;
   border-radius: var(--radius-sm);
   background: #fffbfb;
 }
@@ -748,8 +748,8 @@ onMounted(async () => {
   word-break: break-all;
 }
 .code-blue {
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
 }
 
 /* ── STATE BOX ────────────────────────────────────────────────────── */

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"crm-prospect-simulator/backend/internal/prospect/model"
 	"github.com/google/uuid"
@@ -639,13 +638,6 @@ func isForeignKeyViolation(err error) bool {
 	return errors.As(err, &pgError) && pgError.Code == "23503"
 }
 
-func isUndefinedColumn(err error, column string) bool {
-	var pgError *pgconn.PgError
-	return errors.As(err, &pgError) &&
-		pgError.Code == "42703" &&
-		(pgError.ColumnName == column || strings.Contains(pgError.Message, `"`+column+`"`))
-}
-
 func (r *PostgresRepository) RequestDeletion(ctx context.Context, prospectID, salesExecID uuid.UUID) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE prospects SET deletion_requested = TRUE, updated_at = now()
@@ -797,21 +789,18 @@ func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID u
 
 func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.UUID) ([]model.ProspectPhotoTag, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, prospect_id, photo_index, category, updated_by, created_at, updated_at
+		SELECT id, prospect_id, photo_name, category, updated_by, created_at, updated_at
 		FROM prospect_photo_tags
 		WHERE prospect_id = $1
-		ORDER BY photo_index ASC`, prospectID)
+		ORDER BY created_at ASC`, prospectID)
 	if err != nil {
-		if isUndefinedColumn(err, "photo_index") {
-			return []model.ProspectPhotoTag{}, nil
-		}
 		return nil, fmt.Errorf("list prospect photo tags: %w", err)
 	}
 	defer rows.Close()
 	items := make([]model.ProspectPhotoTag, 0)
 	for rows.Next() {
 		var item model.ProspectPhotoTag
-		if err := rows.Scan(&item.ID, &item.ProspectID, &item.PhotoIndex, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.PhotoName, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan prospect photo tag: %w", err)
 		}
 		items = append(items, item)
@@ -819,21 +808,18 @@ func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.
 	return items, rows.Err()
 }
 
-func (r *PostgresRepository) UpsertPhotoTag(ctx context.Context, prospectID uuid.UUID, photoIndex int, category model.PhotoCategory, userID uuid.UUID) (model.ProspectPhotoTag, error) {
+func (r *PostgresRepository) UpsertPhotoTag(ctx context.Context, prospectID uuid.UUID, photoName string, category model.PhotoCategory, userID uuid.UUID) (model.ProspectPhotoTag, error) {
 	id := uuid.New()
 	var item model.ProspectPhotoTag
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO prospect_photo_tags (id, prospect_id, photo_index, category, updated_by, updated_at)
+		INSERT INTO prospect_photo_tags (id, prospect_id, photo_name, category, updated_by, updated_at)
 		VALUES ($1, $2, $3, $4, $5, now())
-		ON CONFLICT (prospect_id, photo_index)
+		ON CONFLICT (prospect_id, photo_name)
 		DO UPDATE SET category = EXCLUDED.category, updated_by = EXCLUDED.updated_by, updated_at = now()
-		RETURNING id, prospect_id, photo_index, category, updated_by, created_at, updated_at`,
-		id, prospectID, photoIndex, category, userID).
-		Scan(&item.ID, &item.ProspectID, &item.PhotoIndex, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
+		RETURNING id, prospect_id, photo_name, category, updated_by, created_at, updated_at`,
+		id, prospectID, photoName, category, userID).
+		Scan(&item.ID, &item.ProspectID, &item.PhotoName, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
-		if isUndefinedColumn(err, "photo_index") {
-			return model.ProspectPhotoTag{}, ErrPhotoTagSchemaUnsupported
-		}
 		return model.ProspectPhotoTag{}, fmt.Errorf("upsert prospect photo tag: %w", err)
 	}
 	return item, nil

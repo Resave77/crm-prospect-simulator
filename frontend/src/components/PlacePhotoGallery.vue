@@ -11,11 +11,11 @@ const props = defineProps<{
   section?: 'menu' | 'photos'
 }>()
 
-const sharedTags = reactive<Record<string, Record<number, PhotoCategory>>>({})
-const sharedSaving = reactive<Record<string, number | null>>({})
+const sharedTags = reactive<Record<string, Record<string, PhotoCategory>>>({})
+const sharedSaving = reactive<Record<string, string | null>>({})
 
 const tags = computed(() => sharedTags[props.prospectId ?? ''] ?? {})
-const savingIndex = computed(() => (props.prospectId ? sharedSaving[props.prospectId] ?? null : null))
+const savingName = computed(() => (props.prospectId ? sharedSaving[props.prospectId] ?? null : null))
 const loading = ref(true)
 const lightbox = ref<PlacePhoto | null>(null)
 const tagError = ref('')
@@ -29,25 +29,18 @@ let disposed = false
 const taggable = computed(() => !!props.prospectId)
 const canTag = computed(() => props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR')
 
-const menuPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ photo, index }) => {
-  const stored = tags.value[index]
-  return stored === 'MENU' || (!stored && photo.isMenu)
-}))
-const regularPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ photo, index }) => {
-  const stored = tags.value[index]
-  return stored === 'PLACE' || (!stored && !photo.isMenu) || (stored !== 'MENU' && stored !== undefined)
-}))
+const menuPhotos = computed(() => props.photos.filter((photo) => tags.value[photo.name] === 'MENU'))
+const regularPhotos = computed(() => props.photos.filter((photo) => tags.value[photo.name] !== 'MENU'))
 
-function categoryOf(index: number): PhotoCategory {
-  const stored = tags.value[index]
+function categoryOf(photo: PlacePhoto): PhotoCategory {
+  const stored = tags.value[photo.name]
   if (stored) return stored
-  const photo = props.photos[index]
-  return photo?.isMenu ? 'MENU' : 'PLACE'
+  return 'PLACE'
 }
 
-function applyTags(prospectId: string, items: { photoIndex: number; category: PhotoCategory }[]) {
-  const map: Record<number, PhotoCategory> = { ...(sharedTags[prospectId] ?? {}) }
-  items.forEach((t) => { map[t.photoIndex] = t.category })
+function applyTags(prospectId: string, items: { photoName: string; category: PhotoCategory }[]) {
+  const map: Record<string, PhotoCategory> = { ...(sharedTags[prospectId] ?? {}) }
+  items.forEach((t) => { map[t.photoName] = t.category })
   sharedTags[prospectId] = map
 }
 
@@ -68,12 +61,12 @@ async function loadTags() {
   }
 }
 
-async function setCategory(index: number, category: PhotoCategory) {
-  if (savingIndex.value !== null || !taggable.value || !canTag.value) return
-  sharedSaving[props.prospectId!] = index
+async function setCategory(photo: PlacePhoto, category: PhotoCategory) {
+  if (savingName.value !== null || !taggable.value || !canTag.value) return
+  sharedSaving[props.prospectId!] = photo.name
   tagError.value = ''
   try {
-    const item = await setProspectPhotoTag(props.prospectId!, index, category, props.role)
+    const item = await setProspectPhotoTag(props.prospectId!, photo.name, category, props.role)
     applyTags(props.prospectId!, [item])
   } catch (caught) {
     tagError.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
@@ -204,22 +197,22 @@ onBeforeUnmount(() => {
       <h2 v-if="!section"><i class="pi pi-book" /> Menu</h2>
       <p v-if="menuPhotos.length" class="ppg-count">{{ menuPhotos.length }} photo{{ menuPhotos.length === 1 ? '' : 's' }} tagged as menu</p>
       <div v-if="menuPhotos.length" class="ppg-scroll">
-        <div v-for="item in menuPhotos" :key="item.photo.name" class="ppg-item">
-          <div class="ppg-thumb" @click="lightbox = item.photo">
-            <img v-if="resolvedPhotoUrl(item.photo)" :src="resolvedPhotoUrl(item.photo)" :alt="'Menu photo'" loading="lazy" />
+        <div v-for="photo in menuPhotos" :key="photo.name" class="ppg-item">
+          <div class="ppg-thumb" @click="lightbox = photo">
+            <img v-if="resolvedPhotoUrl(photo)" :src="resolvedPhotoUrl(photo)" :alt="'Menu photo'" loading="lazy" />
             <span v-else class="ppg-photo-placeholder">
-              <i v-if="isPhotoLoading(item.photo)" class="pi pi-spin pi-spinner" />
-              <i v-else-if="didPhotoFail(item.photo)" class="pi pi-image" />
+              <i v-if="isPhotoLoading(photo)" class="pi pi-spin pi-spinner" />
+              <i v-else-if="didPhotoFail(photo)" class="pi pi-image" />
             </span>
             <span class="ppg-badge ppg-badge-menu"><i class="pi pi-book" /> Menu</span>
           </div>
           <button
             v-if="taggable && canTag"
             class="ppg-tag-btn"
-            :disabled="savingIndex === item.index"
-            @click="setCategory(item.index, 'PLACE')"
+            :disabled="savingName === photo.name"
+            @click="setCategory(photo, 'PLACE')"
           >
-            <i v-if="savingIndex === item.index" class="pi pi-spin pi-spinner" />
+            <i v-if="savingName === photo.name" class="pi pi-spin pi-spinner" />
             <i v-else class="pi pi-image" />
             Move to Photos
           </button>
@@ -236,22 +229,22 @@ onBeforeUnmount(() => {
       <h2 v-if="!section"><i class="pi pi-images" /> Photos</h2>
       <p v-if="regularPhotos.length" class="ppg-count">{{ regularPhotos.length }} photo{{ regularPhotos.length === 1 ? '' : 's' }}</p>
       <div v-if="regularPhotos.length" class="ppg-scroll">
-        <div v-for="item in regularPhotos" :key="item.photo.name" class="ppg-item">
-          <div class="ppg-thumb" @click="lightbox = item.photo">
-            <img v-if="resolvedPhotoUrl(item.photo)" :src="resolvedPhotoUrl(item.photo)" :alt="'Place photo'" loading="lazy" />
+        <div v-for="photo in regularPhotos" :key="photo.name" class="ppg-item">
+          <div class="ppg-thumb" @click="lightbox = photo">
+            <img v-if="resolvedPhotoUrl(photo)" :src="resolvedPhotoUrl(photo)" :alt="'Place photo'" loading="lazy" />
             <span v-else class="ppg-photo-placeholder">
-              <i v-if="isPhotoLoading(item.photo)" class="pi pi-spin pi-spinner" />
-              <i v-else-if="didPhotoFail(item.photo)" class="pi pi-image" />
+              <i v-if="isPhotoLoading(photo)" class="pi pi-spin pi-spinner" />
+              <i v-else-if="didPhotoFail(photo)" class="pi pi-image" />
             </span>
-            <span v-if="categoryOf(item.index) === 'PLACE'" class="ppg-badge ppg-badge-place"><i class="pi pi-images" /> Photo</span>
+            <span v-if="categoryOf(photo) === 'PLACE'" class="ppg-badge ppg-badge-place"><i class="pi pi-images" /> Photo</span>
           </div>
           <button
             v-if="taggable && canTag"
             class="ppg-tag-btn"
-            :disabled="savingIndex === item.index"
-            @click="setCategory(item.index, 'MENU')"
+            :disabled="savingName === photo.name"
+            @click="setCategory(photo, 'MENU')"
           >
-            <i v-if="savingIndex === item.index" class="pi pi-spin pi-spinner" />
+            <i v-if="savingName === photo.name" class="pi pi-spin pi-spinner" />
             <i v-else class="pi pi-book" />
             Tag as Menu
           </button>
@@ -328,7 +321,7 @@ onBeforeUnmount(() => {
   background: #fff; color: var(--brand-blue); font-size: 0.66rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s ease;
 }
-.ppg-tag-btn:hover:not(:disabled) { background: #fff1f2; border-color: #f3b9c0; }
+.ppg-tag-btn:hover:not(:disabled) { background: #fff0f1; border-color: #f4b3ba; }
 .ppg-tag-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .ppg-empty {

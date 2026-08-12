@@ -560,7 +560,7 @@ function openActionMenu(
 
 .hier-level.level-1,
 .sales-name.level-1 {
-  color: #bb3342;
+  color: #d62839;
 }
 
 .hier-level.level-2,

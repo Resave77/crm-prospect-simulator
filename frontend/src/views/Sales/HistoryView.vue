@@ -286,7 +286,7 @@ onMounted(async () => {
 
 <style scoped>
 .history-back { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; color: var(--brand-blue); background: var(--brand-blue-bg); border: 1px solid transparent; border-radius: var(--radius-md); text-decoration: none; font-size: 0.9rem; margin-bottom: 0.5rem; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.history-back:hover { background: #ffd9dd; border-color: var(--brand-blue); }
+.history-back:hover { background: #ffd9dc; border-color: var(--brand-blue); }
 
 .htabs { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
 .htab {
@@ -326,7 +326,7 @@ onMounted(async () => {
   width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px;
   font-size: 0.7rem; font-weight: 800; color: #fff; flex-shrink: 0;
 }
-.ht-visit-avatar.prospect { background: linear-gradient(135deg, #d14350, #bb3342); }
+.ht-visit-avatar.prospect { background: linear-gradient(135deg, #e63946, #d62839); }
 .ht-visit-avatar.customer { background: linear-gradient(135deg, #16a34a, #15803d); }
 .ht-visit-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
 .ht-visit-info strong { font-size: 0.88rem; font-weight: 700; }

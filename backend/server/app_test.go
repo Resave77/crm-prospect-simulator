@@ -40,6 +40,28 @@ func TestUnknownAPIRouteReturnsJSON404(t *testing.T) {
 	}
 }
 
+func TestAIStatusIsAuthenticatedAndDoesNotExposeSecret(t *testing.T) {
+	app, token := buildTestApp(authmodel.User{ID: uuid.New(), Email: "admin@test.test", Role: authmodel.RoleAdministrator, Status: authmodel.UserActive, TokenVersion: 1})
+	req := httptest.NewRequest("GET", "/api/v1/ai/status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status=%d body=%s, want 200", resp.StatusCode, body)
+	}
+	text := string(body)
+	if strings.Contains(text, "OPENAI") || strings.Contains(text, "key") || strings.Contains(text, "secret") {
+		t.Fatalf("status response exposed secret-ish content: %s", text)
+	}
+	if !strings.Contains(text, "enabled") || !strings.Contains(text, "configured") || !strings.Contains(text, "modelConfigured") {
+		t.Fatalf("status response missing config booleans: %s", text)
+	}
+}
+
 func TestChangePasswordNeedsAuthentication(t *testing.T) {
 	app, _ := buildTestApp(authmodel.User{ID: uuid.New(), Email: "admin@test.test", Role: authmodel.RoleAdministrator, TokenVersion: 1})
 	req := httptest.NewRequest("POST", "/api/v1/auth/change-password", strings.NewReader(`{"currentPassword":"password","newPassword":"NewPass456","confirmPassword":"NewPass456"}`))

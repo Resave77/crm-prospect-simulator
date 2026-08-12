@@ -72,6 +72,15 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	auth.Post("/logout-all", authMiddleware.Authenticate, authHandler.LogoutAll)
 	auth.Post("/change-password", authMiddleware.Authenticate, authHandler.ChangePassword)
 
+	ai := api.Group("/ai", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
+	ai.Get("/status", func(c *fiber.Ctx) error {
+		return response.Data(c, fiber.StatusOK, fiber.Map{
+			"enabled":         cfg.AIEnabled,
+			"configured":      cfg.AIConfigured(),
+			"modelConfigured": cfg.OpenAIModel != "",
+		})
+	})
+
 	dashboard := api.Group("/dashboard", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
 	dashboard.Get("/admin", authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator), func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"surface": "administrator"})

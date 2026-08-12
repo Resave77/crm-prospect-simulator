@@ -617,8 +617,8 @@ onMounted(() => { load() })
 }
 
 .search-field:focus-within {
-  border-color: #d14350;
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.08);
+  border-color: #e63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.08);
 }
 
 .search-field i {
@@ -756,8 +756,8 @@ onMounted(() => { load() })
   flex: 0 0 auto;
   place-content: center;
   border-radius: 9px;
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
   font-size: 0.75rem;
   font-weight: 800;
 }
@@ -957,7 +957,7 @@ onMounted(() => { load() })
 }
 
 .action-card:hover {
-  border-color: #f3b9c0;
+  border-color: #f4b3ba;
   background: #fffbfb;
   transform: translateY(-1px);
 }
@@ -972,8 +972,8 @@ onMounted(() => { load() })
 }
 
 .view-icon {
-  background: #fff1f2;
-  color: #d14350;
+  background: #fff0f1;
+  color: #e63946;
 }
 
 .edit-icon {

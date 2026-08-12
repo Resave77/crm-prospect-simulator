@@ -214,8 +214,8 @@ async function submit() {
 
 :deep(.p-inputtext:focus),
 :deep(.p-password-input:focus) {
-  border-color: #d14350;
-  box-shadow: 0 0 0 3px rgba(209, 67, 80, 0.12);
+  border-color: #e63946;
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.12);
 }
 
 :deep(.p-password) {
@@ -230,15 +230,15 @@ async function submit() {
 .submit-btn {
   margin-top: 0.25rem;
   border-radius: 10px !important;
-  background: #d14350 !important;
-  border-color: #d14350 !important;
+  background: #e63946 !important;
+  border-color: #e63946 !important;
   font-weight: 700 !important;
-  box-shadow: 0 8px 18px rgba(209, 67, 80, 0.18) !important;
+  box-shadow: 0 8px 18px rgba(230, 57, 70, 0.18) !important;
 }
 
 .submit-btn:hover {
-  background: #bb3342 !important;
-  border-color: #bb3342 !important;
+  background: #d62839 !important;
+  border-color: #d62839 !important;
 }
 
 .privacy-copy {

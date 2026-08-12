@@ -388,7 +388,7 @@ onMounted(async () => {
   background: #f1f5f9;
   color: var(--text-secondary);
 }
-.code-blue { background: #fff1f2; color: #d14350; }
+.code-blue { background: #fff0f1; color: #e63946; }
 
 /* ── FORM LAYOUT ──────────────────────────────────────────────────── */
 .form-layout {
@@ -428,8 +428,8 @@ onMounted(async () => {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.si-blue { background: #fff1f2; color: #d14350; }
-.si-violet { background: #fff5f6; color: #d15a66; }
+.si-blue { background: #fff0f1; color: #e63946; }
+.si-violet { background: #fff5f5; color: #ef4e5d; }
 .si-emerald { background: #ecfdf5; color: #059669; }
 .si-amber { background: #fffbeb; color: #d97706; }
 .si-slate { background: #f1f5f9; color: #64748b; }

@@ -867,8 +867,8 @@ onMounted(async () => {
   height: 58px;
   place-content: center;
   border-radius: 50%;
-  background: #fff5f6;
-  color: #d14350;
+  background: #fff5f5;
+  color: #e63946;
   font-size: 1rem;
   font-weight: 800;
 }
@@ -1006,23 +1006,23 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.85rem;
-  border-color: #f3b9c0;
-  background: #fff1f2;
+  border-color: #f4b3ba;
+  background: #fff0f1;
 }
 
 .help-card > i {
   margin-top: 0.08rem;
-  color: #d14350;
+  color: #e63946;
 }
 
 .help-card strong {
-  color: #922833;
+  color: #a51e2d;
   font-size: 0.73rem;
 }
 
 .help-card p {
   margin: 0.18rem 0 0;
-  color: #ad3040;
+  color: #d62839;
   font-size: 0.66rem;
   line-height: 1.5;
 }
