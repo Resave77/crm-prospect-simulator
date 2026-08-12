@@ -43,6 +43,7 @@ export interface PlaceResult {
   markerColor: string
   markerIcon: string
   placeTypes: string[]
+  hasMenuPhotos?: boolean
   isCustomer?: boolean
   customerId?: string
 }
@@ -164,6 +165,14 @@ export interface PlacePhoto {
   widthPx: number
   heightPx: number
   attribution: string
+  isMenu: boolean
+}
+
+export interface MenuImage {
+  title: string
+  imageUrl: string
+  sourceUrl: string
+  sourceSite: string
 }
 
 export interface PlaceOpeningHours {

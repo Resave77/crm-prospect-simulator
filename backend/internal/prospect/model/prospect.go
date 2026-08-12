@@ -70,6 +70,7 @@ type PlaceResult struct {
 	MarkerCategory   string   `json:"markerCategory"`
 	MarkerColor      string   `json:"markerColor"`
 	MarkerIcon       string   `json:"markerIcon"`
+	HasMenuPhotos    bool     `json:"hasMenuPhotos"`
 	IsCustomer       bool     `json:"isCustomer"`
 }
 
@@ -152,6 +153,14 @@ type PlacePhoto struct {
 	WidthPx     int    `json:"widthPx"`
 	HeightPx    int    `json:"heightPx"`
 	Attribution string `json:"attribution"`
+	IsMenu      bool   `json:"isMenu"`
+}
+
+type MenuImage struct {
+	Title      string `json:"title"`
+	ImageURL   string `json:"imageUrl"`
+	SourceURL  string `json:"sourceUrl"`
+	SourceSite string `json:"sourceSite"`
 }
 
 type PlaceOpeningHours struct {

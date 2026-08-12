@@ -37,7 +37,7 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	tokens := service.NewTokenManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL)
 	authService := service.NewAuthService(repo, repo, tokens, cfg.RefreshTokenTTL)
 	prospectRepo := prospectrepository.NewPostgresRepository(pool)
-	placesClient := prospectservice.NewGooglePlacesClient(cfg.GoogleMapsAPIKey)
+	placesClient := prospectservice.NewGooglePlacesClient(cfg.GoogleMapsAPIKey, cfg.GoogleCSEID, cfg.GoogleCSEAPIKey)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)

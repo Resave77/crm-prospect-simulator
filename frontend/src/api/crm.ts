@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -40,6 +40,7 @@ export async function getSalesExecutives() { return (await api.get<ApiEnvelope<S
 export async function getCustomerMarkers() { return (await api.get<ApiEnvelope<CustomerMarker[]>>('/admin/prospect-finder/customers')).data.data }
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
 export async function getPlaceDetails(googlePlaceId: string) { return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/prospect-finder/place-details/${googlePlaceId}`)).data.data }
+export async function getMenuImages(query: string, limit = 8) { return (await api.get<ApiEnvelope<MenuImage[]>>('/admin/prospect-finder/menu-images', { params: { query, limit } })).data.data }
 export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
 
 

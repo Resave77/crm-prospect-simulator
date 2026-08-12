@@ -21,6 +21,7 @@ var (
 	ErrProspectStatus   = errors.New("prospect is not eligible for this operation")
 	ErrFinderInput      = errors.New("prospect finder query is invalid")
 	ErrPlacesDisabled   = errors.New("Google Places server key is not configured")
+	ErrMenuImagesDisabled = errors.New("Google Custom Search is not configured")
 	ErrAlreadyCustomer  = errors.New("place is already an existing customer")
 	ErrVisitCoordinates = errors.New("visit GPS coordinates are invalid")
 	ErrPhotoTagInvalid  = errors.New("photo category must be MENU or PLACE")
@@ -41,6 +42,7 @@ type Places interface {
 	Search(context.Context, prospectmodel.PlaceSearchInput) ([]prospectmodel.PlaceResult, error)
 	Detail(context.Context, string) (prospectmodel.PlaceResult, error)
 	DetailFull(context.Context, string) (prospectmodel.PlaceDetails, error)
+	SearchMenuImages(context.Context, string, int) ([]prospectmodel.MenuImage, error)
 }
 
 func New(repo repository.Repository, placeClients ...Places) *Service {
@@ -251,6 +253,16 @@ func (s *Service) PlaceDetailFull(ctx context.Context, placeID string) (prospect
 		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
 	}
 	return s.places.DetailFull(ctx, placeID)
+}
+
+func (s *Service) MenuImages(ctx context.Context, query string, limit int) ([]prospectmodel.MenuImage, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, ErrFinderInput
+	}
+	if s.places == nil {
+		return nil, ErrMenuImagesDisabled
+	}
+	return s.places.SearchMenuImages(ctx, query, limit)
 }
 
 func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.SaveProspectInput) (prospectmodel.Prospect, error) {

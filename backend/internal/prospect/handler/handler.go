@@ -603,6 +603,19 @@ func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, place)
 }
 
+func (h *Handler) PlaceFinderMenuImages(c *fiber.Ctx) error {
+	query := strings.TrimSpace(c.Query("query"))
+	if query == "" {
+		return response.Error(c, 400, "QUERY_REQUIRED", "Search query is required.")
+	}
+	limit, _ := strconv.Atoi(c.Query("limit", "8"))
+	items, err := h.service.MenuImages(c.UserContext(), query, limit)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
 	var permissionKeys []string
@@ -635,6 +648,8 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())
+	case errors.Is(err, service.ErrMenuImagesDisabled):
+		return response.Error(c, fiber.StatusServiceUnavailable, "MENU_IMAGES_NOT_CONFIGURED", err.Error())
 	case errors.Is(err, repository.ErrPhotoTagSchemaUnsupported):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PHOTO_TAGGING_UNAVAILABLE", "Photo tagging is unavailable with the current database schema.")
 	case errors.Is(err, service.ErrAlreadyCustomer):

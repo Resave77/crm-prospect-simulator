@@ -24,6 +24,8 @@ type Config struct {
 	AllowedOrigins   string
 	CookieSecure     bool
 	GoogleMapsAPIKey string
+	GoogleCSEID      string
+	GoogleCSEAPIKey  string
 }
 
 func Load() (Config, error) {
@@ -54,6 +56,8 @@ func Load() (Config, error) {
 		AllowedOrigins:   value("ALLOWED_ORIGINS", "http://localhost:5173"),
 		CookieSecure:     secure,
 		GoogleMapsAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
+		GoogleCSEID:      strings.TrimSpace(os.Getenv("GOOGLE_CSE_ID")),
+		GoogleCSEAPIKey:  strings.TrimSpace(os.Getenv("GOOGLE_CSE_API_KEY")),
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -14,14 +15,77 @@ import (
 )
 
 const placesBaseURL = "https://places.googleapis.com/v1"
+const customSearchBaseURL = "https://www.googleapis.com/customsearch/v1"
 
 type GooglePlacesClient struct {
-	key  string
-	http *http.Client
+	key    string
+	cseID  string
+	cseKey string
+	http   *http.Client
 }
 
-func NewGooglePlacesClient(key string) *GooglePlacesClient {
-	return &GooglePlacesClient{key: strings.TrimSpace(key), http: &http.Client{Timeout: 15e9}}
+func NewGooglePlacesClient(key, cseID, cseKey string) *GooglePlacesClient {
+	if strings.TrimSpace(cseKey) == "" {
+		cseKey = key
+	}
+	return &GooglePlacesClient{key: strings.TrimSpace(key), cseID: strings.TrimSpace(cseID), cseKey: strings.TrimSpace(cseKey), http: &http.Client{Timeout: 15e9}}
+}
+
+type menuImageItem struct {
+	Title string `json:"title"`
+	Link  string `json:"link"`
+	Image struct {
+		ThumbnailLink string `json:"thumbnailLink"`
+	} `json:"image"`
+	DisplayLink string `json:"displayLink"`
+}
+
+type menuImageResponse struct {
+	Items []menuImageItem `json:"items"`
+}
+
+func (c *GooglePlacesClient) SearchMenuImages(ctx context.Context, query string, limit int) ([]prospectmodel.MenuImage, error) {
+	if c.cseID == "" {
+		return nil, ErrMenuImagesDisabled
+	}
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	endpoint := fmt.Sprintf("%s?key=%s&cx=%s&searchType=image&num=%d&q=%s",
+		customSearchBaseURL, url.QueryEscape(c.cseKey), url.QueryEscape(c.cseID), limit, url.QueryEscape(strings.TrimSpace(query)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Google Custom Search request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Google Custom Search returned HTTP %d", resp.StatusCode)
+	}
+	var body menuImageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	images := make([]prospectmodel.MenuImage, 0, len(body.Items))
+	for _, item := range body.Items {
+		imageURL := item.Link
+		if imageURL == "" {
+			imageURL = item.Image.ThumbnailLink
+		}
+		if imageURL == "" {
+			continue
+		}
+		images = append(images, prospectmodel.MenuImage{
+			Title: item.Title, ImageURL: imageURL, SourceURL: item.Image.ThumbnailLink, SourceSite: item.DisplayLink,
+		})
+	}
+	return images, nil
 }
 
 type googlePlace struct {
@@ -33,15 +97,15 @@ type googlePlace struct {
 	PrimaryTypeDisplayName struct {
 		Text string `json:"text"`
 	} `json:"primaryTypeDisplayName"`
-	Types                   []string `json:"types"`
-	BusinessStatus          string   `json:"businessStatus"`
-	Rating                  float64  `json:"rating"`
-	UserRatingCount         int      `json:"userRatingCount"`
-	NationalPhoneNumber     string   `json:"nationalPhoneNumber"`
-	InternationalPhoneNumber string `json:"internationalPhoneNumber"`
-	WebsiteURI              string   `json:"websiteUri"`
-	GoogleMapsURI           string   `json:"googleMapsUri"`
-	Location                struct {
+	Types                    []string `json:"types"`
+	BusinessStatus           string   `json:"businessStatus"`
+	Rating                   float64  `json:"rating"`
+	UserRatingCount          int      `json:"userRatingCount"`
+	NationalPhoneNumber      string   `json:"nationalPhoneNumber"`
+	InternationalPhoneNumber string   `json:"internationalPhoneNumber"`
+	WebsiteURI               string   `json:"websiteUri"`
+	GoogleMapsURI            string   `json:"googleMapsUri"`
+	Location                 struct {
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
 	} `json:"location"`
@@ -51,17 +115,17 @@ type googlePlace struct {
 		Overview string `json:"overview"`
 	} `json:"editorialSummary"`
 	Photos []struct {
-		Name        string `json:"name"`
-		WidthPx     int    `json:"widthPx"`
-		HeightPx    int    `json:"heightPx"`
+		Name         string `json:"name"`
+		WidthPx      int    `json:"widthPx"`
+		HeightPx     int    `json:"heightPx"`
 		Attributions []struct {
 			DisplayName string `json:"displayName"`
 			URI         string `json:"uri"`
 		} `json:"attributions"`
 	} `json:"photos"`
 	RegularOpeningHours struct {
-		OpenNow              bool     `json:"openNow"`
-		WeekdayDescriptions  []string `json:"weekdayDescriptions"`
+		OpenNow             bool     `json:"openNow"`
+		WeekdayDescriptions []string `json:"weekdayDescriptions"`
 	} `json:"regularOpeningHours"`
 	Reviews []struct {
 		AuthorAttribution struct {
@@ -72,16 +136,16 @@ type googlePlace struct {
 		AuthorPhoto struct {
 			PhotoURI string `json:"photoUri"`
 		} `json:"authorPhoto"`
-		Rating       float64 `json:"rating"`
-		Text         struct {
+		Rating float64 `json:"rating"`
+		Text   struct {
 			Text string `json:"text"`
 		} `json:"text"`
 		RelativePublishTimeDescription string `json:"relativePublishTimeDescription"`
 		LanguageCode                   string `json:"languageCode"`
 	} `json:"reviews"`
-	Delivery     bool `json:"delivery"`
-	DineIn       bool `json:"dineIn"`
-	Takeout      bool `json:"takeout"`
+	Delivery       bool `json:"delivery"`
+	DineIn         bool `json:"dineIn"`
+	Takeout        bool `json:"takeout"`
 	CurbsidePickup bool `json:"curbsidePickup"`
 	ParkingOptions struct {
 		PaidStreetParking bool `json:"paidStreetParking"`
@@ -111,7 +175,7 @@ type googleResponse struct {
 }
 
 const (
-	searchFieldMask  = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.businessStatus,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location"
+	searchFieldMask    = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.businessStatus,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location,places.photos"
 	singleTileRadius   = 5000.0
 	defaultTileSize    = 3500.0
 	maxTiles           = 16
@@ -130,6 +194,7 @@ func (c *GooglePlacesClient) Search(ctx context.Context, input prospectmodel.Pla
 	}
 	keyword := strings.TrimSpace(input.Keyword)
 	types := categoryTypes(input.Categories)
+	selected := selectedCategorySet(input.Categories)
 	seen := make(map[string]bool)
 	results := make([]prospectmodel.PlaceResult, 0, 40)
 	collect := func(mapped prospectmodel.PlaceResult) {
@@ -144,7 +209,7 @@ func (c *GooglePlacesClient) Search(ctx context.Context, input prospectmodel.Pla
 	}
 
 	if keyword != "" {
-		if err := c.searchText(ctx, input, keyword, types, collect); err != nil {
+		if err := c.searchText(ctx, input, keyword, types, selected, collect); err != nil {
 			return nil, err
 		}
 		return results, nil
@@ -155,7 +220,7 @@ func (c *GooglePlacesClient) Search(ctx context.Context, input prospectmodel.Pla
 			if len(results) >= maxResults {
 				break
 			}
-			if err := c.searchNearbyCircle(ctx, input, tile, chunk, collect); err != nil {
+			if err := c.searchNearbyCircle(ctx, input, tile, chunk, selected, collect); err != nil {
 				return nil, err
 			}
 		}
@@ -164,6 +229,29 @@ func (c *GooglePlacesClient) Search(ctx context.Context, input prospectmodel.Pla
 		}
 	}
 	return results, nil
+}
+
+// selectedCategorySet builds a lookup of the checked CRM category keys. An
+// empty set means no category filter is applied.
+func selectedCategorySet(categories []string) map[string]bool {
+	set := make(map[string]bool, len(categories))
+	for _, c := range categories {
+		if c != "" {
+			set[c] = true
+		}
+	}
+	return set
+}
+
+// matchesCategory reports whether the place's primary Google type maps to one
+// of the checked CRM categories, keeping search results consistent with the
+// category shown on each result.
+func matchesCategory(types []string, selected map[string]bool) bool {
+	if len(selected) == 0 {
+		return true
+	}
+	key, _ := appCategory(types)
+	return key != "" && selected[key]
 }
 
 // chunkTypes splits types into chunks of at most size each. Google Places
@@ -181,7 +269,7 @@ func chunkTypes(types []string, size int) [][]string {
 	return append(chunks, types)
 }
 
-func (c *GooglePlacesClient) searchNearbyCircle(ctx context.Context, input prospectmodel.PlaceSearchInput, tile latLng, types []string, collect func(prospectmodel.PlaceResult)) error {
+func (c *GooglePlacesClient) searchNearbyCircle(ctx context.Context, input prospectmodel.PlaceSearchInput, tile latLng, types []string, selected map[string]bool, collect func(prospectmodel.PlaceResult)) error {
 	body := map[string]any{
 		"maxResultCount": 20,
 		"languageCode":   "id",
@@ -202,12 +290,15 @@ func (c *GooglePlacesClient) searchNearbyCircle(ctx context.Context, input prosp
 		if mapped.Distance > input.Radius {
 			continue
 		}
+		if !matchesCategory(place.Types, selected) {
+			continue
+		}
 		collect(mapped)
 	}
 	return nil
 }
 
-func (c *GooglePlacesClient) searchText(ctx context.Context, input prospectmodel.PlaceSearchInput, keyword string, types []string, collect func(prospectmodel.PlaceResult)) error {
+func (c *GooglePlacesClient) searchText(ctx context.Context, input prospectmodel.PlaceSearchInput, keyword string, types []string, selected map[string]bool, collect func(prospectmodel.PlaceResult)) error {
 	pageToken := ""
 	for page := 0; page < 3; page++ {
 		body := map[string]any{
@@ -228,7 +319,7 @@ func (c *GooglePlacesClient) searchText(ctx context.Context, input prospectmodel
 			if mapped.Distance > input.Radius {
 				continue
 			}
-			if len(types) > 0 && !hasAnyType(place.Types, types) {
+			if !matchesCategory(place.Types, selected) {
 				continue
 			}
 			collect(mapped)
@@ -256,7 +347,8 @@ func (c *GooglePlacesClient) postPlaces(ctx context.Context, endpoint string, bo
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", fmt.Errorf("Google Places returned HTTP %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, "", fmt.Errorf("Google Places returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 	var payload googleResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -373,10 +465,83 @@ func (c *GooglePlacesClient) DetailFull(ctx context.Context, placeID string) (pr
 	return mapPlaceDetails(place, c.key), nil
 }
 
+var categoryLabels = map[string]string{
+	"resto_cafe":            "Resto & Café",
+	"qsr_fast_food":         "QSR / Fast Food",
+	"bakery_dessert":        "Bakery & Dessert",
+	"hotels_accommodation":  "Hotel & Akomodasi",
+	"catering_event":        "Catering & Event",
+	"modern_trade":          "Modern Trade",
+	"convenience_store":     "Convenience Store",
+	"general_trade":         "General Trade",
+	"distributor_agent":     "Distributor / Agen",
+	"industry_manufacturer": "Industri / Manufaktur",
+	"baking_supply":         "Toko Bahan Kue / Baking Supply",
+	"institutional":         "Institusi",
+}
+
+var categoryPriority = []string{
+	"resto_cafe",
+	"qsr_fast_food",
+	"bakery_dessert",
+	"catering_event",
+	"hotels_accommodation",
+	"convenience_store",
+	"modern_trade",
+	"general_trade",
+	"baking_supply",
+	"distributor_agent",
+	"industry_manufacturer",
+	"institutional",
+}
+
+// primaryType returns the place's primary Google type, which Google lists
+// first in the types array.
+func primaryType(types []string) string {
+	if len(types) == 0 {
+		return ""
+	}
+	return types[0]
+}
+
+// appCategory maps the place's primary Google type to the app's category key
+// and label using a fixed priority, so shared types (e.g. cake_shop, which
+// appears in several categories) resolve deterministically.
+func appCategory(types []string) (string, string) {
+	primary := primaryType(types)
+	if primary == "" {
+		return "", ""
+	}
+	for _, key := range categoryPriority {
+		if hasAnyType(categoryTypes([]string{key}), []string{primary}) {
+			return key, categoryLabels[key]
+		}
+	}
+	return "", ""
+}
+
+// placeHasMenu reports whether the place's primary Google type indicates it is
+// a menu-bearing food & beverage establishment (restaurant, café, fast food,
+// bakery & dessert, catering/event).
+func placeHasMenu(types []string) bool {
+	primary := primaryType(types)
+	if primary == "" {
+		return false
+	}
+	for _, c := range []string{"resto_cafe", "qsr_fast_food", "bakery_dessert", "catering_event"} {
+		if hasAnyType(categoryTypes([]string{c}), []string{primary}) {
+			return true
+		}
+	}
+	return false
+}
+
 func mapGooglePlace(place googlePlace, originLat, originLng float64) prospectmodel.PlaceResult {
 	lat, lng := place.Location.Latitude, place.Location.Longitude
 	category := place.PrimaryTypeDisplayName.Text
-	if category == "" && len(place.Types) > 0 {
+	if _, label := appCategory(place.Types); label != "" {
+		category = label
+	} else if category == "" && len(place.Types) > 0 {
 		category = strings.ReplaceAll(place.Types[0], "_", " ")
 	}
 	markerCategory, color, icon := markerFor(place.Types)
@@ -384,20 +549,70 @@ func mapGooglePlace(place googlePlace, originLat, originLng float64) prospectmod
 		Latitude: &lat, Longitude: &lng, PlaceCategory: category, PlaceTypes: place.Types, PhoneNumber: place.NationalPhoneNumber,
 		Distance: haversine(originLat, originLng, lat, lng), Rating: place.Rating, UserRatingCount: place.UserRatingCount,
 		BusinessStatus: place.BusinessStatus, WebsiteURL: place.WebsiteURI, GoogleMapsURL: place.GoogleMapsURI,
-		MarkerCategory: markerCategory, MarkerColor: color, MarkerIcon: icon}
+		MarkerCategory: markerCategory, MarkerColor: color, MarkerIcon: icon, HasMenuPhotos: false}
 }
 
 func categoryTypes(categories []string) []string {
 	mapping := map[string][]string{
-		"food_drink": {"restaurant", "cafe", "bakery", "fast_food_restaurant", "bar"},
-		"business":   {"corporate_office", "bank", "insurance_agency", "accounting", "real_estate_agency"},
-		"culture":    {"museum", "art_gallery", "aquarium", "zoo"},
-		"education":  {"school", "university", "primary_school", "secondary_school"},
-		"entertainment": {"movie_theater", "amusement_center", "bowling_alley", "night_club"},
-		"health":     {"hospital", "pharmacy", "beauty_salon", "dentist", "doctor", "spa", "gym", "physiotherapist"},
-		"shopping":   {"shopping_mall", "store", "department_store", "supermarket", "convenience_store", "clothing_store", "electronics_store", "furniture_store", "home_goods_store", "shoe_store", "jewelry_store", "pet_store", "book_store"},
-		"lodging":    {"hotel", "motel"},
-		"services":   {"bank", "car_repair", "gas_station", "car_wash", "laundry", "plumber", "electrician", "locksmith", "moving_company"},
+		"resto_cafe": {
+			"restaurant", "cafe", "coffee_shop", "coffee_roastery", "cafeteria", "bistro", "diner",
+			"family_restaurant", "fine_dining_restaurant", "buffet_restaurant", "breakfast_restaurant",
+			"brunch_restaurant", "food_court", "gastropub", "bar_and_grill", "barbecue_restaurant",
+			"seafood_restaurant", "steak_house", "indonesian_restaurant", "asian_restaurant",
+			"asian_fusion_restaurant", "chinese_restaurant", "japanese_restaurant", "korean_restaurant",
+			"thai_restaurant", "vietnamese_restaurant", "malaysian_restaurant", "western_restaurant",
+			"italian_restaurant", "french_restaurant", "mediterranean_restaurant",
+			"middle_eastern_restaurant", "mexican_restaurant", "indian_restaurant",
+			"vegetarian_restaurant", "vegan_restaurant", "hot_pot_restaurant", "sushi_restaurant",
+			"ramen_restaurant", "noodle_shop", "bar", "pub", "cocktail_bar", "wine_bar",
+		},
+		"qsr_fast_food": {
+			"fast_food_restaurant", "meal_takeaway", "meal_delivery", "hamburger_restaurant",
+			"chicken_restaurant", "chicken_wings_restaurant", "pizza_restaurant", "pizza_delivery",
+			"sandwich_shop", "hot_dog_restaurant", "hot_dog_stand", "kebab_shop",
+			"shawarma_restaurant", "taco_restaurant", "burrito_restaurant", "falafel_restaurant",
+			"snack_bar", "salad_shop", "dumpling_restaurant",
+		},
+		"bakery_dessert": {
+			"bakery", "cake_shop", "pastry_shop", "confectionery", "dessert_shop",
+			"dessert_restaurant", "donut_shop", "bagel_shop", "candy_store", "chocolate_shop",
+			"chocolate_factory", "ice_cream_shop", "tea_house", "juice_shop",
+		},
+		"hotels_accommodation": {
+			"hotel", "resort_hotel", "lodging", "extended_stay_hotel", "motel", "inn",
+			"guest_house", "hostel", "bed_and_breakfast", "farmstay", "private_guest_room", "cottage",
+		},
+		"catering_event": {
+			"catering_service", "banquet_hall", "event_venue", "wedding_venue", "convention_center",
+			"community_center",
+		},
+		"modern_trade": {
+			"supermarket", "hypermarket", "discount_supermarket", "department_store", "warehouse_store",
+			"shopping_mall", "grocery_store", "food_store",
+		},
+		"convenience_store": {
+			"convenience_store", "grocery_store", "food_store", "general_store", "market",
+		},
+		"general_trade": {
+			"grocery_store", "general_store", "food_store", "market", "farmers_market",
+			"asian_grocery_store", "butcher_shop", "health_food_store", "store",
+		},
+		"distributor_agent": {
+			"wholesaler", "supplier", "warehouse_store", "corporate_office", "business_center",
+			"manufacturer", "food_store",
+		},
+		"industry_manufacturer": {
+			"manufacturer", "supplier", "corporate_office", "farm", "ranch", "chocolate_factory",
+			"brewery", "winery",
+		},
+		"baking_supply": {
+			"food_store", "grocery_store", "general_store", "wholesaler", "supplier",
+			"warehouse_store", "market", "cake_shop", "bakery",
+		},
+		"institutional": {
+			"school", "university", "hospital", "general_hospital", "medical_center",
+			"government_office", "corporate_office", "business_center",
+		},
 	}
 	seen := map[string]bool{}
 	result := make([]string, 0)
@@ -439,10 +654,11 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 func mapPlaceDetails(place googlePlace, apiKey string) prospectmodel.PlaceDetails {
 	lat, lng := place.Location.Latitude, place.Location.Longitude
 	category := place.PrimaryTypeDisplayName.Text
-	if category == "" && len(place.Types) > 0 {
+	if _, label := appCategory(place.Types); label != "" {
+		category = label
+	} else if category == "" && len(place.Types) > 0 {
 		category = strings.ReplaceAll(place.Types[0], "_", " ")
 	}
-
 	photos := make([]prospectmodel.PlacePhoto, 0, len(place.Photos))
 	for _, p := range place.Photos {
 		att := ""
@@ -451,7 +667,7 @@ func mapPlaceDetails(place googlePlace, apiKey string) prospectmodel.PlaceDetail
 		}
 		photoURL := fmt.Sprintf("https://places.googleapis.com/v1/%s/media?maxWidthPx=800&key=%s", p.Name, apiKey)
 		photos = append(photos, prospectmodel.PlacePhoto{
-			Name: p.Name, PhotoURL: photoURL, WidthPx: p.WidthPx, HeightPx: p.HeightPx, Attribution: att,
+			Name: p.Name, PhotoURL: photoURL, WidthPx: p.WidthPx, HeightPx: p.HeightPx, Attribution: att, IsMenu: false,
 		})
 	}
 

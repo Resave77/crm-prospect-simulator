@@ -28,6 +28,9 @@ func (f *fakePlaces) Detail(_ context.Context, _ string) (prospectmodel.PlaceRes
 func (f *fakePlaces) DetailFull(_ context.Context, _ string) (prospectmodel.PlaceDetails, error) {
 	return prospectmodel.PlaceDetails{GooglePlaceID: "place-1"}, nil
 }
+func (f *fakePlaces) SearchMenuImages(_ context.Context, _ string, _ int) ([]prospectmodel.MenuImage, error) {
+	return nil, nil
+}
 
 func (f *fakeProspectRepository) ListAssigned(_ context.Context, owner uuid.UUID) ([]prospectmodel.Prospect, error) {
 	if f.prospect.AssignedSalesExecutiveID != owner {
@@ -251,6 +254,84 @@ func TestWonProspectCanBeReviewedByAdministrator(t *testing.T) {
 	review, err := New(repo).Review(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleAdministrator}, repo.prospect.ID)
 	if err != nil || review.Prospect.Status != prospectmodel.StatusWon {
 		t.Fatalf("expected won review, result=%+v err=%v", review, err)
+	}
+}
+
+func TestCategoryTypesCoverageForCRMPlaceTypes(t *testing.T) {
+	categories := []string{
+		"resto_cafe", "qsr_fast_food", "bakery_dessert", "hotels_accommodation", "catering_event",
+		"modern_trade", "convenience_store", "general_trade", "distributor_agent",
+		"industry_manufacturer", "baking_supply", "institutional",
+	}
+	mapped := categoryTypes(categories)
+	for _, want := range []string{
+		"food_court", "hamburger_restaurant", "coffee_roastery", "meal_delivery", "dessert_restaurant",
+		"guest_house", "catering_service", "shopping_mall", "grocery_store", "food_store",
+		"wholesaler", "manufacturer", "hospital", "general_hospital", "business_center",
+	} {
+		if !hasAnyType(mapped, []string{want}) {
+			t.Fatalf("expected CRM Google Place type %q to be included in categoryTypes() result, got %+v", want, mapped)
+		}
+	}
+}
+
+func TestAppCategoryUsesPrimaryTypeDeterministically(t *testing.T) {
+	cases := []struct {
+		types    []string
+		wantKey  string
+		wantMenu bool
+	}{
+		{[]string{"restaurant", "food", "point_of_interest", "establishment"}, "resto_cafe", true},
+		{[]string{"coffee_shop", "cafe", "food"}, "resto_cafe", true},
+		{[]string{"fast_food_restaurant", "restaurant"}, "qsr_fast_food", true},
+		{[]string{"cake_shop", "bakery"}, "bakery_dessert", true},
+		{[]string{"catering_service", "event_venue"}, "catering_event", true},
+		{[]string{"hotel", "lodging", "restaurant"}, "hotels_accommodation", false},
+		{[]string{"shopping_mall", "food_court", "store"}, "modern_trade", false},
+		{[]string{"grocery_store", "food_store"}, "convenience_store", false},
+		{[]string{"supermarket", "grocery_store"}, "modern_trade", false},
+		{[]string{"hospital", "medical_center"}, "institutional", false},
+		{[]string{}, "", false},
+	}
+	for _, tc := range cases {
+		key, label := appCategory(tc.types)
+		if key != tc.wantKey {
+			t.Fatalf("appCategory(%v) key = %q, want %q (label %q)", tc.types, key, tc.wantKey, label)
+		}
+		if tc.wantKey != "" && label != categoryLabels[tc.wantKey] {
+			t.Fatalf("appCategory(%v) label = %q, want %q", tc.types, label, categoryLabels[tc.wantKey])
+		}
+		if got := placeHasMenu(tc.types); got != tc.wantMenu {
+			t.Fatalf("placeHasMenu(%v) = %v, want %v", tc.types, got, tc.wantMenu)
+		}
+	}
+}
+
+func TestPlaceHasMenuExcludesNonFoodPrimaryTypes(t *testing.T) {
+	if placeHasMenu([]string{"hotel", "restaurant", "food"}) {
+		t.Fatal("a hotel with an in-house restaurant must not be menu-bearing by its primary type")
+	}
+	if placeHasMenu([]string{"shopping_mall", "food_court"}) {
+		t.Fatal("a shopping mall must not be menu-bearing by its primary type")
+	}
+}
+
+func TestMatchesCategoryFiltersByPrimaryTypeCategory(t *testing.T) {
+	resto := selectedCategorySet([]string{"resto_cafe"})
+	if !matchesCategory([]string{"restaurant", "food", "point_of_interest"}, resto) {
+		t.Fatal("restaurant should match resto_cafe")
+	}
+	if matchesCategory([]string{"hotel", "restaurant", "food"}, resto) {
+		t.Fatal("a hotel with a restaurant secondary type must not match resto_cafe")
+	}
+	if matchesCategory([]string{"shopping_mall", "food_court"}, resto) {
+		t.Fatal("a mall with a food court must not match resto_cafe")
+	}
+	if !matchesCategory([]string{"shopping_mall"}, selectedCategorySet([]string{"modern_trade"})) {
+		t.Fatal("mall should match modern_trade")
+	}
+	if !matchesCategory([]string{"hospital"}, selectedCategorySet(nil)) {
+		t.Fatal("no category selected should match everything")
 	}
 }
 

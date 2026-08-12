@@ -24,11 +24,20 @@ let pollId: number | undefined
 const taggable = computed(() => !!props.prospectId)
 const canTag = computed(() => props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR')
 
-const menuPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ index }) => tags.value[index] === 'MENU'))
-const regularPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ index }) => tags.value[index] !== 'MENU'))
+const menuPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ photo, index }) => {
+  const stored = tags.value[index]
+  return stored === 'MENU' || (!stored && photo.isMenu)
+}))
+const regularPhotos = computed(() => props.photos.map((p, i) => ({ photo: p, index: i })).filter(({ photo, index }) => {
+  const stored = tags.value[index]
+  return stored === 'PLACE' || (!stored && !photo.isMenu) || (stored !== 'MENU' && stored !== undefined)
+}))
 
 function categoryOf(index: number): PhotoCategory {
-  return tags.value[index] ?? 'PLACE'
+  const stored = tags.value[index]
+  if (stored) return stored
+  const photo = props.photos[index]
+  return photo?.isMenu ? 'MENU' : 'PLACE'
 }
 
 function applyTags(prospectId: string, items: { photoIndex: number; category: PhotoCategory }[]) {

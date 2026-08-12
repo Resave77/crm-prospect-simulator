@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import Dialog from 'primevue/dialog'
+import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
@@ -13,18 +14,46 @@ import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
-import type { CustomerMarker, PlaceDetails, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
+import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
 const toast = useToast()
 
 const categoryOptions = [
-  ['food_drink', 'Food & Drink'], ['business', 'Business'], ['culture', 'Culture'], ['education', 'Education'],
-  ['entertainment', 'Entertainment'], ['health', 'Health'], ['shopping', 'Shopping'], ['lodging', 'Lodging'], ['services', 'Services'],
+  { key: 'resto_cafe', label: 'Resto & Café', icon: '🍽️' },
+  { key: 'qsr_fast_food', label: 'QSR / Fast Food', icon: '🍔' },
+  { key: 'bakery_dessert', label: 'Bakery & Dessert', icon: '🎂' },
+  { key: 'hotels_accommodation', label: 'Hotels & Accommodation', icon: '🏨' },
+  { key: 'catering_event', label: 'Catering & Event', icon: '🎪' },
+  { key: 'modern_trade', label: 'Modern Trade', icon: '🛒' },
+  { key: 'convenience_store', label: 'Convenience Store', icon: '🏪' },
+  { key: 'general_trade', label: 'General Trade', icon: '🏬' },
+  { key: 'distributor_agent', label: 'Distributor / Agent', icon: '📦' },
+  { key: 'industry_manufacturer', label: 'Industry / Manufacturer', icon: '🏭' },
+  { key: 'baking_supply', label: 'Toko Bahan Kue / Baking Supply', icon: '🥣' },
+  { key: 'institutional', label: 'Institutional', icon: '🏫' },
 ] as const
-const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty', 'Services', 'Other']
+const ratingOptions = [
+  { value: 0, label: 'All' }, { value: 3, label: '3★' }, { value: 4, label: '4★' }, { value: 4.5, label: '4.5★' }, { value: 4.8, label: '4.8★' },
+] as const
+const savedFilterOptions = [
+  { value: 'all', label: 'All' }, { value: 'saved', label: 'Saved' }, { value: 'unsaved', label: 'Unsaved' },
+] as const
+const menuFilterOptions = [
+  { value: 'all', label: 'All' }, { value: 'likely', label: 'Likely Has Menu' }, { value: 'ready', label: 'Menu Ready' }, { value: 'not_ready', label: 'Menu Not Ready' },
+] as const
+const industries = [
+  'Resto & Café', 'QSR / Fast Food', 'Bakery & Dessert', 'Hotels & Accommodation',
+  'Catering & Event', 'Modern Trade', 'Convenience Store', 'General Trade',
+  'Distributor / Agent', 'Industry / Manufacturer', 'Toko Bahan Kue / Baking Supply', 'Institutional',
+]
 const keyword = ref('')
-const categories = ref<string[]>(['food_drink', 'business', 'culture'])
-const radius = ref(3000)
+const categories = ref<string[]>(categoryOptions.map(o => o.key))
+const radius = ref(5000)
+const minRating = ref(0)
+const savedFilter = ref<'all' | 'saved' | 'unsaved'>('all')
+const menuFilter = ref<'all' | 'likely' | 'ready' | 'not_ready'>('all')
+const savedPlaceIds = ref<Set<string>>(new Set())
+const queried = ref(false)
 const latitude = ref(0)
 const longitude = ref(0)
 const geoResolved = ref(false)
@@ -36,6 +65,9 @@ const customersLoading = ref(false)
 const placeDetails = ref<PlaceDetails | null>(null)
 const placeDetailsLoading = ref(false)
 const placeDetailsError = ref('')
+const menuImages = ref<MenuImage[]>([])
+const menuImagesLoading = ref(false)
+const menuImagesError = ref('')
 const sales = ref<SalesExecutiveOption[]>([])
 const salesExecutiveId = ref('')
 const industryGroup = ref('N&B / Kuliner')
@@ -44,10 +76,23 @@ const saving = ref(false)
 const error = ref('')
 const success = ref('')
 const detailOpen = ref(false)
+const previewOpen = ref(false)
+const previewPhoto = ref<{ url: string; alt: string; attribution?: string } | null>(null)
+const pinOpen = ref(false)
+const pinName = ref('')
+const pinLat = ref(0)
+const pinLng = ref(0)
+const pinSaving = ref(false)
+const pinError = ref('')
+const pinDragging = ref(false)
 const mapElement = ref<HTMLElement | null>(null)
 const resultsScroll = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let searchCircle: L.Circle | null = null
+let centerMarker: L.Marker | null = null
+let customPinMarker: L.Marker | null = null
+let draggingCenter = false
+let zooming = false
 let customerLayer: L.LayerGroup | null = null
 const markers = new Map<string, L.Marker>()
 const customerMarkerMap = new Map<string, L.Marker>()
@@ -57,17 +102,196 @@ const selectedSalesCount = computed(() => {
   return exec?.activeProspectCount ?? 0
 })
 
+// Places API does not expose the Google Maps UI's Menu/Photo grouping.
+// Ignore legacy `isMenu` values that were inferred from landscape dimensions;
+// those values incorrectly classified storefront and street photos as menus.
+const menuPhotos = computed<PlacePhoto[]>(() => [])
+const regularPhotos = computed(() => placeDetails.value?.photos ?? [])
+
+function menuImageQuery() {
+  const d = placeDetails.value
+  if (!d) return ''
+  const types = d.placeTypes ?? []
+  const foodKeywords: Array<[string, string]> = [
+    ['fast_food_restaurant', 'menu fast food'],
+    ['hamburger_restaurant', 'menu hamburger'],
+    ['pizza_restaurant', 'menu pizza'],
+    ['pizza_delivery', 'menu pizza delivery'],
+    ['sandwich_shop', 'menu sandwich'],
+    ['kebab_shop', 'menu kebab'],
+    ['shawarma_restaurant', 'menu shawarma'],
+    ['taco_restaurant', 'menu taco'],
+    ['burrito_restaurant', 'menu burrito'],
+    ['falafel_restaurant', 'menu falafel'],
+    ['hot_dog_restaurant', 'menu hot dog'],
+    ['hot_dog_stand', 'menu hot dog'],
+    ['snack_bar', 'snack menu'],
+    ['meal_takeaway', 'takeaway food menu'],
+    ['meal_delivery', 'delivery food menu'],
+    ['food_court', 'menu food court'],
+    ['dessert_restaurant', 'dessert menu'],
+    ['ice_cream_shop', 'ice cream menu'],
+    ['bakery', 'bakery menu'],
+    ['pastry_shop', 'pastry menu'],
+    ['cake_shop', 'cake menu'],
+    ['confectionery', 'dessert menu'],
+    ['dessert_shop', 'dessert menu'],
+    ['donut_shop', 'donut menu'],
+    ['bagel_shop', 'bagel menu'],
+    ['candy_store', 'candy menu'],
+    ['coffee_shop', 'coffee menu'],
+    ['coffee_roastery', 'coffee menu'],
+    ['cafe', 'cafe menu'],
+    ['cafeteria', 'cafeteria menu'],
+    ['restaurant', 'restaurant menu'],
+    ['bistro', 'bistro menu'],
+    ['diner', 'diner menu'],
+    ['family_restaurant', 'family restaurant menu'],
+    ['fine_dining_restaurant', 'fine dining menu'],
+    ['buffet_restaurant', 'buffet menu'],
+    ['breakfast_restaurant', 'breakfast menu'],
+    ['brunch_restaurant', 'brunch menu'],
+    ['gastropub', 'gastropub menu'],
+    ['bar_and_grill', 'bar grill menu'],
+    ['barbecue_restaurant', 'barbecue menu'],
+    ['seafood_restaurant', 'seafood menu'],
+    ['steak_house', 'steak house menu'],
+    ['indonesian_restaurant', 'indonesian food menu'],
+    ['asian_restaurant', 'asian food menu'],
+    ['asian_fusion_restaurant', 'asian fusion menu'],
+    ['chinese_restaurant', 'chinese food menu'],
+    ['japanese_restaurant', 'japanese food menu'],
+    ['korean_restaurant', 'korean food menu'],
+    ['thai_restaurant', 'thai food menu'],
+    ['vietnamese_restaurant', 'vietnamese food menu'],
+    ['malaysian_restaurant', 'malaysian food menu'],
+    ['western_restaurant', 'western food menu'],
+    ['italian_restaurant', 'italian food menu'],
+    ['french_restaurant', 'french food menu'],
+    ['mediterranean_restaurant', 'mediterranean food menu'],
+    ['middle_eastern_restaurant', 'middle eastern food menu'],
+    ['mexican_restaurant', 'mexican food menu'],
+    ['indian_restaurant', 'indian food menu'],
+    ['vegetarian_restaurant', 'vegetarian menu'],
+    ['vegan_restaurant', 'vegan menu'],
+    ['hot_pot_restaurant', 'hot pot menu'],
+    ['sushi_restaurant', 'sushi menu'],
+    ['ramen_restaurant', 'ramen menu'],
+    ['noodle_shop', 'noodle menu'],
+    ['catering_service', 'catering menu'],
+    ['banquet_hall', 'event catering menu'],
+    ['event_venue', 'event menu'],
+    ['wedding_venue', 'wedding menu'],
+    ['convention_center', 'meeting menu'],
+    ['community_center', 'community menu'],
+    ['supermarket', 'grocery menu'],
+    ['hypermarket', 'food menu'],
+    ['discount_supermarket', 'food menu'],
+    ['department_store', 'food menu'],
+    ['warehouse_store', 'food menu'],
+    ['shopping_mall', 'food menu'],
+    ['grocery_store', 'grocery menu'],
+    ['food_store', 'food store menu'],
+    ['convenience_store', 'store menu'],
+    ['general_store', 'store menu'],
+    ['market', 'market menu'],
+    ['farmers_market', 'market menu'],
+    ['asian_grocery_store', 'asian grocery menu'],
+    ['butcher_shop', 'butcher menu'],
+    ['health_food_store', 'health food menu'],
+    ['wholesaler', 'wholesale food menu'],
+    ['supplier', 'supplier menu'],
+    ['manufacturer', 'manufacturer menu'],
+    ['business_center', 'business catering'],
+    ['corporate_office', 'office catering'],
+    ['hospital', 'hospital menu'],
+    ['general_hospital', 'hospital menu'],
+    ['medical_center', 'medical center menu'],
+    ['government_office', 'office catering'],
+    ['school', 'canteen menu'],
+    ['university', 'campus menu'],
+  ]
+  const keyword = foodKeywords.find(([type]) => types.includes(type))?.[1] ?? 'restaurant menu'
+  return `"${d.placeName}" ${d.formattedAddress} ${keyword} menu harga daftar harga`.trim()
+}
+
+watch([placeDetails, placeDetailsLoading], async () => {
+  if (placeDetailsLoading.value) return
+  if (!placeDetails.value || !likelyHasMenu({ placeTypes: placeDetails.value.placeTypes } as PlaceResult)) {
+    menuImages.value = []
+    menuImagesError.value = ''
+    return
+  }
+  const query = menuImageQuery()
+  if (!query) return
+  menuImagesLoading.value = true
+  menuImagesError.value = ''
+  try {
+    menuImages.value = (await crmApi.getMenuImages(query, 3)).slice(0, 3)
+    if (selected.value) selected.value.hasMenuPhotos = menuImages.value.length > 0
+  } catch (caught) {
+    menuImagesError.value = crmError(caught)
+    menuImages.value = []
+    if (selected.value) selected.value.hasMenuPhotos = false
+  } finally {
+    menuImagesLoading.value = false
+  }
+})
+
 const filteredResults = ref<PlaceResult[]>([])
 
-watch([results, resultSearch], () => {
+const menuBearingPrimaryTypes = new Set([
+  'restaurant', 'cafe', 'coffee_shop', 'coffee_roastery', 'cafeteria', 'bistro', 'diner',
+  'family_restaurant', 'fine_dining_restaurant', 'buffet_restaurant', 'breakfast_restaurant',
+  'brunch_restaurant', 'food_court', 'gastropub', 'bar_and_grill', 'barbecue_restaurant',
+  'seafood_restaurant', 'steak_house', 'indonesian_restaurant', 'asian_restaurant',
+  'asian_fusion_restaurant', 'chinese_restaurant', 'japanese_restaurant', 'korean_restaurant',
+  'thai_restaurant', 'vietnamese_restaurant', 'malaysian_restaurant', 'western_restaurant',
+  'italian_restaurant', 'french_restaurant', 'mediterranean_restaurant', 'middle_eastern_restaurant',
+  'mexican_restaurant', 'indian_restaurant', 'vegetarian_restaurant', 'vegan_restaurant',
+  'hot_pot_restaurant', 'sushi_restaurant', 'ramen_restaurant', 'noodle_shop',
+  'fast_food_restaurant', 'meal_takeaway', 'meal_delivery', 'hamburger_restaurant',
+  'chicken_restaurant', 'chicken_wings_restaurant', 'pizza_restaurant', 'pizza_delivery',
+  'sandwich_shop', 'hot_dog_restaurant', 'hot_dog_stand', 'kebab_shop', 'shawarma_restaurant',
+  'taco_restaurant', 'burrito_restaurant', 'falafel_restaurant', 'snack_bar', 'salad_shop',
+  'dumpling_restaurant', 'bakery', 'cake_shop', 'pastry_shop', 'confectionery', 'dessert_shop',
+  'dessert_restaurant', 'donut_shop', 'bagel_shop', 'candy_store', 'chocolate_shop',
+  'ice_cream_shop', 'tea_house', 'juice_shop', 'catering_service',
+])
+
+function likelyHasMenu(item: PlaceResult) {
+  return menuBearingPrimaryTypes.has(item.placeTypes?.[0] ?? '')
+}
+
+watch([results, resultSearch, minRating, savedFilter, menuFilter, savedPlaceIds], () => {
   const q = resultSearch.value.toLowerCase().trim()
-  if (!q) { filteredResults.value = results.value; return }
-  filteredResults.value = results.value.filter(r =>
-    r.name.toLowerCase().includes(q) ||
-    r.category.toLowerCase().includes(q) ||
-    r.address.toLowerCase().includes(q)
-  )
+  const min = minRating.value
+  const mode = savedFilter.value
+  const menuMode = menuFilter.value
+  filteredResults.value = results.value.filter(r => {
+    if (q && !(r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || r.address.toLowerCase().includes(q))) return false
+    if (min && r.rating < min) return false
+    if (mode === 'saved' && !(r.isCustomer || savedPlaceIds.value.has(r.googlePlaceId))) return false
+    if (mode === 'unsaved' && (r.isCustomer || savedPlaceIds.value.has(r.googlePlaceId))) return false
+    if (menuMode === 'likely' && !likelyHasMenu(r)) return false
+    if (menuMode === 'ready' && !r.hasMenuPhotos) return false
+    if (menuMode === 'not_ready' && r.hasMenuPhotos) return false
+    return true
+  })
 }, { immediate: true })
+
+watch(filteredResults, () => {
+  if (map && results.value.length) renderMarkers()
+})
+
+function selectAllCategories() {
+  categories.value = categoryOptions.map(o => o.key)
+}
+
+function openPhotoPreview(url: string, alt: string, attribution?: string) {
+  previewPhoto.value = { url, alt, attribution }
+  previewOpen.value = true
+}
 
 function markerIcon(item: PlaceResult, active = false) {
   if (item.isCustomer) {
@@ -92,6 +316,109 @@ function customerMarkerIcon(active = false) {
     iconAnchor: active ? [23, 50] : [19, 42],
     popupAnchor: [0, -44],
   })
+}
+
+function centerMarkerIcon() {
+  return L.divIcon({
+    className: 'finder-center-icon-host',
+    html: '<span class="finder-center-marker"><i class="pi pi-crosshairs"></i></span><span class="finder-center-ring"></span>',
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  })
+}
+
+function customPinIcon(active = false) {
+  return L.divIcon({
+    className: 'finder-leaflet-icon-host',
+    html: `<span class="finder-leaflet-marker is-custom-pin${active ? ' is-selected' : ''}" title="Custom pin"><i class="pi pi-map-marker"></i></span>`,
+    iconSize: active ? [44, 50] : [36, 42],
+    iconAnchor: active ? [22, 48] : [18, 40],
+    popupAnchor: [0, -42],
+  })
+}
+
+function renderPinMarker() {
+  if (!map) return
+  customPinMarker?.remove()
+  customPinMarker = L.marker([pinLat.value, pinLng.value], { icon: customPinIcon(), draggable: true, keyboard: true, zIndexOffset: 800, title: 'Pin location' })
+    .bindTooltip('Drag to position', { direction: 'top', offset: [0, -28] })
+    .on('dragstart', () => { pinDragging.value = true })
+    .on('drag', () => {
+      const pos = customPinMarker!.getLatLng()
+      pinLat.value = pos.lat
+      pinLng.value = pos.lng
+    })
+    .on('dragend', () => { pinDragging.value = false })
+    .addTo(map)
+}
+
+watch([pinLat, pinLng], () => {
+  if (map && !pinDragging.value) customPinMarker?.setLatLng([pinLat.value, pinLng.value])
+})
+
+function openPinForm() {
+  if (!map) return
+  detailOpen.value = false
+  pinName.value = ''
+  pinError.value = ''
+  pinLat.value = latitude.value
+  pinLng.value = longitude.value
+  pinOpen.value = true
+  nextTick(() => {
+    renderPinMarker()
+    map?.flyTo([pinLat.value, pinLng.value], Math.max(map.getZoom(), 15), { duration: 0.5 })
+  })
+}
+
+function closePinForm() {
+  pinOpen.value = false
+  customPinMarker?.remove()
+  customPinMarker = null
+}
+
+async function savePin() {
+  if (!pinName.value.trim()) {
+    toast.add({ severity: 'warn', summary: 'Missing name', detail: 'Enter a name for the pin.', life: 4000 })
+    return
+  }
+  if (!salesExecutiveId.value || !industryGroup.value) {
+    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select an Industry Group and Sales Executive before saving.', life: 4000 })
+    return
+  }
+  pinError.value = ''
+  pinSaving.value = true
+  try {
+    const lat = pinLat.value
+    const lng = pinLng.value
+    const result: PlaceResult = {
+      googlePlaceId: `CUSTOM_PIN_${lat.toFixed(6)},${lng.toFixed(6)}`,
+      name: pinName.value.trim(),
+      category: 'Custom Pin',
+      address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+      distance: 0,
+      rating: 0,
+      userRatingCount: 0,
+      businessStatus: 'OPERATIONAL',
+      latitude: lat,
+      longitude: lng,
+      phone: '',
+      website: '',
+      googleMapsUrl: '',
+      markerCategory: 'custom',
+      markerColor: '#7c3aed',
+      markerIcon: 'pi pi-map-marker',
+      placeTypes: [],
+    }
+    const item = await crmApi.saveProspect(result, industryGroup.value, salesExecutiveId.value)
+    toast.add({ severity: 'success', summary: 'Pin saved', detail: `${item.placeName} was saved as NEW_LEAD and assigned successfully.`, life: 5000 })
+    closePinForm()
+    loadSavedPlaceIds()
+  } catch (caught) {
+    pinError.value = crmError(caught)
+    toast.add({ severity: 'error', summary: 'Save failed', detail: pinError.value, life: 6000 })
+  } finally {
+    pinSaving.value = false
+  }
 }
 
 function customerToResult(c: CustomerMarker): PlaceResult {
@@ -125,6 +452,41 @@ function initializeMap() {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map)
+  const center = L.marker([latitude.value, longitude.value], {
+    draggable: true,
+    icon: centerMarkerIcon(),
+    keyboard: true,
+    zIndexOffset: 900,
+    title: 'Drag to move the search center',
+  })
+    .bindTooltip(`${latitude.value.toFixed(5)}, ${longitude.value.toFixed(5)}`, { direction: 'top', offset: [0, -20] })
+    .on('dragstart', () => { draggingCenter = true })
+    .on('drag', () => {
+      const pos = center.getLatLng()
+      latitude.value = pos.lat
+      longitude.value = pos.lng
+      searchCircle?.setLatLng(pos)
+      center.setTooltipContent(`${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`)
+    })
+    .on('dragend', () => { draggingCenter = false })
+    .addTo(map)
+  centerMarker = center
+  map.on('zoomstart', () => { zooming = true })
+  map.on('zoomend', () => { zooming = false })
+  map.on('move', () => {
+    if (draggingCenter || zooming || !map) return
+    const c = map.getCenter()
+    latitude.value = c.lat
+    longitude.value = c.lng
+    centerMarker?.setLatLng([c.lat, c.lng])
+    searchCircle?.setLatLng([c.lat, c.lng])
+    centerMarker?.setTooltipContent(`${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`)
+  })
+  const initial = map.getCenter()
+  latitude.value = initial.lat
+  longitude.value = initial.lng
+  centerMarker.setLatLng([initial.lat, initial.lng])
+  drawSearchArea()
   customerLayer = L.layerGroup().addTo(map)
 }
 
@@ -162,38 +524,50 @@ async function loadCustomerMarkers() {
 
 function drawSearchArea() {
   if (!map) return
-  searchCircle?.remove()
-  searchCircle = L.circle([latitude.value, longitude.value], {
-    radius: radius.value,
-    color: '#d14350',
-    weight: 1,
-    fillColor: '#df5a66',
-    fillOpacity: 0.06,
-  }).addTo(map)
+  const latlng: L.LatLngExpression = [latitude.value, longitude.value]
+  if (searchCircle) {
+    searchCircle.setLatLng(latlng)
+    searchCircle.setRadius(radius.value)
+  } else {
+    searchCircle = L.circle(latlng, {
+      radius: radius.value,
+      color: '#d14350',
+      weight: 1,
+      fillColor: '#df5a66',
+      fillOpacity: 0.06,
+    }).addTo(map)
+  }
+  centerMarker?.setLatLng(latlng)
+  centerMarker?.setTooltipContent(`${latitude.value.toFixed(5)}, ${longitude.value.toFixed(5)}`)
 }
 
 function renderMarkers() {
   if (!map) return
   markers.forEach((marker) => marker.remove())
   markers.clear()
-  const bounds: L.LatLngExpression[] = []
-  for (const item of results.value) {
+  for (const item of filteredResults.value) {
     if (item.isCustomer) continue
     if (item.latitude === null || item.longitude === null) continue
-    const position: L.LatLngExpression = [item.latitude, item.longitude]
-    const marker = L.marker(position, { icon: markerIcon(item, selected.value?.googlePlaceId === item.googlePlaceId), keyboard: true, title: item.name })
+    const marker = L.marker([item.latitude, item.longitude], { icon: markerIcon(item, selected.value?.googlePlaceId === item.googlePlaceId), keyboard: true, title: item.name })
       .bindTooltip(item.name, { direction: 'top', offset: [0, -34] })
       .on('click', () => selectResult(item, true))
       .addTo(map)
     markers.set(item.googlePlaceId, marker)
-    bounds.push(position)
   }
   drawSearchArea()
-  if (bounds.length) map.fitBounds(L.latLngBounds(bounds), { padding: [48, 48], maxZoom: 16 })
-  else map.setView([latitude.value, longitude.value], 14)
+  nextTick(() => map?.invalidateSize())
 }
 
-function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = null }
+function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = null; queried.value = false; nextTick(() => map?.invalidateSize()) }
+
+async function loadSavedPlaceIds() {
+  try {
+    const items = await crmApi.getPipeline()
+    savedPlaceIds.value = new Set(items.map(p => p.googlePlaceId).filter(Boolean))
+  } catch {
+    savedPlaceIds.value = new Set()
+  }
+}
 
 async function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
@@ -240,12 +614,18 @@ watch(selected, (current, previous) => {
 
 watch(radius, drawSearchArea)
 
+watch([latitude, longitude], () => {
+  if (draggingCenter || !map) return
+  drawSearchArea()
+})
+
 async function search() {
   error.value = ''
   success.value = ''
   loading.value = true
   try {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: categories.value.join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
+    queried.value = true
     selected.value = null
     placeDetails.value = null
     detailOpen.value = false
@@ -291,6 +671,7 @@ async function save() {
     success.value = `${item.placeName} saved as NEW_LEAD and assigned successfully.`
     toast.add({ severity: 'success', summary: 'Prospect saved', detail: `${item.placeName} was saved as NEW_LEAD and assigned successfully.`, life: 5000 })
     detailOpen.value = false
+    loadSavedPlaceIds()
   } catch (caught) {
     error.value = crmError(caught)
     toast.add({ severity: 'error', summary: 'Save failed', detail: error.value, life: 6000 })
@@ -332,6 +713,7 @@ onMounted(async () => {
   initializeMap()
   useGPS()
   loadCustomerMarkers()
+  loadSavedPlaceIds()
   try {
     sales.value = await crmApi.getSalesExecutives()
     salesExecutiveId.value = sales.value[0]?.id ?? ''
@@ -343,6 +725,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   map?.remove()
   map = null
+  centerMarker = null
+  customPinMarker = null
   customerLayer = null
   markers.clear()
   customerMarkerMap.clear()
@@ -395,10 +779,11 @@ onBeforeUnmount(() => {
           <div class="finder-panel-title">
             <i class="pi pi-compass" />
             <div>
-              <h1>Prospect Finder</h1>
+              <h1>Prospect Query</h1>
               <span>Discover &amp; save qualified prospects</span>
             </div>
           </div>
+          <Button label="Create Pin" icon="pi pi-map-marker" severity="secondary" outlined class="create-pin-button" @click="openPinForm" />
         </div>
 
         <div class="finder-filter-scroll">
@@ -407,7 +792,7 @@ onBeforeUnmount(() => {
               <span>Keyword</span>
               <div class="keyword-input-wrap">
                 <i class="pi pi-search keyword-icon" />
-                <InputText v-model="keyword" placeholder="Cafe, hotel, pharmacy..." @keyup.enter="search" />
+                <InputText v-model="keyword" placeholder="Search cafe, office, laundry..." @keyup.enter="search" />
               </div>
             </label>
           </div>
@@ -417,10 +802,15 @@ onBeforeUnmount(() => {
               <span class="filter-section-title">Categories</span>
               <span class="category-count">{{ categories.length }} selected</span>
             </div>
+            <div class="category-tools">
+              <button type="button" class="category-tool" @click="selectAllCategories"><i class="pi pi-check" /> Select All</button>
+              <button type="button" class="category-tool clear" @click="categories = []"><i class="pi pi-times" /> Clear All</button>
+            </div>
             <div class="category-grid">
-              <label v-for="option in categoryOptions" :key="option[0]" class="category-chip" :class="{ active: categories.includes(option[0]) }">
-                <Checkbox v-model="categories" :input-id="option[0]" :value="option[0]" />
-                <span>{{ option[1] }}</span>
+              <label v-for="option in categoryOptions" :key="option.key" class="category-chip" :class="{ active: categories.includes(option.key) }">
+                <Checkbox v-model="categories" :input-id="option.key" :value="option.key" />
+                <span class="category-chip-icon">{{ option.icon }}</span>
+                <span class="category-chip-label">{{ option.label }}</span>
               </label>
             </div>
           </div>
@@ -428,32 +818,62 @@ onBeforeUnmount(() => {
           <div class="filter-section">
             <div class="radius-header">
               <span class="filter-section-title">Search Radius</span>
-              <span class="radius-value">{{ (radius / 1000).toFixed(1) }} km</span>
+              <span class="radius-value">{{ (radius / 1000).toFixed(0) }} km</span>
             </div>
-            <Slider v-model="radius" :min="500" :max="20000" :step="500" class="finder-slider" />
+            <Slider v-model="radius" :min="1000" :max="25000" :step="500" class="finder-slider" />
             <div class="radius-range-labels">
-              <span>0.5 km</span>
-              <span>20 km</span>
+              <span>1 km</span>
+              <span>25 km</span>
             </div>
           </div>
 
           <div class="filter-section">
-            <p class="filter-section-title">Coordinates</p>
+            <p class="filter-section-title">Search Location Anchor</p>
+            <Button label="Use Current GPS" icon="pi pi-crosshairs" severity="secondary" outlined fluid class="gps-button" @click="useGPS" />
             <div class="coordinate-grid">
-              <label class="field"><span>Lat</span><input v-model.number="latitude" type="number" step="0.000001" /></label>
-              <label class="field"><span>Lng</span><input v-model.number="longitude" type="number" step="0.000001" /></label>
+              <label class="field"><span>LATITUDE</span><input v-model.number="latitude" type="number" step="0.000001" /></label>
+              <label class="field"><span>LONGITUDE</span><input v-model.number="longitude" type="number" step="0.000001" /></label>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-title">Minimum Rating Threshold</p>
+            <div class="segment-row">
+              <button v-for="opt in ratingOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: minRating === opt.value }" @click="minRating = opt.value">{{ opt.label }}</button>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-title">Leads saved state</p>
+            <div class="segment-row">
+              <button v-for="opt in savedFilterOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: savedFilter === opt.value }" @click="savedFilter = opt.value">{{ opt.label }}</button>
+            </div>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-title">Menu availability</p>
+            <div class="segment-row">
+              <button v-for="opt in menuFilterOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: menuFilter === opt.value }" @click="menuFilter = opt.value">{{ opt.label }}</button>
             </div>
           </div>
 
           <div class="filter-actions">
-            <Button label="GPS" icon="pi pi-crosshairs" severity="secondary" outlined @click="useGPS" />
-            <Button :label="!geoResolved ? 'Detecting location...' : 'Search Area'" icon="pi pi-search" :loading="loading || !geoResolved" :disabled="!categories.length || !geoResolved" @click="search" />
+            <Button :label="!geoResolved ? 'Detecting location...' : 'PROSES CARI PROSPEK'" icon="pi pi-search" fluid :loading="loading || !geoResolved" :disabled="!categories.length || !geoResolved" @click="search" />
+          </div>
+
+          <div v-if="queried" class="query-results-footer">
+            <div class="query-results-row">
+              <span class="query-results-label">Query Results:</span>
+              <strong>{{ filteredResults.length }} items</strong>
+            </div>
+            <span class="query-source"><i class="pi pi-cloud" /> GOOGLE API</span>
+            <span class="query-anchor">Map Anchor: {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }}</span>
           </div>
         </div>
 
       </aside>
 
-      <div class="finder-map-stage">
+      <div class="finder-map-stage" :class="{ 'has-results': results.length }">
         <div ref="mapElement" class="leaflet-map" role="region" aria-label="OpenStreetMap with Google Places prospect markers" />
 
         
@@ -499,6 +919,9 @@ onBeforeUnmount(() => {
                 <div class="result-meta-row">
                   <span v-if="item.distance" class="result-distance"><i class="pi pi-map-marker" /> {{ Math.round(item.distance) }} m</span>
                   <Tag v-if="item.businessStatus" :value="item.businessStatus === 'OPERATIONAL' ? 'Open' : item.businessStatus" :severity="item.businessStatus === 'OPERATIONAL' ? 'success' : 'warn'" class="result-status-tag" />
+                  <Tag v-if="item.hasMenuPhotos" value="Menu Ready ✓" severity="success" class="result-menu-tag" />
+                  <Tag v-else-if="likelyHasMenu(item)" value="Likely Has Menu" severity="warn" class="result-menu-tag" />
+                  <Tag v-else value="Menu Not Ready" severity="secondary" class="result-menu-tag" />
                 </div>
               </div>
               <i class="pi pi-chevron-right result-chevron" />
@@ -678,11 +1101,37 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails?.photos?.length" class="detail-section">
-          <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
-          <div class="detail-photos-row">
-            <img v-for="photo in placeDetails.photos.slice(0, 6)" :key="photo.name" :src="photo.photoUrl" alt="Place photo" class="detail-photo" loading="lazy" />
+        <div v-if="placeDetails" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-book" /> Menu Photos</h3>
+          <div v-if="menuPhotos.length" class="detail-photos-row">
+            <button v-for="photo in menuPhotos" :key="photo.name" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(photo.photoUrl, 'Menu photo', photo.attribution)">
+              <img :src="photo.photoUrl" alt="Menu photo" class="detail-photo" loading="lazy" />
+              <span class="detail-photo-badge"><i class="pi pi-book" /> Menu</span>
+            </button>
           </div>
+          <div v-else-if="menuImagesLoading" class="detail-photo-empty"><i class="pi pi-spin pi-spinner" /> Mencari foto menu harga...</div>
+          <div v-else-if="menuImages.length" class="menu-images">
+            <p class="menu-images-note"><i class="pi pi-image" /> Foto menu dari hasil pencarian Google (maksimal 3)</p>
+            <div class="detail-photos-row">
+              <button v-for="image in menuImages" :key="image.imageUrl" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(image.imageUrl, image.title || 'Menu price photo', image.sourceSite)">
+                <img :src="image.imageUrl" :alt="image.title || 'Menu price photo'" class="detail-photo" loading="lazy" @error="($event.target as HTMLImageElement).style.display='none'" />
+                <span class="detail-photo-badge"><i class="pi pi-book" /> Menu</span>
+              </button>
+            </div>
+          </div>
+          <Message v-else-if="menuImagesError" severity="warn" :closable="false">{{ menuImagesError }}</Message>
+          <div v-else class="detail-photo-empty"><i class="pi pi-book" /> Menu not found <span class="detail-menu-status">Menu Not Ready</span></div>
+        </div>
+
+        <div v-if="placeDetails" class="detail-section">
+          <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
+          <div v-if="regularPhotos.length" class="detail-photos-row">
+            <button v-for="photo in regularPhotos" :key="photo.name" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(photo.photoUrl, 'Place photo', photo.attribution)">
+              <img :src="photo.photoUrl" alt="Place photo" class="detail-photo" loading="lazy" />
+              <span class="detail-photo-badge"><i class="pi pi-images" /> Photo</span>
+            </button>
+          </div>
+          <div v-else class="detail-photo-empty"><i class="pi pi-images" /> No photos available</div>
         </div>
 
         <div v-if="placeDetailsError" class="detail-section">
@@ -709,6 +1158,55 @@ onBeforeUnmount(() => {
           <Button label="Cancel" severity="secondary" text @click="detailOpen = false" />
           <Button v-if="selected?.isCustomer" label="Existing Customer" icon="pi pi-check" severity="success" disabled />
           <Button v-else label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !industryGroup" @click="save" />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="previewOpen" modal header="Photo Preview" :style="{ width: 'min(960px, 95vw)' }" :breakpoints="{ '576px': '96vw' }" @hide="previewPhoto = null">
+      <div v-if="previewPhoto" class="finder-photo-preview">
+        <img :src="previewPhoto.url" :alt="previewPhoto.alt" />
+        <small v-if="previewPhoto.attribution">Photo: {{ previewPhoto.attribution }}</small>
+      </div>
+    </Dialog>
+
+    <Dialog v-model:visible="pinOpen" :header="'Create Pin'" :style="{ width: '430px' }" :modal="true" :dismissable-mask="false" class="pin-dialog" @hide="closePinForm">
+      <div class="pin-form">
+        <Message v-if="pinError" severity="error" :closable="false" class="pin-error">{{ pinError }}</Message>
+
+        <div class="pin-map-note">
+          <i class="pi pi-map-marker" />
+          <span>Drag the purple pin on the map to position it, or move it below by coordinates.</span>
+        </div>
+
+        <label class="field">
+          <span>Pin Name</span>
+          <InputText v-model="pinName" placeholder="e.g. Kopi Nusantara HQ" fluid />
+        </label>
+
+        <div class="pin-coords">
+          <label class="field">
+            <span>Latitude</span>
+            <InputNumber v-model="pinLat" :min="-90" :max="90" :min-fraction-digits="6" :max-fraction-digits="6" fluid />
+          </label>
+          <label class="field">
+            <span>Longitude</span>
+            <InputNumber v-model="pinLng" :min="-180" :max="180" :min-fraction-digits="6" :max-fraction-digits="6" fluid />
+          </label>
+        </div>
+
+        <div class="pin-assignment">
+          <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
+          <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
+          <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
+            {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
+          </Message>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="pin-dialog-footer">
+          <Button label="Cancel" severity="secondary" text @click="closePinForm" />
+          <Button label="Save Pin" icon="pi pi-save" :loading="pinSaving" :disabled="!pinName || !salesExecutiveId || !industryGroup" @click="savePin" />
         </div>
       </template>
     </Dialog>
@@ -837,14 +1335,30 @@ onBeforeUnmount(() => {
 
 .finder-panel-header {
   padding: 0.65rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
   border-bottom: 1px solid var(--border-light);
   background: linear-gradient(150deg, var(--brand-blue-50) 0%, #ffffff 70%);
+}
+
+.create-pin-button {
+  flex: 0 0 auto;
+}
+
+.create-pin-button :deep(.p-button) {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  border-radius: 0.6rem;
 }
 
 .finder-panel-title {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  min-width: 0;
 }
 
 .finder-panel-title > i {
@@ -960,17 +1474,46 @@ onBeforeUnmount(() => {
 }
 
 /* Categories */
+.category-tools {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.45rem;
+}
+
+.category-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.24rem 0.55rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--brand-blue);
+  font-size: 0.56rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.category-tool:hover { background: var(--brand-blue-50); border-color: var(--brand-blue); }
+
+.category-tool.clear { color: var(--text-muted); }
+.category-tool.clear:hover { color: var(--brand-blue); }
+
+.category-tool i { font-size: 0.5rem; }
+
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.3rem;
 }
 
 .category-chip {
   display: flex;
-  gap: 0.28rem;
+  gap: 0.3rem;
   align-items: center;
-  padding: 0.3rem 0.4rem;
+  min-width: 0;
+  padding: 0.32rem 0.4rem;
   border-radius: 0.55rem;
   background: var(--surface-subtle);
   border: 1px solid transparent;
@@ -986,17 +1529,26 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 1px rgba(209, 67, 80, 0.14), 0 2px 6px -2px rgba(209, 67, 80, 0.25);
 }
 
-.category-chip span {
+.category-chip-icon {
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  filter: grayscale(0.15);
+}
+
+.category-chip-label {
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   color: var(--text-secondary);
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 550;
+  line-height: 1.3;
   transition: color 160ms ease;
 }
 
-.category-chip.active span { color: var(--brand-blue); font-weight: 700; }
+.category-chip.active .category-chip-label { color: var(--brand-blue); font-weight: 700; }
 
 /* Radius */
 .radius-header {
@@ -1029,10 +1581,17 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
+  margin-top: 0.45rem;
 }
 
 .coordinate-grid .field { gap: 0.22rem; }
-.coordinate-grid .field > span { color: var(--text-muted); font-size: 0.58rem; font-weight: 700; }
+.coordinate-grid .field > span {
+  color: var(--text-muted);
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 
 .coordinate-grid input {
   width: 100%;
@@ -1051,18 +1610,55 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 4px rgba(209, 67, 80, 0.10);
 }
 
+.gps-button {
+  width: 100%;
+}
+
+.gps-button :deep(.p-button) {
+  padding: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 0.6rem;
+}
+
+/* Segmented controls */
+.segment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.segment-chip {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.segment-chip:hover { background: var(--surface-hover); border-color: var(--border-default); }
+
+.segment-chip.active {
+  background: linear-gradient(135deg, var(--brand-blue) 0%, #b13a48 100%);
+  border-color: var(--brand-blue);
+  color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(209, 67, 80, 0.45);
+}
+
 /* Filter Actions */
 .filter-actions {
   margin-top: 0.55rem;
-  display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 0.45rem;
 }
 
 .filter-actions :deep(.p-button) {
-  padding: 0.52rem;
-  font-size: 0.68rem;
-  font-weight: 700;
+  padding: 0.62rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
   border-radius: 0.6rem;
   transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
@@ -1071,6 +1667,51 @@ onBeforeUnmount(() => {
   transform: translateY(-1px);
   filter: brightness(1.03);
 }
+
+/* Query Results Footer */
+.query-results-footer {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-light);
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, var(--surface-subtle) 0%, #ffffff 100%);
+}
+
+.query-results-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.query-results-label {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.query-results-row strong {
+  color: var(--brand-blue);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.query-source,
+.query-anchor {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-faint);
+  font-size: 0.55rem;
+  font-weight: 500;
+}
+
+.query-source i { color: #16a34a; font-size: 0.55rem; }
+.query-anchor { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 
 /* ── Floating Results Panel ──────────────────────────────────── */
 .finder-floating-results {
@@ -1324,6 +1965,7 @@ onBeforeUnmount(() => {
 .result-distance i { font-size: 0.5rem; }
 
 .result-status-tag { transform: scale(0.8); transform-origin: left; }
+.result-menu-tag { transform: scale(0.8); transform-origin: left; }
 
 .result-chevron {
   color: var(--text-faint);
@@ -1793,13 +2435,107 @@ onBeforeUnmount(() => {
   padding-bottom: 0.25rem;
 }
 
+.detail-photo-tile {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 86px;
+}
+
+.detail-photo-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.detail-photo-button:hover .detail-photo,
+.detail-photo-button:focus-visible .detail-photo {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.finder-photo-preview {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+}
+
+.finder-photo-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.finder-photo-preview small { color: var(--text-muted); }
+
 .detail-photo {
-  width: 80px;
-  height: 80px;
+  position: relative;
+  width: 86px;
+  height: 86px;
   border-radius: var(--radius-sm);
   object-fit: cover;
-  flex-shrink: 0;
   border: 1px solid var(--border-light);
+}
+
+.detail-photo-badge {
+  position: absolute;
+  left: 0.35rem;
+  bottom: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.detail-photo-badge i { font-size: 0.45rem; }
+
+.detail-photo-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.detail-photo-empty i { color: #cbd5e1; }
+
+.menu-images {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.menu-images-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+
+.menu-images-note i { color: var(--brand-blue); }
+
+.menu-image-tile {
+  text-decoration: none;
+}
+
+.menu-images-error {
+  font-size: 0.68rem;
 }
 
 .detail-photo::-webkit-scrollbar { height: 3px; }
@@ -1845,6 +2581,105 @@ onBeforeUnmount(() => {
   font-size: 0.72rem;
   margin-top: 0.18rem;
   border-radius: 0.6rem;
+}
+
+/* ── Create Pin dialog ── */
+.pin-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.pin-error {
+  font-size: 0.72rem;
+}
+
+.pin-map-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.pin-map-note i {
+  color: var(--brand-blue);
+  margin-top: 0.08rem;
+}
+
+.pin-form .field {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.pin-form .field > span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.pin-coords {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.pin-assignment {
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.pin-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+/* ── Side-by-side results (results column, map never covered) ── */
+@media (min-width: 901px) {
+  .finder-map-stage.has-results {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .finder-map-stage.has-results .leaflet-map {
+    position: relative;
+    inset: auto;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .finder-map-stage.has-results .finder-floating-results {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 340px;
+    height: 100%;
+    max-height: none;
+    border: none;
+    border-left: 1px solid #e5eaf0;
+    border-radius: 0;
+    box-shadow: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .finder-map-stage.has-results {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .finder-map-stage.has-results .finder-floating-results {
+    width: 300px;
+  }
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
@@ -1935,6 +2770,52 @@ onBeforeUnmount(() => {
 <style>
 .finder-leaflet-icon-host { border: 0; background: transparent; }
 
+.finder-center-icon-host {
+  border: 0;
+  background: transparent;
+}
+
+.finder-center-icon-host.leaflet-marker-draggable,
+.finder-center-marker {
+  cursor: grab;
+}
+
+.finder-center-icon-host.leaflet-marker-draggable:active,
+.finder-center-marker:active { cursor: grabbing; }
+
+.finder-center-marker {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.16), 0 6px 18px rgba(29, 78, 216, 0.45);
+  cursor: grab;
+  transition: width 160ms ease, height 160ms ease, box-shadow 160ms ease;
+}
+
+.finder-center-marker:hover { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 6px 18px rgba(29, 78, 216, 0.5); }
+.finder-center-marker i { font-size: 1rem; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+
+.finder-center-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(59, 130, 246, 0.55);
+  animation: finder-ring-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes finder-ring-pulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+
 .finder-leaflet-marker {
   width: 36px;
   height: 36px;
@@ -1958,6 +2839,19 @@ onBeforeUnmount(() => {
   border-color: #ffffff;
   border-radius: 50%;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25), 0 6px 16px rgba(21, 128, 61, 0.4);
+}
+
+.finder-leaflet-marker.is-custom-pin {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25), 0 6px 16px rgba(124, 58, 237, 0.45);
+  cursor: grab;
+}
+
+.finder-leaflet-marker.is-custom-pin:active { cursor: grabbing; }
+
+.finder-leaflet-marker.is-custom-pin.is-selected {
+  box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.22), 0 8px 22px rgba(124, 58, 237, 0.5);
 }
 
 .finder-leaflet-marker.is-customer b {

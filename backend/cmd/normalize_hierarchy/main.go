@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	targetDatabase = "crm_prospect_simulator_dev"
+	targetDatabase = "yummy_crm"
 	effectiveFrom  = "2026-08-01"
 
 	roleSuperAdminID = "00000000-0000-0000-0000-000000000100"
