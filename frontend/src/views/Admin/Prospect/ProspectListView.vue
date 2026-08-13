@@ -20,7 +20,7 @@ const loading = ref(true)
 
 const searchQuery = ref('')
 const salesFilter = ref('')
-const industryFilter = ref('')
+const categoryFilter = ref('')
 const statusFilter = ref('')
 
 const deleteDialogVisible = ref(false)
@@ -35,15 +35,18 @@ const deletionBusy = ref(false)
 const actionDialogVisible = ref(false)
 const actionTarget = ref<Prospect | null>(null)
 
-const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty', 'Services', 'Other']
-const industryOptions = computed(() => [{ label: 'All Business Segments', value: '' }, ...industries.map((v) => ({ label: v, value: v }))])
+const categoryOptions = computed(() => {
+  const categories = [...new Set(prospects.value.map((item) => item.placeCategory).filter(Boolean))].sort()
+  return [{ label: 'All Categories', value: '' }, ...categories.map((value) => ({ label: value, value }))]
+})
 const statusOptions = computed(() => [{ label: 'All Pipeline Statuses', value: '' }, ...BOARD_STATUSES.map((v) => ({ label: v.replaceAll('_', ' '), value: v }))])
 const salesOptions = computed(() => [{ label: 'All Sales Executives', value: '' }, ...sales.value.map((s) => ({ label: s.fullName, value: s.id }))])
 
 const filtered = computed(() => {
   return filterProspects(prospects.value, {
     salesExecutiveId: salesFilter.value,
-    industryGroup: industryFilter.value,
+    industryGroup: '',
+    category: categoryFilter.value,
     status: statusFilter.value,
     search: searchQuery.value,
   })
@@ -84,7 +87,7 @@ function formatDate(dateStr: string) {
 function resetFilters() {
   searchQuery.value = ''
   salesFilter.value = ''
-  industryFilter.value = ''
+  categoryFilter.value = ''
   statusFilter.value = ''
 }
 
@@ -266,8 +269,8 @@ onMounted(async () => {
             <Select v-model="salesFilter" :options="salesOptions" optionLabel="label" optionValue="value" placeholder="All Sales" />
           </div>
           <div class="filter-field">
-            <label>Industry Group</label>
-            <Select v-model="industryFilter" :options="industryOptions" optionLabel="label" optionValue="value" />
+            <label>Category</label>
+            <Select v-model="categoryFilter" :options="categoryOptions" optionLabel="label" optionValue="value" />
           </div>
           <div class="filter-field">
             <label>Status</label>
@@ -302,7 +305,6 @@ onMounted(async () => {
               <tr>
                 <th>Place Name</th>
                 <th>Category</th>
-                <th>Industry Group</th>
                 <th>Sales Executive</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -326,7 +328,6 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td><span class="cell-text">{{ p.placeCategory }}</span></td>
-                <td><span class="cell-text">{{ p.industryGroup }}</span></td>
                 <td><span class="cell-text">{{ p.assignedSalesExecutive }}</span></td>
                 <td>
                   <div class="status-cell">

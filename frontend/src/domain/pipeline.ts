@@ -17,6 +17,7 @@ export function previousStage(status: ProspectStatus) {
 export interface PipelineFilters {
   salesExecutiveId: string
   industryGroup: string
+  category?: string
   status: string
   search: string
 }
@@ -26,6 +27,7 @@ export function filterProspects(items: Prospect[], filters: PipelineFilters) {
   return items.filter((item) =>
     (!filters.salesExecutiveId || item.assignedSalesExecutiveId === filters.salesExecutiveId) &&
     (!filters.industryGroup || item.industryGroup === filters.industryGroup) &&
+    (!filters.category || item.placeCategory === filters.category) &&
     (!filters.status || item.status === filters.status) &&
     (!search || `${item.placeName} ${item.formattedAddress}`.toLowerCase().includes(search)),
   )

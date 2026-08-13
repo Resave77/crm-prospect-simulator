@@ -303,11 +303,6 @@ onBeforeUnmount(() => {
                 <strong>{{ review.prospect.placeCategory || 'Not provided' }}</strong>
                 <DataSourceBadge source="google" label="Google" />
               </div>
-              <div class="detail-field">
-                <span><i class="pi pi-briefcase" /> Industry</span>
-                <strong>{{ review.prospect.industryGroup || 'Not provided' }}</strong>
-                <DataSourceBadge source="google" label="Google" />
-              </div>
               <div class="detail-field detail-field-wide">
                 <span><i class="pi pi-id-card" /> Google Place ID</span>
                 <strong class="wrap-anywhere">{{ review.prospect.googlePlaceId || '-' }}</strong>
@@ -333,7 +328,6 @@ onBeforeUnmount(() => {
 
             <div class="prospect-tags">
               <Tag v-if="review.prospect.placeCategory" :value="review.prospect.placeCategory" severity="secondary" />
-              <Tag v-if="review.prospect.industryGroup" :value="review.prospect.industryGroup" />
               <Tag
                 v-if="placeDetails?.businessStatus"
                 :value="businessStatusLabel(placeDetails.businessStatus)"
@@ -555,7 +549,6 @@ onBeforeUnmount(() => {
               <div><dt>Phone (Primary)</dt><dd><a v-if="review.prospect.phoneNumber" :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a><span v-else>Not provided</span></dd></div>
               <div v-if="placeDetails?.internationalPhone"><dt>Phone (International)</dt><dd>{{ placeDetails.internationalPhone }}</dd></div>
               <div><dt>Category</dt><dd>{{ review.prospect.placeCategory || 'Not provided' }}</dd></div>
-              <div><dt>Industry</dt><dd>{{ review.prospect.industryGroup || 'Not provided' }}</dd></div>
               <div v-if="placeDetails?.openingHours"><dt>Operating hours</dt><dd>{{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}</dd></div>
               <div v-if="placeDetails?.priceLevel"><dt>Price level</dt><dd>{{ priceLevelLabel(placeDetails.priceLevel) }}</dd></div>
               <div><dt>Source</dt><dd>Google Maps / CRM</dd></div>
