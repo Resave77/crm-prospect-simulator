@@ -57,7 +57,6 @@ jobs:
               fi
             fi
 
-            database_url="$(printf '%s' "$database_url" | sed 's/^['\"'\"']\|['\"'\"']$//g')"
             if [ -z "$database_url" ]; then
               echo 'AUDIT_ERROR=DATABASE_URL_NOT_FOUND'
               exit 1
@@ -72,9 +71,35 @@ jobs:
               exit 1
             fi
 
-            db_host="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.urlparse(os.environ["DATABASE_URL"]).hostname or "")')"
-            db_port="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; u=urllib.parse.urlparse(os.environ["DATABASE_URL"]); print(u.port or 5432)')"
-            db_name="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(os.environ["DATABASE_URL"]).path.lstrip("/")))')"
+            normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
+            import os
+            import urllib.parse
+
+            raw = os.environ["DATABASE_URL"].strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("\"", "\x27"):
+                raw = raw[1:-1]
+            parsed = urllib.parse.urlsplit(raw)
+            if parsed.scheme not in ("postgres", "postgresql") or not parsed.hostname:
+                raise SystemExit(2)
+            username = urllib.parse.unquote(parsed.username or "")
+            password = urllib.parse.unquote(parsed.password or "")
+            credentials = urllib.parse.quote(username, safe="")
+            if parsed.password is not None:
+                credentials += ":" + urllib.parse.quote(password, safe="")
+            hostname = parsed.hostname
+            formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
+            authority = (credentials + "@" if parsed.username is not None else "") + formatted_host
+            if parsed.port is not None:
+                authority += ":" + str(parsed.port)
+            print(urllib.parse.urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment)))
+            ')" || {
+              echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            }
+
+            db_host="$(DATABASE_URL="$normalized_database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.urlsplit(os.environ["DATABASE_URL"]).hostname or "")')"
+            db_port="$(DATABASE_URL="$normalized_database_url" python3 -c 'import os, urllib.parse; u=urllib.parse.urlsplit(os.environ["DATABASE_URL"]); print(u.port or 5432)')"
+            db_name="$(DATABASE_URL="$normalized_database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlsplit(os.environ["DATABASE_URL"]).path.lstrip("/")))')"
 
             if [ -z "$db_host" ] || [ -z "$db_name" ]; then
               echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
@@ -86,7 +111,7 @@ jobs:
             esac
 
             sql_value() {
-              PGOPTIONS='-c default_transaction_read_only=on' psql "$database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
             }
 
             prisma_table="$(sql_value "SELECT CASE WHEN to_regclass('public._prisma_migrations') IS NULL THEN 'ABSENT' ELSE 'EXISTS' END;")"
