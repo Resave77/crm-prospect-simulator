@@ -379,7 +379,9 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 	if !actor.Role.IsAdminRole() {
 		return prospectmodel.Prospect{}, ErrForbidden
 	}
-	input.IndustryGroup = strings.TrimSpace(input.IndustryGroup)
+	// The legacy industry_group column stores the selected place category.
+	// Derive it server-side so it always matches Google Places data.
+	input.IndustryGroup = strings.TrimSpace(input.Place.PlaceCategory)
 	if input.Place.GooglePlaceID == "" || input.Place.PlaceName == "" || input.Place.FormattedAddress == "" || input.IndustryGroup == "" || input.AssignedSalesExecutiveID == uuid.Nil {
 		return prospectmodel.Prospect{}, ErrFinderInput
 	}

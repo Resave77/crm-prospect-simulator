@@ -62,7 +62,7 @@ export async function getPlaceDetails(googlePlaceId: string) { return (await api
 export async function getMenuImages(query: string, limit = 8) { return (await api.get<ApiEnvelope<MenuImage[]>>('/admin/prospect-finder/menu-images', { params: { query, limit } })).data.data }
 export function apiClientPath(path: string) { return path.replace(/^\/api\/v1(?=\/)/, '') }
 export async function getPlacePhotoBlob(photoUrl: string) { return (await api.get(apiClientPath(photoUrl), { responseType: 'blob' })).data as Blob }
-export async function saveProspect(place: PlaceResult, industryGroup: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup, assignedSalesExecutiveId })).data.data }
+export async function saveProspect(place: PlaceResult, category: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup: category, assignedSalesExecutiveId })).data.data }
 
 
 export async function getProspectReview(id: string) {

@@ -42,11 +42,6 @@ const savedFilterOptions = [
 const menuFilterOptions = [
   { value: 'all', label: 'All' }, { value: 'likely', label: 'Likely Has Menu' }, { value: 'ready', label: 'Menu Ready' }, { value: 'not_ready', label: 'Menu Not Ready' },
 ] as const
-const industries = [
-  'Resto & Café', 'QSR / Fast Food', 'Bakery & Dessert', 'Hotels & Accommodation',
-  'Catering & Event', 'Modern Trade', 'Convenience Store', 'General Trade',
-  'Distributor / Agent', 'Industry / Manufacturer', 'Toko Bahan Kue / Baking Supply', 'Institutional',
-]
 const keyword = ref('')
 const categories = ref<string[]>(categoryOptions.map(o => o.key))
 const radius = ref(5000)
@@ -71,7 +66,6 @@ const menuImagesLoading = ref(false)
 const menuImagesError = ref('')
 const sales = ref<SalesExecutiveOption[]>([])
 const salesExecutiveId = ref('')
-const industryGroup = ref('N&B / Kuliner')
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -104,6 +98,10 @@ const selectedSalesCount = computed(() => {
   const exec = sales.value.find(s => s.id === salesExecutiveId.value)
   return exec?.activeProspectCount ?? 0
 })
+const selectedPlaceCategory = computed(() =>
+  placeDetails.value?.placeCategory?.trim() || selected.value?.category?.trim() || '',
+)
+const pinCategory = 'Custom Pin'
 
 // Places API does not expose the Google Maps UI's Menu/Photo grouping.
 // Ignore legacy `isMenu` values that were inferred from landscape dimensions;
@@ -431,8 +429,8 @@ async function savePin() {
     toast.add({ severity: 'warn', summary: 'Missing name', detail: 'Enter a name for the pin.', life: 4000 })
     return
   }
-  if (!salesExecutiveId.value || !industryGroup.value) {
-    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select an Industry Group and Sales Executive before saving.', life: 4000 })
+  if (!salesExecutiveId.value) {
+    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select a Sales Executive before saving.', life: 4000 })
     return
   }
   pinError.value = ''
@@ -459,7 +457,7 @@ async function savePin() {
       markerIcon: 'pi pi-map-marker',
       placeTypes: [],
     }
-    const item = await crmApi.saveProspect(result, industryGroup.value, salesExecutiveId.value)
+    const item = await crmApi.saveProspect(result, pinCategory, salesExecutiveId.value)
     toast.add({ severity: 'success', summary: 'Pin saved', detail: `${item.placeName} was saved as NEW_LEAD and assigned successfully.`, life: 5000 })
     closePinForm()
     loadSavedPlaceIds()
@@ -705,8 +703,8 @@ function useGPS() {
 }
 
 async function save() {
-  if (!selected.value || !salesExecutiveId.value || !industryGroup.value) {
-    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select a Place, Industry Group, and Sales Executive before saving.', life: 4000 })
+  if (!selected.value || !selectedPlaceCategory.value || !salesExecutiveId.value) {
+    toast.add({ severity: 'warn', summary: 'Missing information', detail: 'The selected place must have a Category and Sales Executive before saving.', life: 4000 })
     return
   }
   if (selected.value.isCustomer) {
@@ -717,7 +715,8 @@ async function save() {
   success.value = ''
   saving.value = true
   try {
-    const item = await crmApi.saveProspect(selected.value, industryGroup.value, salesExecutiveId.value)
+    const place = { ...selected.value, category: selectedPlaceCategory.value }
+    const item = await crmApi.saveProspect(place, selectedPlaceCategory.value, salesExecutiveId.value)
     success.value = `${item.placeName} saved as NEW_LEAD and assigned successfully.`
     toast.add({ severity: 'success', summary: 'Prospect saved', detail: `${item.placeName} was saved as NEW_LEAD and assigned successfully.`, life: 5000 })
     detailOpen.value = false
@@ -1199,7 +1198,7 @@ onBeforeUnmount(() => {
             <strong>Existing customer</strong> — this place has already been converted to a customer and can no longer be assigned to sales.
           </Message>
           <div v-else class="detail-assignment-fields">
-            <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
+            <label class="field"><span>Category</span><InputText :model-value="selectedPlaceCategory" disabled fluid /></label>
             <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
             <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
               {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
@@ -1212,7 +1211,7 @@ onBeforeUnmount(() => {
         <div class="detail-dialog-footer">
           <Button label="Cancel" severity="secondary" text @click="detailOpen = false" />
           <Button v-if="selected?.isCustomer" label="Existing Customer" icon="pi pi-check" severity="success" disabled />
-          <Button v-else label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !industryGroup" @click="save" />
+          <Button v-else label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !selectedPlaceCategory" @click="save" />
         </div>
       </template>
     </Dialog>
@@ -1250,7 +1249,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="pin-assignment">
-          <label class="field"><span>Industry Group</span><Select v-model="industryGroup" :options="industries" fluid /></label>
+          <label class="field"><span>Category</span><InputText :model-value="pinCategory" disabled fluid /></label>
           <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
           <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
             {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
@@ -1261,7 +1260,7 @@ onBeforeUnmount(() => {
       <template #footer>
         <div class="pin-dialog-footer">
           <Button label="Cancel" severity="secondary" text @click="closePinForm" />
-          <Button label="Save Pin" icon="pi pi-save" :loading="pinSaving" :disabled="!pinName || !salesExecutiveId || !industryGroup" @click="savePin" />
+          <Button label="Save Pin" icon="pi pi-save" :loading="pinSaving" :disabled="!pinName || !salesExecutiveId" @click="savePin" />
         </div>
       </template>
     </Dialog>
