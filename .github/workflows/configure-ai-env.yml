@@ -1,0 +1,195 @@
+name: Configure Development AI Environment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  configure-ai-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure VPS AI environment and restart backend once
+        uses: appleboy/ssh-action@v0.1.10
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          envs: OPENAI_API_KEY
+          script: |
+            set -eu
+            set +x
+
+            TARGET_ENV="/home/smk_dev/app/backend/dev/.env"
+            BACKUP_DIRECTORY="/home/smk_dev/app/backend/dev/backups"
+            SERVICE_NAME="dev-backend.service"
+
+            if ! sudo test -f "$TARGET_ENV"; then
+              echo 'CONFIGURATION_ERROR=TARGET_ENV_NOT_FOUND'
+              exit 1
+            fi
+            if ! sudo systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then
+              echo 'CONFIGURATION_ERROR=SERVICE_NOT_FOUND'
+              exit 1
+            fi
+            if [ -z "${OPENAI_API_KEY:-}" ]; then
+              echo 'CONFIGURATION_ERROR=OPENAI_API_KEY_SECRET_EMPTY'
+              exit 1
+            fi
+
+            service_user="$(sudo systemctl show "$SERVICE_NAME" --property=User --value)"
+            timestamp="$(date -u +%Y%m%d%H%M%S)"
+            backup_path="$BACKUP_DIRECTORY/.env-before-ai-$timestamp"
+            sudo install -d -m 700 -o "$service_user" "$BACKUP_DIRECTORY"
+            sudo cp --preserve=mode,ownership,timestamps -- "$TARGET_ENV" "$backup_path"
+            sudo chmod 600 "$backup_path"
+            if ! sudo test -s "$backup_path"; then
+              echo 'CONFIGURATION_ERROR=ENV_BACKUP_FAILED'
+              exit 1
+            fi
+            printf 'ENV_BACKUP_CREATED=YES\n'
+            printf 'ENV_BACKUP_PATH=%s\n' "$backup_path"
+
+            printf '%s' "$OPENAI_API_KEY" | sudo python3 -c '
+            import os
+            import re
+            import stat
+            import sys
+            import tempfile
+
+            target = sys.argv[1]
+            api_key = sys.stdin.read()
+            if not api_key or api_key.strip() != api_key or any(char in api_key for char in "\r\n#"):
+                raise SystemExit("OPENAI_API_KEY secret is empty or unsafe for dotenv")
+
+            desired = {
+                "AI_ENABLED": "true",
+                "OPENAI_API_KEY": api_key,
+                "OPENAI_MODEL": "gpt-5.6-luna",
+                "OPENAI_TIMEOUT": "20s",
+                "OPENAI_MAX_OUTPUT_TOKENS": "800",
+                "OPENAI_FIND_MENU_TIMEOUT": "60s",
+                "OPENAI_MENU_PROFILE_TIMEOUT": "40s",
+                "AI_CHAT_MAX_MESSAGE_LENGTH": "1000",
+                "AI_CHAT_MAX_HISTORY_MESSAGES": "6",
+            }
+            key_pattern = re.compile(r"^(?P<prefix>\s*(?:export\s+)?)(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?P<separator>\s*=).*$")
+            with open(target, "r", encoding="utf-8") as source:
+                original = source.readlines()
+            output = []
+            seen = set()
+            for line in original:
+                match = key_pattern.match(line.rstrip("\r\n"))
+                key = match.group("key") if match else ""
+                if key not in desired:
+                    output.append(line)
+                    continue
+                if key in seen:
+                    continue
+                newline = "\r\n" if line.endswith("\r\n") else "\n"
+                prefix = match.group("prefix")
+                separator = match.group("separator")
+                output.append(prefix + key + separator + desired[key] + newline)
+                seen.add(key)
+            if output and not output[-1].endswith(("\n", "\r")):
+                output[-1] += "\n"
+            for key, value in desired.items():
+                if key not in seen:
+                    output.append(f"{key}={value}\n")
+
+            metadata = os.stat(target)
+            directory = os.path.dirname(target)
+            descriptor, temporary = tempfile.mkstemp(prefix=".env-ai-", dir=directory, text=True)
+            try:
+                with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as destination:
+                    destination.writelines(output)
+                    destination.flush()
+                    os.fsync(destination.fileno())
+                os.chmod(temporary, stat.S_IMODE(metadata.st_mode))
+                os.chown(temporary, metadata.st_uid, metadata.st_gid)
+                os.replace(temporary, target)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            ' "$TARGET_ENV"
+            unset OPENAI_API_KEY
+
+            sudo python3 -c '
+            import re
+            import sys
+
+            target = sys.argv[1]
+            expected = {
+                "AI_ENABLED": "true",
+                "OPENAI_MODEL": "gpt-5.6-luna",
+                "OPENAI_TIMEOUT": "20s",
+                "OPENAI_MAX_OUTPUT_TOKENS": "800",
+                "OPENAI_FIND_MENU_TIMEOUT": "60s",
+                "OPENAI_MENU_PROFILE_TIMEOUT": "40s",
+                "AI_CHAT_MAX_MESSAGE_LENGTH": "1000",
+                "AI_CHAT_MAX_HISTORY_MESSAGES": "6",
+            }
+            wanted = set(expected) | {"OPENAI_API_KEY"}
+            values = {}
+            counts = {key: 0 for key in wanted}
+            pattern = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
+            with open(target, "r", encoding="utf-8") as source:
+                for line in source:
+                    match = pattern.match(line.rstrip("\r\n"))
+                    if match and match.group(1) in wanted:
+                        key = match.group(1)
+                        counts[key] += 1
+                        values[key] = match.group(2)
+            if any(counts[key] != 1 for key in wanted):
+                raise SystemExit("AI environment key count validation failed")
+            if not values.get("OPENAI_API_KEY"):
+                raise SystemExit("OPENAI_API_KEY nonempty validation failed")
+            if any(values.get(key) != value for key, value in expected.items()):
+                raise SystemExit("AI environment value validation failed")
+            print("AI_ENABLED=true")
+            print("OPENAI_API_KEY_PRESENT=YES")
+            print("OPENAI_API_KEY_NONEMPTY=YES")
+            print("OPENAI_MODEL=gpt-5.6-luna")
+            print("OPENAI_TIMEOUT=20s")
+            print("OPENAI_MAX_OUTPUT_TOKENS=800")
+            print("OPENAI_FIND_MENU_TIMEOUT=60s")
+            print("OPENAI_MENU_PROFILE_TIMEOUT=40s")
+            print("AI_CHAT_MAX_MESSAGE_LENGTH=1000")
+            print("AI_CHAT_MAX_HISTORY_MESSAGES=6")
+            ' "$TARGET_ENV"
+
+            sudo systemctl restart "$SERVICE_NAME"
+
+            service_active="$(sudo systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)"
+            if [ "$service_active" = "active" ]; then
+              printf 'BACKEND_SERVICE_ACTIVE=YES\n'
+            else
+              printf 'BACKEND_SERVICE_ACTIVE=NO\n'
+            fi
+
+            port="$(sudo awk -F= '$1 == "PORT" {sub(/^[^=]*=/, ""); gsub(/^[[:space:]'"'"']+|[[:space:]'"'"']+$/, ""); print; exit}' "$TARGET_ENV")"
+            [ -n "$port" ] || port="8080"
+            case "$port" in
+              *[!0-9]*) health_result="FAIL" ;;
+              *)
+                if command -v curl >/dev/null 2>&1 && curl --silent --show-error --fail --max-time 10 "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; then
+                  health_result="PASS"
+                elif ! command -v curl >/dev/null 2>&1; then
+                  health_result="NOT_AVAILABLE"
+                else
+                  health_result="FAIL"
+                fi
+                ;;
+            esac
+            printf 'BACKEND_HEALTHCHECK=%s\n' "$health_result"
+
+            startup_error_count="$(sudo journalctl -u "$SERVICE_NAME" --since '2 minutes ago' --no-pager 2>/dev/null | grep -Eic 'panic|fatal|configuration.*error|parse.*error|invalid.*duration' || true)"
+            printf 'STARTUP_ERROR_COUNT=%s\n' "$startup_error_count"
+            printf 'BACKEND_RESTART_COUNT=1\n'
+            printf 'REAL_OPENAI_CALLS=0\n'
+
+            if [ "$service_active" != "active" ] || [ "$health_result" = "FAIL" ] || [ "$startup_error_count" != "0" ]; then
+              echo 'CONFIGURATION_ERROR=BACKEND_POST_RESTART_VALIDATION_FAILED'
+              exit 1
+            fi
