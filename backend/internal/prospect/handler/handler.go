@@ -26,8 +26,9 @@ import (
 )
 
 type Handler struct {
-	service     *service.Service
-	customerSvc *customerservice.Service
+	service         *service.Service
+	customerSvc     *customerservice.Service
+	initialAnalyzer *aiservice.InitialAnalyzer
 }
 
 type createCommentRequest struct {
@@ -40,12 +41,17 @@ type chatRequest struct {
 }
 
 type setPhotoTagRequest struct {
-	PhotoName string `json:"photoName"`
-	Category  string `json:"category"`
+	PhotoName  string `json:"photoName"`
+	PhotoIndex *int   `json:"photoIndex"`
+	Category   string `json:"category"`
 }
 
 func New(prospectService *service.Service, customerSvc *customerservice.Service) *Handler {
 	return &Handler{service: prospectService, customerSvc: customerSvc}
+}
+
+func (h *Handler) SetInitialAnalyzer(analyzer *aiservice.InitialAnalyzer) {
+	h.initialAnalyzer = analyzer
 }
 
 type transitionRequest struct {
@@ -111,6 +117,24 @@ func (h *Handler) ChatAIHistory(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) InitialAnalysis(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if h.initialAnalyzer == nil {
+		return response.Error(c, fiber.StatusNotFound, "AI_ANALYSIS_NOT_AVAILABLE", "AI analysis is not available.")
+	}
+	if err := h.service.AuthorizeProspectAccess(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	item, err := h.initialAnalyzer.Get(c.UserContext(), id)
+	if err != nil {
+		return response.Error(c, fiber.StatusNotFound, "AI_ANALYSIS_NOT_AVAILABLE", "AI analysis is not available.")
+	}
+	return response.Data(c, fiber.StatusOK, item)
 }
 
 func (h *Handler) Decide(c *fiber.Ctx) error {
@@ -607,6 +631,71 @@ func (h *Handler) ListPhotoTags(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, items)
 }
 
+func (h *Handler) ProfileMenu(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	var request struct {
+		Force bool `json:"force"`
+	}
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&request); err != nil {
+			return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
+		}
+	}
+	result, err := h.service.ProfileMenu(c.UserContext(), actor(c), id, request.Force)
+	if err != nil {
+		return writeError(c, err)
+	}
+	var data any
+	if json.Unmarshal(result, &data) != nil {
+		return response.Error(c, 503, "AI_INVALID_RESPONSE", "AI menu profiling returned invalid data.")
+	}
+	return response.Data(c, fiber.StatusOK, data)
+}
+
+func (h *Handler) FindMenu(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	result, err := h.service.FindMenu(c.UserContext(), actor(c), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, aiservice.ErrAITimeout):
+			return response.Error(c, fiber.StatusServiceUnavailable, aiservice.SafeErrorCode(err), "Pencarian menu membutuhkan waktu lebih lama dari biasanya.")
+		case errors.Is(err, aiservice.ErrAIRateLimited), errors.Is(err, aiservice.ErrAIUnavailable):
+			return response.Error(c, fiber.StatusServiceUnavailable, aiservice.SafeErrorCode(err), "Layanan pencarian menu sedang sibuk. Silakan coba lagi.")
+		case errors.Is(err, aiservice.ErrAINotConfigured), errors.Is(err, aiservice.ErrAIInvalidResponse), errors.Is(err, aiservice.ErrAIAuthentication), errors.Is(err, aiservice.ErrAIRequestRejected):
+			return response.Error(c, fiber.StatusServiceUnavailable, aiservice.SafeErrorCode(err), "Pencarian menu belum dapat diselesaikan.")
+		default:
+			return writeError(c, err)
+		}
+	}
+	var data any
+	if json.Unmarshal(result, &data) != nil {
+		return response.Error(c, 503, "MENU_FINDER_INVALID_RESPONSE", "Pencarian menu belum dapat diselesaikan.")
+	}
+	return response.Data(c, fiber.StatusOK, data)
+}
+
+func (h *Handler) GenerateSummary(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	summary, err := h.service.GenerateSummary(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	var data any
+	if json.Unmarshal(summary, &data) != nil {
+		return response.Error(c, 503, "AI_INVALID_RESPONSE", "AI summary returned invalid data.")
+	}
+	return response.Data(c, fiber.StatusOK, data)
+}
+
 func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -616,7 +705,7 @@ func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
 	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
 	}
-	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoName, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
+	item, err := h.service.SetPhotoTag(c.UserContext(), actor(c), id, request.PhotoName, request.PhotoIndex, prospectmodel.PhotoCategory(strings.ToUpper(request.Category)))
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -701,12 +790,14 @@ func writeError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
-	case errors.Is(err, aiservice.ErrAINotConfigured), errors.Is(err, aiservice.ErrAIUnavailable), errors.Is(err, aiservice.ErrAITimeout), errors.Is(err, aiservice.ErrAIRateLimited), errors.Is(err, aiservice.ErrAIInvalidResponse):
+	case errors.Is(err, aiservice.ErrAINotConfigured), errors.Is(err, aiservice.ErrAIUnavailable), errors.Is(err, aiservice.ErrAITimeout), errors.Is(err, aiservice.ErrAIRateLimited), errors.Is(err, aiservice.ErrAIInvalidResponse), errors.Is(err, aiservice.ErrAIAuthentication), errors.Is(err, aiservice.ErrAIRequestRejected):
 		return response.Error(c, fiber.StatusServiceUnavailable, aiservice.SafeErrorCode(err), "AI is temporarily unavailable.")
 	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates), errors.Is(err, service.ErrPhotoTagInvalid), errors.Is(err, service.ErrPlacePhotoInvalid):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_NOT_CONFIGURED", err.Error())
+	case errors.Is(err, service.ErrMenuDataNotAvailable):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "MENU_DATA_NOT_AVAILABLE", "No usable MENU-tagged photo is available.")
 	case errors.Is(err, service.ErrMenuImagesDisabled):
 		return response.Error(c, fiber.StatusServiceUnavailable, "MENU_IMAGES_NOT_CONFIGURED", err.Error())
 	case errors.Is(err, service.ErrPlacePhotoUnavailable):

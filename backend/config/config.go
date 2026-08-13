@@ -13,26 +13,28 @@ import (
 )
 
 type Config struct {
-	Environment      string
-	Port             string
-	DatabaseURL      string
-	JWTSecret        string
-	JWTIssuer        string
-	JWTAudience      string
-	AccessTokenTTL   time.Duration
-	RefreshTokenTTL  time.Duration
-	AllowedOrigins   string
-	CookieSecure     bool
-	GoogleMapsAPIKey string
-	GoogleCSEID      string
-	GoogleCSEAPIKey  string
-	AIEnabled        bool
-	OpenAIAPIKey     string
-	OpenAIModel      string
-	OpenAITimeout    time.Duration
-	OpenAIMaxTokens  int
-	AIChatMaxLength  int
-	AIChatMaxHistory int
+	Environment              string
+	Port                     string
+	DatabaseURL              string
+	JWTSecret                string
+	JWTIssuer                string
+	JWTAudience              string
+	AccessTokenTTL           time.Duration
+	RefreshTokenTTL          time.Duration
+	AllowedOrigins           string
+	CookieSecure             bool
+	GoogleMapsAPIKey         string
+	GoogleCSEID              string
+	GoogleCSEAPIKey          string
+	AIEnabled                bool
+	OpenAIAPIKey             string
+	OpenAIModel              string
+	OpenAITimeout            time.Duration
+	OpenAIFindMenuTimeout    time.Duration
+	OpenAIMenuProfileTimeout time.Duration
+	OpenAIMaxTokens          int
+	AIChatMaxLength          int
+	AIChatMaxHistory         int
 }
 
 func Load() (Config, error) {
@@ -58,6 +60,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	openAIFindMenuTimeout, err := duration("OPENAI_FIND_MENU_TIMEOUT", 60*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	openAIMenuProfileTimeout, err := duration("OPENAI_MENU_PROFILE_TIMEOUT", 40*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 	openAIMaxTokens, err := positiveInt("OPENAI_MAX_OUTPUT_TOKENS", 800)
 	if err != nil {
 		return Config{}, err
@@ -72,26 +82,28 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Environment:      value("APP_ENV", "development"),
-		Port:             value("PORT", "8080"),
-		DatabaseURL:      strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		JWTIssuer:        value("JWT_ISSUER", "yummy-crm"),
-		JWTAudience:      value("JWT_AUDIENCE", "yummy-crm-api"),
-		AccessTokenTTL:   accessTTL,
-		RefreshTokenTTL:  refreshTTL,
-		AllowedOrigins:   value("ALLOWED_ORIGINS", "http://localhost:5173"),
-		CookieSecure:     secure,
-		GoogleMapsAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
-		GoogleCSEID:      strings.TrimSpace(os.Getenv("GOOGLE_CSE_ID")),
-		GoogleCSEAPIKey:  strings.TrimSpace(os.Getenv("GOOGLE_CSE_API_KEY")),
-		AIEnabled:        aiEnabled,
-		OpenAIAPIKey:     strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		OpenAIModel:      strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
-		OpenAITimeout:    openAITimeout,
-		OpenAIMaxTokens:  openAIMaxTokens,
-		AIChatMaxLength:  chatMaxLength,
-		AIChatMaxHistory: chatMaxHistory,
+		Environment:              value("APP_ENV", "development"),
+		Port:                     value("PORT", "8080"),
+		DatabaseURL:              strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		JWTSecret:                os.Getenv("JWT_SECRET"),
+		JWTIssuer:                value("JWT_ISSUER", "yummy-crm"),
+		JWTAudience:              value("JWT_AUDIENCE", "yummy-crm-api"),
+		AccessTokenTTL:           accessTTL,
+		RefreshTokenTTL:          refreshTTL,
+		AllowedOrigins:           value("ALLOWED_ORIGINS", "http://localhost:5173"),
+		CookieSecure:             secure,
+		GoogleMapsAPIKey:         strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
+		GoogleCSEID:              strings.TrimSpace(os.Getenv("GOOGLE_CSE_ID")),
+		GoogleCSEAPIKey:          strings.TrimSpace(os.Getenv("GOOGLE_CSE_API_KEY")),
+		AIEnabled:                aiEnabled,
+		OpenAIAPIKey:             strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIModel:              strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
+		OpenAITimeout:            openAITimeout,
+		OpenAIFindMenuTimeout:    openAIFindMenuTimeout,
+		OpenAIMenuProfileTimeout: openAIMenuProfileTimeout,
+		OpenAIMaxTokens:          openAIMaxTokens,
+		AIChatMaxLength:          chatMaxLength,
+		AIChatMaxHistory:         chatMaxHistory,
 	}
 
 	if cfg.DatabaseURL == "" {

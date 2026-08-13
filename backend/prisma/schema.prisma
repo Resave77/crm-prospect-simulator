@@ -281,7 +281,8 @@ model ProspectComment {
 model ProspectPhotoTag {
   id         String   @id @default(uuid()) @db.Uuid
   prospectId String   @map("prospect_id") @db.Uuid
-  photoName  String   @map("photo_name")
+    photoName  String   @map("photo_name")
+    photoIndex Int?     @map("photo_index")
   category   String   @map("category")
   updatedBy  String?  @map("updated_by") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

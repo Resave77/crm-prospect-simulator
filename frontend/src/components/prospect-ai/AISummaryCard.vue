@@ -4,7 +4,12 @@ import type { ProspectInitialAnalysis } from '../../types/crm'
 defineProps<{
   prospectName?: string
   analysis?: ProspectInitialAnalysis | null
+  loading?: boolean
+  error?: string
+  context?: 'prospect' | 'customer'
 }>()
+
+defineEmits<{ retry: [] }>()
 </script>
 
 <template>
@@ -12,19 +17,21 @@ defineProps<{
     <div class="ai-card-head">
       <div>
         <p class="ai-eyebrow"><i class="pi pi-sparkles" /> AI Summary</p>
-        <h2>Prospect insight</h2>
+        <h2>{{ context === 'customer' ? 'Customer Insight' : 'Prospect insight' }}</h2>
       </div>
+      <span v-if="context === 'customer'" class="historical-note">Insight AI tersimpan dari fase prospect</span>
     </div>
 
-    <div v-if="!analysis || analysis.status === 'PENDING'" class="ai-state ai-empty">
-      <i class="pi pi-file-edit" />
+    <div v-if="loading" class="ai-state ai-empty">
+      <i class="pi pi-spin pi-spinner" />
       <div>
-        <strong>AI Summary belum dibuat.</strong>
-        <span>{{ prospectName || 'Prospect' }} siap untuk diringkas ketika AI generation diaktifkan.</span>
+        <strong>{{ context === 'customer' ? 'Memuat insight customer...' : 'Membuat ringkasan prospect...' }}</strong>
+        <span>{{ context === 'customer' ? 'Mengambil insight tersimpan dari riwayat prospect.' : 'AI sedang menganalisis data prospect.' }}</span>
       </div>
     </div>
-    <div v-else-if="analysis.status === 'FAILED'" class="ai-state ai-empty"><i class="pi pi-exclamation-triangle" /><div><strong>AI Summary gagal dibuat.</strong><span>Analisis tetap aman tanpa mengganggu data CRM.</span></div></div>
-    <div v-else class="ai-state ai-empty"><i class="pi pi-check-circle" /><div><strong>{{ String(analysis.summary?.summary || 'AI Summary tersedia.') }}</strong><span>Potential: {{ String(analysis.summary?.potential || 'UNKNOWN') }}</span></div></div>
+    <div v-else-if="analysis?.summary" class="ai-state ai-empty"><i class="pi pi-check-circle" /><div><strong>{{ String(analysis.summary.summary || 'AI Summary tersedia.') }}</strong><span>Potential: {{ String(analysis.summary.potential || 'UNKNOWN') }}</span></div></div>
+    <div v-else-if="error || analysis?.status === 'FAILED'" class="ai-state ai-empty"><i class="pi pi-exclamation-triangle" /><div><strong>AI Summary belum dapat dibuat.</strong><span>{{ error || 'Analisis tetap aman tanpa mengganggu data CRM.' }}</span><button v-if="context !== 'customer'" class="ai-retry-btn" type="button" @click="$emit('retry')">Coba lagi</button></div></div>
+    <div v-else class="ai-state ai-empty"><i class="pi pi-file-edit" /><div><strong>AI Summary belum dibuat.</strong><span>{{ context === 'customer' ? 'Insight customer belum tersedia dari riwayat prospect.' : `${prospectName || 'Prospect'} siap untuk diringkas.` }}</span></div></div>
   </article>
 </template>
 
@@ -46,6 +53,7 @@ defineProps<{
   justify-content: space-between;
   gap: 0.75rem;
 }
+.historical-note{display:block;margin-top:.35rem;color:#8a7b7f;font-size:.68rem;line-height:1.4}
 
 .ai-card-head h2 {
   margin: 0.1rem 0 0;
@@ -130,4 +138,5 @@ defineProps<{
   font-weight: 800;
   cursor: not-allowed;
 }
+.ai-retry-btn { width: fit-content; margin-top: 0.35rem; padding: 0.4rem 0.65rem; border: 1px solid #e63946; border-radius: 9px; background: #fff; color: #d62839; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
 </style>

@@ -646,6 +646,15 @@ func TestPermissionCatalogAndRolePermissionContracts(t *testing.T) {
 	if len(items) < 7 || items[0].Key != "menu_admin_dashboard" {
 		t.Fatalf("catalog order/items=%+v", items)
 	}
+	catalogKeys := map[string]bool{}
+	for _, item := range DefaultPermissionCatalog() {
+		catalogKeys[item.Key] = true
+	}
+	for _, key := range []string{"view_ai_summary", "view_ai_menu_profiling", "use_prospect_ai_chat"} {
+		if !catalogKeys[key] {
+			t.Fatalf("AI route permission %q is missing from Role Management catalog", key)
+		}
+	}
 	if _, err := svc.ListPermissions(context.Background(), Actor{UserID: uuid.New(), Role: authmodel.RoleSalesExecutive}, ""); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("sales catalog err=%v", err)
 	}

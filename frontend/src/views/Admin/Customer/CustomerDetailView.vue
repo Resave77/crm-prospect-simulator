@@ -7,10 +7,15 @@ import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 import { useCrmStore } from '../../../stores/crm'
-import { deleteCustomer, getAdminCustomerPlaceDetails } from '../../../api/crm'
-import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
+import { deleteCustomer, getAdminCustomerPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
+import type { CustomerDetail, PlaceDetails, ProspectInitialAnalysis, ProspectMenuDocument, ProspectMenuFinding, ProspectMenuProfile } from '../../../types/crm'
+import { useAuthStore } from '../../../stores/auth'
 import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
+import AISummaryCard from '../../../components/prospect-ai/AISummaryCard.vue'
+import CustomerProductOpportunityCard from '../../../components/customer-ai/CustomerProductOpportunityCard.vue'
+import CustomerSnapshotCard from '../../../components/customer-ai/CustomerSnapshotCard.vue'
+import TanyaAICard from '../../../components/prospect-ai/TanyaAICard.vue'
 import { priceLevelLabel, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const fieldSources = {
@@ -36,10 +41,16 @@ const fsLabels: Record<string, string> = { google: 'GOOGLE', manual: 'MANUAL', s
 const route = useRoute()
 const router = useRouter()
 const crm = useCrmStore()
+const auth = useAuthStore()
 const toast = useToast()
 const error = ref('')
 const detail = ref<CustomerDetail | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
+const initialAnalysis = ref<ProspectInitialAnalysis | null>(null)
+const sourceProspectId = computed(() => detail.value?.customer.sourceProspectId || '')
+const storedMenu = computed(() => initialAnalysis.value?.menu as ProspectMenuDocument | null | undefined)
+const storedDiscovery = computed(() => (storedMenu.value?.discovery ?? storedMenu.value?.finding ?? null) as ProspectMenuFinding | null)
+const storedProfiling = computed(() => (storedMenu.value?.profiling ?? storedMenu.value?.profile ?? null) as ProspectMenuProfile | null)
 const activeTab = ref('overview')
 const showAllHours = ref(false)
 const deleteDialogVisible = ref(false)
@@ -90,6 +101,9 @@ onMounted(async () => {
     ])
     detail.value = cust
     placeDetails.value = place
+    if (cust.customer.sourceProspectId && (auth.hasPermission('view_ai_summary') || auth.hasPermission('view_ai_menu_profiling'))) {
+      initialAnalysis.value = await getProspectInitialAnalysis(cust.customer.sourceProspectId).catch(() => null)
+    }
   } catch (e) {
     error.value = crm.errorMessage(e)
   }
@@ -128,7 +142,7 @@ async function executeDelete() {
     <template v-if="detail">
       <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <!-- PAGE HEADER -->
-      <header class="page-heading">
+      <header class="page-heading customer-admin-hero">
         <div class="page-title-wrapper">
           <span class="eyebrow">Customer Detail</span>
           <div class="title-row">
@@ -148,7 +162,7 @@ async function executeDelete() {
       </header>
 
       <!-- SUMMARY STRIP -->
-      <div class="summary-strip">
+      <div class="summary-strip customer-detail-card">
         <div class="strip-item">
           <i class="pi pi-tag" />
           <div>
@@ -185,6 +199,19 @@ async function executeDelete() {
           </div>
         </div>
       </div>
+
+      <CustomerSnapshotCard class="customer-admin-snapshot" :customer="detail.customer" :operating-status="placeDetails?.businessStatus" />
+
+      <section v-if="sourceProspectId" class="customer-intelligence">
+        <AISummaryCard v-if="auth.hasPermission('view_ai_summary')" class="customer-admin-insight" :prospect-name="detail.customer.name" :analysis="initialAnalysis" context="customer" />
+        <CustomerProductOpportunityCard v-if="auth.hasPermission('view_ai_menu_profiling')" class="customer-admin-opportunity" :discovery="storedDiscovery" :profiling="storedProfiling" />
+        <ProspectComments class="admin-comments-section customer-admin-discussion" :prospect-id="sourceProspectId" role="ADMINISTRATOR" embedded />
+        <TanyaAICard v-if="auth.hasPermission('use_prospect_ai_chat')" class="customer-admin-chat" :prospect-id="sourceProspectId" />
+      </section>
+      <section v-else class="detail-card customer-ai-unavailable">
+        <h3>Intelligence Customer</h3>
+        <p>Riwayat AI tidak tersedia karena customer ini tidak memiliki relasi prospect sumber.</p>
+      </section>
 
       <!-- TABS -->
       <nav class="tabs-bar">
@@ -636,11 +663,46 @@ async function executeDelete() {
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
       </template>
     </Dialog>
-    <ProspectComments v-if="detail?.customer.sourceProspectId" class="admin-comments-section" :prospect-id="detail.customer.sourceProspectId" role="ADMINISTRATOR" embedded />
   </section>
 </template>
 
 <style scoped>
+.customer-intelligence {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+  gap: 1rem;
+  min-width: 0;
+  margin: 1rem 0;
+}
+.customer-admin-opportunity { grid-column: 1; grid-row: 1 / span 3; }
+.customer-admin-insight { grid-column: 2; grid-row: 1; }
+.customer-admin-discussion { grid-column: 2; grid-row: 2; }
+.customer-admin-chat { grid-column: 2; grid-row: 3; }
+.customer-admin-hero {
+  min-width: 0;
+  padding: .3rem 0 .8rem;
+  border-bottom: 1px solid #eee3e5;
+}
+.customer-admin-hero .page-title-wrapper { min-width: 0; }
+.customer-admin-hero .title-row { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
+.customer-admin-hero h1 { min-width: 0; overflow-wrap: anywhere; font-size: clamp(1.45rem, 2vw, 1.85rem); }
+.customer-admin-hero .page-heading-actions { flex: 0 0 auto; }
+.customer-detail-card { min-width: 0; border: 1px solid #eee3e5; border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgba(73, 34, 41, .05); }
+.customer-detail-card .strip-item { min-width: 0; }
+.customer-detail-card strong { overflow-wrap: anywhere; }
+.customer-intelligence > * { min-width: 0; max-width: 100%; }
+.customer-ai-unavailable { margin: 1rem 0; }
+@media (max-width: 1199px) {
+  .customer-intelligence { grid-template-columns: 1fr; }
+  .customer-admin-insight { grid-column: 1; grid-row: 1; }
+  .customer-admin-opportunity { grid-column: 1; grid-row: 2; }
+  .customer-admin-discussion { grid-column: 1; grid-row: 3; }
+  .customer-admin-chat { grid-column: 1; grid-row: 4; }
+}
+@media (max-width: 767px) {
+  .customer-admin-hero { align-items: flex-start; }
+  .customer-admin-hero .page-heading-actions { width: 100%; flex-wrap: wrap; }
+}
 .admin-page {
   display: flex;
   flex-direction: column;

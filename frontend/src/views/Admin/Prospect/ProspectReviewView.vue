@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { getProspectReview, getProspectPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
+import { generateProspectSummary, getProspectReview, getProspectPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
@@ -12,6 +12,7 @@ import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
 import AISummaryCard from '../../../components/prospect-ai/AISummaryCard.vue'
 import AIMenuProfilingCard from '../../../components/prospect-ai/AIMenuProfilingCard.vue'
 import TanyaAICard from '../../../components/prospect-ai/TanyaAICard.vue'
+import AIExpandedModal from '../../../components/prospect-ai/AIExpandedModal.vue'
 import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { formatPlaceType, isValidWebsite, websiteDisplayUrl, isValidPhone, copyToClipboard } from '../../../utils/placeDetails'
@@ -24,6 +25,10 @@ const auth = useAuthStore()
 const review = ref<ProspectReview | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
 const initialAnalysis = ref<ProspectInitialAnalysis | null>(null)
+const summaryLoading = ref(false)
+const summaryError = ref('')
+const summaryGenerationAttempted = ref(false)
+const analysisLoadFailed = ref(false)
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
@@ -43,9 +48,9 @@ let geoWatchId: number | null = null
 let desktopQuery: MediaQueryList | null = null
 
 const isAdminContext = computed(() => auth.user?.role === 'SUPER_ADMIN' || auth.user?.role === 'ADMINISTRATOR')
-const canViewAISummary = computed(() => isAdminContext.value || auth.hasPermission('view_ai_summary'))
-const canViewAIMenuProfiling = computed(() => isAdminContext.value || auth.hasPermission('view_ai_menu_profiling'))
-const canUseProspectAIChat = computed(() => isAdminContext.value || auth.hasPermission('use_prospect_ai_chat'))
+const canViewAISummary = computed(() => auth.hasPermission('view_ai_summary'))
+const canViewAIMenuProfiling = computed(() => auth.hasPermission('view_ai_menu_profiling'))
+const canUseProspectAIChat = computed(() => auth.hasPermission('use_prospect_ai_chat'))
 const hasPhotos = computed(() => (placeDetails.value?.photos?.length ?? 0) > 0)
 const canConvertProspect = computed(() => review.value?.prospect.status === 'WON')
 
@@ -89,6 +94,40 @@ function openExpandedPanel(panel: 'summary' | 'discussion' | 'chat') {
 function closeExpandedPanel() {
   expandedPanel.value = null
   document.body.style.overflow = ''
+}
+
+function hasPersistedSummary(analysis: ProspectInitialAnalysis | null) {
+  return !!analysis?.summary && Object.keys(analysis.summary).length > 0
+}
+
+async function loadInitialAnalysis(prospectId: string) {
+  try {
+    return await getProspectInitialAnalysis(prospectId)
+  } catch (caught: any) {
+    if (caught?.response?.status === 404 && caught?.response?.data?.error?.code === 'AI_ANALYSIS_NOT_AVAILABLE') return null
+    analysisLoadFailed.value = true
+    summaryError.value = 'Data AI prospect belum dapat dimuat.'
+    return null
+  }
+}
+
+async function ensureSummary(force = false) {
+  if (!review.value || summaryLoading.value || hasPersistedSummary(initialAnalysis.value)) return
+  if (!force && summaryGenerationAttempted.value) return
+  summaryGenerationAttempted.value = true
+  summaryLoading.value = true
+  summaryError.value = ''
+  try {
+    const summary = await generateProspectSummary(review.value.prospect.id)
+    initialAnalysis.value = { prospectId: review.value.prospect.id, summary, menu: initialAnalysis.value?.menu ?? null, status: 'SUCCESS', errorCode: '' }
+  } catch (caught) {
+    const timeout = (caught as { code?: string; message?: string })
+    summaryError.value = timeout.code === 'ECONNABORTED' || /timeout/i.test(timeout.message || '')
+      ? 'AI Summary membutuhkan waktu lebih lama dari biasanya.'
+      : formatErrorMessage(caught) || 'AI Summary belum dapat dibuat.'
+  } finally {
+    summaryLoading.value = false
+  }
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
@@ -168,11 +207,12 @@ onMounted(async () => {
     const [reviewData, placeData, analysisData] = await Promise.all([
       getProspectReview(prospectId),
       getProspectPlaceDetails(prospectId, 'ADMINISTRATOR').catch(() => null),
-      getProspectInitialAnalysis(prospectId).catch(() => null),
+      loadInitialAnalysis(prospectId),
     ])
     review.value = reviewData
     placeDetails.value = placeData
     initialAnalysis.value = analysisData
+    if (canViewAISummary.value && !analysisLoadFailed.value && !hasPersistedSummary(analysisData)) void ensureSummary()
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
 
@@ -189,19 +229,6 @@ onBeforeUnmount(() => {
 
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
-
-    <div class="ds-legend">
-      <button class="ds-legend-toggle" type="button" @click="showLegend = !showLegend">
-        <i class="pi pi-info-circle" />
-        <span>Data source legend</span>
-        <i :class="showLegend ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
-      </button>
-      <div v-if="showLegend" class="ds-legend-body">
-        <div class="ds-legend-item"><DataSourceBadge source="google" /> <span>Data imported from Google Maps / Places</span></div>
-        <div class="ds-legend-item"><DataSourceBadge source="manual" /> <span>Data entered or updated by the sales/admin team</span></div>
-        <div class="ds-legend-item"><DataSourceBadge source="system" /> <span>Generated automatically by CRM</span></div>
-      </div>
-    </div>
 
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>
@@ -220,7 +247,6 @@ onBeforeUnmount(() => {
     <template v-else>
       <!-- Reference-style header: identity + actions, not a duplicated detail card -->
       <header class="prospect-hero">
-        <div class="hero-breadcrumb"><span>Admin</span><i class="pi pi-angle-right" /><strong>Prospect Review</strong></div>
 
         <div class="hero-row">
           <div class="hero-identity">
@@ -439,6 +465,7 @@ onBeforeUnmount(() => {
           </section>
 
           <AIMenuProfilingCard
+            :prospect-id="review.prospect.id"
             :analysis="initialAnalysis"
             v-if="canViewAIMenuProfiling"
             class="detail-ai-menu"
@@ -539,7 +566,7 @@ onBeforeUnmount(() => {
             <button class="expand-control" type="button" title="Expand AI Summary" aria-label="Expand AI Summary" @click="openExpandedPanel('summary')">
               <i class="pi pi-window-maximize" /><span>Expand</span>
             </button>
-            <AISummaryCard class="detail-ai-summary" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
+            <AISummaryCard class="detail-ai-summary" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" :loading="summaryLoading" :error="summaryError" @retry="ensureSummary(true)" />
           </div>
 
           <section class="dcard business-contact-card">
@@ -669,24 +696,18 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Functional expand overlay. No OpenAI generation is triggered by opening/closing it. -->
-      <Teleport to="body">
-        <div v-if="expandedPanel" class="expand-overlay" @click.self="closeExpandedPanel">
-          <section :class="['expand-dialog', `expand-dialog-${expandedPanel}`, { 'expand-dialog--chat': expandedPanel === 'chat' }]" role="dialog" aria-modal="true">
-            <header class="expand-dialog-header">
-              <div>
-                <span>{{ expandedPanel === 'summary' ? 'AI Summary' : expandedPanel === 'discussion' ? 'Discussion' : 'Tanya AI' }}</span>
-                <strong>{{ review.prospect.placeName }}</strong>
-              </div>
-              <button type="button" aria-label="Close expanded panel" @click="closeExpandedPanel"><i class="pi pi-times" /></button>
-            </header>
-            <div class="expand-dialog-body">
-          <AISummaryCard v-if="expandedPanel === 'summary'" class="expanded-content-card" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
+      <AIExpandedModal
+        :open="Boolean(expandedPanel)"
+        :title="expandedPanel === 'summary' ? 'AI Summary' : expandedPanel === 'discussion' ? 'Discussion' : 'Tanya AI'"
+        :subtitle="review.prospect.placeName"
+        :badge="expandedPanel === 'chat' ? 'Sales Copilot' : undefined"
+        :variant="expandedPanel ?? 'summary'"
+        @close="closeExpandedPanel"
+      >
+          <AISummaryCard v-if="expandedPanel === 'summary'" class="expanded-content-card" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" :loading="summaryLoading" :error="summaryError" @retry="ensureSummary(true)" />
           <ProspectComments v-else-if="expandedPanel === 'discussion'" class="expanded-content-card" :prospect-id="review.prospect.id" role="ADMINISTRATOR" :embedded="true" expanded />
           <TanyaAICard v-else-if="expandedPanel === 'chat'" class="expanded-content-card" :prospect-id="review.prospect.id" expanded />
-            </div>
-          </section>
-        </div>
-      </Teleport>
+      </AIExpandedModal>
     </template>
   </section>
 </template>
@@ -1082,72 +1103,6 @@ onBeforeUnmount(() => {
 .dbar-checkin { background: var(--detail-soft); }
 .dbar-disabled { opacity: .45; pointer-events: none; }
 
-/* Expand overlay */
-.expand-overlay {
-  position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center;
-  padding: clamp(.75rem, 3vw, 2rem); background: rgba(24, 18, 20, .55); backdrop-filter: blur(4px);
-  pointer-events: auto;
-}
-.expand-dialog {
-  width: min(1080px, calc(100vw - 80px)); max-height: 88vh; overflow: hidden;
-  display: grid; grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid #eadfe1; border-radius: 18px; background: #fff;
-  box-shadow: 0 28px 80px rgba(15,23,42,.25);
-}
-.expand-dialog-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: .8rem 1rem; border-bottom: 1px solid var(--detail-border); background: #fffafa;
-}
-.expand-dialog-header > div { display: grid; gap: .1rem; }
-.expand-dialog-header span { color: var(--detail-accent); font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-.expand-dialog-header strong { font-size: .82rem; }
-.expand-dialog-header button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 9px; background: #fff; color: var(--detail-accent); cursor: pointer; }
-.expand-dialog-body { min-height: 0; overflow: auto; padding: clamp(1rem, 2.5vw, 1.5rem); }
-.expand-dialog-body > * { width: 100%; min-width: 0; }
-.expand-dialog-summary { height: auto; }
-.expand-dialog-summary .expand-dialog-body { overflow: visible; }
-.expand-dialog-summary .expand-dialog-body :deep(.ai-card) { box-shadow: none; }
-.expand-dialog-discussion, .expand-dialog-chat { height: min(760px, 78vh); }
-.expand-dialog-discussion .expand-dialog-body, .expand-dialog-chat .expand-dialog-body { display: flex; min-height: 0; }
-.expand-dialog-discussion .expand-dialog-body :deep(.pc-floating), .expand-dialog-chat .expand-dialog-body :deep(.tanya-card) { flex: 1 1 auto; min-height: 0; }
-.expand-dialog-discussion .expand-dialog-body :deep(.pc-wrap) { position: static; width: 100%; height: 100%; min-height: 0; }
-.expand-dialog-discussion .expand-dialog-body :deep(.pc-list) { max-height: none !important; overflow-y: auto !important; justify-content: flex-start; }
-
-/* Discussion: flush chat surface, seamless white header chain */
-.expand-dialog-discussion .expand-dialog-body { padding: 0; }
-.expand-dialog-discussion .expand-dialog-header {
-  background: #fff;
-  border-bottom-color: #e7ebf1;
-}
-.expand-dialog-discussion .expand-dialog-header button { background: #fff0f1; border-color: #ffd9dc; color: #b42332; }
-.expand-dialog-discussion .expand-dialog-body :deep(.pc-wrap) { border: 0; box-shadow: none; }
-
-/* Tanya AI chat variant: the conversation fills the whole modal body */
-.expand-dialog--chat { height: min(760px, 78vh); }
-.expand-dialog--chat .expand-dialog-body {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-  padding: 0;
-}
-.expand-dialog--chat .expand-dialog-body :deep(.tanya-card) {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-}
-.expand-dialog-chat .expand-dialog-header {
-  padding: .75rem clamp(1rem, 3vw, 1.5rem);
-  background: #fff;
-  border-bottom-color: #e7ebf1;
-}
-.expand-dialog-chat .expand-dialog-header span { color: #b42332; }
-.expand-dialog-chat .expand-dialog-header button {
-  background: #fff0f1;
-  border-color: #ffd9dc;
-  color: #b42332;
-}
-
 /* Desktop */
 @media (min-width: 1200px) {
   .detail-page {
@@ -1348,16 +1303,6 @@ onBeforeUnmount(() => {
   .ai-shell-discussion > .expand-control span { display: none; }
   .ai-shell-summary > .expand-control i,
   .ai-shell-discussion > .expand-control i { font-size: .66rem; }
-
-  .expand-dialog {
-    width: 100%;
-    max-height: 94dvh;
-    border-radius: 16px;
-  }
-  .expand-dialog-discussion, .expand-dialog-chat { height: min(760px, 92dvh); }
-  .expand-dialog-chat .expand-dialog-header {
-    padding: .6rem .85rem;
-  }
 
   .dcard {
     padding: .78rem;

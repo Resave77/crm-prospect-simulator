@@ -4,19 +4,27 @@ import { useRoute } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { getMyCustomer, getMyCustomerPlaceDetails } from '../../../api/crm'
-import type { CustomerDetail, PlaceDetails } from '../../../types/crm'
+import { getProspectInitialAnalysis } from '../../../api/crm'
+import type { CustomerDetail, PlaceDetails, ProspectInitialAnalysis, ProspectMenuDocument, ProspectMenuFinding, ProspectMenuProfile } from '../../../types/crm'
+import { useAuthStore } from '../../../stores/auth'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
 import { openGoogleMapsNavigation, getDistanceTo, formatDistance } from '../../../utils/maps'
 import { copyToClipboard } from '../../../utils/placeDetails'
 import DataSourceBadge from '../../../components/sales/detail/DataSourceBadge.vue'
+import AISummaryCard from '../../../components/prospect-ai/AISummaryCard.vue'
+import CustomerProductOpportunityCard from '../../../components/customer-ai/CustomerProductOpportunityCard.vue'
+import CustomerSnapshotCard from '../../../components/customer-ai/CustomerSnapshotCard.vue'
+import TanyaAICard from '../../../components/prospect-ai/TanyaAICard.vue'
 import { initials, formatErrorMessage, formatVisitDate, calcDuration } from '../../../utils/format'
 import { priceLevelLabel, priceLevelSeverity, businessStatusLabel, businessStatusSeverity, stars, utcOffsetLabel } from '../../../utils/placeLabels'
 
 const route = useRoute()
+const auth = useAuthStore()
 const detail = ref<CustomerDetail | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
+const initialAnalysis = ref<ProspectInitialAnalysis | null>(null)
 const error = ref('')
 const loading = ref(true)
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
@@ -28,6 +36,13 @@ const showAllHours = ref(false)
 
 const customer = computed(() => detail.value?.customer)
 const parentCompany = computed(() => detail.value?.parentCompany)
+const sourceProspectId = computed(() => customer.value?.sourceProspectId || '')
+const canViewAISummary = computed(() => auth.hasPermission('view_ai_summary'))
+const canViewAIMenu = computed(() => auth.hasPermission('view_ai_menu_profiling'))
+const canUseAIChat = computed(() => auth.hasPermission('use_prospect_ai_chat'))
+const storedMenu = computed(() => initialAnalysis.value?.menu as ProspectMenuDocument | null | undefined)
+const storedDiscovery = computed(() => (storedMenu.value?.discovery ?? storedMenu.value?.finding ?? null) as ProspectMenuFinding | null)
+const storedProfiling = computed(() => (storedMenu.value?.profiling ?? storedMenu.value?.profile ?? null) as ProspectMenuProfile | null)
 
 const displayPhone = computed(() => {
   return customer.value?.contacts?.[0]?.phone ?? ''
@@ -119,6 +134,9 @@ onMounted(async () => {
     ])
     detail.value = cust
     placeDetails.value = place
+    if (cust.customer.sourceProspectId && (canViewAISummary.value || canViewAIMenu.value)) {
+      initialAnalysis.value = await getProspectInitialAnalysis(cust.customer.sourceProspectId).catch(() => null)
+    }
   } catch (caught) {
     error.value = formatErrorMessage(caught) ?? 'Unable to load customer.'
   } finally { loading.value = false }
@@ -170,30 +188,46 @@ onBeforeUnmount(() => {
 
     <!-- Detail content -->
     <template v-else>
-      <!-- Summary Card -->
-      <div class="dcard dcard-summary">
-        <div class="dcard-summary-top">
-          <div class="dcard-avatar">{{ initials(customer?.name || 'Customer') }}</div>
-          <div class="dcard-identity">
-            <p class="eyebrow">Customer Existing</p>
-            <h1>{{ customer?.name }} <DataSourceBadge source="google" label="Google" /></h1>
-            <small v-if="customer?.parentCompanyName">{{ customer.parentCompanyName }} <DataSourceBadge source="manual" label="Manual" /></small>
+      <header class="customer-hero">
+        <div class="customer-hero-row">
+          <div class="customer-hero-identity">
+            <div class="customer-hero-title"><h1>{{ customer?.name }}</h1><DataSourceBadge source="google" label="Google" /></div>
+            <div v-if="customer?.address?.previewAddress" class="customer-hero-address"><i class="pi pi-map-marker" /><span>{{ customer.address.previewAddress }}</span></div>
           </div>
+          <div class="customer-hero-actions">
+            <button class="hero-action hero-action-nav" type="button" :disabled="!hasCoords && !customer?.address?.previewAddress" @click="navigate"><i class="pi pi-directions" /> Navigate</button>
+            <a v-if="displayPhone" :href="`tel:${displayPhone}`" class="hero-action hero-action-call"><i class="pi pi-phone" /> Call</a>
+            <span v-else class="hero-action hero-action-call hero-action-disabled"><i class="pi pi-phone" /> Call</span>
+            <RouterLink class="hero-action hero-action-visit" :to="`/sales/my-customers/${customer?.id}/check-in`"><i class="pi pi-sign-in" /> Check in</RouterLink>
+          </div>
+          <Tag class="customer-hero-status" value="CUSTOMER · ACTIVE" severity="success" />
         </div>
-        <div class="dcard-codes">
-          <div class="dcard-code-item"><span>Customer code <DataSourceBadge source="system" label="CRM" /></span><strong>{{ customer?.customerCode }}</strong></div>
-          <div class="dcard-code-item"><span>Parent code <DataSourceBadge source="system" label="CRM" /></span><strong>{{ customer?.parentCode }}</strong></div>
+      </header>
+
+      <div class="customer-content-grid">
+      <main class="customer-main-column">
+      <section class="dcard dcard-customer-core">
+        <div class="section-heading"><h2>Customer Detail</h2><DataSourceBadge source="system" label="CRM" /></div>
+        <div class="customer-detail-grid">
+          <div><span>Assigned Sales</span><strong>{{ customer?.salesExecutiveName || '—' }}</strong></div>
+          <div><span>Phone</span><strong>{{ displayPhone || placeDetails?.phoneNumber || '—' }}</strong></div>
+          <div><span>Customer Code</span><strong>{{ customer?.customerCode || '—' }}</strong></div>
+          <div><span>Parent Code</span><strong>{{ customer?.parentCode || '—' }}</strong></div>
+          <div><span>Category</span><strong>{{ customer?.category || '—' }}</strong></div>
+          <div><span>Segment</span><strong>{{ customer?.segment || '—' }}</strong></div>
+          <div><span>Converted At</span><strong>{{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleString() : '—' }}</strong></div>
+          <div><span>Last Updated</span><strong>{{ customer?.updatedAt ? new Date(customer.updatedAt).toLocaleString() : '—' }}</strong></div>
         </div>
-        <div class="dcard-tags">
-          <Tag value="ACTIVE" severity="success" />
-          <Tag v-if="customer?.segment" :value="customer.segment" />
-          <Tag v-if="customer?.category" :value="customer.category" severity="secondary" />
-          <template v-if="placeDetails">
-            <Tag v-if="placeDetails.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
-            <Tag v-if="placeDetails.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
-          </template>
+        <div class="dcard-tags customer-detail-tags">
+          <Tag value="ACTIVE" severity="success" /><Tag v-if="customer?.segment" :value="customer.segment" /><Tag v-if="customer?.category" :value="customer.category" severity="secondary" />
+          <Tag v-if="placeDetails?.businessStatus" :value="businessStatusLabel(placeDetails.businessStatus)" :severity="businessStatusSeverity(placeDetails.businessStatus)" />
+          <Tag v-if="placeDetails?.priceLevel" :value="priceLevelLabel(placeDetails.priceLevel)" :severity="priceLevelSeverity(placeDetails.priceLevel)" />
         </div>
-      </div>
+      </section>
+
+      <CustomerSnapshotCard v-if="customer" class="customer-snapshot" :customer="customer" :operating-status="placeDetails?.businessStatus" />
+
+      <CustomerProductOpportunityCard v-if="sourceProspectId && canViewAIMenu" class="customer-ai customer-ai-menu" :discovery="storedDiscovery" :profiling="storedProfiling" />
 
       <!-- Google Place Info Card -->
       <div v-if="placeDetails" class="dcard dcard-google-info">
@@ -313,6 +347,26 @@ onBeforeUnmount(() => {
             </span>
           </div>
         </div>
+
+        <div class="dcard-google-map">
+          <div class="dcard-header-row">
+            <h3>Location</h3>
+            <span v-if="distance != null" class="dcard-distance-pill">
+              <i class="pi pi-compass" /> {{ formatDistance(distance) }} away
+            </span>
+          </div>
+          <EntityLocationMap
+            :latitude="customer?.address?.latitude ?? null"
+            :longitude="customer?.address?.longitude ?? null"
+            :label="customer?.name"
+            :interactive="true"
+            height="200px"
+          />
+          <div class="dcard-location-rows">
+            <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ customer?.address?.previewAddress || 'No address' }}</span></div>
+            <div v-if="customer?.region" class="dcard-row"><i class="pi pi-globe" /><span>Region: {{ customer.region }}</span></div>
+          </div>
+        </div>
       </div>
 
       <!-- Photo Gallery -->
@@ -350,53 +404,6 @@ onBeforeUnmount(() => {
           <button v-if="placeDetails.openingHours.weekdays.length > 3" class="dcard-hours-toggle" @click="showAllHours = !showAllHours">
             {{ showAllHours ? 'Show less' : `Show all ${placeDetails.openingHours.weekdays.length} days` }}
           </button>
-        </div>
-      </div>
-
-      <!-- Location Card -->
-      <div class="dcard dcard-location">
-        <div class="dcard-header-row">
-          <h2>Location <DataSourceBadge source="google" /></h2>
-          <span v-if="distance != null" class="dcard-distance-pill">
-            <i class="pi pi-compass" /> {{ formatDistance(distance) }} away
-          </span>
-        </div>
-        <EntityLocationMap
-          :latitude="customer?.address?.latitude ?? null"
-          :longitude="customer?.address?.longitude ?? null"
-          :label="customer?.name"
-          :interactive="true"
-          height="200px"
-        />
-        <div class="dcard-location-rows">
-          <div class="dcard-row"><i class="pi pi-map-marker" /><span>{{ customer?.address?.previewAddress || 'No address' }}</span></div>
-          <div v-if="customer?.region" class="dcard-row"><i class="pi pi-globe" /><span>Region: {{ customer.region }}</span></div>
-          <div v-if="hasCoords" class="dcard-row dcard-row-coords">
-            <i class="pi pi-compass" /><span>GPS: {{ customer?.address?.latitude?.toFixed(6) }}, {{ customer?.address?.longitude?.toFixed(6) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Contact Card -->
-      <div class="dcard dcard-contact">
-        <h2>Contact & Address</h2>
-        <div v-if="siteContacts.length" class="dcard-contact-section">
-          <div v-for="(contact, idx) in siteContacts" :key="idx" class="dcard-contact-block">
-            <div class="dcard-row"><i class="pi pi-user" /><span><strong>{{ contact.name || customer?.name || 'Unnamed Contact' }}</strong><template v-if="contact.position"> - {{ contact.position }}</template> <DataSourceBadge source="manual" /></span></div>
-            <div v-if="contact.phone" class="dcard-row"><i class="pi pi-phone" /><a :href="`tel:${contact.phone}`">{{ contact.phone }}</a> <DataSourceBadge source="google" /></div>
-            <div v-if="contact.email" class="dcard-row"><i class="pi pi-envelope" /><a :href="`mailto:${contact.email}`">{{ contact.email }}</a> <DataSourceBadge source="manual" /></div>
-          </div>
-        </div>
-        <p v-else class="dcard-empty-text">No contacts on file.</p>
-        <div v-if="customer?.address?.previewAddress" class="dcard-address-block">
-          <div class="dcard-address-label">Full Address</div>
-          <p>{{ customer.address.previewAddress }}</p>
-          <div v-if="customer.address.province || customer.address.district" class="dcard-address-detail">
-            <span v-if="customer.address.village">{{ customer.address.village }}, </span>
-            <span v-if="customer.address.subDistrict">{{ customer.address.subDistrict }}, </span>
-            <span v-if="customer.address.district">{{ customer.address.district }}, </span>
-            <span v-if="customer.address.province">{{ customer.address.province }}</span>
-          </div>
         </div>
       </div>
 
@@ -518,22 +525,43 @@ onBeforeUnmount(() => {
 
       <!-- Conversion Source -->
       <div class="dcard dcard-conversion">
-        <h2>Conversion Source</h2>
+        <h2>Conversion History</h2>
         <div class="dcard-rows">
-          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Prospect:</strong> {{ detail.sourceProspectName }} <DataSourceBadge source="prospect" /></span></div>
-          <div class="dcard-row"><i class="pi pi-id-card" /><span><strong>Source ID:</strong> {{ customer?.sourceProspectId || '—' }} <DataSourceBadge source="prospect" /></span></div>
-          <div v-if="customer?.sourceGooglePlaceId" class="dcard-row">
-            <i class="pi pi-info-circle" />
-            <span class="dcard-place-id"><span>Google Place ID <DataSourceBadge source="google" /></span><code>{{ customer.sourceGooglePlaceId }}</code></span>
-            <button class="dcard-copy-btn" title="Copy Place ID" aria-label="Copy Place ID" @click="handleCopy(customer.sourceGooglePlaceId)"><i class="pi pi-copy" /></button>
-          </div>
-          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Converted:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }} <DataSourceBadge source="system" /></span></div>
-          <div class="dcard-row"><i class="pi pi-refresh" /><span><strong>Last updated:</strong> {{ customer?.updatedAt ? new Date(customer.updatedAt).toLocaleString() : '-' }} <DataSourceBadge source="system" /></span></div>
+          <div class="dcard-row"><i class="pi pi-user" /><span><strong>Berasal dari:</strong> {{ detail.sourceProspectName }} <DataSourceBadge source="prospect" /></span></div>
+          <div class="dcard-row"><i class="pi pi-calendar" /><span><strong>Tanggal konversi:</strong> {{ customer?.convertedAt ? new Date(customer.convertedAt).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : '-' }} <DataSourceBadge source="system" /></span></div>
           <div class="dcard-row"><i class="pi pi-user" /><span><strong>Sales Executive:</strong> {{ customer?.salesExecutiveName }} <DataSourceBadge source="system" /></span></div>
         </div>
       </div>
 
-      <ProspectComments v-if="customer?.sourceProspectId" class="detail-comments" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" :embedded="isDesktop" />
+      </main>
+
+      <aside class="customer-intelligence-column">
+      <AISummaryCard v-if="sourceProspectId && canViewAISummary" class="customer-ai customer-ai-summary" :prospect-name="customer?.name" :analysis="initialAnalysis" context="customer" />
+
+      <section class="dcard customer-business-summary">
+        <div class="section-heading"><h2>Business & Contact Details</h2><DataSourceBadge source="manual" label="CRM" /></div>
+        <div class="customer-business-rows">
+          <div><span>Business</span><strong>{{ customer?.name || '—' }}</strong></div>
+          <div><span>Phone</span><strong>{{ displayPhone || placeDetails?.phoneNumber || '—' }}</strong></div>
+          <div v-if="siteContacts[0]?.email"><span>Email</span><strong>{{ siteContacts[0].email }}</strong></div>
+          <div v-if="siteContacts[0]?.name"><span>Contact</span><strong>{{ siteContacts[0].name }}<template v-if="siteContacts[0].position"> · {{ siteContacts[0].position }}</template></strong></div>
+          <div><span>Category</span><strong>{{ customer?.category || placeDetails?.placeCategory || '—' }}</strong></div>
+          <div><span>Segment</span><strong>{{ customer?.segment || '—' }}</strong></div>
+          <div><span>Parent Company</span><strong>{{ customer?.parentCompanyName || '—' }}</strong></div>
+          <div><span>Status</span><strong>Customer Aktif</strong></div>
+        </div>
+      </section>
+
+      <ProspectComments v-if="customer?.sourceProspectId" class="detail-comments customer-activity" :prospect-id="customer.sourceProspectId" role="SALES_EXECUTIVE" :embedded="isDesktop" />
+
+      <TanyaAICard v-if="sourceProspectId && canUseAIChat" class="customer-ai customer-ai-chat" :prospect-id="sourceProspectId" />
+
+      <div v-if="!sourceProspectId" class="dcard customer-ai-unavailable">
+        <h2>Intelligence Customer</h2>
+        <p>Riwayat AI tidak tersedia karena customer ini tidak memiliki relasi prospect sumber.</p>
+      </div>
+      </aside>
+      </div>
 
       <!-- Bottom Action Bar -->
       <div class="detail-bottom-bar">
@@ -553,7 +581,53 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.detail-page { display: grid; gap: 0.85rem; width: 100%; padding-bottom: 5.5rem; }
+.customer-hero { padding: .2rem 0 .35rem; }
+.customer-hero-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .75rem; }
+.customer-hero-identity { min-width: 0; display: grid; gap: .35rem; }
+.customer-hero-title { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.customer-hero-title h1 { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: clamp(1.3rem, 2vw, 1.75rem); line-height: 1.2; }
+.customer-hero-address { min-width: 0; display: flex; align-items: flex-start; gap: .4rem; color: var(--text-muted); font-size: .78rem; line-height: 1.45; }
+.customer-hero-address i { margin-top: .12rem; color: #d12f40; }
+.customer-hero-actions { display: flex; align-items: center; gap: .45rem; }
+.hero-action { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: .38rem; padding: .5rem .72rem; border: 1px solid #efcbd0; border-radius: 9px; background: #fff; color: #b42332; font-size: .7rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+.hero-action-nav { background: #d12f40; border-color: #d12f40; color: #fff; }
+.hero-action-call { border-color: #b8e7d0; background: #f0fdf7; color: #087a50; }
+.hero-action-visit { background: #fff5f6; }
+.hero-action-disabled { opacity: .45; pointer-events: none; }
+.customer-hero-status { white-space: nowrap; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .8rem; }
+.section-heading h2 { margin: 0; }
+.customer-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem .9rem; }
+.customer-detail-grid > div { min-width: 0; display: grid; gap: .08rem; padding: .42rem 0; border-bottom: 1px solid #f1e7e9; }
+.customer-detail-grid span { color: var(--text-muted); font-size: .65rem; }
+.customer-detail-grid strong { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: .76rem; line-height: 1.4; }
+.customer-detail-tags { margin-top: .8rem; }
+.customer-ai { min-width: 0; max-width: 100%; }
+.customer-content-grid { width: 100%; max-width: none; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .7rem; box-sizing: border-box; }
+.customer-main-column, .customer-intelligence-column { width: 100%; max-width: none; min-width: 0; display: grid; align-content: start; gap: .7rem; box-sizing: border-box; }
+.customer-main-column > *, .customer-intelligence-column > * { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.customer-main-column > .dcard-customer-core { order: 10; }
+.customer-main-column > .dcard-google-info { order: 20; }
+.customer-main-column > .dcard-hours { order: 21; }
+.customer-main-column > .dcard-service-options { order: 22; }
+.customer-main-column > .dcard-amenities { order: 23; }
+.customer-main-column > .dcard-parent-company,
+.customer-main-column > .dcard-company-contacts,
+.customer-main-column > .dcard-kam,
+.customer-main-column > .dcard-reviews { order: 24; }
+.customer-main-column > .dcard-photos { order: 30; }
+.customer-main-column > .customer-ai-menu { order: 40; }
+.customer-main-column > .detail-comments { order: 50; }
+.customer-main-column > .dcard-conversion { order: 60; }
+.customer-business-rows { display: grid; gap: .45rem; }
+.customer-business-rows > div { min-width: 0; display: grid; gap: .1rem; padding-bottom: .45rem; border-bottom: 1px solid #f1e7e9; }
+.customer-business-rows > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.customer-business-rows span { color: var(--text-muted); font-size: .65rem; }
+.customer-business-rows strong { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: .75rem; line-height: 1.4; }
+.dcard-google-map { display: grid; gap: .65rem; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid #f1e7e9; }
+.dcard-google-map h3 { margin: 0; color: var(--text-primary); font-size: .86rem; }
+.dcard-conversion .dcard-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-page { display: grid; gap: 0.85rem; width: 100%; max-width: none; min-width: 0; box-sizing: border-box; padding-bottom: 5.5rem; }
 
 /* ── Skeleton ────────────────────────────────────────────── */
 .detail-skeleton { display: grid; gap: 0.85rem; }
@@ -865,6 +939,24 @@ onBeforeUnmount(() => {
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
+  .customer-content-grid,
+  .customer-main-column,
+  .customer-intelligence-column { display: contents; }
+  .customer-main-column > * { order: 7; }
+  .customer-snapshot { order: 1; }
+  .dcard-customer-core { order: 2; }
+  .customer-ai-summary { order: 3; }
+  .customer-business-summary { order: 4; }
+  .customer-activity { order: 5; }
+  .customer-ai-menu { order: 6; }
+  .customer-ai-chat { order: 7; }
+  .customer-main-column > :not(.customer-snapshot):not(.dcard-customer-core):not(.customer-ai-menu) { order: 8; }
+  .dcard-conversion { order: 9; }
+  .customer-ai-unavailable { order: 2; }
+  .customer-hero-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .customer-hero-actions { display: none; }
+  .customer-hero-status { grid-column: 2; grid-row: 1; align-self: start; }
+  .customer-detail-grid { grid-template-columns: minmax(0, 1fr); }
   .dcard-google-actions,
   .dcard-google-details {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -893,7 +985,7 @@ onBeforeUnmount(() => {
 }
 
 /* ── Desktop ─────────────────────────────────────────────── */
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .detail-page {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.6rem;
@@ -909,13 +1001,32 @@ onBeforeUnmount(() => {
   .detail-page > .p-message,
   .detail-skeleton,
   .detail-empty,
-  .dcard,
   .detail-comments,
   .detail-page :deep(.pc-wrap) {
     width: 100%;
     min-width: 0;
     grid-column: 1 / -1;
     align-self: start;
+  }
+
+  .customer-content-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+    gap: .75rem;
+    height: clamp(460px, calc(100dvh - 210px), 780px);
+    min-height: 0;
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .customer-main-column,
+  .customer-intelligence-column {
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: .34rem;
+    scrollbar-width: thin;
+    scrollbar-color: #d9bcc1 transparent;
   }
 
   /* Use desktop width inside cards instead of pairing variable-height cards. */
@@ -1018,5 +1129,31 @@ onBeforeUnmount(() => {
     border-radius: 12px;
     white-space: nowrap;
   }
+}
+
+@media (max-width: 1199px) {
+  .customer-main-column,
+  .customer-intelligence-column { display: contents; }
+  .dcard-customer-core { order: 10; }
+  .customer-ai-summary { order: 20; }
+  .customer-business-summary { order: 30; }
+  .dcard-google-info { order: 40; }
+  .dcard-hours { order: 41; }
+  .dcard-service-options { order: 42; }
+  .dcard-amenities { order: 43; }
+  .dcard-parent-company,
+  .dcard-company-contacts,
+  .dcard-kam,
+  .dcard-reviews { order: 44; }
+  .dcard-photos { order: 50; }
+  .customer-ai-menu { order: 60; }
+  .customer-ai-chat { order: 70; }
+  .detail-comments { order: 80; }
+  .dcard-conversion { order: 90; }
+  .dcard-conversion .dcard-rows { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (min-width: 1200px) {
+  .detail-bottom-bar { display: none; }
 }
 </style>

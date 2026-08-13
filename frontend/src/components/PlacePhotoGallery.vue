@@ -11,7 +11,7 @@ const props = defineProps<{
   section?: 'menu' | 'photos'
 }>()
 
-const sharedTags = reactive<Record<string, Record<string, PhotoCategory>>>({})
+const sharedTags = reactive<Record<string, Record<string, { photoName: string; photoIndex: number; category: PhotoCategory }>>>({})
 const sharedSaving = reactive<Record<string, string | null>>({})
 
 const tags = computed(() => sharedTags[props.prospectId ?? ''] ?? {})
@@ -29,18 +29,28 @@ let disposed = false
 const taggable = computed(() => !!props.prospectId)
 const canTag = computed(() => props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR')
 
-const menuPhotos = computed(() => props.photos.filter((photo) => tags.value[photo.name] === 'MENU'))
-const regularPhotos = computed(() => props.photos.filter((photo) => tags.value[photo.name] !== 'MENU'))
+function photoIndexOf(photo: PlacePhoto) { return props.photos.findIndex((item) => item === photo) }
+
+const menuPhotos = computed(() => props.photos.filter((photo) => tags.value[String(photoIndexOf(photo))]?.category === 'MENU'))
+const regularPhotos = computed(() => props.photos.filter((photo) => tags.value[String(photoIndexOf(photo))]?.category !== 'MENU'))
 
 function categoryOf(photo: PlacePhoto): PhotoCategory {
-  const stored = tags.value[photo.name]
-  if (stored) return stored
+  const stored = tags.value[String(photoIndexOf(photo))]
+  if (stored) return stored.category
   return 'PLACE'
 }
 
-function applyTags(prospectId: string, items: { photoName: string; category: PhotoCategory }[]) {
-  const map: Record<string, PhotoCategory> = { ...(sharedTags[prospectId] ?? {}) }
-  items.forEach((t) => { map[t.photoName] = t.category })
+function applyTags(prospectId: string, payload: { photoName?: string | null; photo_name?: string | null; photoIndex?: number | null; photo_index?: number | null; category?: string }[] | { data?: { photoName?: string | null; photo_name?: string | null; photoIndex?: number | null; photo_index?: number | null; category?: string }[] }) {
+  const items = Array.isArray(payload) ? payload : (Array.isArray(payload.data) ? payload.data : [])
+  const map = { ...(sharedTags[prospectId] ?? {}) }
+  items.forEach((t) => {
+    const photoName = String(t.photoName ?? t.photo_name ?? '').trim()
+    const photoIndex = t.photoIndex ?? t.photo_index ?? null
+    const category = String(t.category ?? '').trim().toUpperCase() as PhotoCategory
+    if (photoName && typeof photoIndex === 'number' && Number.isInteger(photoIndex) && photoIndex >= 0 && (category === 'MENU' || category === 'PLACE')) {
+      map[String(photoIndex)] = { photoName, photoIndex, category }
+    }
+  })
   sharedTags[prospectId] = map
 }
 
@@ -54,8 +64,11 @@ async function loadTags() {
   try {
     const items = await getProspectPhotoTags(props.prospectId!, props.role)
     applyTags(props.prospectId!, items)
-  } catch {
-    sharedTags[props.prospectId ?? ''] = {}
+  } catch (caught) {
+    // Keep the shared source-of-truth snapshot when one parallel gallery request fails.
+    // Clearing it here made a transient Sales request error look like there were no MENU tags.
+    tagError.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+      ?? 'Photo tags could not be loaded. Please reload the prospect.'
   } finally {
     loading.value = false
   }
@@ -66,7 +79,7 @@ async function setCategory(photo: PlacePhoto, category: PhotoCategory) {
   sharedSaving[props.prospectId!] = photo.name
   tagError.value = ''
   try {
-    const item = await setProspectPhotoTag(props.prospectId!, photo.name, category, props.role)
+    const item = await setProspectPhotoTag(props.prospectId!, photo.name, photoIndexOf(photo), category, props.role)
     applyTags(props.prospectId!, [item])
   } catch (caught) {
     tagError.value = (caught as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message

@@ -14,6 +14,34 @@ export interface ProspectInitialAnalysis {
   status: 'PENDING' | 'SUCCESS' | 'FAILED'
   errorCode?: string
 }
+export interface ProspectMenuProfileItem {
+  menuName: string
+  profile: string
+  yoghurtFit: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
+  opportunity: string
+  reason: string
+  recommendedSalesAction: string
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+}
+export interface ProspectMenuProfile {
+  menus?: ProspectMenuProfileItem[]
+  menuOpportunity?: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
+  yoghurtFit?: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
+  topOpportunity: string
+  why?: string
+  recommendedAction: string
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW'
+  sourcePhotoNames?: string[]
+  state?: string
+  message?: string
+}
+export type MenuBranchMatch = 'exact_branch' | 'likely_same_branch' | 'brand_only' | 'uncertain'
+export interface ProspectMenuFindingSource { name: string; url: string; branchMatch: MenuBranchMatch }
+export interface ProspectMenuFindingPrice { source: string; sourceUrl: string; price: number; currency: 'IDR' | string }
+export interface ProspectMenuFindingItem { name: string; description: string | null; imageUrl: string | null; prices: ProspectMenuFindingPrice[]; availability: string; branchMatch: MenuBranchMatch; confidence: number }
+export interface ProspectMenuFindingCategory { name: string; items: ProspectMenuFindingItem[] }
+export interface ProspectMenuFinding { status: 'FOUND' | 'NOT_FOUND' | 'MENU_SOURCE_NOT_AVAILABLE'; message?: string; place: { name: string; branch: string; address: string; googlePlaceId: string; googleMapsUrl: string }; sources: ProspectMenuFindingSource[]; categories: ProspectMenuFindingCategory[]; summary: { sourceCount: number; totalCategories: number; totalItems: number } }
+export interface ProspectMenuDocument { discovery?: ProspectMenuFinding | null; profiling?: ProspectMenuProfile | null; finding?: ProspectMenuFinding | null; profile?: ProspectMenuProfile | null }
 
 export interface ProspectChatResponse {
   answer: string
@@ -25,6 +53,9 @@ export interface ProspectChatResponse {
 export interface ProspectAIChatHistory extends ProspectChatResponse {
   id: string
   message: string
+  userId?: string
+  authorName?: string
+  authorRole?: string
   createdAt: string
 }
 
@@ -481,7 +512,8 @@ export type PhotoCategory = 'MENU' | 'PLACE'
 export interface ProspectPhotoTag {
   id: string
   prospectId: string
-  photoName: string
+  photoName: string | null
+  photoIndex: number | null
   category: PhotoCategory
   updatedBy: string
   createdAt: string

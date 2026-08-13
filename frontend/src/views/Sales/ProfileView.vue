@@ -116,9 +116,9 @@ onMounted(loadStats)
     <template v-else>
       <!-- Profile Identity Card -->
       <div class="profile-card">
-        <div class="profile-card-cover">
+        <div class="profile-card-top">
           <span class="profile-card-kicker">Sales account</span>
-          <span class="profile-status"><i class="pi pi-circle-fill" /> Active</span>
+          <span class="profile-status"><i class="pi pi-circle-fill" /> Aktif</span>
         </div>
         <div class="profile-card-identity">
           <div class="profile-card-avatar" aria-hidden="true">{{ initials }}</div>
@@ -271,25 +271,6 @@ onMounted(loadStats)
   border: 1px solid #eee3e5;
   box-shadow: 0 10px 26px rgba(73, 34, 41, 0.08);
 }
-.profile-card-cover {
-  min-height: 86px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 1rem;
-  color: #fff;
-  background: linear-gradient(120deg, #ef4e5d 0%, #e63946 56%, #d62839 100%);
-}
-.profile-card-cover::after {
-  content: '';
-  position: absolute;
-  top: -55px;
-  right: -35px;
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-}
 .profile-card-kicker { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
 .profile-status { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.5rem; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; background: rgba(255,255,255,.13); font-size: 0.62rem; font-weight: 750; }
 .profile-status i { font-size: 0.38rem; color: #bbf7d0; }
@@ -392,5 +373,135 @@ onMounted(loadStats)
   .perf-section { padding: 1.5rem; }
   .stat-card { padding: 1.1rem 0.75rem; }
   .stat-value { font-size: 1.7rem; }
+}
+
+/* Profile dashboard composition */
+.profile-page {
+  min-width: 0;
+  box-sizing: border-box;
+}
+.profile-page > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.profile-header { gap: 1rem; padding-block: .2rem; }
+.profile-header-left, .profile-header-text { min-width: 0; }
+.profile-header-text h1 { color: var(--text-primary); font-size: clamp(1.45rem, 2vw, 1.75rem); line-height: 1.15; }
+.profile-header-text p { margin-top: .18rem; font-size: .78rem; }
+.profile-header-action { flex: 0 0 40px; }
+
+.profile-card {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(73, 34, 41, .07);
+}
+.profile-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: 1rem 1.1rem .75rem;
+  border-bottom: 1px solid #f2e7e9;
+  background: linear-gradient(90deg, #fff7f8, #fff);
+}
+.profile-card-kicker { color: #b42332; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.profile-status { flex: 0 0 auto; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; font-size: .7rem; }
+.profile-status i { color: #22c55e; }
+.profile-card-identity {
+  align-items: center;
+  gap: .9rem;
+  margin: 0;
+  padding: 1.15rem 1.1rem;
+}
+.profile-card-avatar {
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
+  border: 0;
+  border-radius: 16px;
+  font-size: 1.2rem;
+}
+.profile-card-copy { min-width: 0; padding: 0; }
+.profile-card-name { overflow-wrap: anywhere; font-size: clamp(1.2rem, 1.8vw, 1.45rem); line-height: 1.2; }
+.profile-card-role { margin-top: .3rem; font-size: .84rem; line-height: 1.4; }
+.profile-card-strip {
+  min-width: 0;
+  margin: 0 1.1rem 1.1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 0;
+  gap: .55rem;
+  background: transparent;
+}
+.strip-item {
+  min-width: 0;
+  padding: .75rem;
+  border: 1px solid #f0e6e8;
+  border-radius: 12px;
+  background: #fcfafb;
+}
+.strip-item:last-child { grid-column: 1 / -1; border-bottom: 1px solid #f0e6e8; }
+.strip-copy { overflow: hidden; }
+.strip-label { font-size: .68rem; letter-spacing: .04em; }
+.strip-value { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; font-size: .84rem; line-height: 1.4; }
+
+.perf-section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1.35rem;
+  border-color: #eee3e5;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(73, 34, 41, .06);
+}
+.perf-heading { margin-bottom: 1rem; }
+.perf-heading span { font-size: .68rem; }
+.perf-title { margin-top: .12rem; font-size: 1.08rem; }
+.perf-stats { flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+.stat-card {
+  min-width: 0;
+  min-height: 128px;
+  justify-content: center;
+  padding: 1rem;
+  border: 1px solid transparent;
+}
+.stat-blue { border-color: #ffe0e3; }
+.stat-green { border-color: #d7f5df; }
+.stat-purple { border-color: #ebe5fa; }
+.stat-icon { width: 34px; height: 34px; margin-bottom: .45rem; }
+.stat-icon i { font-size: .85rem; }
+.stat-value { font-size: clamp(1.65rem, 2.5vw, 2rem); }
+.stat-label { margin-top: .15rem; font-size: .72rem; line-height: 1.35; }
+.skeleton-card { align-items: stretch; background: #fff; border: 1px solid #eee3e5; }
+.skeleton-card .sk-circle, .skeleton-card .sk-line, .skeleton-card .sk-label, .skeleton-card .sk-value { background: #f1e8ea; }
+
+@media (min-width: 1100px) {
+  .profile-page { grid-template-columns: minmax(320px, .9fr) minmax(0, 1.6fr); gap: 1.25rem; align-items: stretch; }
+  .profile-card, .perf-section { height: 100%; }
+}
+
+@media (min-width: 768px) and (max-width: 1099px) {
+  .profile-page { grid-template-columns: 1fr; }
+  .profile-card, .perf-section { grid-column: 1; }
+  .profile-card-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .strip-item:last-child { grid-column: auto; }
+}
+
+@media (max-width: 767px) {
+  .profile-header { padding: .8rem; }
+  .profile-card-top { padding: .9rem 1rem .7rem; }
+  .profile-card-identity { padding: 1rem; }
+  .profile-card-strip { margin: 0 1rem 1rem; grid-template-columns: 1fr; }
+  .strip-item:last-child { grid-column: auto; }
+  .perf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-card { min-height: 108px; }
+  .stat-card:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 390px) {
+  .profile-page { gap: .7rem; }
+  .profile-header-avatar { width: 38px; height: 38px; }
+  .profile-card-avatar { width: 54px; height: 54px; flex-basis: 54px; }
+  .perf-section { padding: 1rem; }
+  .perf-stats { gap: .55rem; }
+  .stat-card { padding: .8rem; }
 }
 </style>

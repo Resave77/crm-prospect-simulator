@@ -23,7 +23,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	"github.com/google/uuid"
 )
 
 func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service, initialAnalyzers ...*aiservice.InitialAnalyzer) *fiber.App {
@@ -55,6 +54,9 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	authHandler := authhandler.New(authService, cfg.CookieSecure)
 	authMiddleware := authmiddleware.New(authService)
 	prospectHandler := prospecthandler.New(prospectService, customerService)
+	if len(initialAnalyzers) > 0 {
+		prospectHandler.SetInitialAnalyzer(initialAnalyzers[0])
+	}
 	customerHandler := customerhandler.New(customerService, prospectService)
 	adminHandler := adminhandler.New(adminService)
 
@@ -83,19 +85,12 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 		})
 	})
 	ai.Post("/prospects/:id/chat", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAI)
+	ai.Post("/prospects/:id/menu-profile", authMiddleware.RequirePermission("view_ai_menu_profiling"), prospectHandler.ProfileMenu)
+	ai.Post("/prospects/:id/find-menu", authMiddleware.RequirePermission("view_ai_menu_profiling"), prospectHandler.FindMenu)
+	ai.Post("/prospects/:id/summary", authMiddleware.RequirePermission("view_ai_summary"), prospectHandler.GenerateSummary)
 	ai.Get("/prospects/:id/chat/history", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAIHistory)
 	if len(initialAnalyzers) > 0 && initialAnalyzers[0] != nil {
-		ai.Get("/prospects/:id/initial-analysis", authMiddleware.RequirePermission("view_ai_summary"), func(c *fiber.Ctx) error {
-			id, err := uuid.Parse(c.Params("id"))
-			if err != nil {
-				return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
-			}
-			item, err := initialAnalyzers[0].Get(c.UserContext(), id)
-			if err != nil {
-				return response.Error(c, fiber.StatusNotFound, "AI_ANALYSIS_NOT_AVAILABLE", "AI analysis is not available.")
-			}
-			return response.Data(c, fiber.StatusOK, item)
-		})
+		ai.Get("/prospects/:id/initial-analysis", authMiddleware.RequirePermission("view_ai_summary"), prospectHandler.InitialAnalysis)
 	}
 
 	dashboard := api.Group("/dashboard", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)

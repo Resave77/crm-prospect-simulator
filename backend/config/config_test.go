@@ -39,3 +39,29 @@ func TestDurationRejectsInvalidAIValues(t *testing.T) {
 		t.Fatal("expected invalid duration error")
 	}
 }
+
+func TestFindMenuTimeoutDefaultsLongerWithoutChangingDefault(t *testing.T) {
+	t.Setenv("OPENAI_TIMEOUT", "20s")
+	t.Setenv("OPENAI_FIND_MENU_TIMEOUT", "60s")
+	normal, err := duration("OPENAI_TIMEOUT", 20*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finder, err := duration("OPENAI_FIND_MENU_TIMEOUT", 60*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normal != 20*time.Second || finder != 60*time.Second {
+		t.Fatalf("normal=%s finder=%s", normal, finder)
+	}
+}
+
+func TestMenuProfileTimeoutIsOperationSpecific(t *testing.T) {
+	t.Setenv("OPENAI_TIMEOUT", "20s")
+	t.Setenv("OPENAI_MENU_PROFILE_TIMEOUT", "40s")
+	normal, _ := duration("OPENAI_TIMEOUT", 20*time.Second)
+	profiling, err := duration("OPENAI_MENU_PROFILE_TIMEOUT", 40*time.Second)
+	if err != nil || normal != 20*time.Second || profiling != 40*time.Second {
+		t.Fatalf("normal=%s profiling=%s err=%v", normal, profiling, err)
+	}
+}

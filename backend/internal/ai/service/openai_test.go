@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"crm-prospect-simulator/backend/config"
+	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 )
 
 func TestGenerateTextSendsSecureResponsesRequestAndParsesUsage(t *testing.T) {
@@ -54,6 +55,195 @@ func TestGenerateTextSendsSecureResponsesRequestAndParsesUsage(t *testing.T) {
 	}
 	if result.Text != "hello" || result.InputTokens != 11 || result.OutputTokens != 7 || result.TotalTokens != 18 || result.UpstreamRequestID != "req_mock" {
 		t.Fatalf("unexpected result=%+v", result)
+	}
+}
+
+func TestGenerateMultimodalSendsBackendImageAsInputImage(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output_text":"{}"}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	if _, err := client.GenerateMultimodal(context.Background(), "instructions", "context", []ImageInput{{Bytes: []byte("image"), ContentType: "image/jpeg"}}); err != nil {
+		t.Fatal(err)
+	}
+	input, ok := body["input"].([]any)
+	if !ok || len(input) != 1 {
+		t.Fatalf("input=%#v", body["input"])
+	}
+	message := input[0].(map[string]any)
+	content := message["content"].([]any)
+	if len(content) != 2 {
+		t.Fatalf("content=%#v", content)
+	}
+	image := content[1].(map[string]any)
+	if image["type"] != "input_image" || !strings.HasPrefix(image["image_url"].(string), "data:image/jpeg;base64,") {
+		t.Fatalf("image=%#v", image)
+	}
+}
+
+func TestGenerateWebSearchUsesOneHostedToolRequestAndReturnsToolSources(t *testing.T) {
+	calls := 0
+	var body requestBody
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"output_text":"{\"status\":\"NOT_FOUND\"}","output":[{"type":"web_search_call","action":{"sources":[{"title":"Official menu","url":"https://example.com/menu"}]}}]}`))
+	}))
+	defer server.Close()
+	result, err := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client())).GenerateWebSearch(context.Background(), "find", "prospect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d, want 1", calls)
+	}
+	if len(body.Tools) != 1 || body.Tools[0]["type"] != "web_search" {
+		t.Fatalf("tools=%#v", body.Tools)
+	}
+	if len(body.Include) != 1 || body.Include[0] != "web_search_call.action.sources" {
+		t.Fatalf("include=%#v", body.Include)
+	}
+	if len(result.Sources) != 1 || result.Sources[0].URL != "https://example.com/menu" {
+		t.Fatalf("sources=%#v", result.Sources)
+	}
+}
+
+func TestGenerateWebSearchReturnsIncompleteMetadataWithoutRetry(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output_text":"{truncated","output":[{"type":"web_search_call","action":{"sources":[{"title":"Official","url":"https://example.com/menu"}]}}]}`))
+	}))
+	defer server.Close()
+	result, err := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client())).GenerateWebSearch(context.Background(), "find", "prospect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || result.ResponseStatus != "incomplete" || result.IncompleteReason != "max_output_tokens" {
+		t.Fatalf("calls=%d result=%+v", calls, result)
+	}
+}
+
+func TestMenuFormattingRecoveryMakesOneTextOnlyRequest(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body requestBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Tools) != 0 || len(body.Include) != 0 {
+			t.Fatalf("recovery must not include tools: %+v", body)
+		}
+		_, _ = w.Write([]byte(`{"output_text":"{\"status\":\"NOT_FOUND\"}"}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	prospectAI := NewProspectAI(client, 1000, 6)
+	_, err := prospectAI.RecoverProspectMenuFormatting(context.Background(), prospectmodel.Review{}, WebSearchResult{TextResult: TextResult{Text: "{truncated"}, Sources: []WebSearchSource{{URL: "https://example.com/menu"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls=%d, want 1", calls)
+	}
+}
+
+func TestFindMenuPromptUsesHardCompactRepresentativeLimits(t *testing.T) {
+	var body requestBody
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"output_text":"{\"status\":\"NOT_FOUND\"}"}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	_, err := NewProspectAI(client, 1000, 6).FindProspectMenu(context.Background(), prospectmodel.Review{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"at most 5 source-defined categories",
+		"at most 20 menu items TOTAL",
+		"at most 2 price/source evidence entries per item",
+		"Stop after maximum 20 menu items total",
+		"Do not attempt to return the full merchant catalog",
+		"representative subset sufficient for CRM sales analysis",
+		"ensure the JSON object is complete and closed",
+	} {
+		if !strings.Contains(body.Instructions, required) {
+			t.Fatalf("prompt missing %q", required)
+		}
+	}
+	if body.MaxOutputTokens != 4000 {
+		t.Fatalf("max_output_tokens=%d, want 4000", body.MaxOutputTokens)
+	}
+	if len(body.Tools) != 1 || body.Tools[0]["type"] != "web_search" {
+		t.Fatalf("tools=%#v", body.Tools)
+	}
+}
+
+func TestWebSearchSourcesIncludeGroundedCitationAnnotations(t *testing.T) {
+	var parsed responseBody
+	raw := `{"output":[{"type":"web_search_call","action":{"sources":[{"title":"Tool","url":"https://example.com/tool"}]}},{"type":"message","content":[{"type":"output_text","text":"result","annotations":[{"type":"url_citation","title":"Citation","url":"https://example.com/citation"}]}]}]}`
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	sources := parsed.webSources()
+	if len(sources) != 2 || sources[0].URL != "https://example.com/tool" || sources[1].URL != "https://example.com/citation" {
+		t.Fatalf("sources=%+v", sources)
+	}
+}
+
+func TestOperationSpecificOutputBudgetDoesNotChangeClientDefault(t *testing.T) {
+	budgets := make([]int, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body requestBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		budgets = append(budgets, body.MaxOutputTokens)
+		_, _ = w.Write([]byte(`{"output_text":"{}"}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	if _, err := client.GenerateTextWithMaxOutputTokens(context.Background(), "", "", 1600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GenerateText(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(budgets) != 2 || budgets[0] != 1600 || budgets[1] != 321 {
+		t.Fatalf("budgets=%v", budgets)
+	}
+}
+
+func TestClientKeepsDedicatedFindMenuTimeout(t *testing.T) {
+	cfg := testConfig()
+	cfg.OpenAITimeout = 20 * time.Second
+	cfg.OpenAIFindMenuTimeout = 60 * time.Second
+	client := NewClient(cfg)
+	if client.timeout != 20*time.Second || client.findMenuTimeout != 60*time.Second {
+		t.Fatalf("normal=%s finder=%s", client.timeout, client.findMenuTimeout)
+	}
+}
+
+func TestClientKeepsDedicatedMenuProfileTimeout(t *testing.T) {
+	cfg := testConfig()
+	cfg.OpenAITimeout = 20 * time.Second
+	cfg.OpenAIMenuProfileTimeout = 40 * time.Second
+	client := NewClient(cfg)
+	if client.timeout != 20*time.Second || client.menuProfileTimeout != 40*time.Second {
+		t.Fatalf("normal=%s profiling=%s", client.timeout, client.menuProfileTimeout)
 	}
 }
 
@@ -110,10 +300,15 @@ func TestGenerateTextRateLimitedKeepsSafeMappingWithDiagnosticsHeaders(t *testin
 }
 
 func TestGenerateTextUnavailableStatuses(t *testing.T) {
-	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway, http.StatusUnauthorized, http.StatusForbidden} {
+	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway} {
 		err := errorFromStatus(t, status)
 		if !errors.Is(err, ErrAIUnavailable) {
 			t.Fatalf("status=%d err=%v, want unavailable", status, err)
+		}
+	}
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		if err := errorFromStatus(t, status); !errors.Is(err, ErrAIAuthentication) {
+			t.Fatalf("status=%d err=%v, want authentication", status, err)
 		}
 	}
 }

@@ -1,30 +1,33 @@
 <template>
-  <div class="sales-layout">
+  <div class="sales-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <!-- Desktop sidebar -->
-    <aside class="sales-sidebar">
+    <aside class="sales-sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <RouterLink to="/sales/dashboard" class="sidebar-brand">
+        <RouterLink to="/sales/dashboard" class="sidebar-brand" :title="sidebarCollapsed ? 'Yummy CRM' : ''">
           <span class="sidebar-logo">
             <img src="/yummy-logo.png" alt="Yummy Dairy" />
           </span>
-          <span class="sidebar-brand-text">Yummy CRM</span>
+          <span v-show="!sidebarCollapsed" class="sidebar-brand-text">Yummy CRM</span>
         </RouterLink>
+        <button class="sidebar-collapse-btn" type="button" :aria-label="sidebarCollapsed ? 'Perluas sidebar Sales' : 'Ciutkan sidebar Sales'" :title="sidebarCollapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'" @click="toggleCollapse">
+          <i class="pi" :class="sidebarCollapsed ? 'pi-chevron-right' : 'pi-chevron-left'" />
+        </button>
       </div>
       <nav class="sidebar-nav" aria-label="Sales navigation">
-        <RouterLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="sidebar-link">
-          <i :class="item.icon" /><span>{{ item.label }}</span>
+        <RouterLink v-for="item in visibleNavItems" :key="item.to" :to="item.to" class="sidebar-link" :title="sidebarCollapsed ? item.label : ''">
+          <i :class="item.icon" /><span v-show="!sidebarCollapsed">{{ item.label }}</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-user">
           <span class="sidebar-user-avatar">{{ initials }}</span>
-          <div class="sidebar-user-info">
+          <div v-show="!sidebarCollapsed" class="sidebar-user-info">
             <span class="sidebar-user-name">{{ auth.user?.fullName ?? '—' }}</span>
             <span class="sidebar-user-role">{{ roleLabel }}</span>
           </div>
         </div>
-        <button class="sidebar-logout" @click="logout">
-          <i class="pi pi-sign-out" /><span>Sign out</span>
+        <button class="sidebar-logout" :title="sidebarCollapsed ? 'Sign out' : ''" :aria-label="sidebarCollapsed ? 'Sign out' : undefined" @click="logout">
+          <i class="pi pi-sign-out" /><span v-show="!sidebarCollapsed">Sign out</span>
         </button>
       </div>
     </aside>
@@ -70,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
@@ -78,6 +81,7 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const sidebarCollapsed = ref(false)
 
 const salesNavItems = [
   { label: 'Home', to: '/sales/dashboard', icon: 'pi pi-home', permission: 'view_sales_dashboard' },
@@ -131,6 +135,10 @@ function goBack() {
 
 function refreshPage() {
   window.location.reload()
+}
+
+function toggleCollapse() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
 }
 </script>
 
@@ -260,6 +268,7 @@ function refreshPage() {
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
+  min-width: 0;
   background:
     linear-gradient(180deg, #f3f7fd 0%, #f8fafc 42%, #f8fafc 100%);
 }
@@ -358,6 +367,10 @@ function refreshPage() {
     --sales-topbar-h: 56px;
   }
 
+  .sales-layout.sidebar-collapsed {
+    --sales-shell-sidebar-w: 68px;
+  }
+
   .sales-sidebar {
     display: flex;
     flex-direction: column;
@@ -370,7 +383,11 @@ function refreshPage() {
     border-right: 1px solid var(--border-light);
     overflow-y: auto;
     flex-shrink: 0;
+    overflow-x: hidden;
+    transition: width 0.22s ease;
   }
+
+  .sales-sidebar.collapsed { width: 68px; }
 
   .sales-nav {
     display: none;
@@ -382,10 +399,13 @@ function refreshPage() {
 
   .sales-shell {
     padding-bottom: 0;
+    width: auto;
   }
 
   .sales-content {
+    min-width: 0;
     max-width: 1280px;
+    box-sizing: border-box;
     padding: 2rem;
   }
 }
@@ -538,8 +558,34 @@ function refreshPage() {
 
 /* ── Sidebar Styles ───────────────────────────────────────────── */
 .sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 1.25rem 1.25rem 1rem;
   border-bottom: 1px solid var(--border-light);
+}
+
+.sidebar-collapse-btn {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.sidebar-collapse-btn:hover,
+.sidebar-collapse-btn:focus-visible {
+  color: #fff;
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  outline: none;
 }
 
 .sidebar-brand {
@@ -683,6 +729,30 @@ function refreshPage() {
   font-size: 1rem;
   width: 20px;
   text-align: center;
+}
+
+@media (min-width: 769px) {
+  .sales-sidebar.collapsed .sidebar-header {
+    flex-direction: column;
+    padding: 1rem 0.45rem;
+  }
+
+  .sales-sidebar.collapsed .sidebar-brand { justify-content: center; }
+  .sales-sidebar.collapsed .sidebar-logo { width: 50px; height: 34px; }
+  .sales-sidebar.collapsed .sidebar-nav { width: 100%; padding: 0.75rem 0.45rem; }
+  .sales-sidebar.collapsed .sidebar-link,
+  .sales-sidebar.collapsed .sidebar-logout { justify-content: center; padding: 0.7rem 0; }
+  .sales-sidebar.collapsed .sidebar-link.router-link-active { box-shadow: inset 3px 0 0 var(--brand-blue); }
+  .sales-sidebar.collapsed .sidebar-footer { width: 100%; padding: 0.65rem 0.45rem; }
+  .sales-sidebar.collapsed .sidebar-user { justify-content: center; padding: 0.5rem 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sales-sidebar,
+  .sidebar-brand-text,
+  .sidebar-user-info,
+  .sidebar-link span,
+  .sidebar-logout span { transition: none !important; }
 }
 
 </style>

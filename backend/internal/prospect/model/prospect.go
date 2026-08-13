@@ -286,6 +286,8 @@ type ProspectAIChat struct {
 	Insight           string    `json:"insight,omitempty"`
 	Why               string    `json:"why,omitempty"`
 	RecommendedAction string    `json:"recommendedAction,omitempty"`
+	AuthorName        string    `json:"authorName"`
+	AuthorRole        string    `json:"authorRole"`
 	CreatedAt         time.Time `json:"createdAt"`
 }
 
@@ -309,7 +311,8 @@ const (
 type ProspectPhotoTag struct {
 	ID         uuid.UUID     `json:"id"`
 	ProspectID uuid.UUID     `json:"prospectId"`
-	PhotoName  string        `json:"photoName"`
+	PhotoName  *string       `json:"photoName"`
+	PhotoIndex *int          `json:"photoIndex"`
 	Category   PhotoCategory `json:"category"`
 	UpdatedBy  *uuid.UUID    `json:"updatedBy"`
 	CreatedAt  time.Time     `json:"createdAt"`

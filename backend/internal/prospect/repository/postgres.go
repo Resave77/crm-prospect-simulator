@@ -710,7 +710,7 @@ func (r *PostgresRepository) ListAIChats(ctx context.Context, prospectID uuid.UU
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id, prospect_id, user_id, message, answer, skill, COALESCE(insight,''), COALESCE(why,''), COALESCE(recommended_action,''), created_at FROM prospect_ai_chats WHERE prospect_id=$1 ORDER BY created_at ASC LIMIT $2`, prospectID, limit)
+	rows, err := r.pool.Query(ctx, `SELECT c.id, c.prospect_id, c.user_id, c.message, c.answer, c.skill, COALESCE(c.insight,''), COALESCE(c.why,''), COALESCE(c.recommended_action,''), u.full_name, u.role::text, c.created_at FROM prospect_ai_chats c JOIN users u ON u.id=c.user_id WHERE c.prospect_id=$1 ORDER BY c.created_at ASC LIMIT $2`, prospectID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list prospect AI chats: %w", err)
 	}
@@ -718,7 +718,7 @@ func (r *PostgresRepository) ListAIChats(ctx context.Context, prospectID uuid.UU
 	items := []model.ProspectAIChat{}
 	for rows.Next() {
 		var item model.ProspectAIChat
-		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.AuthorName, &item.AuthorRole, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -730,7 +730,7 @@ func (r *PostgresRepository) ListRecentAIChats(ctx context.Context, prospectID u
 	if limit <= 0 {
 		limit = 8
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id, prospect_id, user_id, message, answer, skill, COALESCE(insight,''), COALESCE(why,''), COALESCE(recommended_action,''), created_at FROM prospect_ai_chats WHERE prospect_id=$1 ORDER BY created_at DESC LIMIT $2`, prospectID, limit)
+	rows, err := r.pool.Query(ctx, `SELECT c.id, c.prospect_id, c.user_id, c.message, c.answer, c.skill, COALESCE(c.insight,''), COALESCE(c.why,''), COALESCE(c.recommended_action,''), u.full_name, u.role::text, c.created_at FROM prospect_ai_chats c JOIN users u ON u.id=c.user_id WHERE c.prospect_id=$1 ORDER BY c.created_at DESC LIMIT $2`, prospectID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list recent prospect AI chats: %w", err)
 	}
@@ -738,7 +738,7 @@ func (r *PostgresRepository) ListRecentAIChats(ctx context.Context, prospectID u
 	items := []model.ProspectAIChat{}
 	for rows.Next() {
 		var item model.ProspectAIChat
-		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.AuthorName, &item.AuthorRole, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -841,7 +841,7 @@ func (r *PostgresRepository) FindProspectOwner(ctx context.Context, prospectID u
 
 func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.UUID) ([]model.ProspectPhotoTag, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, prospect_id, photo_name, category, updated_by, created_at, updated_at
+		SELECT id, prospect_id, photo_name, photo_index, category, updated_by, created_at, updated_at
 		FROM prospect_photo_tags
 		WHERE prospect_id = $1
 		ORDER BY created_at ASC`, prospectID)
@@ -851,8 +851,8 @@ func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.
 	defer rows.Close()
 	items := make([]model.ProspectPhotoTag, 0)
 	for rows.Next() {
-		var item model.ProspectPhotoTag
-		if err := rows.Scan(&item.ID, &item.ProspectID, &item.PhotoName, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		item, err := scanPhotoTag(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan prospect photo tag: %w", err)
 		}
 		items = append(items, item)
@@ -860,21 +860,32 @@ func (r *PostgresRepository) ListPhotoTags(ctx context.Context, prospectID uuid.
 	return items, rows.Err()
 }
 
-func (r *PostgresRepository) UpsertPhotoTag(ctx context.Context, prospectID uuid.UUID, photoName string, category model.PhotoCategory, userID uuid.UUID) (model.ProspectPhotoTag, error) {
+func (r *PostgresRepository) UpsertPhotoTag(ctx context.Context, prospectID uuid.UUID, photoName string, photoIndex *int, category model.PhotoCategory, userID uuid.UUID) (model.ProspectPhotoTag, error) {
 	id := uuid.New()
 	var item model.ProspectPhotoTag
-	err := r.pool.QueryRow(ctx, `
-		INSERT INTO prospect_photo_tags (id, prospect_id, photo_name, category, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, now())
-		ON CONFLICT (prospect_id, photo_name)
-		DO UPDATE SET category = EXCLUDED.category, updated_by = EXCLUDED.updated_by, updated_at = now()
-		RETURNING id, prospect_id, photo_name, category, updated_by, created_at, updated_at`,
-		id, prospectID, photoName, category, userID).
-		Scan(&item.ID, &item.ProspectID, &item.PhotoName, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
+	const returning = `RETURNING id, prospect_id, photo_name, photo_index, category, updated_by, created_at, updated_at`
+	var err error
+	if photoIndex != nil {
+		item, err = scanPhotoTag(r.pool.QueryRow(ctx, `UPDATE prospect_photo_tags SET photo_name=$3, category=$4, updated_by=$5, updated_at=now() WHERE prospect_id=$1 AND photo_index=$2 `+returning, prospectID, *photoIndex, photoName, category, userID))
+	}
+	if err == pgx.ErrNoRows || photoIndex == nil {
+		item, err = scanPhotoTag(r.pool.QueryRow(ctx, `
+			INSERT INTO prospect_photo_tags (id, prospect_id, photo_name, photo_index, category, updated_by, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, now())
+			ON CONFLICT (prospect_id, photo_name)
+			DO UPDATE SET photo_index = EXCLUDED.photo_index, category = EXCLUDED.category, updated_by = EXCLUDED.updated_by, updated_at = now()
+			`+returning, id, prospectID, photoName, photoIndex, category, userID))
+	}
 	if err != nil {
 		return model.ProspectPhotoTag{}, fmt.Errorf("upsert prospect photo tag: %w", err)
 	}
 	return item, nil
+}
+
+func scanPhotoTag(row rowScanner) (model.ProspectPhotoTag, error) {
+	var item model.ProspectPhotoTag
+	err := row.Scan(&item.ID, &item.ProspectID, &item.PhotoName, &item.PhotoIndex, &item.Category, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
+	return item, err
 }
 
 func (r *PostgresRepository) ProspectAccessibleTo(ctx context.Context, prospectID, userID uuid.UUID) (bool, error) {

@@ -28,6 +28,29 @@ test('sales navigation items are permission-aware', async () => {
   assert.match(sales, /auth\.hasPermission\(item\.permission\)/)
 })
 
+test('sales desktop sidebar reuses an accessible local collapsed state without removing links', async () => {
+  const sales = await readFile(new URL('../src/layouts/SalesLayout.vue', import.meta.url), 'utf8')
+  assert.match(sales, /const sidebarCollapsed = ref\(false\)/)
+  assert.match(sales, /function toggleCollapse\(\)/)
+  assert.match(sales, /@click="toggleCollapse"/)
+  assert.match(sales, /:class="\{ 'sidebar-collapsed': sidebarCollapsed \}"/)
+  assert.match(sales, /Perluas sidebar Sales/)
+  assert.match(sales, /Ciutkan sidebar Sales/)
+  assert.match(sales, /v-show="!sidebarCollapsed"/)
+  assert.doesNotMatch(sales, /v-if="!sidebarCollapsed" class="sidebar-link/)
+})
+
+test('sales collapse remains desktop-only and preserves the mobile bottom navigation', async () => {
+  const sales = await readFile(new URL('../src/layouts/SalesLayout.vue', import.meta.url), 'utf8')
+  assert.match(sales, /@media \(min-width: 769px\)/)
+  assert.match(sales, /\.sales-layout\.sidebar-collapsed[\s\S]*--sales-shell-sidebar-w: 68px/)
+  assert.match(sales, /\.sales-sidebar\.collapsed \{ width: 68px; \}/)
+  assert.match(sales, /class="sales-nav" aria-label="Sales navigation"/)
+  assert.match(sales, /@media \(max-width: 768px\)/)
+  assert.match(sales, /\.sales-nav[\s\S]*position: fixed/)
+  assert.match(sales, /\.sales-shell[\s\S]*min-width: 0/)
+})
+
 test('route permission guard allows permitted routes and denies missing permissions', async () => {
   const router = await readFile(new URL('../src/router/index.ts', import.meta.url), 'utf8')
   assert.match(router, /permission\?: string/)

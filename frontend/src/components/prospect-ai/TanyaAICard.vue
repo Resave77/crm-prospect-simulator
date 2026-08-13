@@ -16,12 +16,23 @@ const historyLoading = ref(false)
 const historyError = ref('')
 const threadRef = ref<HTMLElement | null>(null)
 const visibleHistory = computed(() => props.expanded ? history.value : history.value.slice(-1))
+const latestHistory = computed(() => history.value.at(-1) ?? null)
 const chips = [{ label: 'Ringkas prospek', skill: 'PROSPECT_ANALYSIS' }, { label: 'Cari peluang yoghurt', skill: 'MENU_OPPORTUNITY' }, { label: 'Buat pitch visit', skill: 'SALES_PITCH' }]
 const selectedSkill = ref('AUTO')
 const messageLength = computed(() => message.value.trim().length)
 const hasProspectId = computed(() => props.prospectId.trim().length > 0)
 const permissionResult = computed(() => auth.hasPermission('use_prospect_ai_chat'))
 const canSubmit = computed(() => messageLength.value > 0 && hasProspectId.value && permissionResult.value && !loading.value)
+const roleLabels: Record<string, string> = { SUPER_ADMIN: 'Super Admin', ADMINISTRATOR: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES_EXECUTIVE: 'Sales' }
+
+function authorLabel(item: ProspectAIChatHistory) {
+  const role = item.authorRole ? roleLabels[item.authorRole] || item.authorRole : ''
+  return [item.authorName, role].filter(Boolean).join(' · ')
+}
+
+function timestampLabel(value: string) {
+  return new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+}
 
 function scrollThreadToLatest() {
   nextTick(() => {
@@ -43,7 +54,14 @@ async function submit() {
   if (!canSubmit.value) return
   loading.value = true; error.value = ''
   const question = message.value.trim()
-  try { const result = await askProspectAI(props.prospectId, question, selectedSkill.value); answer.value = result; history.value.push({ ...result, id: `session-${Date.now()}`, message: question, createdAt: new Date().toISOString() }); message.value = ''; scrollThreadToLatest() }
+  try {
+    const result = await askProspectAI(props.prospectId, question, selectedSkill.value)
+    const createdAt = new Date().toISOString()
+    answer.value = result
+    history.value.push({ ...result, id: `session-${Date.now()}`, message: question, userId: auth.user?.id, authorName: auth.user?.fullName, authorRole: auth.user?.role, createdAt })
+    message.value = ''
+    scrollThreadToLatest()
+  }
   catch (caught: any) { error.value = caught?.response?.data?.error?.message || 'AI sedang tidak tersedia.' }
   finally { loading.value = false }
 }
@@ -71,8 +89,10 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 <template>
   <article :class="['tanya-card', { 'tanya-card-expanded': expanded }]" @click="handleCardClick">
     <div class="tanya-head">
-      <p class="ai-eyebrow"><i class="pi pi-comments" /> Tanya AI</p>
-      <span>{{ loading ? 'Thinking...' : 'Sales copilot' }}</span>
+      <div class="tanya-title-group">
+        <p class="ai-eyebrow"><i class="pi pi-comments" /> Tanya AI</p>
+        <span>{{ loading ? 'Thinking...' : 'Sales copilot' }}</span>
+      </div>
       <slot name="header-action" />
     </div>
     <p v-if="!expanded" class="tanya-mobile-hint">Ketuk untuk lihat percakapan</p>
@@ -82,7 +102,13 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
       <div v-else-if="error" class="tanya-empty"><i class="pi pi-exclamation-triangle" /><strong>AI tidak tersedia.</strong><span>{{ error }}</span></div>
       <div v-else-if="historyLoading" class="tanya-empty"><i class="pi pi-spin pi-spinner" /><strong>Memuat percakapan...</strong></div>
       <div v-else-if="historyError" class="tanya-empty tanya-history-error"><i class="pi pi-exclamation-triangle" /><strong>Riwayat percakapan tidak dapat dimuat.</strong><button type="button" @click.stop="loadHistory">Coba lagi</button></div>
-      <div v-else-if="history.length" ref="threadRef" class="tanya-history"><div v-for="item in visibleHistory" :key="item.id" class="tanya-turn"><div class="tanya-user-bubble">{{ item.message }}</div><div class="tanya-ai-bubble"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><div class="tanya-answer"><strong>{{ item.answer }}</strong><span v-if="item.insight"><b>Insight</b>{{ item.insight }}</span><span v-if="item.why"><b>Why</b>{{ item.why }}</span><span v-if="item.recommendedAction"><b>Next step</b>{{ item.recommendedAction }}</span></div></div></div></div>
+      <div v-else-if="expanded && history.length" ref="threadRef" class="tanya-history"><div v-for="item in visibleHistory" :key="item.id" class="tanya-turn"><div class="tanya-user-meta"><span v-if="authorLabel(item)">{{ authorLabel(item) }}</span><time :datetime="item.createdAt">{{ timestampLabel(item.createdAt) }}</time></div><div class="tanya-user-bubble">{{ item.message }}</div><div class="tanya-ai-bubble"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><div class="tanya-answer"><strong>{{ item.answer }}</strong><span v-if="item.insight"><b>Insight</b>{{ item.insight }}</span><span v-if="item.why"><b>Why</b>{{ item.why }}</span><span v-if="item.recommendedAction"><b>Next step</b>{{ item.recommendedAction }}</span></div></div></div></div>
+      <div v-else-if="latestHistory" class="tanya-preview">
+        <div class="tanya-last-request"><span>Permintaan terakhir</span><p>{{ latestHistory.message }}</p></div>
+        <div class="tanya-preview-heading"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><strong>Respons AI terbaru</strong></div>
+        <p class="tanya-preview-answer">{{ latestHistory.answer }}</p>
+        <div class="tanya-preview-meta"><span v-if="authorLabel(latestHistory)">{{ authorLabel(latestHistory) }}</span><time :datetime="latestHistory.createdAt">{{ timestampLabel(latestHistory.createdAt) }}</time></div>
+      </div>
       <div v-else class="tanya-empty">
         <i class="pi pi-sparkles" />
         <strong>Tanya AI siap digunakan.</strong>
@@ -242,6 +268,8 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 .tanya-card-expanded .tanya-input-row button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .tanya-history { display: flex; flex-direction: column; gap: .9rem; min-width: 0; overflow-y: auto; scrollbar-width: thin; }
 .tanya-turn { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.tanya-user-meta { align-self: flex-end; display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; color: #64748b; font-size: .68rem; line-height: 1.3; }
+.tanya-user-meta span { font-weight: 700; color: #475569; }
 .tanya-user-bubble { align-self: flex-end; max-width: 74%; padding: .65rem .8rem; border-radius: 16px 4px 16px 16px; background: linear-gradient(145deg, #ef4e5d, #d62839); color: #fff; font-size: .78rem; line-height: 1.45; box-shadow: 0 5px 14px rgba(214,40,57,.14); }
 .tanya-ai-bubble { display: flex; align-items: flex-start; gap: .5rem; align-self: flex-start; max-width: 82%; min-width: 0; }
 .tanya-ai-avatar { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 9px; background: #fff0f1; color: #e63946; }
@@ -249,27 +277,16 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 .tanya-ai-bubble .tanya-answer span { display: grid; gap: .1rem; color: #64748b; font-size: .72rem; }
 .tanya-ai-bubble .tanya-answer b { color: #b42332; font-size: .65rem; text-transform: uppercase; letter-spacing: .04em; }
 .tanya-card-expanded .tanya-history { padding-right: .25rem; }
-.tanya-card:not(.tanya-card-expanded) .tanya-user-bubble {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.tanya-card:not(.tanya-card-expanded) .tanya-ai-bubble .tanya-answer {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-}
-.tanya-card:not(.tanya-card-expanded) .tanya-ai-bubble .tanya-answer span { display: none; }
-.tanya-card:not(.tanya-card-expanded) .tanya-history { overflow: hidden; }
-
 .tanya-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  min-width: 0;
 }
+.tanya-title-group { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.tanya-head .ai-eyebrow { min-width: 0; }
+.tanya-head :deep(.expand-control) { flex: 0 0 auto; }
 
 .ai-eyebrow {
   margin: 0;
@@ -311,7 +328,16 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
   border-radius: 12px;
   background: linear-gradient(180deg, #fff 0, #fcf9f9 100%);
 }
-.tanya-card:not(.tanya-card-expanded) .tanya-messages { max-height: 148px; }
+.tanya-card:not(.tanya-card-expanded) .tanya-messages { min-height: 0; display: block; padding: 0; border: 0; background: transparent; }
+.tanya-preview { width: 100%; min-width: 0; display: grid; gap: .65rem; padding: .85rem; box-sizing: border-box; border-radius: 12px; background: #fcf9f9; }
+.tanya-last-request { min-width: 0; display: grid; gap: .18rem; padding-bottom: .6rem; border-bottom: 1px solid #eee4e6; }
+.tanya-last-request span { color: #8d7d81; font-size: .7rem; font-weight: 700; }
+.tanya-last-request p { margin: 0; overflow-wrap: anywhere; color: #5f4f54; font-size: .78rem; line-height: 1.45; }
+.tanya-preview-heading { min-width: 0; display: flex; align-items: center; gap: .5rem; color: #b42332; font-size: .76rem; }
+.tanya-preview-heading .tanya-ai-avatar { width: 26px; height: 26px; flex-basis: 26px; }
+.tanya-preview-answer { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; overflow-wrap: anywhere; white-space: normal; color: #273142; font-size: .875rem; line-height: 1.55; }
+.tanya-preview-meta { min-width: 0; display: flex; flex-wrap: wrap; gap: .25rem .4rem; color: #817177; font-size: .7rem; line-height: 1.35; }
+.tanya-preview-meta span { font-weight: 700; }
 @media (max-width: 767px) {
   .tanya-card:not(.tanya-card-expanded) { cursor: pointer; transition: border-color .18s ease, box-shadow .18s ease; }
   .tanya-card:not(.tanya-card-expanded):active { border-color: #f1a3aa; box-shadow: 0 0 0 3px rgba(230,57,70,.08); }
@@ -361,14 +387,18 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 .tanya-chips {
   display: flex;
   gap: 0.45rem;
+  min-width: 0;
   overflow-x: auto;
-  padding-bottom: 0.2rem;
+  padding-bottom: .2rem;
   -webkit-overflow-scrolling: touch;
 }
+
+.tanya-card:not(.tanya-card-expanded) .tanya-chips { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
 
 .tanya-chips button {
   min-height: 34px;
   flex: 0 0 auto;
+  max-width: 100%;
   padding: 0 0.65rem;
   border: 1px solid #eadde0;
   border-radius: 999px;
@@ -377,7 +407,11 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
+.tanya-card:not(.tanya-card-expanded) .tanya-chips button { flex: 1 1 120px; }
 
 .tanya-chips button:hover {
   border-color: #f4b3ba;
@@ -393,7 +427,10 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 }
 
 .tanya-input-row textarea {
-  flex: 1;
+  flex: 1 1 180px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 42px;
   max-height: 110px;
@@ -462,5 +499,10 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
   .tanya-card-expanded .tanya-messages { padding: 1rem .75rem; }
   .tanya-card-expanded .tanya-head { padding: .65rem .85rem; min-height: 54px; }
   .tanya-card-expanded .tanya-chips { padding: .6rem .7rem; }
+}
+
+@media (max-width: 1100px) {
+  .tanya-card:not(.tanya-card-expanded) .tanya-input-row { flex-wrap: wrap; }
+  .tanya-card:not(.tanya-card-expanded) .tanya-input-row button { margin-left: auto; }
 }
 </style>

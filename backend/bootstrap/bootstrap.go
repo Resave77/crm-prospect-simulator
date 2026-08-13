@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"crm-prospect-simulator/backend/config"
@@ -44,7 +45,16 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	prospectAI := aiservice.NewProspectAI(aiClient, cfg.AIChatMaxLength, cfg.AIChatMaxHistory)
 	initialAnalyzer := aiservice.NewInitialAnalyzer(pool, prospectAI)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
-	prospectService.SetInitialAnalysis(initialAnalyzer.Analyze)
+	prospectService.SetSummaryAI(initialAnalyzer.GenerateSummary)
+	prospectService.SetMenuAI(func(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, images []prospectservice.MenuImageInput) (json.RawMessage, error) {
+		inputs := make([]aiservice.MenuImageInput, 0, len(images))
+		for _, image := range images {
+			inputs = append(inputs, aiservice.MenuImageInput{Name: image.Name, Bytes: image.Bytes, ContentType: image.ContentType})
+		}
+		return initialAnalyzer.ProfileMenu(ctx, review, details, inputs)
+	})
+	prospectService.SetFindMenu(initialAnalyzer.FindMenu)
+	prospectService.SetStructuredMenuAI(initialAnalyzer.ProfileStructuredMenu)
 	prospectService.SetChatAI(func(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, history []prospectservice.ChatTurn, message, skill string) (string, error) {
 		turns := make([]aiservice.ChatMessage, 0, len(history))
 		for _, turn := range history {

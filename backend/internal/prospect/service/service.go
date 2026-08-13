@@ -16,18 +16,20 @@ import (
 )
 
 var (
-	ErrForbidden             = errors.New("prospect operation forbidden")
-	ErrTransition            = errors.New("invalid prospect stage transition")
-	ErrNotesRequired         = errors.New("a win note or loss reason is required")
-	ErrProspectStatus        = errors.New("prospect is not eligible for this operation")
-	ErrFinderInput           = errors.New("prospect finder query is invalid")
-	ErrPlacesDisabled        = errors.New("Google Places server key is not configured")
-	ErrMenuImagesDisabled    = errors.New("Google Custom Search is not configured")
-	ErrPlacePhotoInvalid     = errors.New("Google Places photo resource name is invalid")
-	ErrPlacePhotoUnavailable = errors.New("Google Places photo is unavailable")
-	ErrAlreadyCustomer       = errors.New("place is already an existing customer")
-	ErrVisitCoordinates      = errors.New("visit GPS coordinates are invalid")
-	ErrPhotoTagInvalid       = errors.New("photo tag is invalid: category must be MENU or PLACE and photoName must be a valid Google photo resource name")
+	ErrForbidden              = errors.New("prospect operation forbidden")
+	ErrTransition             = errors.New("invalid prospect stage transition")
+	ErrNotesRequired          = errors.New("a win note or loss reason is required")
+	ErrProspectStatus         = errors.New("prospect is not eligible for this operation")
+	ErrFinderInput            = errors.New("prospect finder query is invalid")
+	ErrPlacesDisabled         = errors.New("Google Places server key is not configured")
+	ErrMenuImagesDisabled     = errors.New("Google Custom Search is not configured")
+	ErrPlacePhotoInvalid      = errors.New("Google Places photo resource name is invalid")
+	ErrPlacePhotoUnavailable  = errors.New("Google Places photo is unavailable")
+	ErrAlreadyCustomer        = errors.New("place is already an existing customer")
+	ErrVisitCoordinates       = errors.New("visit GPS coordinates are invalid")
+	ErrPhotoTagInvalid        = errors.New("photo tag is invalid: category must be MENU or PLACE and photoName must be a valid Google photo resource name")
+	ErrMenuDataNotAvailable   = errors.New("MENU_DATA_NOT_AVAILABLE")
+	ErrMenuSourceNotAvailable = errors.New("MENU_SOURCE_NOT_AVAILABLE")
 )
 
 type Actor struct {
@@ -41,10 +43,20 @@ type ChatTurn struct {
 }
 
 type Service struct {
-	repository      repository.Repository
-	places          Places
-	initialAnalysis func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment)
-	chatAI          func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, []ChatTurn, string, string) (string, error)
+	repository       repository.Repository
+	places           Places
+	initialAnalysis  func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment)
+	chatAI           func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, []ChatTurn, string, string) (string, error)
+	menuAI           func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []MenuImageInput) (json.RawMessage, error)
+	findMenu         func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails) (json.RawMessage, error)
+	structuredMenuAI func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, bool) (json.RawMessage, bool, error)
+	summaryAI        func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment) (json.RawMessage, error)
+}
+
+type MenuImageInput struct {
+	Name        string
+	Bytes       []byte
+	ContentType string
 }
 
 type Places interface {
@@ -67,8 +79,134 @@ func (s *Service) SetInitialAnalysis(fn func(context.Context, prospectmodel.Revi
 	s.initialAnalysis = fn
 }
 
+func (s *Service) SetSummaryAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment) (json.RawMessage, error)) {
+	s.summaryAI = fn
+}
+
+// AuthorizeProspectAccess applies the same prospect ownership rule used by the
+// AI mutation endpoints before a caller reads persisted prospect-scoped data.
+func (s *Service) AuthorizeProspectAccess(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if actor.Role.IsAdminRole() {
+		_, err := s.repository.FindReview(ctx, id)
+		return err
+	}
+	accessible, err := s.repository.ProspectAccessibleTo(ctx, id, actor.UserID)
+	if err != nil {
+		return err
+	}
+	if !accessible {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (s *Service) GenerateSummary(ctx context.Context, actor Actor, id uuid.UUID) (json.RawMessage, error) {
+	if !actor.can("view_ai_summary") || s.summaryAI == nil {
+		return nil, ErrForbidden
+	}
+	review, err := s.repository.FindReview(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.AuthorizeProspectAccess(ctx, actor, id); err != nil {
+		return nil, err
+	}
+	comments, err := s.repository.ListComments(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var details *prospectmodel.PlaceDetails
+	if s.places != nil {
+		if loaded, detailErr := s.places.DetailFull(ctx, review.Prospect.GooglePlaceID); detailErr == nil {
+			details = &loaded
+		}
+	}
+	return s.summaryAI(ctx, review, details, comments)
+}
+
 func (s *Service) SetChatAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, []ChatTurn, string, string) (string, error)) {
 	s.chatAI = fn
+}
+
+func (s *Service) SetMenuAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []MenuImageInput) (json.RawMessage, error)) {
+	s.menuAI = fn
+}
+
+func (s *Service) SetFindMenu(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails) (json.RawMessage, error)) {
+	s.findMenu = fn
+}
+func (s *Service) SetStructuredMenuAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, bool) (json.RawMessage, bool, error)) {
+	s.structuredMenuAI = fn
+}
+
+func (s *Service) FindMenu(ctx context.Context, actor Actor, id uuid.UUID) (json.RawMessage, error) {
+	if !actor.can("view_ai_menu_profiling") || s.findMenu == nil || s.places == nil {
+		return nil, ErrForbidden
+	}
+	review, err := s.repository.FindReview(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.AuthorizeProspectAccess(ctx, actor, id); err != nil {
+		return nil, err
+	}
+	var details *prospectmodel.PlaceDetails
+	if loaded, detailErr := s.places.DetailFull(ctx, review.Prospect.GooglePlaceID); detailErr == nil {
+		details = &loaded
+	}
+	return s.findMenu(ctx, review, details)
+}
+
+func (s *Service) ProfileMenu(ctx context.Context, actor Actor, id uuid.UUID, force bool) (json.RawMessage, error) {
+	if !actor.can("view_ai_menu_profiling") || s.menuAI == nil || s.places == nil {
+		return nil, ErrForbidden
+	}
+	review, err := s.repository.FindReview(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.AuthorizeProspectAccess(ctx, actor, id); err != nil {
+		return nil, err
+	}
+	details, err := s.places.DetailFull(ctx, review.Prospect.GooglePlaceID)
+	if err != nil {
+		return nil, err
+	}
+	if s.structuredMenuAI != nil {
+		if result, found, structuredErr := s.structuredMenuAI(ctx, review, &details, force); structuredErr != nil {
+			return nil, structuredErr
+		} else if found {
+			return result, nil
+		}
+	}
+	tags, err := s.repository.ListPhotoTags(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	wanted := map[int]bool{}
+	for _, tag := range tags {
+		if tag.Category == prospectmodel.PhotoCategoryMenu && tag.PhotoIndex != nil {
+			wanted[*tag.PhotoIndex] = true
+		}
+	}
+	if len(wanted) == 0 {
+		return nil, ErrMenuDataNotAvailable
+	}
+	images := make([]MenuImageInput, 0, 3)
+	for index, photo := range details.Photos {
+		if !wanted[index] || len(images) >= 3 {
+			continue
+		}
+		data, contentType, fetchErr := s.places.FetchPhoto(ctx, photo.Name)
+		if fetchErr != nil || len(data) == 0 {
+			continue
+		}
+		images = append(images, MenuImageInput{Name: photo.Name, Bytes: data, ContentType: contentType})
+	}
+	if len(images) == 0 {
+		return nil, ErrMenuDataNotAvailable
+	}
+	return s.menuAI(ctx, review, &details, images)
 }
 
 func (s *Service) ChatAI(ctx context.Context, actor Actor, id uuid.UUID, message, skill string) (string, error) {
@@ -87,8 +225,8 @@ func (s *Service) ChatAI(ctx context.Context, actor Actor, id uuid.UUID, message
 	if err != nil {
 		return "", err
 	}
-	if !actor.Role.IsAdminRole() && review.Prospect.AssignedSalesExecutiveID != actor.UserID {
-		return "", ErrForbidden
+	if err := s.AuthorizeProspectAccess(ctx, actor, id); err != nil {
+		return "", err
 	}
 	comments, err := s.repository.ListComments(ctx, id)
 	if err != nil {
@@ -131,12 +269,8 @@ func (s *Service) AIChatHistory(ctx context.Context, actor Actor, id uuid.UUID) 
 	if !actor.can("use_prospect_ai_chat") {
 		return nil, ErrForbidden
 	}
-	review, err := s.repository.FindReview(ctx, id)
-	if err != nil {
+	if err := s.AuthorizeProspectAccess(ctx, actor, id); err != nil {
 		return nil, err
-	}
-	if !actor.Role.IsAdminRole() && review.Prospect.AssignedSalesExecutiveID != actor.UserID {
-		return nil, ErrForbidden
 	}
 	chatRepo, ok := s.repository.(repository.AIChatRepository)
 	if !ok {
@@ -650,7 +784,7 @@ func (s *Service) ListPhotoTags(ctx context.Context, actor Actor, prospectID uui
 	return s.repository.ListPhotoTags(ctx, prospectID)
 }
 
-func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoName string, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
+func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.UUID, photoName string, photoIndex *int, category prospectmodel.PhotoCategory) (prospectmodel.ProspectPhotoTag, error) {
 	if err := s.ensurePhotoTagAccess(ctx, actor, prospectID); err != nil {
 		return prospectmodel.ProspectPhotoTag{}, err
 	}
@@ -660,7 +794,10 @@ func (s *Service) SetPhotoTag(ctx context.Context, actor Actor, prospectID uuid.
 	if !ValidGooglePlacePhotoName(photoName) {
 		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
 	}
-	return s.repository.UpsertPhotoTag(ctx, prospectID, photoName, category, actor.UserID)
+	if photoIndex == nil || *photoIndex < 0 {
+		return prospectmodel.ProspectPhotoTag{}, ErrPhotoTagInvalid
+	}
+	return s.repository.UpsertPhotoTag(ctx, prospectID, photoName, photoIndex, category, actor.UserID)
 }
 
 func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospectID uuid.UUID) error {
@@ -682,6 +819,9 @@ func (s *Service) ensurePhotoTagAccess(ctx context.Context, actor Actor, prospec
 }
 
 func (actor Actor) can(permissionKey string) bool {
+	if actor.Role == authmodel.RoleSuperAdmin {
+		return true
+	}
 	if actor.Role == authmodel.RoleSalesExecutive && actor.PermissionKeys == nil {
 		return true
 	}

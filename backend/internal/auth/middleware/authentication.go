@@ -103,6 +103,11 @@ func hasPermission(principal service.Principal, permissionKey string) bool {
 	if permissionKey == "" {
 		return true
 	}
+	// SUPER_ADMIN is the system-wide authority and is not assigned a sales role.
+	// Keep this aligned with frontend navigation.hasPermission.
+	if principal.Role == model.RoleSuperAdmin {
+		return true
+	}
 	if principal.Role == model.RoleSalesExecutive && principal.SalesRole == nil {
 		return true
 	}

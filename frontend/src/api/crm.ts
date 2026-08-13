@@ -17,6 +17,15 @@ export async function getAIStatus() {
 export async function getProspectInitialAnalysis(id: string) {
   return (await api.get<ApiEnvelope<ProspectInitialAnalysis>>(`/ai/prospects/${id}/initial-analysis`)).data.data
 }
+export async function generateProspectSummary(id: string) {
+  return (await api.post<ApiEnvelope<Record<string, unknown>>>(`/ai/prospects/${id}/summary`, undefined, { timeout: 90000 })).data.data
+}
+export async function profileProspectMenu(id: string, force = false) {
+  return (await api.post<ApiEnvelope<import('../types/crm').ProspectMenuProfile>>(`/ai/prospects/${id}/menu-profile`, { force }, { timeout: 60000 })).data.data
+}
+export async function findProspectMenu(id: string) {
+  return (await api.post<ApiEnvelope<import('../types/crm').ProspectMenuFinding>>(`/ai/prospects/${id}/find-menu`, undefined, { timeout: 90000 })).data.data
+}
 
 export async function askProspectAI(id: string, message: string, skill = 'AUTO') {
   return (await api.post<ApiEnvelope<ProspectChatResponse>>(`/ai/prospects/${id}/chat`, { message, skill })).data.data
@@ -203,7 +212,7 @@ export async function getProspectPhotoTags(prospectId: string, role: UserRole) {
   return (await api.get<ApiEnvelope<ProspectPhotoTag[]>>(`${base}/prospects/${prospectId}/photo-tags`)).data.data
 }
 
-export async function setProspectPhotoTag(prospectId: string, photoName: string, category: PhotoCategory, role: UserRole) {
+export async function setProspectPhotoTag(prospectId: string, photoName: string, photoIndex: number, category: PhotoCategory, role: UserRole) {
   const base = crmBaseForRole(role)
-  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoName, category })).data.data
+  return (await api.put<ApiEnvelope<ProspectPhotoTag>>(`${base}/prospects/${prospectId}/photo-tags`, { photoName, photoIndex, category })).data.data
 }
