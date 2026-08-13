@@ -1,0 +1,322 @@
+name: Temporary AI Runtime Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-ai-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit VPS AI runtime (read-only)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+            EXPECTED_WORKING_DIRECTORY="/home/smk_dev/app/backend/dev"
+            PROSPECT_NAME="Tahu Gejrot Bang Jack Viral"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            service_active="$(sudo systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            exec_start_raw="$(sudo systemctl show "$SERVICE_NAME" --property=ExecStart --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+            main_pid="$(sudo systemctl show "$SERVICE_NAME" --property=MainPID --value)"
+            process_started="$(sudo systemctl show "$SERVICE_NAME" --property=ExecMainStartTimestamp --value)"
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+            if [ -z "$environment_file" ] && sudo test -r "$working_directory/.env"; then
+              environment_file="$working_directory/.env"
+            fi
+
+            exec_path="$(printf '%s' "$exec_start_raw" | sed -n 's/.*path=\([^ ;}]*\).*/\1/p')"
+            [ -n "$exec_path" ] || exec_path="UNKNOWN"
+            [ -n "$process_started" ] || process_started="UNKNOWN"
+            case "$service_active" in active) service_active_safe="YES" ;; *) service_active_safe="NO" ;; esac
+
+            echo '================ SERVICE RUNTIME ================'
+            printf 'SERVICE_ACTIVE=%s\n' "$service_active_safe"
+            printf 'SERVICE_WORKING_DIRECTORY=%s\n' "${working_directory:-UNKNOWN}"
+            printf 'SERVICE_EXEC_START=%s\n' "$exec_path"
+            printf 'SERVICE_ENV_FILE=%s\n' "${environment_file:-UNKNOWN}"
+            printf 'SERVICE_PID=%s\n' "${main_pid:-UNKNOWN}"
+            printf 'SERVICE_PROCESS_START=%s\n' "$process_started"
+            printf 'BACKEND_EXPECTED_WORKING_DIRECTORY=%s\n' "$([ "$working_directory" = "$EXPECTED_WORKING_DIRECTORY" ] && printf YES || printf NO)"
+            printf 'BACKEND_VERSION_CURRENT=UNKNOWN\n'
+
+            if [ -z "$environment_file" ] || ! sudo test -r "$environment_file"; then
+              echo 'AUDIT_ERROR=SERVICE_ENV_FILE_NOT_READABLE'
+              exit 1
+            fi
+
+            env_value() {
+              sudo awk -v wanted="$1" '
+                /^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {
+                  line=$0
+                  sub(/^[[:space:]]*/, "", line)
+                  sub(/^export[[:space:]]+/, "", line)
+                  key=line
+                  sub(/[[:space:]]*=.*/, "", key)
+                  if (key == wanted) {
+                    sub(/^[^=]*=/, "", line)
+                    sub(/^[[:space:]]*/, "", line)
+                    sub(/[[:space:]]*$/, "", line)
+                    print line
+                    exit
+                  }
+                }
+              ' "$environment_file"
+            }
+            strip_quotes() {
+              printf '%s' "$1" | sed 's/^['"'"']\|['"'"']$//g'
+            }
+            safe_scalar() {
+              value="$(printf '%s' "$1" | tr -cd 'A-Za-z0-9._:+/-')"
+              [ -n "$value" ] && printf '%s' "$value" || printf MISSING
+            }
+
+            ai_enabled_raw="$(strip_quotes "$(env_value AI_ENABLED)")"
+            openai_api_key="$(strip_quotes "$(env_value OPENAI_API_KEY)")"
+            openai_model_raw="$(strip_quotes "$(env_value OPENAI_MODEL)")"
+            openai_timeout_raw="$(strip_quotes "$(env_value OPENAI_TIMEOUT)")"
+            find_menu_timeout_raw="$(strip_quotes "$(env_value OPENAI_FIND_MENU_TIMEOUT)")"
+            menu_profile_timeout_raw="$(strip_quotes "$(env_value OPENAI_MENU_PROFILE_TIMEOUT)")"
+            max_output_tokens_raw="$(strip_quotes "$(env_value OPENAI_MAX_OUTPUT_TOKENS)")"
+
+            case "$(printf '%s' "$ai_enabled_raw" | tr '[:upper:]' '[:lower:]')" in
+              true) ai_enabled_safe="true" ;;
+              false) ai_enabled_safe="false" ;;
+              *) ai_enabled_safe="MISSING" ;;
+            esac
+            if sudo grep -Eq '^[[:space:]]*(export[[:space:]]+)?OPENAI_API_KEY[[:space:]]*=' "$environment_file"; then
+              api_key_present="YES"
+            else
+              api_key_present="NO"
+            fi
+            [ -n "$openai_api_key" ] && api_key_nonempty="YES" || api_key_nonempty="NO"
+            openai_model="$(safe_scalar "$openai_model_raw")"
+            [ -n "$openai_timeout_raw" ] && openai_timeout="$(safe_scalar "$openai_timeout_raw")" || openai_timeout="20s_DEFAULT"
+            [ -n "$find_menu_timeout_raw" ] && find_menu_timeout="$(safe_scalar "$find_menu_timeout_raw")" || find_menu_timeout="60s_DEFAULT"
+            [ -n "$menu_profile_timeout_raw" ] && menu_profile_timeout="$(safe_scalar "$menu_profile_timeout_raw")" || menu_profile_timeout="40s_DEFAULT"
+            [ -n "$max_output_tokens_raw" ] && max_output_tokens="$(safe_scalar "$max_output_tokens_raw")" || max_output_tokens="800_DEFAULT"
+            unset openai_api_key
+
+            echo '================ AI ENVIRONMENT ================'
+            printf 'AI_ENABLED=%s\n' "$ai_enabled_safe"
+            printf 'OPENAI_API_KEY_PRESENT=%s\n' "$api_key_present"
+            printf 'OPENAI_API_KEY_NONEMPTY=%s\n' "$api_key_nonempty"
+            printf 'OPENAI_MODEL=%s\n' "$openai_model"
+            printf 'OPENAI_TIMEOUT=%s\n' "$openai_timeout"
+            printf 'OPENAI_FIND_MENU_TIMEOUT=%s\n' "$find_menu_timeout"
+            printf 'OPENAI_MENU_PROFILE_TIMEOUT=%s\n' "$menu_profile_timeout"
+            printf 'OPENAI_MAX_OUTPUT_TOKENS=%s\n' "$max_output_tokens"
+
+            database_url="$(strip_quotes "$(env_value DATABASE_URL)")"
+            if [ -z "$database_url" ]; then
+              echo 'AUDIT_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+            if ! command -v python3 >/dev/null 2>&1 || ! command -v psql >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=REQUIRED_AUDIT_TOOL_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
+            import os
+            import re
+            import urllib.parse
+
+            raw = os.environ["DATABASE_URL"].strip()
+            scheme, separator, remainder = raw.partition("://")
+            if separator != "://" or scheme not in ("postgres", "postgresql"):
+                raise SystemExit(2)
+            match = re.fullmatch(r"([^/?#]*)(.*)", remainder, flags=re.DOTALL)
+            if match is None:
+                raise SystemExit(2)
+            authority, suffix = match.groups()
+            userinfo, credential_separator, hostinfo = authority.rpartition("@")
+            if not credential_separator:
+                hostinfo = authority
+            parsed_host = urllib.parse.urlsplit("//" + hostinfo)
+            if not parsed_host.hostname:
+                raise SystemExit(2)
+            credentials = ""
+            if credential_separator:
+                raw_username, password_separator, raw_password = userinfo.partition(":")
+                credentials = urllib.parse.quote(urllib.parse.unquote(raw_username), safe="")
+                if password_separator:
+                    credentials += ":" + urllib.parse.quote(urllib.parse.unquote(raw_password), safe="")
+                credentials += "@"
+            hostname = parsed_host.hostname
+            formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
+            normalized_authority = credentials + formatted_host
+            if parsed_host.port is not None:
+                normalized_authority += ":" + str(parsed_host.port)
+            print(scheme + "://" + normalized_authority + suffix)
+            ')" || {
+              echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            }
+            unset database_url
+
+            sql_read() {
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+            }
+
+            prospect_count="$(sql_read "SELECT COUNT(*) FROM public.prospects WHERE place_name='Tahu Gejrot Bang Jack Viral';")"
+            prospect_id="UNKNOWN"
+            analysis_exists="NO"
+            analysis_status="NONE"
+            analysis_error="NONE"
+            summary_present="NO"
+            discovery_present="NO"
+            profiling_present="NO"
+            if [ "$prospect_count" = "1" ]; then
+              prospect_id="$(sql_read "SELECT id FROM public.prospects WHERE place_name='Tahu Gejrot Bang Jack Viral';")"
+              analysis_exists="$(sql_read "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid) THEN 'YES' ELSE 'NO' END;")"
+              if [ "$analysis_exists" = "YES" ]; then
+                analysis_status="$(sql_read "SELECT COALESCE(NULLIF(status,''),'NONE') FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid;")"
+                analysis_error="$(sql_read "SELECT COALESCE(NULLIF(error_code,''),'NONE') FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid;")"
+                summary_present="$(sql_read "SELECT CASE WHEN summary_json IS NOT NULL AND summary_json <> 'null'::jsonb THEN 'YES' ELSE 'NO' END FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid;")"
+                discovery_present="$(sql_read "SELECT CASE WHEN menu_json IS NOT NULL AND menu_json ? 'discovery' AND menu_json->'discovery' <> 'null'::jsonb THEN 'YES' ELSE 'NO' END FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid;")"
+                profiling_present="$(sql_read "SELECT CASE WHEN menu_json IS NOT NULL AND menu_json ? 'profiling' AND menu_json->'profiling' <> 'null'::jsonb THEN 'YES' ELSE 'NO' END FROM public.prospect_ai_analyses WHERE prospect_id='$prospect_id'::uuid;")"
+              fi
+            fi
+            analysis_status="$(safe_scalar "$analysis_status")"
+            analysis_error="$(safe_scalar "$analysis_error")"
+
+            echo '================ VPS AI PERSISTENCE ================'
+            printf 'PROSPECT_FOUND=%s\n' "$([ "$prospect_count" = "1" ] && printf YES || printf NO)"
+            printf 'PROSPECT_ID=%s\n' "$prospect_id"
+            printf 'AI_ANALYSIS_ROW_EXISTS=%s\n' "$analysis_exists"
+            printf 'AI_ANALYSIS_STATUS=%s\n' "$analysis_status"
+            printf 'AI_ANALYSIS_ERROR_CODE=%s\n' "$analysis_error"
+            printf 'SUMMARY_PRESENT=%s\n' "$summary_present"
+            printf 'DISCOVERY_PRESENT=%s\n' "$discovery_present"
+            printf 'PROFILING_PRESENT=%s\n' "$profiling_present"
+
+            journal_json="$(sudo journalctl -u "$SERVICE_NAME" --since '30 minutes ago' -n 300 --no-pager -o json 2>/dev/null || true)"
+            printf '%s\n' "$journal_json" | AI_ENABLED_SAFE="$ai_enabled_safe" API_KEY_NONEMPTY="$api_key_nonempty" MODEL_SAFE="$openai_model" ANALYSIS_EXISTS="$analysis_exists" SUMMARY_PRESENT="$summary_present" DISCOVERY_PRESENT="$discovery_present" python3 -c '
+            import json
+            import os
+            import re
+            import shlex
+            import sys
+
+            allowed = re.compile(r"^[A-Za-z0-9._:/+-]{1,160}$")
+            def safe(value, default="UNKNOWN"):
+                value = str(value or "").strip()
+                return value if allowed.fullmatch(value) else default
+
+            events = []
+            upstream = {}
+            for raw in sys.stdin:
+                try:
+                    message = json.loads(raw).get("MESSAGE", "")
+                    tokens = shlex.split(message)
+                except Exception:
+                    continue
+                fields = {}
+                for token in tokens:
+                    if "=" in token:
+                        key, value = token.split("=", 1)
+                        fields[key] = value
+                if "OpenAI upstream request failed" in message:
+                    request_id = safe(fields.get("request_id"), "")
+                    if request_id:
+                        upstream[request_id] = safe(fields.get("status"))
+                operation = fields.get("operation")
+                if operation in ("summary_generation", "find_menu"):
+                    fields["_message"] = message
+                    events.append(fields)
+
+            def result(operation, prefix):
+                matches = [event for event in events if event.get("operation") == operation]
+                if not matches:
+                    return {
+                        f"{prefix}_REQUEST_SEEN": "NO", f"{prefix}_HTTP_STATUS": "UNKNOWN",
+                        f"{prefix}_SAFE_ERROR": "UNKNOWN", f"{prefix}_FAILURE_STAGE": "UNKNOWN",
+                        f"{prefix}_OPENAI_REACHED": "UNKNOWN", f"{prefix}_OPENAI_HTTP_STATUS": "UNKNOWN",
+                        f"{prefix}_OPENAI_REQUEST_ID": "UNKNOWN", f"{prefix}_DURATION_MS": "UNKNOWN",
+                    }
+                event = matches[-1]
+                code = safe(event.get("safe_error_code"))
+                request_id = safe(event.get("openai_request_id"))
+                stage = safe(event.get("failure_stage") or event.get("failure_category"))
+                failed = code != "UNKNOWN" or "failed" in event.get("_message", "").lower()
+                reached = "UNKNOWN"
+                if code == "AI_NOT_CONFIGURED":
+                    reached = "NO"
+                elif request_id != "UNKNOWN" or code in ("AI_AUTHENTICATION_FAILED", "AI_REQUEST_REJECTED", "AI_RATE_LIMITED"):
+                    reached = "YES"
+                return {
+                    f"{prefix}_REQUEST_SEEN": "YES", f"{prefix}_HTTP_STATUS": "503" if failed else "UNKNOWN",
+                    f"{prefix}_SAFE_ERROR": code, f"{prefix}_FAILURE_STAGE": stage,
+                    f"{prefix}_OPENAI_REACHED": reached,
+                    f"{prefix}_OPENAI_HTTP_STATUS": upstream.get(request_id, "UNKNOWN"),
+                    f"{prefix}_OPENAI_REQUEST_ID": request_id,
+                    f"{prefix}_DURATION_MS": safe(event.get("duration_ms")),
+                }
+
+            output = {}
+            output.update(result("summary_generation", "SUMMARY"))
+            output.update(result("find_menu", "FIND_MENU"))
+            for key, value in output.items():
+                print(f"{key}={value}")
+
+            cases = []
+            causes = []
+            if os.environ.get("AI_ENABLED_SAFE") != "true":
+                cases.append("A"); causes.append("AI_ENABLED is false or missing")
+            if os.environ.get("API_KEY_NONEMPTY") != "YES":
+                cases.append("B"); causes.append("OPENAI_API_KEY is missing or empty")
+            if os.environ.get("MODEL_SAFE") == "MISSING":
+                cases.append("D"); causes.append("OPENAI_MODEL is missing")
+            codes = {output["SUMMARY_SAFE_ERROR"], output["FIND_MENU_SAFE_ERROR"]}
+            mapping = {
+                "AI_AUTHENTICATION_FAILED": ("C", "OpenAI authentication failed"),
+                "AI_TIMEOUT": ("E", "OpenAI request timed out"),
+                "AI_REQUEST_REJECTED": ("F", "OpenAI rejected the request"),
+                "AI_RATE_LIMITED": ("F", "OpenAI rate limit rejected the request"),
+                "AI_UNAVAILABLE": ("G", "OpenAI upstream or network was unavailable"),
+                "AI_INVALID_RESPONSE": ("H", "OpenAI output was invalid or incomplete"),
+            }
+            for code in codes:
+                if code in mapping:
+                    letter, cause = mapping[code]
+                    cases.append(letter); causes.append(cause)
+            fresh_failed = (
+                os.environ.get("ANALYSIS_EXISTS") == "NO"
+                or (os.environ.get("SUMMARY_PRESENT") == "NO" and os.environ.get("DISCOVERY_PRESENT") == "NO")
+            ) and (output["SUMMARY_REQUEST_SEEN"] == "YES" or output["FIND_MENU_REQUEST_SEEN"] == "YES")
+            if fresh_failed:
+                cases.append("L"); causes.append("No persisted VPS AI result was available and fresh generation failed")
+            cases = list(dict.fromkeys(cases))
+            causes = list(dict.fromkeys(causes))
+            print("AI_RUNTIME_CASE=" + (",".join(cases) if cases else "UNKNOWN"))
+            print("EXACT_ROOT_CAUSE=" + ("; ".join(causes) if causes else "Insufficient safe log evidence"))
+            '
+            unset journal_json normalized_database_url
+
+            echo '================ FIX DECISION ================'
+            if [ "$ai_enabled_safe" != "true" ] || [ "$api_key_nonempty" != "YES" ] || [ "$openai_model" = "MISSING" ]; then
+              printf 'ENV_FIX_REQUIRED=YES\n'
+              printf 'SERVICE_RESTART_REQUIRED=YES\n'
+            else
+              printf 'ENV_FIX_REQUIRED=NO\n'
+              printf 'SERVICE_RESTART_REQUIRED=NO\n'
+            fi
+            printf 'SOURCE_FIX_REQUIRED=NO\n'
+            printf 'BACKEND_REDEPLOY_REQUIRED=NO\n'
+            printf 'FRONTEND_REDEPLOY_REQUIRED=NO\n'
+            printf 'DB_CHANGE_REQUIRED=NO\n'
+            printf 'REAL_OPENAI_CALLS=0\n'
