@@ -1,0 +1,189 @@
+name: Temporary Development Database Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-dev-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit VPS development database (read-only)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            service_user="$(sudo systemctl show "$SERVICE_NAME" --property=User --value)"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            exec_start="$(sudo systemctl show "$SERVICE_NAME" --property=ExecStart --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+
+            printf 'SERVICE_USER=%s\n' "${service_user:-UNKNOWN}"
+            printf 'SERVICE_WORKING_DIRECTORY=%s\n' "${working_directory:-UNKNOWN}"
+            printf 'SERVICE_EXEC_START_CONFIGURED=%s\n' "$([ -n "$exec_start" ] && printf YES || printf NO)"
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+            if [ -n "$environment_file" ]; then
+              printf 'SERVICE_ENVIRONMENT_FILE=%s\n' "$environment_file"
+            else
+              printf 'SERVICE_ENVIRONMENT_FILE=NONE_DECLARED\n'
+            fi
+
+            database_url=""
+            if [ -n "$environment_file" ] && sudo test -r "$environment_file"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$environment_file")"
+            fi
+
+            if [ -z "$database_url" ] && [ -n "$working_directory" ] && sudo test -r "$working_directory/.env"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$working_directory/.env")"
+              printf 'SERVICE_ENVIRONMENT_FILE=%s\n' "$working_directory/.env"
+            fi
+
+            if [ -z "$database_url" ]; then
+              main_pid="$(sudo systemctl show "$SERVICE_NAME" --property=MainPID --value)"
+              if [ "${main_pid:-0}" -gt 0 ] && sudo test -r "/proc/$main_pid/environ"; then
+                database_url="$(sudo cat "/proc/$main_pid/environ" | tr '\0' '\n' | sed -n 's/^DATABASE_URL=//p' | head -n 1)"
+              fi
+            fi
+
+            database_url="$(printf '%s' "$database_url" | sed 's/^['\"'\"']\|['\"'\"']$//g')"
+            if [ -z "$database_url" ]; then
+              echo 'AUDIT_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=PYTHON3_NOT_AVAILABLE_FOR_SAFE_URL_PARSING'
+              exit 1
+            fi
+            if ! command -v psql >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=PSQL_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            db_host="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.urlparse(os.environ["DATABASE_URL"]).hostname or "")')"
+            db_port="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; u=urllib.parse.urlparse(os.environ["DATABASE_URL"]); print(u.port or 5432)')"
+            db_name="$(DATABASE_URL="$database_url" python3 -c 'import os, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(os.environ["DATABASE_URL"]).path.lstrip("/")))')"
+
+            if [ -z "$db_host" ] || [ -z "$db_name" ]; then
+              echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            fi
+            case "$db_host" in
+              localhost|127.0.0.1|::1) db_topology="VPS_LOCALHOST" ;;
+              *) db_topology="REMOTE" ;;
+            esac
+
+            sql_value() {
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+            }
+
+            prisma_table="$(sql_value "SELECT CASE WHEN to_regclass('public._prisma_migrations') IS NULL THEN 'ABSENT' ELSE 'EXISTS' END;")"
+            if [ "$prisma_table" = "EXISTS" ]; then
+              prisma_count="$(sql_value 'SELECT COUNT(*) FROM public._prisma_migrations;')"
+              old_photo_migration="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name='202608050001_photo_tags_by_index' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) THEN 'APPLIED' ELSE 'NOT_APPLIED' END;")"
+              new_photo_migration="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name='202608140001_photo_tags_persistent_index' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) THEN 'APPLIED' ELSE 'NOT_APPLIED' END;")"
+            else
+              prisma_count="0"
+              old_photo_migration="NOT_APPLIED"
+              new_photo_migration="NOT_APPLIED"
+            fi
+
+            photo_tag_table="$(sql_value "SELECT CASE WHEN to_regclass('public.prospect_photo_tags') IS NULL THEN 'ABSENT' ELSE 'EXISTS' END;")"
+            photo_name_state="ABSENT"
+            photo_index_state="ABSENT"
+            photo_tag_rows="0"
+            photo_index_null_rows="0"
+            photo_index_nonnull_rows="0"
+            photo_indexes="NONE"
+            if [ "$photo_tag_table" = "EXISTS" ]; then
+              photo_name_state="$(sql_value "SELECT COALESCE((SELECT CASE WHEN is_nullable='YES' THEN 'EXISTS_NULLABLE' ELSE 'EXISTS_NOT_NULL' END FROM information_schema.columns WHERE table_schema='public' AND table_name='prospect_photo_tags' AND column_name='photo_name'), 'ABSENT');")"
+              photo_index_state="$(sql_value "SELECT COALESCE((SELECT CASE WHEN is_nullable='YES' THEN 'EXISTS_NULLABLE' ELSE 'EXISTS_NOT_NULL' END FROM information_schema.columns WHERE table_schema='public' AND table_name='prospect_photo_tags' AND column_name='photo_index'), 'ABSENT');")"
+              photo_tag_rows="$(sql_value 'SELECT COUNT(*) FROM public.prospect_photo_tags;')"
+              if [ "$photo_index_state" != "ABSENT" ]; then
+                photo_index_null_rows="$(sql_value 'SELECT COUNT(*) FROM public.prospect_photo_tags WHERE photo_index IS NULL;')"
+                photo_index_nonnull_rows="$(sql_value 'SELECT COUNT(*) FROM public.prospect_photo_tags WHERE photo_index IS NOT NULL;')"
+              fi
+              photo_indexes="$(sql_value "SELECT COALESCE(string_agg(indexname, ',' ORDER BY indexname), 'NONE') FROM pg_indexes WHERE schemaname='public' AND tablename='prospect_photo_tags' AND indexdef ~* '(prospect_id|photo_name|photo_index)';")"
+            fi
+
+            if [ "$photo_name_state" != "ABSENT" ] && [ "$photo_index_state" = "ABSENT" ]; then
+              photo_schema_case="A"
+            elif [ "$photo_name_state" = "ABSENT" ] && [ "$photo_index_state" = "EXISTS_NOT_NULL" ]; then
+              photo_schema_case="C"
+            elif [ "$photo_name_state" != "ABSENT" ] && [ "$photo_index_state" = "EXISTS_NULLABLE" ]; then
+              photo_schema_case="D"
+            else
+              photo_schema_case="E"
+            fi
+            if [ "$photo_schema_case" = "D" ]; then
+              runtime_photo_compatible="YES"
+            else
+              runtime_photo_compatible="NO"
+            fi
+
+            ai_analyses="$(sql_value "SELECT CASE WHEN to_regclass('public.prospect_ai_analyses') IS NULL THEN 'ABSENT' ELSE 'EXISTS' END;")"
+            ai_chats="$(sql_value "SELECT CASE WHEN to_regclass('public.prospect_ai_chats') IS NULL THEN 'ABSENT' ELSE 'EXISTS' END;")"
+            ai_chats_schema="INCOMPATIBLE"
+            if [ "$ai_chats" = "EXISTS" ]; then
+              ai_chat_columns="$(sql_value "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='prospect_ai_chats' AND column_name IN ('id','prospect_id','user_id','message','answer','skill','insight','why','recommended_action','created_at');")"
+              if [ "$ai_chat_columns" = "10" ]; then
+                ai_chats_schema="COMPATIBLE"
+              fi
+            fi
+            if [ "$ai_analyses" = "EXISTS" ] && [ "$ai_chats_schema" = "COMPATIBLE" ]; then
+              current_ai_schema_compatible="YES"
+            else
+              current_ai_schema_compatible="NO"
+            fi
+
+            source_prospect_id="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='customer_sites' AND column_name='source_prospect_id') THEN 'EXISTS' ELSE 'ABSENT' END;")"
+            source_prospect_nullable="NO"
+            source_prospect_unique="NO"
+            if [ "$source_prospect_id" = "EXISTS" ]; then
+              source_prospect_nullable="$(sql_value "SELECT CASE WHEN is_nullable='YES' THEN 'YES' ELSE 'NO' END FROM information_schema.columns WHERE table_schema='public' AND table_name='customer_sites' AND column_name='source_prospect_id';")"
+              source_prospect_unique="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_index i JOIN pg_class t ON t.oid=i.indrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' AND t.relname='customer_sites' AND i.indisunique AND (SELECT array_agg(a.attname ORDER BY k.ordinality) FROM unnest(i.indkey) WITH ORDINALITY k(attnum, ordinality) JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=k.attnum) = ARRAY['source_prospect_id']::name[]) THEN 'YES' ELSE 'NO' END;")"
+            fi
+
+            database_safe="NO"
+            if [ "$runtime_photo_compatible" = "YES" ] && [ "$current_ai_schema_compatible" = "YES" ] && [ "$source_prospect_id" = "EXISTS" ]; then
+              database_safe="YES"
+            fi
+
+            echo '================ VPS DATABASE AUDIT ================'
+            printf 'DB_HOST: %s\n' "$db_host"
+            printf 'DB_PORT: %s\n' "$db_port"
+            printf 'DB_NAME: %s\n' "$db_name"
+            printf 'DB_TOPOLOGY: %s\n' "$db_topology"
+            printf 'PRISMA_TABLE: %s\n' "$prisma_table"
+            printf 'PRISMA_MIGRATION_COUNT: %s\n' "$prisma_count"
+            printf 'OLD_PHOTO_MIGRATION: %s\n' "$old_photo_migration"
+            printf 'NEW_PHOTO_MIGRATION: %s\n' "$new_photo_migration"
+            printf 'PHOTO_TAG_TABLE: %s\n' "$photo_tag_table"
+            printf 'PHOTO_NAME: %s\n' "$photo_name_state"
+            printf 'PHOTO_INDEX: %s\n' "$photo_index_state"
+            printf 'PHOTO_TAG_ROWS: %s\n' "$photo_tag_rows"
+            printf 'PHOTO_INDEX_NULL_ROWS: %s\n' "$photo_index_null_rows"
+            printf 'PHOTO_INDEX_NONNULL_ROWS: %s\n' "$photo_index_nonnull_rows"
+            printf 'PHOTO_RELEVANT_INDEXES: %s\n' "$photo_indexes"
+            printf 'PHOTO_SCHEMA_CASE: %s\n' "$photo_schema_case"
+            printf 'PROSPECT_AI_ANALYSES: %s\n' "$ai_analyses"
+            printf 'PROSPECT_AI_CHATS: %s\n' "$ai_chats"
+            printf 'PROSPECT_AI_CHATS_SCHEMA: %s\n' "$ai_chats_schema"
+            printf 'SOURCE_PROSPECT_ID: %s\n' "$source_prospect_id"
+            printf 'SOURCE_PROSPECT_NULLABLE: %s\n' "$source_prospect_nullable"
+            printf 'SOURCE_PROSPECT_UNIQUE: %s\n' "$source_prospect_unique"
+            printf 'RUNTIME_PHOTO_SCHEMA_COMPATIBLE: %s\n' "$runtime_photo_compatible"
+            printf 'CURRENT_AI_SCHEMA_COMPATIBLE: %s\n' "$current_ai_schema_compatible"
+            printf 'DATABASE_SAFE_FOR_MIGRATION_FREEZE_DEPLOY: %s\n' "$database_safe"
