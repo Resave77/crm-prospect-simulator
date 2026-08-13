@@ -73,25 +73,38 @@ jobs:
 
             normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
             import os
+            import re
             import urllib.parse
 
             raw = os.environ["DATABASE_URL"].strip()
             if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("\"", "\x27"):
                 raw = raw[1:-1]
-            parsed = urllib.parse.urlsplit(raw)
-            if parsed.scheme not in ("postgres", "postgresql") or not parsed.hostname:
+            scheme, separator, remainder = raw.partition("://")
+            if separator != "://" or scheme not in ("postgres", "postgresql"):
                 raise SystemExit(2)
-            username = urllib.parse.unquote(parsed.username or "")
-            password = urllib.parse.unquote(parsed.password or "")
-            credentials = urllib.parse.quote(username, safe="")
-            if parsed.password is not None:
-                credentials += ":" + urllib.parse.quote(password, safe="")
-            hostname = parsed.hostname
+            authority_match = re.fullmatch(r"([^/?#]*)(.*)", remainder, flags=re.DOTALL)
+            if authority_match is None:
+                raise SystemExit(2)
+            authority, suffix = authority_match.groups()
+            userinfo, credential_separator, hostinfo = authority.rpartition("@")
+            if not credential_separator:
+                hostinfo = authority
+            parsed_host = urllib.parse.urlsplit("//" + hostinfo)
+            if not parsed_host.hostname:
+                raise SystemExit(2)
+            credentials = ""
+            if credential_separator:
+                raw_username, password_separator, raw_password = userinfo.partition(":")
+                credentials = urllib.parse.quote(urllib.parse.unquote(raw_username), safe="")
+                if password_separator:
+                    credentials += ":" + urllib.parse.quote(urllib.parse.unquote(raw_password), safe="")
+                credentials += "@"
+            hostname = parsed_host.hostname
             formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
-            authority = (credentials + "@" if parsed.username is not None else "") + formatted_host
-            if parsed.port is not None:
-                authority += ":" + str(parsed.port)
-            print(urllib.parse.urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment)))
+            normalized_authority = credentials + formatted_host
+            if parsed_host.port is not None:
+                normalized_authority += ":" + str(parsed_host.port)
+            print(scheme + "://" + normalized_authority + suffix)
             ')" || {
               echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
               exit 1
