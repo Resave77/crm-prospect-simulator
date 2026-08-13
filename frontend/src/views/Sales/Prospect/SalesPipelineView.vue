@@ -7,11 +7,9 @@ import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Textarea from 'primevue/textarea'
 import { BOARD_STATUSES, PIPELINE_STAGES, nextStage, previousStage } from '../../../domain/pipeline'
-import { useAuthStore } from '../../../stores/auth'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 import PipelineProspectCard from '../../../components/sales/pipeline/PipelineProspectCard.vue'
-import ProspectPageSwitcher from '../../../components/sales/ProspectPageSwitcher.vue'
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
 
 type PipelineGroup = 'ALL' | 'NEW_LEAD' | 'IN_PROGRESS' | 'WON' | 'LOST'
@@ -30,7 +28,6 @@ const SECONDARY_OPTIONS: { value: SecondaryStage; label: string }[] = [
 
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
 const crm = useCrmStore()
 const toast = useToast()
 
@@ -194,14 +191,6 @@ const needsAttentionProspects = computed(() => {
     return prospects.value.filter(p => p.status === 'NEW_LEAD').slice(0, 3)
   }
   return []
-})
-
-const canViewMyProspects = computed(() => auth.hasPermission('view_my_prospects'))
-
-const switcherDestinations = computed<('pipeline' | 'my-prospects')[]>(() => {
-  const destinations: ('pipeline' | 'my-prospects')[] = ['pipeline']
-  if (canViewMyProspects.value) destinations.push('my-prospects')
-  return destinations
 })
 
 watch([activeGroup, secondaryStage, searchQuery, appliedFilters, sortOption], () => {
@@ -410,9 +399,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="pl-switcher-bar">
-      <ProspectPageSwitcher :destinations="switcherDestinations" />
-      <span v-if="isDesktop" class="pl-total-badge">{{ prospects.length }} active</span>
+    <div v-if="isDesktop" class="pl-switcher-bar">
+      <span class="pl-total-badge">{{ prospects.length }} active</span>
     </div>
 
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
@@ -731,15 +719,14 @@ onBeforeUnmount(() => {
   border: 1px solid #bfdbfe; border-radius: 20px; font-size: 0.72rem; font-weight: 700; white-space: nowrap;
 }
 
-/* ── WORKSPACE SWITCHER BAR ── */
+/* ── META BAR ── */
 .pl-switcher-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.5rem;
   margin-bottom: 10px;
 }
-.pl-switcher-bar .psw { width: min(100%, 26rem); }
 .pl-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: #94a3b8; font-size: 0.82rem; font-weight: 600; }
 .pl-view-target-btn { margin-top: 6px; }
 

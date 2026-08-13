@@ -113,12 +113,16 @@ func (a *InitialAnalyzer) Get(ctx context.Context, id uuid.UUID) (InitialAnalysi
 }
 
 func (a *InitialAnalyzer) Chat(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, message, skill string) (string, error) {
+	return a.ChatWithHistory(ctx, review, details, comments, nil, message, skill)
+}
+
+func (a *InitialAnalyzer) ChatWithHistory(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, history []ChatMessage, message, skill string) (string, error) {
 	analysis, err := a.Get(ctx, review.Prospect.ID)
 	if err != nil {
 		return "", err
 	}
 	saved := map[string]any{"summary": analysis.Summary, "menu": analysis.Menu, "status": analysis.Status}
-	result, err := a.client.AskProspectAIWithSkill(ctx, review, details, comments, nil, message, skill, saved)
+	result, err := a.client.AskProspectAIWithSkill(ctx, review, details, comments, history, message, skill, saved)
 	if err != nil {
 		return "", err
 	}

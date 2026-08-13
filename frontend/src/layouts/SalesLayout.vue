@@ -99,7 +99,6 @@ const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/sales/dashboard': 'Home',
     '/sales/my-customers': 'My Customers',
-    '/sales/my-prospects': 'My Prospects',
     '/sales/pipeline': 'Prospect Pipeline',
     '/sales/history': 'Visit History',
     '/sales/profile': 'My Profile',

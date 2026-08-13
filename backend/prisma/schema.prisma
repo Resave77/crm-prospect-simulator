@@ -60,6 +60,7 @@ model User {
   convertedCustomerSites CustomerSite[]     @relation("CustomerConverter")
   prospectVisits ProspectVisit[]             @relation("ProspectVisitSalesExecutive")
   prospectComments ProspectComment[]        @relation("ProspectCommentUser")
+  prospectAIChats  ProspectAIChat[]
 
   @@index([salesRoleId])
   @@index([deletedAt])
@@ -113,6 +114,7 @@ model Prospect {
   comments                 ProspectComment[]        @relation("ProspectCommentProspect")
   photoTags                ProspectPhotoTag[]      @relation("ProspectPhotoTagProspect")
   aiAnalysis              ProspectAIAnalysis?
+  aiChats                 ProspectAIChat[]
 
   @@index([assignedSalesExecutiveId, status])
   @@index([status, createdAt])
@@ -129,6 +131,25 @@ model ProspectAIAnalysis {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   prospect    Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   @@map("prospect_ai_analyses")
+}
+
+model ProspectAIChat {
+  id                String   @id @default(uuid()) @db.Uuid
+  prospectId        String   @map("prospect_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  message           String
+  answer            String
+  skill             String
+  insight           String?
+  why               String?
+  recommendedAction String?  @map("recommended_action")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  prospect          Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([prospectId, createdAt])
+  @@index([userId, createdAt])
+  @@map("prospect_ai_chats")
 }
 
 model ProspectVisit {

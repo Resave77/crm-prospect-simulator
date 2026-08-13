@@ -276,6 +276,19 @@ type ProspectComment struct {
 	UpdatedAt   time.Time           `json:"updatedAt"`
 }
 
+type ProspectAIChat struct {
+	ID                uuid.UUID `json:"id"`
+	ProspectID        uuid.UUID `json:"prospectId"`
+	UserID            uuid.UUID `json:"userId"`
+	Message           string    `json:"message"`
+	Answer            string    `json:"answer"`
+	Skill             string    `json:"skill"`
+	Insight           string    `json:"insight,omitempty"`
+	Why               string    `json:"why,omitempty"`
+	RecommendedAction string    `json:"recommendedAction,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
 type CommentAttachment struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`

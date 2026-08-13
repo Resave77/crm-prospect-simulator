@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	ErrNotFound                  = errors.New("prospect not found")
-	ErrInvalidStatus             = errors.New("prospect status does not allow this operation")
-	ErrNotOwner                  = errors.New("prospect is not assigned to this sales executive")
-	ErrDuplicate                 = errors.New("Google Place is already saved as a prospect")
-	ErrVisitOpen                 = errors.New("prospect already has an open visit")
-	ErrVisitClosed               = errors.New("visit is already checked out")
-	ErrConflict                  = errors.New("prospect is still referenced by existing records")
+	ErrNotFound      = errors.New("prospect not found")
+	ErrInvalidStatus = errors.New("prospect status does not allow this operation")
+	ErrNotOwner      = errors.New("prospect is not assigned to this sales executive")
+	ErrDuplicate     = errors.New("Google Place is already saved as a prospect")
+	ErrVisitOpen     = errors.New("prospect already has an open visit")
+	ErrVisitClosed   = errors.New("visit is already checked out")
+	ErrConflict      = errors.New("prospect is still referenced by existing records")
 )
 
 type Repository interface {
@@ -48,4 +48,10 @@ type Repository interface {
 	ProspectAccessibleTo(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 	ExistingCustomerPlaceIDs(context.Context, []string) (map[string]bool, error)
 	ListCustomerMarkers(context.Context) ([]model.CustomerMarker, error)
+}
+
+type AIChatRepository interface {
+	CreateAIChat(context.Context, model.ProspectAIChat) (model.ProspectAIChat, error)
+	ListAIChats(context.Context, uuid.UUID, int) ([]model.ProspectAIChat, error)
+	ListRecentAIChats(context.Context, uuid.UUID, int) ([]model.ProspectAIChat, error)
 }

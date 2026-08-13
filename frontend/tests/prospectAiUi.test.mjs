@@ -22,16 +22,28 @@ test('Prospect Detail pages include AI prep components behind expected permissio
   }
 })
 
-test('AI prep components are inert and do not call OpenAI or CRM generation endpoints', async () => {
+test('AI prep components keep OpenAI access backend-only and activate Tanya only on submit', async () => {
   const combined = [await aiSummary(), await aiMenu(), await tanyaAi()].join('\n')
 
   assert.equal(combined.includes('api.openai.com'), false)
   assert.equal(combined.includes('OPENAI_API_KEY'), false)
   assert.equal(combined.includes('getAIStatus'), false)
   assert.equal(combined.includes('GenerateText'), false)
-  assert.equal(combined.includes('@submit="blockSubmit"'), true)
+  assert.equal(combined.includes('askProspectAI'), true)
+  assert.equal(combined.includes('@submit.prevent="submit"'), true)
   assert.equal(combined.includes('@keydown.enter.exact.prevent'), true)
-  assert.match(combined, /disabled/)
+  assert.equal(combined.includes('onMounted'), true)
+  assert.match(combined, /getProspectAIChatHistory/)
+})
+
+test('AI menu profiling waits for real menu data instead of Google photos', async () => {
+  const source = await aiMenu()
+
+  assert.match(source, /MENU_DATA_NOT_AVAILABLE/)
+  assert.match(source, /Menu data not available yet/)
+  assert.equal(source.includes('props.placeDetails?.photos'), false)
+  assert.equal(source.includes('photo.isMenu'), false)
+  assert.equal(source.includes('Menu photo'), false)
 })
 
 test('Prospect Detail keeps secure photo gallery flow for photos and menu', async () => {

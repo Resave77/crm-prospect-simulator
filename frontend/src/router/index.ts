@@ -59,7 +59,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/sales/dashboard' },
         { path: 'dashboard', name: 'SalesDashboard', component: () => import('../views/Sales/Dashboard/SalesDashboardView.vue'), meta: { permission: 'view_sales_dashboard' } },
-        { path: 'my-prospects', name: 'SalesMyProspects', component: () => import('../views/Sales/Prospect/MyProspectsView.vue'), meta: { permission: 'view_my_prospects' } },
+        { path: 'my-prospects', redirect: '/sales/pipeline' },
         { path: 'my-prospects/:id', name: 'SalesProspectDetail', component: () => import('../views/Sales/Prospect/ProspectDetailView.vue'), meta: { permission: 'view_my_prospect_detail' } },
         { path: 'my-prospects/:id/check-in', name: 'SalesProspectCheckIn', component: () => import('../views/Sales/Visit/CheckInView.vue'), meta: { permission: 'check_in_prospect', entityType: 'prospect' } },
         { path: 'my-prospects/:id/check-in/success', name: 'SalesProspectCheckInSuccess', component: () => import('../views/Sales/Visit/CheckInSuccessView.vue'), meta: { permission: 'check_in_prospect', entityType: 'prospect' } },

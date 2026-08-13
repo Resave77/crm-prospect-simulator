@@ -101,6 +101,18 @@ func (h *Handler) ChatAI(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, payload)
 }
 
+func (h *Handler) ChatAIHistory(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	items, err := h.service.AIChatHistory(c.UserContext(), actor(c), id)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
 func (h *Handler) Decide(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

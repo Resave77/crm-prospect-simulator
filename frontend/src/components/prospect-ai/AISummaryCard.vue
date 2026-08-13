@@ -14,7 +14,6 @@ defineProps<{
         <p class="ai-eyebrow"><i class="pi pi-sparkles" /> AI Summary</p>
         <h2>Prospect insight</h2>
       </div>
-      <button class="ai-icon-btn" type="button" disabled aria-label="Expand AI summary"><i class="pi pi-window-maximize" /></button>
     </div>
 
     <div v-if="!analysis || analysis.status === 'PENDING'" class="ai-state ai-empty">

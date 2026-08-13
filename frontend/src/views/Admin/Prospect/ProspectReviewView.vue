@@ -37,6 +37,7 @@ const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const userCoords = ref<{ lat: number; lng: number } | null>(null)
 const isDesktop = ref(false)
+const showTanyaExpand = computed(() => isDesktop.value && window.innerWidth >= 1200)
 const photoGalleryShell = ref<HTMLElement | null>(null)
 let geoWatchId: number | null = null
 let desktopQuery: MediaQueryList | null = null
@@ -157,7 +158,7 @@ function scrollPhotos(direction: -1 | 1) {
 }
 
 onMounted(async () => {
-  desktopQuery = window.matchMedia('(min-width: 1024px)')
+  desktopQuery = window.matchMedia('(min-width: 1200px)')
   syncDesktop(desktopQuery)
   desktopQuery.addEventListener('change', syncDesktop)
   window.addEventListener('keydown', onGlobalKeydown)
@@ -444,6 +445,7 @@ onBeforeUnmount(() => {
           </section>
 
           <AIMenuProfilingCard
+            :analysis="initialAnalysis"
             v-if="canViewAIMenuProfiling"
             class="detail-ai-menu"
             :place-details="placeDetails"
@@ -577,17 +579,20 @@ onBeforeUnmount(() => {
           </section>
 
           <div class="discussion-shell ai-shell ai-shell-discussion">
-            <button class="expand-control" type="button" title="Expand Discussion" aria-label="Expand Discussion" @click="openExpandedPanel('discussion')">
+            <button v-if="isDesktop" class="expand-control" type="button" title="Expand Discussion" aria-label="Expand Discussion" @click="openExpandedPanel('discussion')">
               <i class="pi pi-window-maximize" /><span>Expand</span>
             </button>
             <ProspectComments class="detail-comments" :prospect-id="review.prospect.id" role="ADMINISTRATOR" :embedded="isDesktop" />
           </div>
 
           <div v-if="canUseProspectAIChat" class="ai-shell ai-shell-chat">
-            <button class="expand-control" type="button" title="Expand Tanya AI" aria-label="Expand Tanya AI" @click="openExpandedPanel('chat')">
-              <i class="pi pi-window-maximize" /><span>Expand</span>
-            </button>
-            <TanyaAICard class="detail-tanya-ai" :prospect-id="review.prospect.id" />
+            <TanyaAICard class="detail-tanya-ai" :prospect-id="review.prospect.id" @expand="openExpandedPanel('chat')">
+              <template #header-action>
+                <button v-if="showTanyaExpand" class="expand-control tanya-expand-control" type="button" title="Expand Tanya AI" aria-label="Expand Tanya AI" @click.stop="openExpandedPanel('chat')">
+                  <i class="pi pi-window-maximize" /><span>Expand</span>
+                </button>
+              </template>
+            </TanyaAICard>
           </div>
 
           <!-- Optional supporting data only renders when it has actual content -->
@@ -673,7 +678,7 @@ onBeforeUnmount(() => {
       <!-- Functional expand overlay. No OpenAI generation is triggered by opening/closing it. -->
       <Teleport to="body">
         <div v-if="expandedPanel" class="expand-overlay" @click.self="closeExpandedPanel">
-          <section class="expand-dialog" role="dialog" aria-modal="true">
+          <section :class="['expand-dialog', `expand-dialog-${expandedPanel}`, { 'expand-dialog--chat': expandedPanel === 'chat' }]" role="dialog" aria-modal="true">
             <header class="expand-dialog-header">
               <div>
                 <span>{{ expandedPanel === 'summary' ? 'AI Summary' : expandedPanel === 'discussion' ? 'Discussion' : 'Tanya AI' }}</span>
@@ -682,9 +687,9 @@ onBeforeUnmount(() => {
               <button type="button" aria-label="Close expanded panel" @click="closeExpandedPanel"><i class="pi pi-times" /></button>
             </header>
             <div class="expand-dialog-body">
-              <AISummaryCard v-if="expandedPanel === 'summary'" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
-              <ProspectComments v-else-if="expandedPanel === 'discussion'" :prospect-id="review.prospect.id" role="ADMINISTRATOR" :embedded="true" />
-              <TanyaAICard v-else-if="expandedPanel === 'chat'" :prospect-id="review.prospect.id" />
+          <AISummaryCard v-if="expandedPanel === 'summary'" class="expanded-content-card" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
+          <ProspectComments v-else-if="expandedPanel === 'discussion'" class="expanded-content-card" :prospect-id="review.prospect.id" role="ADMINISTRATOR" :embedded="true" expanded />
+          <TanyaAICard v-else-if="expandedPanel === 'chat'" class="expanded-content-card" :prospect-id="review.prospect.id" expanded />
             </div>
           </section>
         </div>
@@ -889,44 +894,71 @@ onBeforeUnmount(() => {
  * A small white mask keeps that old control from showing underneath the real button.
  * This avoids editing/re-breaking the child components.
  */
-.ai-shell::after {
-  content: '';
+.ai-shell-summary > .expand-control,
+.ai-shell-discussion > .expand-control {
   position: absolute;
-  top: .42rem;
-  right: .42rem;
-  z-index: 24;
-  width: 5.7rem;
-  height: 2.05rem;
-  border-radius: 8px;
-  background: #fff;
-  pointer-events: none;
+  top: .6rem;
+  right: .6rem;
+  z-index: 40;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: .38rem;
+  padding: .3rem .62rem;
+  border: 1px solid #f3cdd2;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #fff, #fff5f6);
+  color: #b42332;
+  font-size: .6rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(214, 40, 57, .1), 0 1px 3px rgba(15, 23, 42, .05);
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
 }
+.ai-shell-summary > .expand-control:hover,
+.ai-shell-discussion > .expand-control:hover {
+  border-color: #e63946;
+  background: #fff;
+  color: #d62839;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(214, 40, 57, .16);
+}
+.ai-shell-summary > .expand-control i,
+.ai-shell-discussion > .expand-control i { font-size: .62rem; }
 
-.ai-shell > .expand-control {
-  position: absolute;
-  top: .58rem;
-  right: .58rem;
-  z-index: 30;
+/* Tanya AI header: [Tanya AI] [Sales copilot] [Expand] as one normal flex row.
+   The Expand button is view-owned and rendered through the card's header slot, so
+   nothing is absolutely positioned over the badge and mobile hides it without a ghost. */
+.ai-shell-chat :deep(.tanya-head) { justify-content: flex-start; }
+.ai-shell-chat .tanya-expand-control {
+  margin-left: auto;
+  flex-shrink: 0;
   min-height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: .3rem;
-  padding: .28rem .48rem;
-  border: 1px solid var(--detail-red-border);
-  border-radius: 7px;
-  background: #fff;
-  color: var(--detail-accent);
-  font-size: .57rem;
-  font-weight: 750;
+  gap: .38rem;
+  padding: .28rem .6rem;
+  border: 1px solid #f3cdd2;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #fff, #fff5f6);
+  color: #b42332;
+  font-size: .6rem;
+  font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(53, 30, 35, .07);
+  box-shadow: 0 4px 14px rgba(214, 40, 57, .1), 0 1px 3px rgba(15, 23, 42, .05);
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
 }
-.ai-shell > .expand-control:hover {
-  border-color: #e4a6ae;
-  background: var(--detail-soft);
-  color: var(--detail-accent-strong);
+.ai-shell-chat .tanya-expand-control:hover {
+  border-color: #e63946;
+  background: #fff;
+  color: #d62839;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(214, 40, 57, .16);
 }
-.ai-shell > .expand-control i { font-size: .61rem; }
+.ai-shell-chat .tanya-expand-control i { font-size: .62rem; }
+@media (max-width: 1199px) {
+  .ai-shell-chat .tanya-expand-control { display: none !important; }
+}
 .ai-shell > :deep(*) { min-width: 0; }
 .detail-page :deep(.ai-card),
 .detail-page :deep(.pai-card),
@@ -1060,12 +1092,13 @@ onBeforeUnmount(() => {
 /* Expand overlay */
 .expand-overlay {
   position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center;
-  padding: 1rem; background: rgba(24, 18, 20, .55); backdrop-filter: blur(4px);
+  padding: clamp(.75rem, 3vw, 2rem); background: rgba(24, 18, 20, .55); backdrop-filter: blur(4px);
+  pointer-events: auto;
 }
 .expand-dialog {
-  width: min(920px, 96vw); max-height: min(820px, 92vh); overflow: hidden;
+  width: min(1080px, calc(100vw - 80px)); max-height: 88vh; overflow: hidden;
   display: grid; grid-template-rows: auto minmax(0, 1fr);
-  border: 1px solid #eadfe1; border-radius: 14px; background: #fff;
+  border: 1px solid #eadfe1; border-radius: 18px; background: #fff;
   box-shadow: 0 28px 80px rgba(15,23,42,.25);
 }
 .expand-dialog-header {
@@ -1076,8 +1109,51 @@ onBeforeUnmount(() => {
 .expand-dialog-header span { color: var(--detail-accent); font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .expand-dialog-header strong { font-size: .82rem; }
 .expand-dialog-header button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 9px; background: #fff; color: var(--detail-accent); cursor: pointer; }
-.expand-dialog-body { min-height: 0; overflow: auto; padding: 1rem; }
-.expand-dialog-body :deep(.pc-list) { max-height: none !important; overflow: visible !important; }
+.expand-dialog-body { min-height: 0; overflow: auto; padding: clamp(1rem, 2.5vw, 1.5rem); }
+.expand-dialog-body > * { width: 100%; min-width: 0; }
+.expand-dialog-summary { height: auto; }
+.expand-dialog-summary .expand-dialog-body { overflow: visible; }
+.expand-dialog-summary .expand-dialog-body :deep(.ai-card) { box-shadow: none; }
+.expand-dialog-discussion, .expand-dialog-chat { height: min(760px, 78vh); }
+.expand-dialog-discussion .expand-dialog-body, .expand-dialog-chat .expand-dialog-body { display: flex; min-height: 0; }
+.expand-dialog-discussion .expand-dialog-body :deep(.pc-floating), .expand-dialog-chat .expand-dialog-body :deep(.tanya-card) { flex: 1 1 auto; min-height: 0; }
+.expand-dialog-discussion .expand-dialog-body :deep(.pc-wrap) { position: static; width: 100%; height: 100%; min-height: 0; }
+.expand-dialog-discussion .expand-dialog-body :deep(.pc-list) { max-height: none !important; overflow-y: auto !important; justify-content: flex-start; }
+
+/* Discussion: flush chat surface, seamless white header chain */
+.expand-dialog-discussion .expand-dialog-body { padding: 0; }
+.expand-dialog-discussion .expand-dialog-header {
+  background: #fff;
+  border-bottom-color: #e7ebf1;
+}
+.expand-dialog-discussion .expand-dialog-header button { background: #fff0f1; border-color: #ffd9dc; color: #b42332; }
+.expand-dialog-discussion .expand-dialog-body :deep(.pc-wrap) { border: 0; box-shadow: none; }
+
+/* Tanya AI chat variant: the conversation fills the whole modal body */
+.expand-dialog--chat { height: min(760px, 78vh); }
+.expand-dialog--chat .expand-dialog-body {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+}
+.expand-dialog--chat .expand-dialog-body :deep(.tanya-card) {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+.expand-dialog-chat .expand-dialog-header {
+  padding: .75rem clamp(1rem, 3vw, 1.5rem);
+  background: #fff;
+  border-bottom-color: #e7ebf1;
+}
+.expand-dialog-chat .expand-dialog-header span { color: #b42332; }
+.expand-dialog-chat .expand-dialog-header button {
+  background: #fff0f1;
+  border-color: #ffd9dc;
+  color: #b42332;
+}
 
 /* Desktop */
 @media (min-width: 1200px) {
@@ -1195,7 +1271,6 @@ onBeforeUnmount(() => {
   .dcard-reviews { order: 80; }
   .history-card { order: 90; }
 
-  .ai-shell::after { width: 5.5rem; }
 }
 
 /* Mobile */
@@ -1265,27 +1340,30 @@ onBeforeUnmount(() => {
     width: 100%;
     min-width: 0;
   }
-  .ai-shell::after {
-    top: .35rem;
-    right: .35rem;
-    width: 2.25rem;
-    height: 2.1rem;
-  }
-  .ai-shell > .expand-control {
-    top: .47rem;
-    right: .47rem;
-    width: 29px;
-    height: 29px;
-    min-height: 29px;
+  .ai-shell-summary > .expand-control,
+  .ai-shell-discussion > .expand-control {
+    top: .5rem;
+    right: .5rem;
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
     padding: 0;
     justify-content: center;
+    border-radius: 50%;
   }
-  .ai-shell > .expand-control span { display: none; }
+  .ai-shell-summary > .expand-control span,
+  .ai-shell-discussion > .expand-control span { display: none; }
+  .ai-shell-summary > .expand-control i,
+  .ai-shell-discussion > .expand-control i { font-size: .66rem; }
 
   .expand-dialog {
     width: 100%;
-    max-height: 94vh;
-    border-radius: 12px;
+    max-height: 94dvh;
+    border-radius: 16px;
+  }
+  .expand-dialog-discussion, .expand-dialog-chat { height: min(760px, 92dvh); }
+  .expand-dialog-chat .expand-dialog-header {
+    padding: .6rem .85rem;
   }
 
   .dcard {

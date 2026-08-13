@@ -119,7 +119,7 @@ function goBack() {
 }
 
 function goBackToList() {
-  router.push(resolvedEntityType.value === 'customer' ? '/sales/my-customers' : '/sales/my-prospects')
+  router.push(resolvedEntityType.value === 'customer' ? '/sales/my-customers' : '/sales/pipeline')
 }
 
 function startElapsedTimer() {

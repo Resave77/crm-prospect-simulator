@@ -697,6 +697,58 @@ func (r *PostgresRepository) ListComments(ctx context.Context, prospectID uuid.U
 	return items, rows.Err()
 }
 
+func (r *PostgresRepository) CreateAIChat(ctx context.Context, item model.ProspectAIChat) (model.ProspectAIChat, error) {
+	item.ID = uuid.New()
+	err := r.pool.QueryRow(ctx, `INSERT INTO prospect_ai_chats (id, prospect_id, user_id, message, answer, skill, insight, why, recommended_action) VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,'')) RETURNING created_at`, item.ID, item.ProspectID, item.UserID, item.Message, item.Answer, item.Skill, item.Insight, item.Why, item.RecommendedAction).Scan(&item.CreatedAt)
+	if err != nil {
+		return model.ProspectAIChat{}, fmt.Errorf("create prospect AI chat: %w", err)
+	}
+	return item, nil
+}
+
+func (r *PostgresRepository) ListAIChats(ctx context.Context, prospectID uuid.UUID, limit int) ([]model.ProspectAIChat, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, prospect_id, user_id, message, answer, skill, COALESCE(insight,''), COALESCE(why,''), COALESCE(recommended_action,''), created_at FROM prospect_ai_chats WHERE prospect_id=$1 ORDER BY created_at ASC LIMIT $2`, prospectID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list prospect AI chats: %w", err)
+	}
+	defer rows.Close()
+	items := []model.ProspectAIChat{}
+	for rows.Next() {
+		var item model.ProspectAIChat
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *PostgresRepository) ListRecentAIChats(ctx context.Context, prospectID uuid.UUID, limit int) ([]model.ProspectAIChat, error) {
+	if limit <= 0 {
+		limit = 8
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, prospect_id, user_id, message, answer, skill, COALESCE(insight,''), COALESCE(why,''), COALESCE(recommended_action,''), created_at FROM prospect_ai_chats WHERE prospect_id=$1 ORDER BY created_at DESC LIMIT $2`, prospectID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list recent prospect AI chats: %w", err)
+	}
+	defer rows.Close()
+	items := []model.ProspectAIChat{}
+	for rows.Next() {
+		var item model.ProspectAIChat
+		if err := rows.Scan(&item.ID, &item.ProspectID, &item.UserID, &item.Message, &item.Answer, &item.Skill, &item.Insight, &item.Why, &item.RecommendedAction, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+		items[i], items[j] = items[j], items[i]
+	}
+	return items, rows.Err()
+}
+
 func (r *PostgresRepository) CreateComment(ctx context.Context, prospectID, userID uuid.UUID, content string, attachments []model.CommentAttachment) (model.ProspectComment, error) {
 	id := uuid.New()
 	raw, err := json.Marshal(attachments)

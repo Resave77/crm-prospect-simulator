@@ -239,17 +239,12 @@ onMounted(async () => {
     <RouterLink class="mc-back" to="/sales/dashboard"><i class="pi pi-arrow-left" /></RouterLink>
     <div class="mc-header">
       <div class="mc-header-left">
-        <span class="mc-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
         <div class="mc-header-text">
           <p class="mc-eyebrow">{{ teamMode ? 'Customers assigned across your sales team' : 'Track and manage your assigned customers' }}</p>
           <h1 class="mc-title">{{ pageTitle }}</h1>
           <span class="mc-total-text">{{ pageSubtitle }}</span>
         </div>
       </div>
-      <button class="mc-header-action" @click="openFilterSheet" aria-label="Open filters">
-        <i class="pi pi-sliders-h" />
-        <span v-if="activeFilterCount()" class="mc-notif-dot">{{ activeFilterCount() }}</span>
-      </button>
     </div>
 
     <div class="mc-search">

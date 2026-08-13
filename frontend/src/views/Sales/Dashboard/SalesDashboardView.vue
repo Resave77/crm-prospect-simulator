@@ -36,7 +36,6 @@ const firstName = computed(() => {
 const permissionKeys = computed(() => auth.user?.salesRole?.permissionKeys ?? [])
 const canViewTeamDashboard = computed(() => permissionKeys.value.includes('view_team_dashboard'))
 const canViewSalesHistory = computed(() => permissionKeys.value.includes('view_sales_history'))
-const canViewMyProspects = computed(() => permissionKeys.value.includes('view_my_prospects'))
 const canViewMyCustomers = computed(() => permissionKeys.value.includes('view_my_customers'))
 const canViewSalesPipeline = computed(() => permissionKeys.value.includes('menu_sales_pipeline'))
 const showTeamDashboard = computed(() => canViewTeamDashboard.value && teamDashboard.value?.hasTeam)
@@ -284,7 +283,7 @@ onMounted(async () => {
     <template v-else>
     <div class="dashboard-overview">
       <!-- Your day is ready -->
-      <RouterLink class="ready-card" to="/sales/my-prospects">
+      <RouterLink class="ready-card" to="/sales/pipeline">
         <div class="ready-content">
           <span class="ready-eyebrow"><i class="pi pi-calendar" /> Today's overview</span>
           <strong>{{ activeProspects.length > 0 ? 'Your day is ready' : 'Your schedule is clear' }}</strong>
@@ -313,7 +312,7 @@ onMounted(async () => {
             <div class="quick-stats-info"><small>Total customers</small><strong>{{ crm.myCustomers.length }}</strong></div>
           </RouterLink>
 
-          <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
+          <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
             <span class="stat-icon amber-dot"><i class="pi pi-briefcase" /></span>
             <div class="quick-stats-info"><small>Today's prospects</small><strong>{{ todayVisits.length }}</strong></div>
           </RouterLink>
@@ -323,7 +322,7 @@ onMounted(async () => {
             <div class="quick-stats-info"><small>Completed visits</small><strong>{{ completed }}</strong></div>
           </RouterLink>
 
-          <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
+          <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
             <span class="stat-icon red-dot"><i class="pi pi-clock" /></span>
             <div class="quick-stats-info"><small>Pending visits</small><strong>{{ pendingCount }}</strong></div>
           </RouterLink>
@@ -341,12 +340,12 @@ onMounted(async () => {
     </div>
 
     <div class="quick-actions">
-      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects" class="action-primary">
+      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="action-primary">
         <span class="action-icon action-icon-primary"><i class="pi pi-play" /></span>
         <span>Start visit</span>
       </RouterLink>
 
-      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
+      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
         <span class="action-icon action-icon-mint"><i class="pi pi-map-marker" /></span>
         <span>Open maps</span>
       </RouterLink>
@@ -356,7 +355,7 @@ onMounted(async () => {
         <span>Customer</span>
       </RouterLink>
 
-      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">
+      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
         <span class="action-icon action-icon-amber"><i class="pi pi-briefcase" /></span>
         <span>Prospect</span>
       </RouterLink>
@@ -365,7 +364,7 @@ onMounted(async () => {
     <!-- Today's visits -->
     <div class="section-title">
       <strong>Today's visits</strong>
-      <RouterLink v-if="canViewMyProspects" to="/sales/my-prospects">See route</RouterLink>
+      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">See route</RouterLink>
     </div>
 
     <div class="today-list">

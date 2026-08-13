@@ -12,6 +12,7 @@ import (
 	"crm-prospect-simulator/backend/internal/auth/service"
 	customerrepository "crm-prospect-simulator/backend/internal/customer/repository"
 	customerservice "crm-prospect-simulator/backend/internal/customer/service"
+	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 	prospectrepository "crm-prospect-simulator/backend/internal/prospect/repository"
 	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
 	"crm-prospect-simulator/backend/platform/database"
@@ -44,7 +45,13 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	initialAnalyzer := aiservice.NewInitialAnalyzer(pool, prospectAI)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
 	prospectService.SetInitialAnalysis(initialAnalyzer.Analyze)
-	prospectService.SetChatAI(initialAnalyzer.Chat)
+	prospectService.SetChatAI(func(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, history []prospectservice.ChatTurn, message, skill string) (string, error) {
+		turns := make([]aiservice.ChatMessage, 0, len(history))
+		for _, turn := range history {
+			turns = append(turns, aiservice.ChatMessage{Role: turn.Role, Content: turn.Content})
+		}
+		return initialAnalyzer.ChatWithHistory(ctx, review, details, comments, turns, message, skill)
+	})
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)
 	adminRepo := adminrepository.NewPostgresRepository(pool)

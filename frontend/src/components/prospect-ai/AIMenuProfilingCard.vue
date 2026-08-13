@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PlaceDetails } from '../../types/crm'
+import type { ProspectInitialAnalysis } from '../../types/crm'
 
 const props = defineProps<{
   placeDetails: PlaceDetails | null
+  analysis?: ProspectInitialAnalysis | null
 }>()
 
+type MenuProfileRow = {
+  menuName?: unknown
+  menu?: unknown
+  profile?: unknown
+  yoghurtFit?: unknown
+  opportunity?: unknown
+}
+
+const menuState = computed(() => String(props.analysis?.menu?.state ?? ''))
+const menuUnavailable = computed(() => menuState.value === 'MENU_DATA_NOT_AVAILABLE')
 const menuRows = computed(() => {
-  const photos = props.placeDetails?.photos ?? []
-  return photos
-    .filter((photo) => photo.isMenu)
-    .slice(0, 6)
-    .map((photo, index) => ({ menu: photo.attribution || photo.name || `Menu photo ${index + 1}` }))
+  const rows = props.analysis?.menu?.menus
+  return Array.isArray(rows) ? (rows as MenuProfileRow[]).slice(0, 6) : []
 })
+
+function menuRowLabel(row: MenuProfileRow) {
+  return String(row.menuName || row.menu || 'Data belum tersedia')
+}
 </script>
 
 <template>
@@ -22,21 +35,23 @@ const menuRows = computed(() => {
         <p class="ai-eyebrow"><i class="pi pi-chart-line" /> AI Menu Profiling</p>
         <h2>Menu opportunity preview</h2>
       </div>
-      <button class="ai-primary-btn" type="button" disabled><i class="pi pi-sparkles" /> Generate</button>
+      <span class="ai-status-label">{{ analysis?.status === 'PENDING' ? 'Pending' : analysis?.status === 'FAILED' ? 'Unavailable' : 'Saved result' }}</span>
     </div>
 
-    <div v-if="menuRows.length" class="ai-menu-table" role="table" aria-label="AI menu profiling preview">
+    <div v-if="menuUnavailable" class="ai-menu-empty ai-menu-compact"><i class="pi pi-info-circle" /><div><strong>Menu data not available yet.</strong><span>Tagging general Google photos is not enough for AI menu profiling.</span></div></div>
+    <div v-else-if="analysis?.status === 'SUCCESS' && analysis.menu" class="ai-menu-empty"><i class="pi pi-check-circle" /><div><strong>Menu profiling tersedia.</strong><span>{{ String(analysis.menu.topOpportunity || analysis.menu.recommendedAction || 'Profil menu tersimpan.') }}</span></div></div>
+    <div v-else-if="menuRows.length" class="ai-menu-table" role="table" aria-label="AI menu profiling preview">
       <div class="ai-menu-row ai-menu-header" role="row">
         <span role="columnheader">Menu</span>
         <span role="columnheader">Profile</span>
         <span role="columnheader">Yoghurt Fit</span>
         <span role="columnheader">AI Opportunity</span>
       </div>
-      <div v-for="row in menuRows" :key="row.menu" class="ai-menu-row" role="row">
-        <strong role="cell">{{ row.menu }}</strong>
-        <span role="cell">Belum dianalisis</span>
-        <span role="cell">Pending</span>
-        <span role="cell">Generate belum aktif</span>
+      <div v-for="row in menuRows" :key="menuRowLabel(row)" class="ai-menu-row" role="row">
+        <strong role="cell">{{ menuRowLabel(row) }}</strong>
+        <span role="cell">{{ String(row.profile || 'Data belum tersedia') }}</span>
+        <span role="cell">{{ String(row.yoghurtFit || 'UNKNOWN') }}</span>
+        <span role="cell">{{ String(row.opportunity || 'Data belum tersedia') }}</span>
       </div>
     </div>
 
@@ -44,7 +59,7 @@ const menuRows = computed(() => {
       <i class="pi pi-book" />
       <div>
         <strong>Menu profiling belum dibuat.</strong>
-        <span>Tag atau muat foto menu terlebih dahulu. Kolom AI tidak akan diisi sampai generation diaktifkan.</span>
+        <span>Menu item data is required before AI menu profiling can run.</span>
       </div>
     </div>
   </article>
@@ -180,6 +195,10 @@ const menuRows = computed(() => {
   color: var(--text-muted);
   font-size: 0.74rem;
   line-height: 1.45;
+}
+
+.ai-menu-compact {
+  padding: 0.75rem;
 }
 
 @media (max-width: 767px) {

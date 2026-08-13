@@ -22,6 +22,11 @@ export interface ProspectChatResponse {
   why: string
   recommendedAction: string
 }
+export interface ProspectAIChatHistory extends ProspectChatResponse {
+  id: string
+  message: string
+  createdAt: string
+}
 
 export interface Prospect {
   id: string

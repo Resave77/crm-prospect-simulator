@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -34,12 +35,16 @@ type Actor struct {
 	Role           authmodel.Role
 	PermissionKeys []string
 }
+type ChatTurn struct {
+	Role    string
+	Content string
+}
 
 type Service struct {
 	repository      repository.Repository
 	places          Places
 	initialAnalysis func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment)
-	chatAI          func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, string, string) (string, error)
+	chatAI          func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, []ChatTurn, string, string) (string, error)
 }
 
 type Places interface {
@@ -62,7 +67,7 @@ func (s *Service) SetInitialAnalysis(fn func(context.Context, prospectmodel.Revi
 	s.initialAnalysis = fn
 }
 
-func (s *Service) SetChatAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, string, string) (string, error)) {
+func (s *Service) SetChatAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, []ChatTurn, string, string) (string, error)) {
 	s.chatAI = fn
 }
 
@@ -95,7 +100,49 @@ func (s *Service) ChatAI(ctx context.Context, actor Actor, id uuid.UUID, message
 			details = &loaded
 		}
 	}
-	return s.chatAI(ctx, review, details, comments, message, skill)
+	chatRepo, ok := s.repository.(repository.AIChatRepository)
+	if !ok {
+		return "", errors.New("AI chat history repository is unavailable")
+	}
+	items, err := chatRepo.ListRecentAIChats(ctx, id, 8)
+	if err != nil {
+		return "", err
+	}
+	history := make([]ChatTurn, 0, len(items)*2)
+	for _, item := range items {
+		history = append(history, ChatTurn{Role: "user", Content: item.Message}, ChatTurn{Role: "assistant", Content: item.Answer})
+	}
+	result, err := s.chatAI(ctx, review, details, comments, history, message, skill)
+	if err != nil {
+		return "", err
+	}
+	var parsed struct{ Answer, Skill, Insight, Why, RecommendedAction string }
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		return "", err
+	}
+	_, err = chatRepo.CreateAIChat(ctx, prospectmodel.ProspectAIChat{ProspectID: id, UserID: actor.UserID, Message: message, Answer: parsed.Answer, Skill: parsed.Skill, Insight: parsed.Insight, Why: parsed.Why, RecommendedAction: parsed.RecommendedAction})
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+func (s *Service) AIChatHistory(ctx context.Context, actor Actor, id uuid.UUID) ([]prospectmodel.ProspectAIChat, error) {
+	if !actor.can("use_prospect_ai_chat") {
+		return nil, ErrForbidden
+	}
+	review, err := s.repository.FindReview(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !actor.Role.IsAdminRole() && review.Prospect.AssignedSalesExecutiveID != actor.UserID {
+		return nil, ErrForbidden
+	}
+	chatRepo, ok := s.repository.(repository.AIChatRepository)
+	if !ok {
+		return nil, errors.New("AI chat history repository is unavailable")
+	}
+	return chatRepo.ListAIChats(ctx, id, 100)
 }
 
 func (s *Service) MyProspects(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {

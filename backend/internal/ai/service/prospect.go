@@ -50,7 +50,7 @@ func (s *ProspectAI) SummarizeProspect(ctx context.Context, review prospectmodel
 
 func (s *ProspectAI) ProfileProspectMenu(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, menuImages []prospectmodel.MenuImage) (TextResult, error) {
 	payload := s.contextJSON(review, details, nil, map[string]any{"menuImages": menuImages})
-	return s.client.GenerateText(ctx, "Profile likely menu positioning using only provided CRM and menu facts. Say when menu data is unavailable.", payload)
+	return s.client.GenerateText(ctx, "Return ONLY valid JSON matching: {menus:[{menuName:string,profile:string,yoghurtFit:HIGH|MEDIUM|LOW|UNKNOWN,opportunity:string,reason:string,recommendedSalesAction:string,confidence:string}],topOpportunity:string,recommendedAction:string}. Use only supplied menu/CRM facts. Do not invent brands, SKUs, flavours, or prices.", payload)
 }
 
 func (s *ProspectAI) AskProspectAI(ctx context.Context, review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, history []ChatMessage, question string) (TextResult, error) {

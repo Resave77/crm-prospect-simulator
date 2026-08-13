@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { getProspectComments, addProspectComment, deleteProspectComment, downloadCommentAttachment, getMentionUsers } from '../api/crm'
 import type { ProspectComment, SalesExecutiveOption } from '../types/crm'
@@ -9,6 +9,7 @@ const props = withDefaults(defineProps<{
   prospectId: string
   role: UserRole
   embedded?: boolean
+  expanded?: boolean
 }>(), { embedded: false })
 
 const auth = useAuthStore()
@@ -27,15 +28,36 @@ const imagePreviews = ref<Record<string, string>>({})
 const unavailableAttachments = ref<Record<string, boolean>>({})
 const imageViewer = ref<{ url: string; name: string } | null>(null)
 const previewImage = ref<{ name: string; url: string } | null>(null)
+const visibleComments = computed(() => (
+  props.embedded && !props.expanded ? comments.value.slice(-1) : comments.value
+))
+const canSendComment = computed(() => {
+  const roleCanComment = props.role === 'SUPER_ADMIN' || props.role === 'ADMINISTRATOR' || auth.hasPermission('manage_prospect_comments')
+  return roleCanComment && !sending.value && (!!newComment.value.trim() || files.value.length > 0)
+})
+const participants = computed(() => {
+  const rows: Array<{ id: string; name: string; initial: string; own: boolean; lastAt: string }> = []
+  const me = auth.user
+  if (me) rows.push({ id: me.id, name: me.fullName || 'You', initial: (me.fullName || '?').charAt(0).toUpperCase(), own: true, lastAt: '' })
+  const seen = new Set(rows.map((row) => row.id))
+  for (const c of comments.value) {
+    if (seen.has(c.userId)) continue
+    seen.add(c.userId)
+    rows.push({ id: c.userId, name: c.userName || 'Unknown', initial: (c.userName || '?').charAt(0).toUpperCase(), own: false, lastAt: c.createdAt })
+  }
+  return rows
+})
 const newCount = ref(0)
 let lastReadAt = ''
 let pollId: number | undefined
 
 function scrollToBottom() {
   nextTick(() => {
-    if (listRef.value) {
-      listRef.value.scrollTop = listRef.value.scrollHeight
+    const scroll = () => {
+      if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight
     }
+    scroll()
+    requestAnimationFrame(scroll)
   })
 }
 
@@ -209,6 +231,12 @@ watch(open, (value) => {
     scrollToBottom()
   }
 })
+watch(() => props.expanded, (value) => {
+  if (value) scrollToBottom()
+})
+watch(() => props.embedded, (value) => {
+  if (value && props.expanded) scrollToBottom()
+})
 watch(() => props.prospectId, () => {
   lastReadAt = ''
   newCount.value = 0
@@ -242,7 +270,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div :class="['pc-floating', { 'pc-embedded': embedded }]">
+  <div :class="['pc-floating', { 'pc-embedded': embedded, 'pc-expanded': expanded }]">
     <button v-if="!embedded && !open" class="pc-launcher" aria-label="Open prospect discussion" @click="open = true">
       <i class="pi pi-comments" />
       <span v-if="newCount" class="pc-launcher-badge">{{ newCount > 99 ? '99+' : newCount }}</span>
@@ -254,6 +282,19 @@ onBeforeUnmount(() => {
       <span v-if="!loading" class="pc-count">{{ comments.length }}</span>
        <button v-if="!embedded" class="pc-close" aria-label="Close discussion" @click="open = false"><i class="pi pi-times" /></button>
     </div>
+
+    <div class="pc-main">
+      <aside v-if="expanded" class="pc-sidebar">
+        <div class="pc-sidebar-head"><i class="pi pi-users" /><span>Team</span></div>
+        <div class="pc-sidebar-people">
+          <div v-for="p in participants" :key="p.id" class="pc-person" :class="{ 'pc-person-own': p.own }">
+            <span class="pc-person-avatar" :class="{ 'pc-person-avatar-own': p.own }">{{ p.initial }}</span>
+            <span class="pc-person-name">{{ p.name }}</span>
+            <span v-if="p.own" class="pc-person-tag">You</span>
+          </div>
+        </div>
+      </aside>
+      <div class="pc-thread">
 
     <div v-if="loading" class="pc-loading">
       <i class="pi pi-spin pi-spinner" />
@@ -269,7 +310,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-for="c in comments"
+        v-for="c in visibleComments"
         :key="c.id"
         class="pc-msg"
         :class="{ 'pc-msg-own': isOwnComment(c) }"
@@ -320,12 +361,14 @@ onBeforeUnmount(() => {
       />
       <button
         class="pc-send-btn"
-        :disabled="(!newComment.trim() && !files.length) || sending"
+        :disabled="!canSendComment"
         @click="submit"
       >
         <i v-if="sending" class="pi pi-spin pi-spinner" />
         <i v-else class="pi pi-send" />
       </button>
+    </div>
+      </div>
     </div>
   </div>
   <div v-if="previewImage" class="pc-lightbox" @click.self="previewImage = null">
@@ -353,6 +396,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 .pc-embedded { width: 100%; }
+.pc-expanded { height: 100%; min-height: 0; }
+.pc-expanded .pc-wrap { height: 100%; min-height: 0; }
+.pc-expanded .pc-list { max-height: none; min-height: 0; }
 .pc-embedded .pc-wrap {
   position: static;
   width: 100%;
@@ -604,5 +650,276 @@ onBeforeUnmount(() => {
   .pc-msg-body { max-width:calc(100% - 40px); }
   .pc-msg-text { font-size:.76rem; }
   .pc-input-row { padding:.6rem; }
+}
+
+/* Expanded discussion: modern messaging workspace */
+.pc-expanded .pc-wrap {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: #eef1f6;
+  box-shadow: none;
+}
+
+/* Chat toolbar header */
+.pc-expanded .pc-header {
+  flex: 0 0 auto;
+  position: relative;
+  min-height: 60px;
+  padding: .7rem 1.1rem;
+  background: #fff;
+  border-bottom: 1px solid #e7ebf1;
+  color: #111827;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .02);
+}
+.pc-expanded .pc-header::after { display: none; }
+.pc-expanded .pc-header > i {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #fff0f1, #ffe4e7);
+  color: #d62839;
+  font-size: .9rem;
+  box-shadow: 0 2px 6px rgba(214, 40, 57, .08);
+}
+.pc-expanded .pc-header > span:not(.pc-count) { font-size: .88rem; font-weight: 800; letter-spacing: -.01em; }
+.pc-expanded .pc-count {
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #b42332;
+  background: #fff0f1;
+  border: 1px solid #ffd9dc;
+  font-size: .62rem;
+}
+
+/* Workspace split: team sidebar + chat thread */
+.pc-main { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.pc-thread { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+.pc-expanded .pc-main { flex-direction: row; }
+.pc-expanded .pc-sidebar {
+  flex: 0 0 248px;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fbfcfd;
+  border-right: 1px solid #e7ebf1;
+}
+.pc-expanded .pc-sidebar-head {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .95rem 1rem .7rem;
+  font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+  color: #94a3b8;
+}
+.pc-expanded .pc-sidebar-head i { font-size: .8rem; color: #e63946; }
+.pc-expanded .pc-sidebar-people {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 0 .6rem 1rem;
+  display: flex; flex-direction: column; gap: .15rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, .5) transparent;
+}
+.pc-expanded .pc-person {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .6rem;
+  border-radius: 10px;
+}
+.pc-expanded .pc-person:hover { background: #f1f4f9; }
+.pc-expanded .pc-person-avatar {
+  width: 34px; height: 34px; flex: 0 0 34px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #64748b, #475569);
+  color: #fff; font-size: .72rem; font-weight: 800;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .12);
+}
+.pc-expanded .pc-person-avatar-own { background: linear-gradient(145deg, #ef4e5d, #e63946 60%, #d62839); }
+.pc-expanded .pc-person-name {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: .78rem; font-weight: 600; color: #334155;
+}
+.pc-expanded .pc-person-own .pc-person-name { color: #b42332; }
+.pc-expanded .pc-person-tag {
+  flex: 0 0 auto;
+  padding: .1rem .45rem;
+  border-radius: 999px;
+  font-size: .58rem; font-weight: 700;
+  color: #b42332; background: #fff0f1; border: 1px solid #ffd9dc;
+}
+
+/* Thread surface with subtle chat-pattern background */
+.pc-expanded .pc-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 1.5rem clamp(1rem, 4vw, 2.5rem);
+  gap: 1.1rem;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(100, 116, 139, .055) 1px, transparent 0),
+    linear-gradient(180deg, #f1f4f9 0%, #eaeef5 100%);
+  background-size: 22px 22px, 100% 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, .5) transparent;
+}
+.pc-expanded .pc-list::-webkit-scrollbar { width: 8px; }
+.pc-expanded .pc-list::-webkit-scrollbar-track { background: transparent; }
+.pc-expanded .pc-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .45);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Message row: centered thread column */
+.pc-expanded .pc-msg {
+  width: min(86%, 640px);
+  margin-inline: auto;
+  align-items: flex-end;
+}
+.pc-expanded .pc-msg:not(.pc-msg-own) { justify-content: flex-start; flex-direction: row; }
+.pc-expanded .pc-msg-own { justify-content: flex-end; flex-direction: row; }
+
+.pc-expanded .pc-msg-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #64748b, #475569);
+  color: #fff;
+  font-size: .68rem;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .14);
+}
+.pc-expanded .pc-msg-own .pc-msg-avatar { display: none; }
+
+.pc-expanded .pc-msg-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: min(88%, 600px);
+}
+.pc-expanded .pc-msg-own .pc-msg-body { align-items: flex-end; }
+
+.pc-expanded .pc-msg-meta { width: 100%; margin-bottom: .3rem; gap: .5rem; }
+.pc-expanded .pc-msg-meta strong { font-size: .72rem; color: #475569; }
+.pc-expanded .pc-msg-meta span { font-size: .62rem; color: #94a3b8; }
+.pc-expanded .pc-msg-own .pc-msg-meta { justify-content: flex-end; }
+.pc-expanded .pc-msg-own .pc-msg-meta strong { color: #b42332; }
+
+/* Bubbles */
+.pc-expanded .pc-msg-text {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: .7rem .95rem;
+  border-radius: 18px 18px 18px 6px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, .05);
+  color: #1f2937;
+  line-height: 1.55;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 8px 20px -12px rgba(15, 23, 42, .18);
+}
+.pc-expanded .pc-msg-own .pc-msg-text {
+  border-color: transparent;
+  border-radius: 18px 18px 6px 18px;
+  background: linear-gradient(145deg, #ef4e5d, #e63946 60%, #d62839);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px rgba(214, 40, 57, .5);
+}
+
+/* Composer */
+.pc-expanded .pc-input-row {
+  flex: 0 0 auto;
+  gap: .55rem;
+  padding: .8rem 1.1rem calc(.9rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #e7ebf1;
+  background: #fff;
+  box-shadow: 0 -8px 24px -16px rgba(15, 23, 42, .16);
+}
+.pc-expanded .pc-input-row textarea {
+  min-height: 44px;
+  max-height: 120px;
+  padding: .6rem 1rem;
+  border-radius: 18px;
+  border: 1px solid #e5e9f0;
+  background: #f4f6fa;
+  font-size: .84rem;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.pc-expanded .pc-input-row textarea:focus {
+  border-color: #f4b3ba;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(230, 57, 70, .08);
+}
+.pc-expanded .pc-attach-btn,
+.pc-expanded .pc-send-btn { width: 44px; height: 44px; border-radius: 50%; }
+.pc-expanded .pc-attach-btn {
+  border: 1px solid #e5e9f0;
+  background: #fff;
+  color: #8d7d81;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.pc-expanded .pc-attach-btn:hover { color: #d62839; background: #fff0f1; border-color: #ffd9dc; }
+.pc-expanded .pc-send-btn {
+  background: linear-gradient(145deg, #ef4e5d, #e63946 60%, #d62839);
+  box-shadow: 0 8px 18px -6px rgba(214, 40, 57, .45);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.pc-expanded .pc-send-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.05); box-shadow: 0 12px 22px -6px rgba(214, 40, 57, .5); }
+.pc-expanded .pc-send-btn:disabled { opacity: .45; }
+
+/* Mentions + selected files blend into composer */
+.pc-expanded .pc-mentions { border: 0; border-top: 1px solid #eef1f6; }
+.pc-expanded .pc-selected-files { border-top: 1px solid #eef1f6; background: #fff; }
+
+/* Empty state */
+.pc-expanded .pc-empty {
+  align-self: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 3rem 1.25rem;
+}
+.pc-expanded .pc-empty i {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #fff, #ffeef0);
+  color: #e63946;
+  font-size: 1.15rem;
+  box-shadow: 0 10px 24px -12px rgba(214, 40, 57, .35);
+}
+
+/* Collapsed embedded card */
+.pc-embedded:not(.pc-expanded) .pc-list {
+  max-height: 190px;
+  overflow: hidden;
+}
+.pc-embedded:not(.pc-expanded) .pc-msg-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+@media (max-width: 768px) {
+  .pc-expanded .pc-sidebar { display: none; }
+  .pc-expanded .pc-msg { width: 96%; }
+}
+@media (max-width: 640px) {
+  .pc-expanded .pc-msg { width: 96%; }
+  .pc-expanded .pc-msg-body { max-width: 92%; }
+  .pc-expanded .pc-list { padding: 1.1rem .75rem; gap: .95rem; }
+  .pc-expanded .pc-header { padding: .65rem .85rem; }
+  .pc-expanded .pc-input-row { padding: .65rem .7rem calc(.75rem + env(safe-area-inset-bottom, 0px)); }
+  .pc-expanded .pc-msg-avatar { width: 28px; height: 28px; flex-basis: 28px; }
+  .pc-expanded .pc-attach-btn,
+  .pc-expanded .pc-send-btn { width: 40px; height: 40px; }
 }
 </style>

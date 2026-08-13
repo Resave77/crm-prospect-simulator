@@ -22,6 +22,10 @@ const prv = () => previousStage(props.item.status)
 const isTerminal = () => props.item.status === 'WON' || props.item.status === 'LOST'
 const isNewLead = () => props.item.status === 'NEW_LEAD'
 const isNegotiation = () => props.item.status === 'NEGOTIATION'
+function openDetail() { emit('viewDetail', props.item) }
+function onCardKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail() }
+}
 </script>
 
 <template>
@@ -29,6 +33,10 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
     :id="`prospect-card-${item.id}`"
     class="pipeline-card"
     :class="{ 'pipeline-card--highlight': highlight, 'pipeline-card--compact': compact }"
+    role="link"
+    tabindex="0"
+    @click="openDetail"
+    @keydown="onCardKeydown"
   >
     <!-- ── COMPACT (DESKTOP) ── -->
     <template v-if="compact">
@@ -67,14 +75,14 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
             v-if="prv() && !isTerminal()"
             class="pact pact-back"
             :title="'Move this prospect one stage backward'"
-            @click="emit('movePrev', item)"
+            @click.stop="emit('movePrev', item)"
           >
             <i class="pi pi-arrow-left" />
             <span>Back to {{ stageLabel(prv()!) }}</span>
           </button>
           <button
             class="pact pact-detail"
-            @click="emit('viewDetail', item)"
+            @click.stop="emit('viewDetail', item)"
           >
             <i class="pi pi-eye" />
             <span>View Detail</span>
@@ -83,7 +91,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
             v-if="!isTerminal() && nxt() && !isNegotiation()"
             class="pact pact-next"
             :title="'Advance this prospect to the next pipeline stage'"
-            @click="emit('moveNext', item)"
+            @click.stop="emit('moveNext', item)"
           >
             <span>{{ isNewLead() ? 'Start Progress' : 'Move to' }} {{ stageLabel(nxt()!) }}</span>
             <i class="pi pi-arrow-right" />
@@ -91,7 +99,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
           <button
             v-if="isNegotiation()"
             class="pact pact-won"
-            @click="emit('markWon', item)"
+            @click.stop="emit('markWon', item)"
           >
             <i class="pi pi-check" />
             <span>Mark as Won</span>
@@ -101,7 +109,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
       <div v-if="!isTerminal()" class="cpt-lost-row">
         <button
           class="pact pact-lost"
-          @click="emit('markLost', item)"
+          @click.stop="emit('markLost', item)"
         >
           <i class="pi pi-times" />
           <span>Mark as Lost</span>
@@ -150,7 +158,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
 
       <div class="cm-actions">
         <div class="cm-actions-row">
-          <button class="pact pact-detail" @click="emit('viewDetail', item)">
+          <button class="pact pact-detail" @click.stop="emit('viewDetail', item)">
             <i class="pi pi-eye" />
             <span>View Detail</span>
           </button>
@@ -158,7 +166,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
             <button
               v-if="nxt() && !isNegotiation()"
               class="pact pact-next"
-              @click="emit('moveNext', item)"
+              @click.stop="emit('moveNext', item)"
             >
               <span>{{ isNewLead() ? 'Start Progress' : 'Move to' }} {{ stageLabel(nxt()!) }}</span>
               <i class="pi pi-arrow-right" />
@@ -166,7 +174,7 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
             <button
               v-if="isNegotiation()"
               class="pact pact-won"
-              @click="emit('markWon', item)"
+              @click.stop="emit('markWon', item)"
             >
               <i class="pi pi-check" />
               <span>Mark as Won</span>
@@ -177,14 +185,14 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
           <button
             v-if="prv()"
             class="pact pact-back"
-            @click="emit('movePrev', item)"
+            @click.stop="emit('movePrev', item)"
           >
             <i class="pi pi-arrow-left" />
             <span>Back to {{ stageLabel(prv()!) }}</span>
           </button>
           <button
             class="pact pact-lost"
-            @click="emit('markLost', item)"
+            @click.stop="emit('markLost', item)"
           >
             <i class="pi pi-times" />
             <span>Mark as Lost</span>
@@ -205,6 +213,9 @@ const isNegotiation = () => props.item.status === 'NEGOTIATION'
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .pipeline-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+.pipeline-card[role="link"] { cursor: pointer; }
+.pipeline-card[role="link"]:focus-visible { outline: 3px solid rgba(37,99,235,.3); outline-offset: 2px; }
+.pipeline-card[role="link"]:hover { border-color: #cbd5e1; box-shadow: 0 5px 14px rgba(15,23,42,.09); }
 .pipeline-card--highlight {
   border-color: #e63946 !important;
   box-shadow: 0 0 0 2px rgba(230,57,70,0.18), 0 2px 8px rgba(230,57,70,0.1) !important;

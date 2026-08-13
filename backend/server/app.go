@@ -83,6 +83,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 		})
 	})
 	ai.Post("/prospects/:id/chat", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAI)
+	ai.Get("/prospects/:id/chat/history", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAIHistory)
 	if len(initialAnalyzers) > 0 && initialAnalyzers[0] != nil {
 		ai.Get("/prospects/:id/initial-analysis", authMiddleware.RequirePermission("view_ai_summary"), func(c *fiber.Ctx) error {
 			id, err := uuid.Parse(c.Params("id"))

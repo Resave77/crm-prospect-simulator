@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import axios, { AxiosError } from 'axios'
-import { changePassword as changePasswordRequest } from '../api/auth'
+import { changePassword as changePasswordRequest, getCurrentUser } from '../api/auth'
 import { api, observeSession, refreshSession, setAccessToken } from '../api/client'
 import type {
   ApiEnvelope,
@@ -60,6 +60,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function refreshUser() {
+    const currentUser = await getCurrentUser()
+    user.value = currentUser
+    return currentUser
+  }
+
   async function logout() {
     try {
       await api.post('/auth/logout')
@@ -104,6 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
     hasPermission,
     bootstrap,
     login,
+    refreshUser,
     logout,
     changePassword,
     errorMessage,
