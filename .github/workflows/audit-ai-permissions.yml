@@ -1,0 +1,191 @@
+name: Temporary AI Permission Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-ai-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit VPS AI permissions (read-only)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+            EXPECTED_WORKING_DIRECTORY="/home/smk_dev/app/backend/dev"
+            ROLE_ID="00000000-0000-0000-0000-000000000104"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+
+            if [ "$working_directory" != "$EXPECTED_WORKING_DIRECTORY" ]; then
+              echo 'AUDIT_ERROR=UNEXPECTED_SERVICE_WORKING_DIRECTORY'
+              exit 1
+            fi
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+
+            database_url=""
+            if [ -n "$environment_file" ] && sudo test -r "$environment_file"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$environment_file")"
+            fi
+            if [ -z "$database_url" ] && sudo test -r "$working_directory/.env"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$working_directory/.env")"
+            fi
+            if [ -z "$database_url" ]; then
+              main_pid="$(sudo systemctl show "$SERVICE_NAME" --property=MainPID --value)"
+              if [ "${main_pid:-0}" -gt 0 ] && sudo test -r "/proc/$main_pid/environ"; then
+                database_url="$(sudo cat "/proc/$main_pid/environ" | tr '\0' '\n' | sed -n 's/^DATABASE_URL=//p' | head -n 1)"
+              fi
+            fi
+            if [ -z "$database_url" ]; then
+              echo 'AUDIT_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=PYTHON3_NOT_AVAILABLE_FOR_SAFE_URL_PARSING'
+              exit 1
+            fi
+            if ! command -v psql >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=PSQL_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
+            import os
+            import re
+            import urllib.parse
+
+            raw = os.environ["DATABASE_URL"].strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("\"", "\x27"):
+                raw = raw[1:-1]
+            scheme, separator, remainder = raw.partition("://")
+            if separator != "://" or scheme not in ("postgres", "postgresql"):
+                raise SystemExit(2)
+            authority_match = re.fullmatch(r"([^/?#]*)(.*)", remainder, flags=re.DOTALL)
+            if authority_match is None:
+                raise SystemExit(2)
+            authority, suffix = authority_match.groups()
+            userinfo, credential_separator, hostinfo = authority.rpartition("@")
+            if not credential_separator:
+                hostinfo = authority
+            parsed_host = urllib.parse.urlsplit("//" + hostinfo)
+            if not parsed_host.hostname:
+                raise SystemExit(2)
+            credentials = ""
+            if credential_separator:
+                raw_username, password_separator, raw_password = userinfo.partition(":")
+                credentials = urllib.parse.quote(urllib.parse.unquote(raw_username), safe="")
+                if password_separator:
+                    credentials += ":" + urllib.parse.quote(urllib.parse.unquote(raw_password), safe="")
+                credentials += "@"
+            hostname = parsed_host.hostname
+            formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
+            normalized_authority = credentials + formatted_host
+            if parsed_host.port is not None:
+                normalized_authority += ":" + str(parsed_host.port)
+            print(scheme + "://" + normalized_authority + suffix)
+            ')" || {
+              echo 'AUDIT_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            }
+
+            sql_value() {
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+            }
+
+            permission_status() {
+              sql_value "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM public.permissions WHERE key='$1') THEN 'ABSENT' WHEN EXISTS (SELECT 1 FROM public.permissions WHERE key='$1' AND is_active=true) THEN 'EXISTS_ACTIVE' ELSE 'EXISTS_INACTIVE' END;"
+            }
+
+            view_ai_summary="$(permission_status view_ai_summary)"
+            view_ai_menu_profiling="$(permission_status view_ai_menu_profiling)"
+            use_prospect_ai_chat="$(permission_status use_prospect_ai_chat)"
+
+            permission_rows="$(sql_value "SELECT key || '|' || name || '|' || group_key || '|' || CASE WHEN is_active THEN 'ACTIVE' ELSE 'INACTIVE' END FROM public.permissions WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat') ORDER BY key;")"
+
+            role_found="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.sales_roles WHERE id='$ROLE_ID'::uuid) THEN 'YES' ELSE 'NO' END;")"
+            role_name="NOT_FOUND"
+            role_level="UNKNOWN"
+            role_permission_count="0"
+            role_view_ai_summary="NO"
+            role_view_ai_menu_profiling="NO"
+            role_use_prospect_ai_chat="NO"
+            if [ "$role_found" = "YES" ]; then
+              role_name="$(sql_value "SELECT name FROM public.sales_roles WHERE id='$ROLE_ID'::uuid;")"
+              role_level="$(sql_value "SELECT level FROM public.sales_roles WHERE id='$ROLE_ID'::uuid;")"
+              role_permission_count="$(sql_value "SELECT COUNT(*) FROM public.role_permissions WHERE sales_role_id='$ROLE_ID'::uuid;")"
+              role_view_ai_summary="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE rp.sales_role_id='$ROLE_ID'::uuid AND p.key='view_ai_summary' AND p.is_active=true) THEN 'YES' ELSE 'NO' END;")"
+              role_view_ai_menu_profiling="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE rp.sales_role_id='$ROLE_ID'::uuid AND p.key='view_ai_menu_profiling' AND p.is_active=true) THEN 'YES' ELSE 'NO' END;")"
+              role_use_prospect_ai_chat="$(sql_value "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE rp.sales_role_id='$ROLE_ID'::uuid AND p.key='use_prospect_ai_chat' AND p.is_active=true) THEN 'YES' ELSE 'NO' END;")"
+            fi
+
+            roles_with_view_ai_summary="$(sql_value "SELECT COUNT(DISTINCT sr.id) FROM public.sales_roles sr JOIN public.role_permissions rp ON rp.sales_role_id=sr.id JOIN public.permissions p ON p.id=rp.permission_id WHERE sr.is_active=true AND p.is_active=true AND p.key='view_ai_summary';")"
+            roles_with_view_ai_menu_profiling="$(sql_value "SELECT COUNT(DISTINCT sr.id) FROM public.sales_roles sr JOIN public.role_permissions rp ON rp.sales_role_id=sr.id JOIN public.permissions p ON p.id=rp.permission_id WHERE sr.is_active=true AND p.is_active=true AND p.key='view_ai_menu_profiling';")"
+            roles_with_use_prospect_ai_chat="$(sql_value "SELECT COUNT(DISTINCT sr.id) FROM public.sales_roles sr JOIN public.role_permissions rp ON rp.sales_role_id=sr.id JOIN public.permissions p ON p.id=rp.permission_id WHERE sr.is_active=true AND p.is_active=true AND p.key='use_prospect_ai_chat';")"
+
+            all_active="NO"
+            if [ "$view_ai_summary" = "EXISTS_ACTIVE" ] && [ "$view_ai_menu_profiling" = "EXISTS_ACTIVE" ] && [ "$use_prospect_ai_chat" = "EXISTS_ACTIVE" ]; then
+              all_active="YES"
+            fi
+            all_absent="NO"
+            if [ "$view_ai_summary" = "ABSENT" ] && [ "$view_ai_menu_profiling" = "ABSENT" ] && [ "$use_prospect_ai_chat" = "ABSENT" ]; then
+              all_absent="YES"
+            fi
+            all_assigned="NO"
+            if [ "$role_found" = "YES" ] && [ "$role_view_ai_summary" = "YES" ] && [ "$role_view_ai_menu_profiling" = "YES" ] && [ "$role_use_prospect_ai_chat" = "YES" ]; then
+              all_assigned="YES"
+            fi
+
+            if [ "$all_absent" = "YES" ]; then
+              ai_permission_case="A"
+            elif [ "$all_active" = "YES" ] && [ "$all_assigned" = "NO" ]; then
+              ai_permission_case="C"
+            elif [ "$all_active" = "YES" ] && [ "$all_assigned" = "YES" ]; then
+              ai_permission_case="D"
+            elif [ "$view_ai_summary" = "EXISTS_INACTIVE" ] && [ "$view_ai_menu_profiling" = "EXISTS_INACTIVE" ] && [ "$use_prospect_ai_chat" = "EXISTS_INACTIVE" ]; then
+              ai_permission_case="B"
+            elif [ "$role_found" = "NO" ]; then
+              ai_permission_case="F"
+            else
+              ai_permission_case="E"
+            fi
+
+            ready_for_reconciliation="NO"
+            case "$ai_permission_case" in
+              A|B|C|E) ready_for_reconciliation="YES" ;;
+            esac
+
+            echo '================ AI PERMISSION AUDIT ================'
+            printf 'VIEW_AI_SUMMARY=%s\n' "$view_ai_summary"
+            printf 'VIEW_AI_MENU_PROFILING=%s\n' "$view_ai_menu_profiling"
+            printf 'USE_PROSPECT_AI_CHAT=%s\n' "$use_prospect_ai_chat"
+            if [ -n "$permission_rows" ]; then
+              printf 'PERMISSION_ROW=%s\n' "$permission_rows"
+            fi
+            printf 'ROLE_FOUND=%s\n' "$role_found"
+            printf 'ROLE_NAME=%s\n' "$role_name"
+            printf 'ROLE_HIERARCHY_LEVEL=%s\n' "$role_level"
+            printf 'ROLE_PERMISSION_COUNT=%s\n' "$role_permission_count"
+            printf 'ROLE_VIEW_AI_SUMMARY=%s\n' "$role_view_ai_summary"
+            printf 'ROLE_VIEW_AI_MENU_PROFILING=%s\n' "$role_view_ai_menu_profiling"
+            printf 'ROLE_USE_PROSPECT_AI_CHAT=%s\n' "$role_use_prospect_ai_chat"
+            printf 'LEVEL4_RECOMMENDS_VIEW_AI_SUMMARY=NO\n'
+            printf 'LEVEL4_RECOMMENDS_VIEW_AI_MENU_PROFILING=NO\n'
+            printf 'LEVEL4_RECOMMENDS_USE_PROSPECT_AI_CHAT=NO\n'
+            printf 'ROLES_WITH_VIEW_AI_SUMMARY=%s\n' "$roles_with_view_ai_summary"
+            printf 'ROLES_WITH_VIEW_AI_MENU_PROFILING=%s\n' "$roles_with_view_ai_menu_profiling"
+            printf 'ROLES_WITH_USE_PROSPECT_AI_CHAT=%s\n' "$roles_with_use_prospect_ai_chat"
+            printf 'AI_PERMISSION_CASE=%s\n' "$ai_permission_case"
+            printf 'READY_FOR_PERMISSION_RECONCILIATION=%s\n' "$ready_for_reconciliation"
