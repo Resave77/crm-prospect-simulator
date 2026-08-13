@@ -47,6 +47,11 @@ test('recommended permissions can be applied explicitly and match backend defaul
   assert.match(sfc, /2: \['menu_sales_dashboard', 'view_sales_dashboard', 'view_team_dashboard'/)
   assert.match(sfc, /3: \['menu_sales_dashboard', 'view_sales_dashboard', 'view_team_dashboard'/)
   assert.match(sfc, /4: \['menu_sales_dashboard', 'view_sales_dashboard', 'menu_my_prospects'/)
+  const level4Recommended = sfc.match(/4: \[([^\]]+)\]/)?.[1] ?? ''
+  assert.match(level4Recommended, /'view_ai_summary'/)
+  assert.match(level4Recommended, /'view_ai_menu_profiling'/)
+  assert.match(level4Recommended, /'use_prospect_ai_chat'/)
+  assert.equal((level4Recommended.match(/'[^']+'/g) ?? []).length, 24)
   assert.match(sfc, /function applyRecommendedPermissions/)
   assert.match(sfc, /normalizedPermissionSet\(recommendedKeys\.value\)/)
   assert.match(sfc, /Apply Recommended/)

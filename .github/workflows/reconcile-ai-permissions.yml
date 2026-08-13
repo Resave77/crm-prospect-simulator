@@ -1,0 +1,227 @@
+name: Controlled AI Permission Reconciliation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reconcile-ai-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile VPS AI permissions
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+            EXPECTED_WORKING_DIRECTORY="/home/smk_dev/app/backend/dev"
+            ROLE_ID="00000000-0000-0000-0000-000000000104"
+            EXPECTED_PERMISSION_COUNT="24"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            service_user="$(sudo systemctl show "$SERVICE_NAME" --property=User --value)"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+            if [ "$working_directory" != "$EXPECTED_WORKING_DIRECTORY" ]; then
+              echo 'RECONCILIATION_ERROR=UNEXPECTED_SERVICE_WORKING_DIRECTORY'
+              exit 1
+            fi
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+
+            database_url=""
+            if [ -n "$environment_file" ] && sudo test -r "$environment_file"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$environment_file")"
+            fi
+            if [ -z "$database_url" ] && sudo test -r "$working_directory/.env"; then
+              database_url="$(sudo awk -F= '$1 == "DATABASE_URL" {sub(/^[^=]*=/, ""); print; exit}' "$working_directory/.env")"
+            fi
+            if [ -z "$database_url" ]; then
+              main_pid="$(sudo systemctl show "$SERVICE_NAME" --property=MainPID --value)"
+              if [ "${main_pid:-0}" -gt 0 ] && sudo test -r "/proc/$main_pid/environ"; then
+                database_url="$(sudo cat "/proc/$main_pid/environ" | tr '\0' '\n' | sed -n 's/^DATABASE_URL=//p' | head -n 1)"
+              fi
+            fi
+            if [ -z "$database_url" ]; then
+              echo 'RECONCILIATION_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo 'RECONCILIATION_ERROR=PYTHON3_NOT_AVAILABLE'
+              exit 1
+            fi
+            if ! command -v psql >/dev/null 2>&1; then
+              echo 'RECONCILIATION_ERROR=PSQL_NOT_AVAILABLE'
+              exit 1
+            fi
+            if ! command -v pg_dump >/dev/null 2>&1; then
+              echo 'RECONCILIATION_ERROR=PG_DUMP_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
+            import os
+            import re
+            import urllib.parse
+
+            raw = os.environ["DATABASE_URL"].strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("\"", "\x27"):
+                raw = raw[1:-1]
+            scheme, separator, remainder = raw.partition("://")
+            if separator != "://" or scheme not in ("postgres", "postgresql"):
+                raise SystemExit(2)
+            match = re.fullmatch(r"([^/?#]*)(.*)", remainder, flags=re.DOTALL)
+            if match is None:
+                raise SystemExit(2)
+            authority, suffix = match.groups()
+            userinfo, credential_separator, hostinfo = authority.rpartition("@")
+            if not credential_separator:
+                hostinfo = authority
+            parsed_host = urllib.parse.urlsplit("//" + hostinfo)
+            if not parsed_host.hostname:
+                raise SystemExit(2)
+            credentials = ""
+            if credential_separator:
+                raw_username, password_separator, raw_password = userinfo.partition(":")
+                credentials = urllib.parse.quote(urllib.parse.unquote(raw_username), safe="")
+                if password_separator:
+                    credentials += ":" + urllib.parse.quote(urllib.parse.unquote(raw_password), safe="")
+                credentials += "@"
+            hostname = parsed_host.hostname
+            formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
+            normalized_authority = credentials + formatted_host
+            if parsed_host.port is not None:
+                normalized_authority += ":" + str(parsed_host.port)
+            print(scheme + "://" + normalized_authority + suffix)
+            ')" || {
+              echo 'RECONCILIATION_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            }
+
+            sql_read() {
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+            }
+
+            permission_rows_before="$(sql_read "SELECT COUNT(*) FROM public.permissions WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat');")"
+            role_state="$(sql_read "SELECT COUNT(*) || '|' || COALESCE(MIN(level)::text,'') || '|' || COALESCE(MIN(name),'') FROM public.sales_roles WHERE id='$ROLE_ID'::uuid;")"
+            role_found_count="${role_state%%|*}"
+            role_remainder="${role_state#*|}"
+            role_level="${role_remainder%%|*}"
+            role_name="${role_remainder#*|}"
+            role_permission_count_before="$(sql_read "SELECT COUNT(*) FROM public.role_permissions WHERE sales_role_id='$ROLE_ID'::uuid;")"
+            ai_assignments_before="$(sql_read "SELECT COUNT(*) FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE rp.sales_role_id='$ROLE_ID'::uuid AND p.key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat');")"
+
+            printf 'PREFLIGHT_PERMISSION_ROWS=%s\n' "$permission_rows_before"
+            printf 'PREFLIGHT_ROLE_FOUND=%s\n' "$([ "$role_found_count" = "1" ] && printf YES || printf NO)"
+            printf 'PREFLIGHT_ROLE_NAME=%s\n' "${role_name:-NOT_FOUND}"
+            printf 'PREFLIGHT_ROLE_LEVEL=%s\n' "${role_level:-UNKNOWN}"
+            printf 'PREFLIGHT_ROLE_PERMISSION_COUNT=%s\n' "$role_permission_count_before"
+            printf 'PREFLIGHT_AI_ASSIGNMENTS=%s\n' "$ai_assignments_before"
+
+            if [ "$permission_rows_before" != "0" ]; then
+              echo 'RECONCILIATION_ERROR=AI_PERMISSION_KEYS_NOT_ALL_ABSENT'
+              exit 1
+            fi
+            if [ "$role_found_count" != "1" ] || [ "$role_level" != "4" ]; then
+              echo 'RECONCILIATION_ERROR=EXPECTED_LEVEL4_ROLE_NOT_FOUND'
+              exit 1
+            fi
+            if [ "$role_permission_count_before" != "$EXPECTED_PERMISSION_COUNT" ] || [ "$ai_assignments_before" != "0" ]; then
+              echo 'RECONCILIATION_ERROR=ROLE_PERMISSION_PREFLIGHT_CHANGED'
+              exit 1
+            fi
+
+            backup_directory="$working_directory/backups"
+            timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+            backup_path="$backup_directory/ai-permissions-before-$timestamp.dump"
+            sudo install -d -m 700 -o "$service_user" "$backup_directory"
+            sudo -u "$service_user" env DATABASE_URL="$normalized_database_url" PGOPTIONS='-c default_transaction_read_only=on' sh -c '
+              set +x
+              pg_dump "$DATABASE_URL" --format=custom --no-owner --no-privileges \
+                --table=public.permissions \
+                --table=public.role_permissions \
+                --table=public.sales_roles \
+                --file="$1"
+            ' sh "$backup_path"
+            if ! sudo test -s "$backup_path"; then
+              echo 'RECONCILIATION_ERROR=BACKUP_FAILED'
+              exit 1
+            fi
+            printf 'BACKUP_CREATED=YES\n'
+            printf 'BACKUP_PATH=%s\n' "$backup_path"
+
+            psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
+              --set=role_id="$ROLE_ID" \
+              --set=expected_count="$EXPECTED_PERMISSION_COUNT" <<'SQL'
+            BEGIN;
+            LOCK TABLE public.permissions, public.role_permissions, public.sales_roles IN SHARE ROW EXCLUSIVE MODE;
+
+            SELECT (
+              (SELECT COUNT(*) FROM public.permissions WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat')) = 0
+              AND (SELECT COUNT(*) FROM public.sales_roles WHERE id=:'role_id'::uuid AND level=4) = 1
+              AND (SELECT COUNT(*) FROM public.role_permissions WHERE sales_role_id=:'role_id'::uuid) = :'expected_count'::integer
+            ) AS transaction_preflight_ok \gset
+
+            \if :transaction_preflight_ok
+            INSERT INTO public.permissions
+              (id, key, name, description, group_key, parent_key, node_type, route_path, is_active, sort_order, created_at, updated_at)
+            VALUES
+              ((substr(md5('view_ai_summary'),1,8)||'-'||substr(md5('view_ai_summary'),9,4)||'-'||substr(md5('view_ai_summary'),13,4)||'-'||substr(md5('view_ai_summary'),17,4)||'-'||substr(md5('view_ai_summary'),21,12))::uuid,
+               'view_ai_summary', 'View AI Summary', '', 'prospects', NULL, 'ACTION', NULL, true, 69, now(), now()),
+              ((substr(md5('view_ai_menu_profiling'),1,8)||'-'||substr(md5('view_ai_menu_profiling'),9,4)||'-'||substr(md5('view_ai_menu_profiling'),13,4)||'-'||substr(md5('view_ai_menu_profiling'),17,4)||'-'||substr(md5('view_ai_menu_profiling'),21,12))::uuid,
+               'view_ai_menu_profiling', 'View AI Menu Profiling', '', 'prospects', NULL, 'ACTION', NULL, true, 70, now(), now()),
+              ((substr(md5('use_prospect_ai_chat'),1,8)||'-'||substr(md5('use_prospect_ai_chat'),9,4)||'-'||substr(md5('use_prospect_ai_chat'),13,4)||'-'||substr(md5('use_prospect_ai_chat'),17,4)||'-'||substr(md5('use_prospect_ai_chat'),21,12))::uuid,
+               'use_prospect_ai_chat', 'Use Prospect AI Chat', '', 'prospects', NULL, 'ACTION', NULL, true, 71, now(), now());
+
+            INSERT INTO public.role_permissions (sales_role_id, permission_id, created_at)
+            SELECT :'role_id'::uuid, id, now()
+            FROM public.permissions
+            WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat');
+
+            COMMIT;
+            \else
+            ROLLBACK;
+            \echo 'RECONCILIATION_ERROR=TRANSACTION_PREFLIGHT_CHANGED'
+            \quit 3
+            \endif
+            SQL
+
+            permission_rows_after="$(sql_read "SELECT COUNT(*) FROM public.permissions WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat') AND is_active=true;")"
+            duplicate_keys_after="$(sql_read "SELECT COUNT(*) FROM (SELECT key FROM public.permissions WHERE key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat') GROUP BY key HAVING COUNT(*) <> 1) duplicates;")"
+            ai_assignments_after="$(sql_read "SELECT COUNT(*) FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE rp.sales_role_id='$ROLE_ID'::uuid AND p.key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat') AND p.is_active=true;")"
+            role_permission_count_after="$(sql_read "SELECT COUNT(*) FROM public.role_permissions WHERE sales_role_id='$ROLE_ID'::uuid;")"
+            roles_changed="$(sql_read "SELECT COUNT(DISTINCT rp.sales_role_id) FROM public.role_permissions rp JOIN public.permissions p ON p.id=rp.permission_id WHERE p.key IN ('view_ai_summary','view_ai_menu_profiling','use_prospect_ai_chat') AND rp.sales_role_id <> '$ROLE_ID'::uuid;")"
+
+            if [ "$permission_rows_after" != "3" ] || [ "$duplicate_keys_after" != "0" ]; then
+              echo 'RECONCILIATION_ERROR=PERMISSION_POST_VALIDATION_FAILED'
+              exit 1
+            fi
+            if [ "$ai_assignments_after" != "3" ] || [ "$role_permission_count_after" != "27" ]; then
+              echo 'RECONCILIATION_ERROR=ROLE_POST_VALIDATION_FAILED'
+              exit 1
+            fi
+            if [ "$roles_changed" != "0" ]; then
+              echo 'RECONCILIATION_ERROR=UNEXPECTED_OTHER_ROLE_ASSIGNMENT'
+              exit 1
+            fi
+
+            echo '================ AI PERMISSION RECONCILIATION ================'
+            printf 'VIEW_AI_SUMMARY=EXISTS_ACTIVE\n'
+            printf 'VIEW_AI_MENU_PROFILING=EXISTS_ACTIVE\n'
+            printf 'USE_PROSPECT_AI_CHAT=EXISTS_ACTIVE\n'
+            printf 'ROLE_VIEW_AI_SUMMARY=YES\n'
+            printf 'ROLE_VIEW_AI_MENU_PROFILING=YES\n'
+            printf 'ROLE_USE_PROSPECT_AI_CHAT=YES\n'
+            printf 'ROLE_PERMISSION_COUNT_BEFORE=%s\n' "$role_permission_count_before"
+            printf 'ROLE_PERMISSION_COUNT_AFTER=%s\n' "$role_permission_count_after"
+            printf 'DUPLICATE_PERMISSION_KEYS=%s\n' "$duplicate_keys_after"
+            printf 'OTHER_ROLES_CHANGED=NO\n'
+            printf 'RECONCILIATION_COMMITTED=YES\n'
