@@ -9,6 +9,7 @@ import (
 	"crm-prospect-simulator/backend/config"
 	adminhandler "crm-prospect-simulator/backend/internal/admin/handler"
 	adminservice "crm-prospect-simulator/backend/internal/admin/service"
+	aiservice "crm-prospect-simulator/backend/internal/ai/service"
 	authhandler "crm-prospect-simulator/backend/internal/auth/handler"
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	"crm-prospect-simulator/backend/internal/auth/model"
@@ -22,9 +23,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/google/uuid"
 )
 
-func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service) *fiber.App {
+func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service, initialAnalyzers ...*aiservice.InitialAnalyzer) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "Yummy CRM API",
 		ReadTimeout:  15 * time.Second,
@@ -80,6 +82,20 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 			"modelConfigured": cfg.OpenAIModel != "",
 		})
 	})
+	ai.Post("/prospects/:id/chat", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAI)
+	if len(initialAnalyzers) > 0 && initialAnalyzers[0] != nil {
+		ai.Get("/prospects/:id/initial-analysis", authMiddleware.RequirePermission("view_ai_summary"), func(c *fiber.Ctx) error {
+			id, err := uuid.Parse(c.Params("id"))
+			if err != nil {
+				return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+			}
+			item, err := initialAnalyzers[0].Get(c.UserContext(), id)
+			if err != nil {
+				return response.Error(c, fiber.StatusNotFound, "AI_ANALYSIS_NOT_AVAILABLE", "AI analysis is not available.")
+			}
+			return response.Data(c, fiber.StatusOK, item)
+		})
+	}
 
 	dashboard := api.Group("/dashboard", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged)
 	dashboard.Get("/admin", authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator), func(c *fiber.Ctx) error {

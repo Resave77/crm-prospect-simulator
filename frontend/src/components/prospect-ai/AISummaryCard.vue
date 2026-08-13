@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import type { ProspectInitialAnalysis } from '../../types/crm'
+
 defineProps<{
   prospectName?: string
+  analysis?: ProspectInitialAnalysis | null
 }>()
 </script>
 
@@ -14,18 +17,15 @@ defineProps<{
       <button class="ai-icon-btn" type="button" disabled aria-label="Expand AI summary"><i class="pi pi-window-maximize" /></button>
     </div>
 
-    <div class="ai-state ai-empty">
+    <div v-if="!analysis || analysis.status === 'PENDING'" class="ai-state ai-empty">
       <i class="pi pi-file-edit" />
       <div>
         <strong>AI Summary belum dibuat.</strong>
         <span>{{ prospectName || 'Prospect' }} siap untuk diringkas ketika AI generation diaktifkan.</span>
       </div>
     </div>
-
-    <button class="ai-primary-btn" type="button" disabled>
-      <i class="pi pi-sparkles" />
-      Generate summary
-    </button>
+    <div v-else-if="analysis.status === 'FAILED'" class="ai-state ai-empty"><i class="pi pi-exclamation-triangle" /><div><strong>AI Summary gagal dibuat.</strong><span>Analisis tetap aman tanpa mengganggu data CRM.</span></div></div>
+    <div v-else class="ai-state ai-empty"><i class="pi pi-check-circle" /><div><strong>{{ String(analysis.summary?.summary || 'AI Summary tersedia.') }}</strong><span>Potential: {{ String(analysis.summary?.potential || 'UNKNOWN') }}</span></div></div>
   </article>
 </template>
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -120,11 +121,14 @@ func (c *Client) GenerateText(ctx context.Context, instructions, input string) (
 	requestID := resp.Header.Get("x-request-id")
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
+		logUpstreamFailure(resp, requestID)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIRateLimited
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500:
+		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIUnavailable
 	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIInvalidResponse
 	}
@@ -151,6 +155,35 @@ func (c *Client) GenerateText(ctx context.Context, instructions, input string) (
 		TotalTokens:       parsed.Usage.TotalTokens,
 		UpstreamRequestID: requestID,
 	}, nil
+}
+
+type upstreamErrorBody struct {
+	Error struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	} `json:"error"`
+}
+
+func logUpstreamFailure(resp *http.Response, requestID string) {
+	var parsed upstreamErrorBody
+	if resp.Body != nil {
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		if err == nil {
+			_ = json.Unmarshal(data, &parsed)
+		}
+	}
+	slog.Warn("OpenAI upstream request failed",
+		"status", resp.StatusCode,
+		"error_type", parsed.Error.Type,
+		"error_code", parsed.Error.Code,
+		"request_id", requestID,
+		"ratelimit_limit_requests", resp.Header.Get("x-ratelimit-limit-requests"),
+		"ratelimit_remaining_requests", resp.Header.Get("x-ratelimit-remaining-requests"),
+		"ratelimit_reset_requests", resp.Header.Get("x-ratelimit-reset-requests"),
+		"ratelimit_limit_tokens", resp.Header.Get("x-ratelimit-limit-tokens"),
+		"ratelimit_remaining_tokens", resp.Header.Get("x-ratelimit-remaining-tokens"),
+		"ratelimit_reset_tokens", resp.Header.Get("x-ratelimit-reset-tokens"),
+	)
 }
 
 type requestBody struct {

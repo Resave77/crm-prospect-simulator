@@ -3,9 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { getMyProspect, getProspectPlaceDetails } from '../../../api/crm'
+import { getMyProspect, getProspectPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
-import type { ProspectReview, PlaceDetails } from '../../../types/crm'
+import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
 import ProspectComments from '../../../components/ProspectComments.vue'
 import PlacePhotoGallery from '../../../components/PlacePhotoGallery.vue'
@@ -23,6 +23,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const review = ref<ProspectReview | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
+const initialAnalysis = ref<ProspectInitialAnalysis | null>(null)
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
@@ -162,12 +163,14 @@ onMounted(async () => {
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
-    const [reviewData, placeData] = await Promise.all([
+    const [reviewData, placeData, analysisData] = await Promise.all([
       getMyProspect(prospectId),
       getProspectPlaceDetails(prospectId, 'SALES_EXECUTIVE').catch(() => null),
+      getProspectInitialAnalysis(prospectId).catch(() => null),
     ])
     review.value = reviewData
     placeDetails.value = placeData
+    initialAnalysis.value = analysisData
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
 
@@ -539,7 +542,7 @@ onBeforeUnmount(() => {
             <button class="expand-control" type="button" title="Expand AI Summary" aria-label="Expand AI Summary" @click="openExpandedPanel('summary')">
               <i class="pi pi-window-maximize" /><span>Expand</span>
             </button>
-            <AISummaryCard class="detail-ai-summary" :prospect-name="review.prospect.placeName" />
+            <AISummaryCard class="detail-ai-summary" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
           </div>
 
           <section class="dcard business-contact-card">
@@ -583,7 +586,7 @@ onBeforeUnmount(() => {
             <button class="expand-control" type="button" title="Expand Tanya AI" aria-label="Expand Tanya AI" @click="openExpandedPanel('chat')">
               <i class="pi pi-window-maximize" /><span>Expand</span>
             </button>
-            <TanyaAICard class="detail-tanya-ai" />
+            <TanyaAICard class="detail-tanya-ai" :prospect-id="review.prospect.id" />
           </div>
 
           <!-- Optional supporting data only renders when it has actual content -->
@@ -665,9 +668,9 @@ onBeforeUnmount(() => {
               <button type="button" aria-label="Close expanded panel" @click="closeExpandedPanel"><i class="pi pi-times" /></button>
             </header>
             <div class="expand-dialog-body">
-              <AISummaryCard v-if="expandedPanel === 'summary'" :prospect-name="review.prospect.placeName" />
+              <AISummaryCard v-if="expandedPanel === 'summary'" :prospect-name="review.prospect.placeName" :analysis="initialAnalysis" />
               <ProspectComments v-else-if="expandedPanel === 'discussion'" :prospect-id="review.prospect.id" role="SALES_EXECUTIVE" :embedded="true" />
-              <TanyaAICard v-else-if="expandedPanel === 'chat'" />
+              <TanyaAICard v-else-if="expandedPanel === 'chat'" :prospect-id="review.prospect.id" />
             </div>
           </section>
         </div>

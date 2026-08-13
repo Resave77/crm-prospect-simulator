@@ -40,11 +40,14 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	prospectRepo := prospectrepository.NewPostgresRepository(pool)
 	placesClient := prospectservice.NewGooglePlacesClient(cfg.GoogleMapsAPIKey, cfg.GoogleCSEID, cfg.GoogleCSEAPIKey)
 	aiClient := aiservice.NewClient(cfg)
-	_ = aiservice.NewProspectAI(aiClient, cfg.AIChatMaxLength, cfg.AIChatMaxHistory)
+	prospectAI := aiservice.NewProspectAI(aiClient, cfg.AIChatMaxLength, cfg.AIChatMaxHistory)
+	initialAnalyzer := aiservice.NewInitialAnalyzer(pool, prospectAI)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
+	prospectService.SetInitialAnalysis(initialAnalyzer.Analyze)
+	prospectService.SetChatAI(initialAnalyzer.Chat)
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)
 	adminRepo := adminrepository.NewPostgresRepository(pool)
 	adminService := adminservice.New(adminRepo)
-	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService), Pool: pool}, cfg, nil
+	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService, initialAnalyzer), Pool: pool}, cfg, nil
 }

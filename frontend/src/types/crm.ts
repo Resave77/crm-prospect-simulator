@@ -7,6 +7,22 @@ export interface AIStatus {
   modelConfigured: boolean
 }
 
+export interface ProspectInitialAnalysis {
+  prospectId: string
+  summary?: Record<string, unknown> | null
+  menu?: Record<string, unknown> | null
+  status: 'PENDING' | 'SUCCESS' | 'FAILED'
+  errorCode?: string
+}
+
+export interface ProspectChatResponse {
+  answer: string
+  skill: string
+  insight: string
+  why: string
+  recommendedAction: string
+}
+
 export interface Prospect {
   id: string
   googlePlaceId: string

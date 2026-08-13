@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	aiservice "crm-prospect-simulator/backend/internal/ai/service"
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	customerrepo "crm-prospect-simulator/backend/internal/customer/repository"
 	customerservice "crm-prospect-simulator/backend/internal/customer/service"
@@ -30,6 +32,11 @@ type Handler struct {
 
 type createCommentRequest struct {
 	Content string `json:"content"`
+}
+
+type chatRequest struct {
+	Message string `json:"message"`
+	Skill   string `json:"skill"`
 }
 
 type setPhotoTagRequest struct {
@@ -72,6 +79,26 @@ func (h *Handler) MyProspect(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, item)
+}
+
+func (h *Handler) ChatAI(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	var input chatRequest
+	if err := c.BodyParser(&input); err != nil || strings.TrimSpace(input.Message) == "" {
+		return response.Error(c, fiber.StatusBadRequest, "AI_MESSAGE_INVALID", "A question is required.")
+	}
+	result, err := h.service.ChatAI(c.UserContext(), actor(c), id, input.Message, input.Skill)
+	if err != nil {
+		return writeError(c, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		return writeError(c, aiservice.ErrAIInvalidResponse)
+	}
+	return response.Data(c, fiber.StatusOK, payload)
 }
 
 func (h *Handler) Decide(c *fiber.Ctx) error {
@@ -662,6 +689,8 @@ func writeError(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
+	case errors.Is(err, aiservice.ErrAINotConfigured), errors.Is(err, aiservice.ErrAIUnavailable), errors.Is(err, aiservice.ErrAITimeout), errors.Is(err, aiservice.ErrAIRateLimited), errors.Is(err, aiservice.ErrAIInvalidResponse):
+		return response.Error(c, fiber.StatusServiceUnavailable, aiservice.SafeErrorCode(err), "AI is temporarily unavailable.")
 	case errors.Is(err, service.ErrTransition), errors.Is(err, service.ErrNotesRequired), errors.Is(err, service.ErrFinderInput), errors.Is(err, service.ErrVisitCoordinates), errors.Is(err, service.ErrPhotoTagInvalid), errors.Is(err, service.ErrPlacePhotoInvalid):
 		return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, service.ErrPlacesDisabled):

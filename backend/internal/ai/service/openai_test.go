@@ -93,6 +93,22 @@ func TestGenerateTextRateLimited(t *testing.T) {
 	}
 }
 
+func TestGenerateTextRateLimitedKeepsSafeMappingWithDiagnosticsHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-request-id", "req_rate")
+		w.Header().Set("x-ratelimit-remaining-requests", "0")
+		w.Header().Set("x-ratelimit-reset-requests", "1s")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_exceeded","code":"rate_limit_exceeded","message":"sensitive upstream detail"}}`))
+	}))
+	defer server.Close()
+
+	_, err := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client())).GenerateText(context.Background(), "", "")
+	if !errors.Is(err, ErrAIRateLimited) || SafeErrorCode(err) != "AI_RATE_LIMITED" {
+		t.Fatalf("err=%v, code=%s", err, SafeErrorCode(err))
+	}
+}
+
 func TestGenerateTextUnavailableStatuses(t *testing.T) {
 	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway, http.StatusUnauthorized, http.StatusForbidden} {
 		err := errorFromStatus(t, status)

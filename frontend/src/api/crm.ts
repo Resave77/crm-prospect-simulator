@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AIStatus, AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AIStatus, AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectChatResponse, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, ProspectInitialAnalysis, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -12,6 +12,14 @@ export async function getTeamDashboard() {
 
 export async function getAIStatus() {
   return (await api.get<ApiEnvelope<AIStatus>>('/ai/status')).data.data
+}
+
+export async function getProspectInitialAnalysis(id: string) {
+  return (await api.get<ApiEnvelope<ProspectInitialAnalysis>>(`/ai/prospects/${id}/initial-analysis`)).data.data
+}
+
+export async function askProspectAI(id: string, message: string, skill = 'AUTO') {
+  return (await api.post<ApiEnvelope<ProspectChatResponse>>(`/ai/prospects/${id}/chat`, { message, skill })).data.data
 }
 
 export async function transitionProspect(id: string, status: ProspectStatus, notes: string) {

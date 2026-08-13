@@ -36,8 +36,10 @@ type Actor struct {
 }
 
 type Service struct {
-	repository repository.Repository
-	places     Places
+	repository      repository.Repository
+	places          Places
+	initialAnalysis func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment)
+	chatAI          func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, string, string) (string, error)
 }
 
 type Places interface {
@@ -54,6 +56,46 @@ func New(repo repository.Repository, placeClients ...Places) *Service {
 		places = placeClients[0]
 	}
 	return &Service{repository: repo, places: places}
+}
+
+func (s *Service) SetInitialAnalysis(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment)) {
+	s.initialAnalysis = fn
+}
+
+func (s *Service) SetChatAI(fn func(context.Context, prospectmodel.Review, *prospectmodel.PlaceDetails, []prospectmodel.ProspectComment, string, string) (string, error)) {
+	s.chatAI = fn
+}
+
+func (s *Service) ChatAI(ctx context.Context, actor Actor, id uuid.UUID, message, skill string) (string, error) {
+	if !actor.can("use_prospect_ai_chat") || s.chatAI == nil {
+		return "", ErrForbidden
+	}
+	skill = strings.ToUpper(strings.TrimSpace(skill))
+	if skill == "" {
+		skill = "AUTO"
+	}
+	supported := map[string]bool{"AUTO": true, "PROSPECT_ANALYSIS": true, "QUALIFICATION_ANALYSIS": true, "MENU_OPPORTUNITY": true, "NEXT_BEST_ACTION": true, "VISIT_PREPARATION": true, "DISCOVERY_QUESTIONS": true, "OBJECTION_HANDLING": true, "SALES_PITCH": true, "FOLLOW_UP": true, "DEAL_RISK_ANALYSIS": true}
+	if !supported[skill] {
+		return "", ErrFinderInput
+	}
+	review, err := s.repository.FindReview(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if !actor.Role.IsAdminRole() && review.Prospect.AssignedSalesExecutiveID != actor.UserID {
+		return "", ErrForbidden
+	}
+	comments, err := s.repository.ListComments(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	var details *prospectmodel.PlaceDetails
+	if s.places != nil {
+		if loaded, detailErr := s.places.DetailFull(ctx, review.Prospect.GooglePlaceID); detailErr == nil {
+			details = &loaded
+		}
+	}
+	return s.chatAI(ctx, review, details, comments, message, skill)
 }
 
 func (s *Service) MyProspects(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {
@@ -301,7 +343,26 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 	if existing[input.Place.GooglePlaceID] {
 		return prospectmodel.Prospect{}, ErrAlreadyCustomer
 	}
-	return s.repository.Create(ctx, input, actor.UserID)
+	item, err := s.repository.Create(ctx, input, actor.UserID)
+	if err == nil && s.initialAnalysis != nil {
+		go func() {
+			analysisCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			review, reviewErr := s.repository.FindReview(analysisCtx, item.ID)
+			if reviewErr != nil {
+				return
+			}
+			comments, _ := s.repository.ListComments(analysisCtx, item.ID)
+			var details *prospectmodel.PlaceDetails
+			if s.places != nil {
+				if loaded, detailErr := s.places.DetailFull(analysisCtx, item.GooglePlaceID); detailErr == nil {
+					details = &loaded
+				}
+			}
+			s.initialAnalysis(analysisCtx, review, details, comments)
+		}()
+	}
+	return item, err
 }
 
 func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {

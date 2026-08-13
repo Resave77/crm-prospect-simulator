@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { askProspectAI } from '../../api/crm'
+import { useAuthStore } from '../../stores/auth'
+import type { ProspectChatResponse } from '../../types/crm'
 
-const input = ref('')
-const chips = ['Ringkas prospek', 'Cari peluang yoghurt', 'Buat pitch visit']
+const props = defineProps<{ prospectId: string }>()
+const auth = useAuthStore()
+const message = ref('')
+const loading = ref(false)
+const error = ref('')
+const answer = ref<ProspectChatResponse | null>(null)
+const chips = [{ label: 'Ringkas prospek', skill: 'PROSPECT_ANALYSIS' }, { label: 'Cari peluang yoghurt', skill: 'MENU_OPPORTUNITY' }, { label: 'Buat pitch visit', skill: 'SALES_PITCH' }]
+const selectedSkill = ref('AUTO')
+const messageLength = computed(() => message.value.trim().length)
+const hasProspectId = computed(() => props.prospectId.trim().length > 0)
+const permissionResult = computed(() => auth.hasPermission('use_prospect_ai_chat'))
+const canSubmit = computed(() => messageLength.value > 0 && hasProspectId.value && permissionResult.value && !loading.value)
 
-function useChip(text: string) {
-  input.value = text
+function useChip(chip: { label: string; skill: string }) {
+  message.value = chip.label
+  selectedSkill.value = chip.skill
 }
 
-function blockSubmit(event?: Event) {
-  event?.preventDefault()
+async function submit() {
+  if (!canSubmit.value) return
+  loading.value = true; error.value = ''
+  try { answer.value = await askProspectAI(props.prospectId, message.value.trim(), selectedSkill.value); message.value = '' }
+  catch (caught: any) { error.value = caught?.response?.data?.error?.message || 'AI sedang tidak tersedia.' }
+  finally { loading.value = false }
 }
 </script>
 
@@ -17,29 +35,32 @@ function blockSubmit(event?: Event) {
   <article class="tanya-card">
     <div class="tanya-head">
       <p class="ai-eyebrow"><i class="pi pi-comments" /> Tanya AI</p>
-      <span>Preview mode</span>
+      <span>{{ loading ? 'Thinking...' : 'Sales copilot' }}</span>
     </div>
 
     <div class="tanya-messages">
-      <div class="tanya-empty">
+      <div v-if="loading" class="tanya-empty"><i class="pi pi-spin pi-spinner" /><strong>AI sedang menganalisis...</strong><span>Tunggu sebentar.</span></div>
+      <div v-else-if="error" class="tanya-empty"><i class="pi pi-exclamation-triangle" /><strong>AI tidak tersedia.</strong><span>{{ error }}</span></div>
+      <div v-else-if="answer" class="tanya-answer"><strong>{{ answer.answer }}</strong><span v-if="answer.insight">Insight: {{ answer.insight }}</span><span v-if="answer.recommendedAction">Langkah berikutnya: {{ answer.recommendedAction }}</span></div>
+      <div v-else class="tanya-empty">
         <i class="pi pi-sparkles" />
-        <strong>Tanya AI belum aktif.</strong>
-        <span>Pertanyaan tidak akan dikirim sampai backend generation diaktifkan.</span>
+        <strong>Tanya AI siap digunakan.</strong>
+        <span>Tanyakan hal spesifik tentang prospek ini.</span>
       </div>
     </div>
 
     <div class="tanya-chips" aria-label="AI prompt suggestions">
-      <button v-for="chip in chips" :key="chip" type="button" @click="useChip(chip)">{{ chip }}</button>
+      <button v-for="chip in chips" :key="chip.label" type="button" @click="useChip(chip)" :disabled="loading">{{ chip.label }}</button>
     </div>
 
-    <form class="tanya-input-row" @submit="blockSubmit">
+    <form class="tanya-input-row" @submit.prevent="submit">
       <textarea
-        v-model="input"
+        v-model="message"
         rows="2"
         placeholder="Tulis pertanyaan untuk AI..."
-        @keydown.enter.exact.prevent
+        @keydown.enter.exact.prevent="submit"
       />
-      <button type="submit" disabled><i class="pi pi-send" /> Ask AI</button>
+      <button class="tanya-submit" type="submit" :disabled="!canSubmit"><i class="pi pi-send" /> {{ loading ? '...' : 'Ask AI' }}</button>
     </form>
   </article>
 </template>
@@ -188,7 +209,16 @@ function blockSubmit(event?: Event) {
   color: #9b8b8f;
   font-size: 0.72rem;
   font-weight: 800;
+  cursor: pointer;
+}
+
+.tanya-input-row button:disabled {
   cursor: not-allowed;
+}
+
+.tanya-input-row .tanya-submit:not(:disabled) {
+  background: #e63946;
+  color: #fff;
 }
 
 @media (max-width: 480px) {

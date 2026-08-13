@@ -112,10 +112,23 @@ model Prospect {
   visits                   ProspectVisit[]
   comments                 ProspectComment[]        @relation("ProspectCommentProspect")
   photoTags                ProspectPhotoTag[]      @relation("ProspectPhotoTagProspect")
+  aiAnalysis              ProspectAIAnalysis?
 
   @@index([assignedSalesExecutiveId, status])
   @@index([status, createdAt])
   @@map("prospects")
+}
+
+model ProspectAIAnalysis {
+  prospectId String   @id @map("prospect_id") @db.Uuid
+  summaryJson Json?   @map("summary_json")
+  menuJson    Json?   @map("menu_json")
+  status      String   @default("PENDING")
+  errorCode   String   @default("") @map("error_code")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  prospect    Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  @@map("prospect_ai_analyses")
 }
 
 model ProspectVisit {
