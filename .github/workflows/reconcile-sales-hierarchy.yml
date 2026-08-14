@@ -1,0 +1,236 @@
+name: Controlled Sales Hierarchy Reconciliation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reconcile-sales-hierarchy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile VPS sales hierarchy (controlled one-shot)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+            EXPECTED_WORKING_DIRECTORY="/home/smk_dev/app/backend/dev"
+            BACKUP_DIRECTORY="$EXPECTED_WORKING_DIRECTORY/backups"
+            CANONICAL_ROOT_ID="c67edd75-23fe-4a91-b3b6-4c1181cc9d8d"
+            DUDUNG_ID="1391e74f-f2a4-405f-b924-49bf0617bb5d"
+            ROOT_ROLE_ID="00000000-0000-0000-0000-000000000100"
+            SALES_LEVEL1_ROLE_ID="00000000-0000-0000-0000-000000000101"
+            SALES_LEVEL2_ROLE_ID="00000000-0000-0000-0000-000000000102"
+            SALES_LEVEL3_ROLE_ID="00000000-0000-0000-0000-000000000104"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+            if [ "$working_directory" != "$EXPECTED_WORKING_DIRECTORY" ]; then
+              echo 'RECONCILIATION_ERROR=UNEXPECTED_SERVICE_WORKING_DIRECTORY'
+              exit 1
+            fi
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+            if [ -z "$environment_file" ] && sudo test -r "$working_directory/.env"; then
+              environment_file="$working_directory/.env"
+            fi
+            if [ -z "$environment_file" ] || ! sudo test -r "$environment_file"; then
+              echo 'RECONCILIATION_ERROR=SERVICE_ENV_FILE_NOT_READABLE'
+              exit 1
+            fi
+
+            database_url="$(sudo awk '
+              /^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*=/ {
+                line=$0; sub(/^[^=]*=/, "", line); sub(/^[[:space:]]*/, "", line); sub(/[[:space:]]*$/, "", line)
+                gsub(/^['"'"']|['"'"']$/, "", line); print line; exit
+              }
+            ' "$environment_file")"
+            if [ -z "$database_url" ]; then
+              echo 'RECONCILIATION_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+            if ! command -v python3 >/dev/null 2>&1 || ! command -v psql >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1; then
+              echo 'RECONCILIATION_ERROR=REQUIRED_DATABASE_TOOL_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            normalized_database_url="$(DATABASE_URL="$database_url" python3 -c '
+            import os
+            import re
+            import urllib.parse
+            raw = os.environ["DATABASE_URL"].strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("\"", "\x27"):
+                raw = raw[1:-1]
+            scheme, separator, remainder = raw.partition("://")
+            if separator != "://" or scheme not in ("postgres", "postgresql"):
+                raise SystemExit(2)
+            match = re.fullmatch(r"([^/?#]*)(.*)", remainder, flags=re.DOTALL)
+            if match is None:
+                raise SystemExit(2)
+            authority, suffix = match.groups()
+            userinfo, credential_separator, hostinfo = authority.rpartition("@")
+            if not credential_separator:
+                hostinfo = authority
+            parsed_host = urllib.parse.urlsplit("//" + hostinfo)
+            if not parsed_host.hostname:
+                raise SystemExit(2)
+            credentials = ""
+            if credential_separator:
+                raw_username, password_separator, raw_password = userinfo.partition(":")
+                credentials = urllib.parse.quote(urllib.parse.unquote(raw_username), safe="")
+                if password_separator:
+                    credentials += ":" + urllib.parse.quote(urllib.parse.unquote(raw_password), safe="")
+                credentials += "@"
+            hostname = parsed_host.hostname
+            formatted_host = "[" + hostname + "]" if ":" in hostname else hostname
+            normalized_authority = credentials + formatted_host
+            if parsed_host.port is not None:
+                normalized_authority += ":" + str(parsed_host.port)
+            print(scheme + "://" + normalized_authority + suffix)
+            ' )" || {
+              echo 'RECONCILIATION_ERROR=DATABASE_TARGET_PARSE_FAILED'
+              exit 1
+            }
+            export PGOPTIONS='-c default_transaction_read_only=on'
+
+            sql_read() {
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
+            }
+
+            preflight="$(sql_read "
+              WITH RECURSIVE active AS (
+                SELECT a.*, u.role::text AS account_role, u.status::text AS account_status,
+                       r.name AS role_name, r.level AS role_level
+                FROM public.sales_structure_assignments a
+                JOIN public.users u ON u.id=a.user_id
+                JOIN public.sales_roles r ON r.id=a.sales_role_id
+                WHERE a.effective_from <= CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                  AND u.deleted_at IS NULL
+              ), dudung AS (
+                SELECT * FROM active WHERE user_id='$DUDUNG_ID'::uuid
+              ), child2 AS (
+                SELECT * FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND role_level=2
+              ), child3 AS (
+                SELECT a.* FROM active a JOIN child2 b ON a.parent_user_id=b.user_id WHERE a.role_level=3
+              ), child4 AS (
+                SELECT a.* FROM active a JOIN child3 b ON a.parent_user_id=b.user_id WHERE a.role_level=4
+              ), defects AS (
+                SELECT COUNT(*) AS n FROM active a LEFT JOIN active p ON p.user_id=a.parent_user_id
+                WHERE (a.parent_user_id IS NOT NULL AND p.user_id IS NULL)
+                   OR a.user_id=a.parent_user_id
+                   OR (a.role_level>1 AND (p.role_level IS NULL OR p.role_level<>a.role_level-1))
+              ), duplicates AS (
+                SELECT COUNT(*) AS n FROM active GROUP BY user_id HAVING COUNT(*)>1
+              ), walk AS (
+                SELECT user_id AS start_id, user_id, parent_user_id, ARRAY[user_id] AS path, false AS cycle
+                FROM active
+                UNION ALL
+                SELECT w.start_id, p.user_id, p.parent_user_id, w.path || p.user_id,
+                       p.user_id=ANY(w.path)
+                FROM walk w JOIN active p ON p.user_id=w.parent_user_id
+                WHERE NOT w.cycle AND cardinality(w.path) <= 20
+              )
+              SELECT CASE WHEN
+                (SELECT COUNT(*) FROM public.users WHERE id='$CANONICAL_ROOT_ID'::uuid AND employee_id='ADM-0001' AND role::text='SUPER_ADMIN' AND status::text='ACTIVE' AND deleted_at IS NULL)=1
+                AND (SELECT COUNT(*) FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid AND name='SUPER_ADMIN' AND level=1 AND is_active)=1
+                AND (SELECT COUNT(*) FROM dudung WHERE account_role='SALES_MANAGER' AND role_name='Sales Level 1' AND role_level=1 AND parent_user_id IS NULL)=1
+                AND (SELECT COUNT(*) FROM child2)=1
+                AND (SELECT COUNT(*) FROM child3)=1
+                AND (SELECT COUNT(*) FROM child4)>=1
+                AND (SELECT n FROM defects)=0
+                AND NOT EXISTS (SELECT 1 FROM duplicates)
+                AND NOT EXISTS (SELECT 1 FROM walk WHERE cycle)
+              THEN 'PASS' ELSE 'FAIL' END;
+            ")"
+            printf 'PREFLIGHT=%s\n' "$preflight"
+            if [ "$preflight" != "PASS" ]; then
+              echo 'RECONCILIATION_ERROR=PREFLIGHT_STATE_CHANGED_OR_UNEXPECTED'
+              exit 1
+            fi
+
+            timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+            backup_path="$BACKUP_DIRECTORY/sales-hierarchy-before-$timestamp.dump"
+            sudo install -d -m 700 "$BACKUP_DIRECTORY"
+            if ! sudo env PGOPTIONS='-c default_transaction_read_only=on' pg_dump "$normalized_database_url" --format=custom --no-owner --no-privileges \
+              --table=public.sales_roles --table=public.sales_structure_assignments --file="$backup_path"; then
+              echo 'RECONCILIATION_ERROR=BACKUP_FAILED'
+              exit 1
+            fi
+            if ! sudo test -s "$backup_path"; then
+              echo 'RECONCILIATION_ERROR=BACKUP_EMPTY'
+              exit 1
+            fi
+            printf 'BACKUP_CREATED=YES\n'
+
+            psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 <<'SQL'
+            BEGIN;
+            SET LOCAL lock_timeout='10s';
+            SET LOCAL statement_timeout='60s';
+            LOCK TABLE public.sales_roles, public.sales_structure_assignments IN SHARE ROW EXCLUSIVE MODE;
+
+            UPDATE public.sales_roles
+            SET level = CASE id
+              WHEN '00000000-0000-0000-0000-000000000100'::uuid THEN 1
+              WHEN '00000000-0000-0000-0000-000000000101'::uuid THEN 2
+              WHEN '00000000-0000-0000-0000-000000000102'::uuid THEN 3
+              WHEN '00000000-0000-0000-0000-000000000104'::uuid THEN 4
+              ELSE level END,
+                updated_at=now()
+            WHERE id IN ('00000000-0000-0000-0000-000000000100'::uuid,
+                         '00000000-0000-0000-0000-000000000101'::uuid,
+                         '00000000-0000-0000-0000-000000000102'::uuid,
+                         '00000000-0000-0000-0000-000000000104'::uuid);
+
+            INSERT INTO public.sales_structure_assignments
+              (id,user_id,sales_role_id,parent_user_id,effective_from,effective_to,created_by,updated_at)
+            SELECT gen_random_uuid(), '$CANONICAL_ROOT_ID'::uuid, '$ROOT_ROLE_ID'::uuid, NULL,
+                   d.effective_from, NULL, '$CANONICAL_ROOT_ID'::uuid, now()
+            FROM public.sales_structure_assignments d
+            WHERE d.user_id='$DUDUNG_ID'::uuid
+              AND d.effective_from <= CURRENT_DATE AND (d.effective_to IS NULL OR d.effective_to >= CURRENT_DATE)
+              AND NOT EXISTS (
+                SELECT 1 FROM public.sales_structure_assignments x
+                WHERE x.user_id='$CANONICAL_ROOT_ID'::uuid
+                  AND x.effective_from <= CURRENT_DATE AND (x.effective_to IS NULL OR x.effective_to >= CURRENT_DATE)
+              );
+
+            UPDATE public.sales_structure_assignments
+            SET sales_role_id='$SALES_LEVEL1_ROLE_ID'::uuid,
+                parent_user_id='$CANONICAL_ROOT_ID'::uuid,
+                updated_at=now()
+            WHERE user_id='$DUDUNG_ID'::uuid
+              AND effective_from <= CURRENT_DATE AND (effective_to IS NULL OR effective_to >= CURRENT_DATE);
+
+            SELECT (
+              (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
+               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL
+                 AND u.id='$CANONICAL_ROOT_ID'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND r.level=1 AND a.parent_user_id IS NULL)=1
+              AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
+               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.id='$DUDUNG_ID'::uuid
+                 AND r.name='Sales Level 1' AND r.level=2 AND a.parent_user_id='$CANONICAL_ROOT_ID'::uuid)=1
+              AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id
+               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1
+              AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL))
+              AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id LEFT JOIN public.sales_structure_assignments p ON p.user_id=a.parent_user_id AND p.effective_from<=CURRENT_DATE AND (p.effective_to IS NULL OR p.effective_to>=CURRENT_DATE) WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level>1 AND (p.user_id IS NULL OR (SELECT level FROM public.sales_roles WHERE id=p.sales_role_id)<>r.level-1))
+            ) AS post_validation_ok \gset
+            \if :post_validation_ok
+            COMMIT;
+            \else
+            ROLLBACK;
+            \quit 1
+            \endif
+            SQL
+
+            printf 'POST_VALIDATION=PASS\n'
+            printf 'SOURCE_FIX_REQUIRED=NO\nFRONTEND_REDEPLOY_REQUIRED=NO\nBACKEND_REDEPLOY_REQUIRED=NO\n'
+            printf 'DATABASE_MUTATION=TARGETED_ONLY\nDEPLOYMENT_TRIGGERED=NO\n'
+            unset database_url normalized_database_url PGOPTIONS
