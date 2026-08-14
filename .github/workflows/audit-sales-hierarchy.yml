@@ -229,18 +229,26 @@ jobs:
               WHERE a.effective_from <= CURRENT_DATE
                 AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
                 AND u.deleted_at IS NULL
-            ), dudung AS (
-              SELECT * FROM active WHERE lower(btrim(full_name)) = 'dudung muajer'
+            ), resolved_level1 AS (
+              SELECT active.*,
+                     CASE WHEN lower(btrim(active.full_name)) = 'dudung muajer' THEN 'EXACT_NAME' ELSE 'LEVEL_1_FALLBACK' END AS lookup_method
+              FROM active
+              WHERE active.hierarchy_level = 1
+              ORDER BY CASE WHEN lower(btrim(active.full_name)) = 'dudung muajer' THEN 0 ELSE 1 END,
+                       active.effective_from DESC,
+                       active.user_id
+              LIMIT 1
             )
-            SELECT d.user_id AS dudung_id,
+            SELECT d.user_id AS resolved_level1_id,
                    COALESCE(d.employee_id, '-') AS employee_id,
                    d.full_name,
-                   d.account_role AS dudung_role,
+                   d.lookup_method,
+                   d.account_role AS resolved_level1_role,
                    d.hierarchy_role,
-                   d.hierarchy_level AS dudung_hierarchy_level,
-                   d.parent_user_id AS dudung_parent_id,
-                   COALESCE(p.full_name, '-') AS dudung_parent_resolved,
-                   d.hierarchy_level - 1 AS dudung_expected_parent_level,
+                   d.hierarchy_level AS resolved_level1_hierarchy_level,
+                   d.parent_user_id AS resolved_level1_parent_id,
+                   COALESCE(p.full_name, '-') AS resolved_level1_parent,
+                   d.hierarchy_level - 1 AS resolved_level1_expected_parent_level,
                    (SELECT COUNT(DISTINCT candidate.user_id)
                     FROM active candidate
                     JOIN users cu ON cu.id = candidate.user_id
@@ -251,9 +259,9 @@ jobs:
                         WHEN 2 THEN 'SALES_MANAGER'
                         WHEN 3 THEN 'SALES_MANAGER'
                         WHEN 4 THEN 'SALES_EXECUTIVE'
-                      END
-                      AND cu.status::text = 'ACTIVE') AS dudung_valid_parent_count
-            FROM dudung d
+                   END
+                      AND cu.status::text = 'ACTIVE') AS resolved_level1_valid_parent_count
+            FROM resolved_level1 d
             LEFT JOIN users p ON p.id = d.parent_user_id AND p.deleted_at IS NULL
             ORDER BY d.effective_from DESC, d.id;
 
@@ -268,27 +276,27 @@ jobs:
                 AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
                 AND u.deleted_at IS NULL
             )
-            SELECT COUNT(*) FILTER (WHERE account_status = 'ACTIVE') AS total_active_sales,
-                   COUNT(*) FILTER (WHERE hierarchy_level = 1 AND account_status = 'ACTIVE') AS total_roots,
-                   COUNT(*) FILTER (WHERE hierarchy_level > 1 AND parent_user_id IS NULL) AS total_missing_parent,
-                   COUNT(*) FILTER (WHERE parent_user_id IS NOT NULL AND p.id IS NULL) AS total_orphan_parent,
-                   COUNT(*) FILTER (WHERE hierarchy_level > 1 AND (pa.id IS NULL OR pa.hierarchy_level <> active.hierarchy_level - 1)) AS total_invalid_parent_level,
+            SELECT COUNT(*) FILTER (WHERE a.account_status = 'ACTIVE') AS total_active_sales,
+                   COUNT(*) FILTER (WHERE a.hierarchy_level = 1 AND a.account_status = 'ACTIVE') AS total_roots,
+                   COUNT(*) FILTER (WHERE a.hierarchy_level > 1 AND a.parent_user_id IS NULL) AS total_missing_parent,
+                   COUNT(*) FILTER (WHERE a.parent_user_id IS NOT NULL AND p.id IS NULL) AS total_orphan_parent,
+                   COUNT(*) FILTER (WHERE a.hierarchy_level > 1 AND (pa.id IS NULL OR pa.hierarchy_level <> a.hierarchy_level - 1)) AS total_invalid_parent_level,
                    COUNT(*) FILTER (WHERE NOT (
-                     (account_role = 'SUPER_ADMIN' AND hierarchy_level = 1) OR
-                     (account_role = 'SALES_MANAGER' AND hierarchy_level IN (2,3)) OR
-                     (account_role = 'SALES_EXECUTIVE' AND hierarchy_level = 4)
+                     (a.account_role = 'SUPER_ADMIN' AND a.hierarchy_level = 1) OR
+                     (a.account_role = 'SALES_MANAGER' AND a.hierarchy_level IN (2,3)) OR
+                     (a.account_role = 'SALES_EXECUTIVE' AND a.hierarchy_level = 4)
                    )) AS total_invalid_role_level,
                    COUNT(*) FILTER (WHERE
-                     account_status = 'ACTIVE' AND
-                     ((hierarchy_level = 1 AND account_role = 'SUPER_ADMIN' AND parent_user_id IS NULL) OR
-                      (hierarchy_level > 1 AND p.status::text = 'ACTIVE' AND pa.hierarchy_level = active.hierarchy_level - 1)) AND
-                     ((account_role = 'SUPER_ADMIN' AND hierarchy_level = 1) OR
-                      (account_role = 'SALES_MANAGER' AND hierarchy_level IN (2,3)) OR
-                      (account_role = 'SALES_EXECUTIVE' AND hierarchy_level = 4))
+                     a.account_status = 'ACTIVE' AND
+                     ((a.hierarchy_level = 1 AND a.account_role = 'SUPER_ADMIN' AND a.parent_user_id IS NULL) OR
+                      (a.hierarchy_level > 1 AND p.status::text = 'ACTIVE' AND pa.hierarchy_level = a.hierarchy_level - 1)) AND
+                     ((a.account_role = 'SUPER_ADMIN' AND a.hierarchy_level = 1) OR
+                      (a.account_role = 'SALES_MANAGER' AND a.hierarchy_level IN (2,3)) OR
+                      (a.account_role = 'SALES_EXECUTIVE' AND a.hierarchy_level = 4))
                    ) AS total_valid_hierarchy_rows
-            FROM active
-            LEFT JOIN users p ON p.id = active.parent_user_id AND p.deleted_at IS NULL
-            LEFT JOIN active pa ON pa.user_id = active.parent_user_id;
+            FROM active a
+            LEFT JOIN users p ON p.id = a.parent_user_id AND p.deleted_at IS NULL
+            LEFT JOIN active pa ON pa.user_id = a.parent_user_id;
 
             \echo '================ STRUCTURAL DEFECTS ================'
             WITH active AS (
