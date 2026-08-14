@@ -148,7 +148,11 @@ jobs:
             fi
             printf 'BACKUP_CREATED=YES\n'
 
-            psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 <<'SQL'
+            psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
+              -v root_role_id="$ROOT_ROLE_ID" \
+              -v canonical_root_id="$CANONICAL_ROOT_ID" \
+              -v dudung_id="$DUDUNG_ID" \
+              -v sales_level1_role_id="$SALES_LEVEL1_ROLE_ID" <<'SQL'
             BEGIN;
             SET LOCAL lock_timeout='10s';
             SET LOCAL statement_timeout='60s';
@@ -156,10 +160,10 @@ jobs:
 
             INSERT INTO public.sales_roles
               (id,name,normalized_name,level,description,landing_page,is_active,created_by,updated_by,created_at,updated_at)
-            SELECT '$ROOT_ROLE_ID'::uuid,'SUPER_ADMIN','super_admin',1,
+            SELECT :'root_role_id'::uuid,'SUPER_ADMIN','super_admin',1,
                    'Top-level organizational role for the primary Super Admin',
-                   '/admin/dashboard',true,'$CANONICAL_ROOT_ID'::uuid,'$CANONICAL_ROOT_ID'::uuid,now(),now()
-            WHERE NOT EXISTS (SELECT 1 FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid);
+                   '/admin/dashboard',true,:'canonical_root_id'::uuid,:'canonical_root_id'::uuid,now(),now()
+            WHERE NOT EXISTS (SELECT 1 FROM public.sales_roles WHERE id=:'root_role_id'::uuid);
 
             UPDATE public.sales_roles
             SET level = CASE id
@@ -176,31 +180,31 @@ jobs:
 
             INSERT INTO public.sales_structure_assignments
               (id,user_id,sales_role_id,parent_user_id,effective_from,effective_to,created_by,updated_at)
-            SELECT gen_random_uuid(), '$CANONICAL_ROOT_ID'::uuid, '$ROOT_ROLE_ID'::uuid, NULL,
-                   d.effective_from, NULL, '$CANONICAL_ROOT_ID'::uuid, now()
+            SELECT gen_random_uuid(), :'canonical_root_id'::uuid, :'root_role_id'::uuid, NULL,
+                   d.effective_from, NULL, :'canonical_root_id'::uuid, now()
             FROM public.sales_structure_assignments d
-            WHERE d.user_id='$DUDUNG_ID'::uuid
+            WHERE d.user_id=:'dudung_id'::uuid
               AND d.effective_from <= CURRENT_DATE AND (d.effective_to IS NULL OR d.effective_to >= CURRENT_DATE)
               AND NOT EXISTS (
                 SELECT 1 FROM public.sales_structure_assignments x
-                WHERE x.user_id='$CANONICAL_ROOT_ID'::uuid
+                WHERE x.user_id=:'canonical_root_id'::uuid
                   AND x.effective_from <= CURRENT_DATE AND (x.effective_to IS NULL OR x.effective_to >= CURRENT_DATE)
               );
 
             UPDATE public.sales_structure_assignments
-            SET sales_role_id='$SALES_LEVEL1_ROLE_ID'::uuid,
-                parent_user_id='$CANONICAL_ROOT_ID'::uuid,
+            SET sales_role_id=:'sales_level1_role_id'::uuid,
+                parent_user_id=:'canonical_root_id'::uuid,
                 updated_at=now()
-            WHERE user_id='$DUDUNG_ID'::uuid
+            WHERE user_id=:'dudung_id'::uuid
               AND effective_from <= CURRENT_DATE AND (effective_to IS NULL OR effective_to >= CURRENT_DATE);
 
             SELECT (
               (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
                WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL
-                 AND u.id='$CANONICAL_ROOT_ID'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND r.level=1 AND a.parent_user_id IS NULL)=1
+                 AND u.id=:'canonical_root_id'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND r.level=1 AND a.parent_user_id IS NULL)=1
               AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
-               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.id='$DUDUNG_ID'::uuid
-                 AND r.name='Sales Level 1' AND r.level=2 AND a.parent_user_id='$CANONICAL_ROOT_ID'::uuid)=1
+               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.id=:'dudung_id'::uuid
+                 AND r.name='Sales Level 1' AND r.level=2 AND a.parent_user_id=:'canonical_root_id'::uuid)=1
               AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id
                WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1
               AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL))
