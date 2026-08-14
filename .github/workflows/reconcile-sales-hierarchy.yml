@@ -109,7 +109,7 @@ jobs:
             active_sql="FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL"
             check() { local name="$1"; local result="$2"; printf 'PREFLIGHT_%s=%s\n' "$name" "$result"; [ "$result" = PASS ]; }
             preflight_ok=true
-            canonical_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END $active_sql AND u.id='$CANONICAL_ROOT_ID'::uuid AND u.employee_id='ADM-0001' AND u.role::text='SUPER_ADMIN' AND u.status::text='ACTIVE';")"
+            canonical_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END FROM public.users u WHERE u.id='$CANONICAL_ROOT_ID'::uuid AND u.employee_id='ADM-0001' AND u.role::text='SUPER_ADMIN' AND u.status::text='ACTIVE' AND u.deleted_at IS NULL;")"
             check CANONICAL_ADMIN "$canonical_check" || preflight_ok=false
             dudung_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END $active_sql AND u.id='$DUDUNG_ID'::uuid AND u.role::text='SALES_MANAGER' AND r.name='Sales Level 1' AND r.level=1 AND a.parent_user_id IS NULL;")"
             check DUDUNG "$dudung_check" || preflight_ok=false
@@ -119,7 +119,7 @@ jobs:
             chain_level3="${chain_check%%|*}"; chain_level4="${chain_check#*|}"
             check JAMALUDIN "$chain_level3" || preflight_ok=false
             check LEVEL4_USERS "$chain_level4" || preflight_ok=false
-            root_role_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid AND name='SUPER_ADMIN' AND level=1 AND is_active;")"
+            root_role_check="$(sql_read "SELECT CASE WHEN COUNT(*)=0 OR (COUNT(*)=1 AND MIN(name)='SUPER_ADMIN' AND MIN(level)=1 AND bool_and(is_active)) THEN 'PASS' ELSE 'FAIL' END FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid;")"
             check ROOT_ROLE_METADATA "$root_role_check" || preflight_ok=false
             assignment_check="$(sql_read "WITH active AS (SELECT a.*,r.level FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL) SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM active WHERE user_id='$DUDUNG_ID'::uuid AND parent_user_id IS NOT NULL) AND (SELECT COUNT(*) FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND level=2)=1 AND (SELECT COUNT(*) FROM active WHERE parent_user_id IN (SELECT user_id FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND level=2) AND level=3)=1 THEN 'PASS' ELSE 'FAIL' END;")"
             check ASSIGNMENTS "$assignment_check" || preflight_ok=false
@@ -153,6 +153,13 @@ jobs:
             SET LOCAL lock_timeout='10s';
             SET LOCAL statement_timeout='60s';
             LOCK TABLE public.sales_roles, public.sales_structure_assignments IN SHARE ROW EXCLUSIVE MODE;
+
+            INSERT INTO public.sales_roles
+              (id,name,normalized_name,level,description,landing_page,is_active,created_by,updated_by,created_at,updated_at)
+            SELECT '$ROOT_ROLE_ID'::uuid,'SUPER_ADMIN','super_admin',1,
+                   'Top-level organizational role for the primary Super Admin',
+                   '/admin/dashboard',true,'$CANONICAL_ROOT_ID'::uuid,'$CANONICAL_ROOT_ID'::uuid,now(),now()
+            WHERE NOT EXISTS (SELECT 1 FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid);
 
             UPDATE public.sales_roles
             SET level = CASE id
