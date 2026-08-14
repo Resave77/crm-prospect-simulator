@@ -148,7 +148,7 @@ jobs:
             fi
             printf 'BACKUP_CREATED=YES\n'
 
-            PGOPTIONS='' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
+            if ! PGOPTIONS='' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
               -v root_role_id="$ROOT_ROLE_ID" \
               -v canonical_root_id="$CANONICAL_ROOT_ID" \
               -v dudung_id="$DUDUNG_ID" \
@@ -214,10 +214,15 @@ jobs:
             COMMIT;
             \else
             ROLLBACK;
-            \quit 1
+            SELECT 1/0;
             \endif
             SQL
 
+            then
+              echo 'POST_VALIDATION=FAIL'
+              echo 'RECONCILIATION_ERROR=POST_VALIDATION_FAILED'
+              exit 1
+            fi
             printf 'POST_VALIDATION=PASS\n'
             printf 'SOURCE_FIX_REQUIRED=NO\nFRONTEND_REDEPLOY_REQUIRED=NO\nBACKEND_REDEPLOY_REQUIRED=NO\n'
             printf 'DATABASE_MUTATION=TARGETED_ONLY\nDEPLOYMENT_TRIGGERED=NO\n'
