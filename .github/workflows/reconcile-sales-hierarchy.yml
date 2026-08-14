@@ -148,7 +148,7 @@ jobs:
             fi
             printf 'BACKUP_CREATED=YES\n'
 
-            psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
+            PGOPTIONS='' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 \
               -v root_role_id="$ROOT_ROLE_ID" \
               -v canonical_root_id="$CANONICAL_ROOT_ID" \
               -v dudung_id="$DUDUNG_ID" \
