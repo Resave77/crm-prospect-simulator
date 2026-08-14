@@ -189,7 +189,9 @@ type googleResponse struct {
 }
 
 const (
-	searchFieldMask    = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.businessStatus,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location,places.photos"
+	// Search results intentionally contain metadata only. Photo references are
+	// requested later, when the user opens a place detail.
+	searchFieldMask    = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.businessStatus,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location"
 	singleTileRadius   = 5000.0
 	defaultTileSize    = 3500.0
 	maxTiles           = 16

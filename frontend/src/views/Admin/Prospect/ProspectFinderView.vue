@@ -64,6 +64,7 @@ const placeDetailsError = ref('')
 const menuImages = ref<MenuImage[]>([])
 const menuImagesLoading = ref(false)
 const menuImagesError = ref('')
+const visiblePhotoCount = ref(1)
 const sales = ref<SalesExecutiveOption[]>([])
 const salesExecutiveId = ref('')
 const loading = ref(false)
@@ -108,6 +109,8 @@ const pinCategory = 'Custom Pin'
 // those values incorrectly classified storefront and street photos as menus.
 const menuPhotos = computed<PlacePhoto[]>(() => [])
 const regularPhotos = computed(() => placeDetails.value?.photos ?? [])
+const visiblePhotos = computed(() => regularPhotos.value.slice(0, visiblePhotoCount.value))
+const hasMorePhotos = computed(() => visiblePhotoCount.value < regularPhotos.value.length)
 
 let photoLoadToken = 0
 
@@ -126,12 +129,13 @@ function canShowPlacePhoto(photo: PlacePhoto) {
   return !!resolvedPlacePhotoUrl(photo) && !failedPhotoNames.value.has(photo.name)
 }
 
-async function loadPlacePhotoObjectUrls(photos: PlacePhoto[]) {
-  revokePlacePhotoObjectUrls()
+async function loadPlacePhotoObjectUrls(photos: PlacePhoto[], reset = false) {
+  if (reset) revokePlacePhotoObjectUrls()
   const token = photoLoadToken
-  if (!photos.length) return
+  const unloaded = photos.filter(photo => !photoObjectUrls.value[photo.name] && !failedPhotoNames.value.has(photo.name))
+  if (!unloaded.length) return
 
-  await Promise.all(photos.map(async (photo) => {
+  await Promise.all(unloaded.map(async (photo) => {
     try {
       const blob = await getPlacePhotoBlob(photo.photoUrl)
       if (token !== photoLoadToken) {
@@ -146,6 +150,30 @@ async function loadPlacePhotoObjectUrls(photos: PlacePhoto[]) {
       failedPhotoNames.value = next
     }
   }))
+}
+
+async function loadNextPlacePhoto() {
+  if (!hasMorePhotos.value) return
+  visiblePhotoCount.value += 1
+  const photo = regularPhotos.value[visiblePhotoCount.value - 1]
+  if (photo) await loadPlacePhotoObjectUrls([photo])
+}
+
+async function loadMenuImages() {
+  if (!placeDetails.value || menuImagesLoading.value) return
+  const query = menuImageQuery()
+  if (!query) return
+  menuImagesLoading.value = true
+  menuImagesError.value = ''
+  try {
+    menuImages.value = (await crmApi.getMenuImages(query, 3)).slice(0, 3)
+    if (selected.value) selected.value.hasMenuPhotos = menuImages.value.length > 0
+  } catch (caught) {
+    menuImagesError.value = crmError(caught)
+    menuImages.value = []
+  } finally {
+    menuImagesLoading.value = false
+  }
 }
 
 function menuImageQuery() {
@@ -255,33 +283,11 @@ function menuImageQuery() {
   return `"${d.placeName}" ${d.formattedAddress} ${keyword} menu harga daftar harga`.trim()
 }
 
-watch([placeDetails, placeDetailsLoading], async () => {
-  if (placeDetailsLoading.value) return
-  if (!placeDetails.value || !likelyHasMenu({ placeTypes: placeDetails.value.placeTypes } as PlaceResult)) {
-    menuImages.value = []
-    menuImagesError.value = ''
-    return
-  }
-  const query = menuImageQuery()
-  if (!query) return
-  menuImagesLoading.value = true
-  menuImagesError.value = ''
-  try {
-    menuImages.value = (await crmApi.getMenuImages(query, 3)).slice(0, 3)
-    if (selected.value) selected.value.hasMenuPhotos = menuImages.value.length > 0
-  } catch (caught) {
-    menuImagesError.value = crmError(caught)
-    menuImages.value = []
-    if (selected.value) selected.value.hasMenuPhotos = false
-  } finally {
-    menuImagesLoading.value = false
-  }
-})
-
 watch(
   () => (placeDetails.value?.photos ?? []).map((photo) => `${photo.name}:${photo.photoUrl}`).join('|'),
   () => {
-    loadPlacePhotoObjectUrls(placeDetails.value?.photos ?? [])
+    visiblePhotoCount.value = 1
+    loadPlacePhotoObjectUrls((placeDetails.value?.photos ?? []).slice(0, 1), true)
   },
   { immediate: true },
 )
@@ -621,6 +627,8 @@ async function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
   placeDetails.value = null
   placeDetailsError.value = ''
+  menuImages.value = []
+  menuImagesError.value = ''
   detailOpen.value = true
   if (item.googlePlaceId) {
     placeDetailsLoading.value = true
@@ -1172,20 +1180,22 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <Message v-else-if="menuImagesError" severity="warn" :closable="false">{{ menuImagesError }}</Message>
-          <div v-else class="detail-photo-empty"><i class="pi pi-book" /> Menu not found <span class="detail-menu-status">Menu Not Ready</span></div>
+          <Button v-else-if="likelyHasMenu({ placeTypes: placeDetails.placeTypes } as PlaceResult)" label="Load menu photos" icon="pi pi-download" severity="secondary" outlined size="small" @click="loadMenuImages" />
+          <div v-else class="detail-photo-empty"><i class="pi pi-book" /> Menu photos are not loaded automatically</div>
         </div>
 
         <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
-          <div v-if="regularPhotos.length" class="detail-photos-row">
-            <template v-for="photo in regularPhotos" :key="photo.name">
+          <div v-if="visiblePhotos.length" class="detail-photos-row">
+            <template v-for="(photo, index) in visiblePhotos" :key="photo.name">
               <button v-if="canShowPlacePhoto(photo)" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(resolvedPlacePhotoUrl(photo), 'Place photo', photo.attribution)">
                 <img :src="resolvedPlacePhotoUrl(photo)" alt="Place photo" class="detail-photo" loading="lazy" />
-                <span class="detail-photo-badge"><i class="pi pi-images" /> Photo</span>
+                <span class="detail-photo-badge"><i class="pi pi-images" /> {{ index === 0 ? 'Hero' : 'Photo' }}</span>
               </button>
             </template>
           </div>
           <div v-else class="detail-photo-empty"><i class="pi pi-images" /> No photos available</div>
+          <Button v-if="hasMorePhotos" label="Load one more photo" icon="pi pi-plus" severity="secondary" outlined size="small" @click="loadNextPlacePhoto" />
         </div>
 
         <div v-if="placeDetailsError" class="detail-section">
