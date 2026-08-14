@@ -106,53 +106,30 @@ jobs:
               PGOPTIONS='-c default_transaction_read_only=on' psql "$normalized_database_url" -X -v ON_ERROR_STOP=1 -Atqc "$1"
             }
 
-            preflight="$(sql_read "
-              WITH RECURSIVE active AS (
-                SELECT a.*, u.role::text AS account_role, u.status::text AS account_status,
-                       r.name AS role_name, r.level AS role_level
-                FROM public.sales_structure_assignments a
-                JOIN public.users u ON u.id=a.user_id
-                JOIN public.sales_roles r ON r.id=a.sales_role_id
-                WHERE a.effective_from <= CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
-                  AND u.deleted_at IS NULL
-              ), dudung AS (
-                SELECT * FROM active WHERE user_id='$DUDUNG_ID'::uuid
-              ), child2 AS (
-                SELECT * FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND role_level=2
-              ), child3 AS (
-                SELECT a.* FROM active a JOIN child2 b ON a.parent_user_id=b.user_id WHERE a.role_level=3
-              ), child4 AS (
-                SELECT a.* FROM active a JOIN child3 b ON a.parent_user_id=b.user_id WHERE a.role_level=4
-              ), defects AS (
-                SELECT COUNT(*) AS n FROM active a LEFT JOIN active p ON p.user_id=a.parent_user_id
-                WHERE (a.parent_user_id IS NOT NULL AND p.user_id IS NULL)
-                   OR a.user_id=a.parent_user_id
-                   OR (a.role_level>1 AND (p.role_level IS NULL OR p.role_level<>a.role_level-1))
-              ), duplicates AS (
-                SELECT COUNT(*) AS n FROM active GROUP BY user_id HAVING COUNT(*)>1
-              ), walk AS (
-                SELECT user_id AS start_id, user_id, parent_user_id, ARRAY[user_id] AS path, false AS cycle
-                FROM active
-                UNION ALL
-                SELECT w.start_id, p.user_id, p.parent_user_id, w.path || p.user_id,
-                       p.user_id=ANY(w.path)
-                FROM walk w JOIN active p ON p.user_id=w.parent_user_id
-                WHERE NOT w.cycle AND cardinality(w.path) <= 20
-              )
-              SELECT CASE WHEN
-                (SELECT COUNT(*) FROM public.users WHERE id='$CANONICAL_ROOT_ID'::uuid AND employee_id='ADM-0001' AND role::text='SUPER_ADMIN' AND status::text='ACTIVE' AND deleted_at IS NULL)=1
-                AND (SELECT COUNT(*) FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid AND name='SUPER_ADMIN' AND level=1 AND is_active)=1
-                AND (SELECT COUNT(*) FROM dudung WHERE account_role='SALES_MANAGER' AND role_name='Sales Level 1' AND role_level=1 AND parent_user_id IS NULL)=1
-                AND (SELECT COUNT(*) FROM child2)=1
-                AND (SELECT COUNT(*) FROM child3)=1
-                AND (SELECT COUNT(*) FROM child4)>=1
-                AND (SELECT n FROM defects)=0
-                AND NOT EXISTS (SELECT 1 FROM duplicates)
-                AND NOT EXISTS (SELECT 1 FROM walk WHERE cycle)
-              THEN 'PASS' ELSE 'FAIL' END;
-            ")"
-            printf 'PREFLIGHT=%s\n' "$preflight"
-            if [ "$preflight" != "PASS" ]; then
+            active_sql="FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL"
+            check() { local name="$1"; local result="$2"; printf 'PREFLIGHT_%s=%s\n' "$name" "$result"; [ "$result" = PASS ]; }
+            preflight_ok=true
+            canonical_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END $active_sql AND u.id='$CANONICAL_ROOT_ID'::uuid AND u.employee_id='ADM-0001' AND u.role::text='SUPER_ADMIN' AND u.status::text='ACTIVE';")"
+            check CANONICAL_ADMIN "$canonical_check" || preflight_ok=false
+            dudung_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END $active_sql AND u.id='$DUDUNG_ID'::uuid AND u.role::text='SALES_MANAGER' AND r.name='Sales Level 1' AND r.level=1 AND a.parent_user_id IS NULL;")"
+            check DUDUNG "$dudung_check" || preflight_ok=false
+            child2_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END $active_sql AND a.parent_user_id='$DUDUNG_ID'::uuid AND r.level=2;")"
+            check DOBLEH "$child2_check" || preflight_ok=false
+            chain_check="$(sql_read "WITH active AS (SELECT a.user_id,a.parent_user_id,r.level FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL), l2 AS (SELECT user_id FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND level=2), l3 AS (SELECT user_id FROM active WHERE parent_user_id IN (SELECT user_id FROM l2) AND level=3), l4 AS (SELECT user_id FROM active WHERE parent_user_id IN (SELECT user_id FROM l3) AND level=4) SELECT CASE WHEN (SELECT COUNT(*) FROM l3)=1 THEN 'PASS' ELSE 'FAIL' END || '|' || CASE WHEN (SELECT COUNT(*) FROM l4)>=1 THEN 'PASS' ELSE 'FAIL' END;")"
+            chain_level3="${chain_check%%|*}"; chain_level4="${chain_check#*|}"
+            check JAMALUDIN "$chain_level3" || preflight_ok=false
+            check LEVEL4_USERS "$chain_level4" || preflight_ok=false
+            root_role_check="$(sql_read "SELECT CASE WHEN COUNT(*)=1 THEN 'PASS' ELSE 'FAIL' END FROM public.sales_roles WHERE id='$ROOT_ROLE_ID'::uuid AND name='SUPER_ADMIN' AND level=1 AND is_active;")"
+            check ROOT_ROLE_METADATA "$root_role_check" || preflight_ok=false
+            assignment_check="$(sql_read "WITH active AS (SELECT a.*,r.level FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL) SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM active WHERE user_id='$DUDUNG_ID'::uuid AND parent_user_id IS NOT NULL) AND (SELECT COUNT(*) FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND level=2)=1 AND (SELECT COUNT(*) FROM active WHERE parent_user_id IN (SELECT user_id FROM active WHERE parent_user_id='$DUDUNG_ID'::uuid AND level=2) AND level=3)=1 THEN 'PASS' ELSE 'FAIL' END;")"
+            check ASSIGNMENTS "$assignment_check" || preflight_ok=false
+            orphan_check="$(sql_read "SELECT CASE WHEN NOT EXISTS (SELECT 1 $active_sql AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL)) THEN 'PASS' ELSE 'FAIL' END;")"
+            check NO_ORPHANS "$orphan_check" || preflight_ok=false
+            duplicate_check="$(sql_read "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL GROUP BY a.user_id HAVING COUNT(*)>1) THEN 'PASS' ELSE 'FAIL' END;")"
+            check NO_DUPLICATES "$duplicate_check" || preflight_ok=false
+            cycle_check="$(sql_read "WITH RECURSIVE active AS (SELECT a.user_id,a.parent_user_id FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL), walk AS (SELECT user_id,parent_user_id,ARRAY[user_id] path,false cycle FROM active UNION ALL SELECT p.user_id,p.parent_user_id,w.path||p.user_id,p.user_id=ANY(w.path) FROM walk w JOIN active p ON p.user_id=w.parent_user_id WHERE NOT w.cycle AND cardinality(w.path)<=20) SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM walk WHERE cycle) THEN 'PASS' ELSE 'FAIL' END;")"
+            check NO_CYCLES "$cycle_check" || preflight_ok=false
+            if [ "$preflight_ok" != true ]; then
               echo 'RECONCILIATION_ERROR=PREFLIGHT_STATE_CHANGED_OR_UNEXPECTED'
               exit 1
             fi
