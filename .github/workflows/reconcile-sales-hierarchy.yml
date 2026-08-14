@@ -198,18 +198,30 @@ jobs:
             WHERE user_id=:'dudung_id'::uuid
               AND effective_from <= CURRENT_DATE AND (effective_to IS NULL OR effective_to >= CURRENT_DATE);
 
-            SELECT (
-              (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
-               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL
-                 AND u.id=:'canonical_root_id'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND r.level=1 AND a.parent_user_id IS NULL)=1
-              AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id
-               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.id=:'dudung_id'::uuid
-                 AND r.name='Sales Level 1' AND r.level=2 AND a.parent_user_id=:'canonical_root_id'::uuid)=1
-              AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id
-               WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1
-              AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL))
-              AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id LEFT JOIN public.sales_structure_assignments p ON p.user_id=a.parent_user_id AND p.effective_from<=CURRENT_DATE AND (p.effective_to IS NULL OR p.effective_to>=CURRENT_DATE) WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level>1 AND (p.user_id IS NULL OR (SELECT level FROM public.sales_roles WHERE id=p.sales_role_id)<>r.level-1))
-            ) AS post_validation_ok \gset
+            SELECT
+              CASE WHEN (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL AND u.id=:'canonical_root_id'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND a.parent_user_id IS NULL)=1 THEN 'PASS' ELSE 'FAIL' END AS post_root_assignment,
+              CASE WHEN (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.user_id=:'canonical_root_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1 THEN 'PASS' ELSE 'FAIL' END AS post_root_level,
+              CASE WHEN (SELECT COUNT(*) FROM public.sales_structure_assignments a WHERE a.user_id=:'dudung_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id=:'canonical_root_id'::uuid)=1 THEN 'PASS' ELSE 'FAIL' END AS post_dudung_parent,
+              CASE WHEN (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.user_id=:'dudung_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.name='Sales Level 1' AND r.level=2)=1 THEN 'PASS' ELSE 'FAIL' END AS post_dudung_level,
+              CASE WHEN (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1 THEN 'PASS' ELSE 'FAIL' END AS post_single_level1_root,
+              CASE WHEN NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL)) THEN 'PASS' ELSE 'FAIL' END AS post_no_orphans,
+              CASE WHEN NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id LEFT JOIN public.sales_structure_assignments p ON p.user_id=a.parent_user_id AND p.effective_from<=CURRENT_DATE AND (p.effective_to IS NULL OR p.effective_to>=CURRENT_DATE) WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level>1 AND (p.user_id IS NULL OR (SELECT level FROM public.sales_roles WHERE id=p.sales_role_id)<>r.level-1)) THEN 'PASS' ELSE 'FAIL' END AS post_parent_levels,
+              (
+                (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND u.deleted_at IS NULL AND u.id=:'canonical_root_id'::uuid AND u.full_name='Yummy Super Admin' AND u.role::text='SUPER_ADMIN' AND r.name='SUPER_ADMIN' AND a.parent_user_id IS NULL)=1
+                AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.user_id=:'canonical_root_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1
+                AND (SELECT COUNT(*) FROM public.sales_structure_assignments a WHERE a.user_id=:'dudung_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id=:'canonical_root_id'::uuid)=1
+                AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.user_id=:'dudung_id'::uuid AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.name='Sales Level 1' AND r.level=2)=1
+                AND (SELECT COUNT(*) FROM public.sales_structure_assignments a JOIN public.sales_roles r ON r.id=a.sales_role_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level=1)=1
+                AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND a.parent_user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.users p WHERE p.id=a.parent_user_id AND p.deleted_at IS NULL))
+                AND NOT EXISTS (SELECT 1 FROM public.sales_structure_assignments a JOIN public.users u ON u.id=a.user_id JOIN public.sales_roles r ON r.id=a.sales_role_id LEFT JOIN public.sales_structure_assignments p ON p.user_id=a.parent_user_id AND p.effective_from<=CURRENT_DATE AND (p.effective_to IS NULL OR p.effective_to>=CURRENT_DATE) WHERE a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) AND r.level>1 AND (p.user_id IS NULL OR (SELECT level FROM public.sales_roles WHERE id=p.sales_role_id)<>r.level-1))
+              ) AS post_validation_ok \gset
+            \echo POST_ROOT_ASSIGNMENT=:post_root_assignment
+            \echo POST_ROOT_LEVEL=:post_root_level
+            \echo POST_DUDUNG_PARENT=:post_dudung_parent
+            \echo POST_DUDUNG_LEVEL=:post_dudung_level
+            \echo POST_SINGLE_LEVEL1_ROOT=:post_single_level1_root
+            \echo POST_NO_ORPHANS=:post_no_orphans
+            \echo POST_PARENT_LEVELS=:post_parent_levels
             \if :post_validation_ok
             COMMIT;
             \else
