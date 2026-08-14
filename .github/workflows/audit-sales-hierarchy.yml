@@ -1,0 +1,352 @@
+name: Temporary Sales Hierarchy Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-sales-hierarchy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit VPS sales hierarchy (read-only)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -eu
+            set +x
+
+            SERVICE_NAME="dev-backend.service"
+            EXPECTED_WORKING_DIRECTORY="/home/smk_dev/app/backend/dev"
+
+            service_unit="$(sudo systemctl cat "$SERVICE_NAME")"
+            working_directory="$(sudo systemctl show "$SERVICE_NAME" --property=WorkingDirectory --value)"
+            environment_files_raw="$(sudo systemctl show "$SERVICE_NAME" --property=EnvironmentFiles --value)"
+
+            if [ "$working_directory" != "$EXPECTED_WORKING_DIRECTORY" ]; then
+              echo 'AUDIT_ERROR=UNEXPECTED_SERVICE_WORKING_DIRECTORY'
+              exit 1
+            fi
+
+            environment_file="$(printf '%s\n' "$service_unit" | awk -F= '/^[[:space:]]*EnvironmentFile=/{gsub(/^[[:space:]-]+|[[:space:]]+$/, "", $2); print $2; exit}')"
+            if [ -z "$environment_file" ]; then
+              environment_file="$(printf '%s' "$environment_files_raw" | sed -n 's/.*{[[:space:]]*\([^ ;}]*\).*/\1/p')"
+            fi
+            if [ -z "$environment_file" ] && sudo test -r "$working_directory/.env"; then
+              environment_file="$working_directory/.env"
+            fi
+            if [ -z "$environment_file" ] || ! sudo test -r "$environment_file"; then
+              echo 'AUDIT_ERROR=SERVICE_ENV_FILE_NOT_READABLE'
+              exit 1
+            fi
+
+            database_url="$(sudo awk '
+              /^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*=/ {
+                line=$0
+                sub(/^[^=]*=/, "", line)
+                sub(/^[[:space:]]*/, "", line)
+                sub(/[[:space:]]*$/, "", line)
+                gsub(/^['"'"']|['"'"']$/, "", line)
+                print line
+                exit
+              }
+            ' "$environment_file")"
+            if [ -z "$database_url" ]; then
+              echo 'AUDIT_ERROR=DATABASE_URL_NOT_FOUND'
+              exit 1
+            fi
+            if ! command -v psql >/dev/null 2>&1; then
+              echo 'AUDIT_ERROR=PSQL_NOT_AVAILABLE'
+              exit 1
+            fi
+
+            export PGOPTIONS='-c default_transaction_read_only=on'
+            psql "$database_url" -X -v ON_ERROR_STOP=1 <<'SQL'
+            \set QUIET 1
+            \pset pager off
+            \pset null '-'
+            \pset format aligned
+            \set QUIET 0
+            BEGIN TRANSACTION READ ONLY;
+
+            \echo '================ AUDIT CONTEXT ================'
+            SELECT current_database() AS database_name,
+                   CURRENT_DATE AS effective_date,
+                   current_setting('transaction_read_only') AS transaction_read_only;
+
+            \echo '================ SUPER ADMIN ACCOUNTS ================'
+            SELECT u.id,
+                   COALESCE(u.employee_id, '-') AS employee_id,
+                   u.full_name,
+                   u.role::text AS account_role,
+                   COALESCE(sr.name, '-') AS hierarchy_role,
+                   sr.level AS hierarchy_level,
+                   u.status::text AS active_status,
+                   a.id AS assignment_id,
+                   a.effective_from,
+                   a.effective_to
+            FROM users u
+            LEFT JOIN LATERAL (
+              SELECT x.*
+              FROM sales_structure_assignments x
+              WHERE x.user_id = u.id
+                AND x.effective_from <= CURRENT_DATE
+                AND (x.effective_to IS NULL OR x.effective_to >= CURRENT_DATE)
+              ORDER BY x.effective_from DESC, x.created_at DESC
+              LIMIT 1
+            ) a ON true
+            LEFT JOIN sales_roles sr ON sr.id = a.sales_role_id
+            WHERE u.role::text = 'SUPER_ADMIN' AND u.deleted_at IS NULL
+            ORDER BY u.full_name, u.id;
+
+            \echo '================ ACTIVE SALES HIERARCHY ROWS ================'
+            WITH active AS (
+              SELECT a.*, u.employee_id, u.full_name, u.role::text AS account_role,
+                     u.status::text AS account_status, r.name AS hierarchy_role,
+                     r.level AS hierarchy_level, r.is_active AS hierarchy_role_active
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            )
+            SELECT a.user_id,
+                   COALESCE(a.employee_id, '-') AS employee_id,
+                   a.full_name,
+                   a.account_role,
+                   a.hierarchy_role,
+                   a.hierarchy_level,
+                   a.parent_user_id,
+                   COALESCE(p.full_name, '-') AS resolved_parent_name,
+                   COALESCE(pa.account_role, p.role::text, '-') AS parent_account_role,
+                   COALESCE(pa.hierarchy_role, '-') AS parent_hierarchy_role,
+                   pa.hierarchy_level AS parent_hierarchy_level,
+                   a.effective_from,
+                   a.effective_to,
+                   a.account_status,
+                   a.hierarchy_role_active
+            FROM active a
+            LEFT JOIN users p ON p.id = a.parent_user_id AND p.deleted_at IS NULL
+            LEFT JOIN active pa ON pa.user_id = a.parent_user_id
+            ORDER BY a.hierarchy_level, a.full_name, a.user_id;
+
+            \echo '================ RUNTIME INVARIANTS ================'
+            WITH active AS (
+              SELECT a.*, u.full_name, u.role::text AS account_role,
+                     u.status::text AS account_status, r.name AS hierarchy_role,
+                     r.level AS hierarchy_level, r.is_active AS hierarchy_role_active
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            )
+            SELECT a.user_id,
+                   a.full_name,
+                   a.account_role,
+                   a.hierarchy_role,
+                   a.hierarchy_level,
+                   CASE WHEN a.hierarchy_level > 1 THEN 'YES' ELSE 'NO' END AS parent_required,
+                   CASE WHEN a.parent_user_id IS NOT NULL AND p.id IS NOT NULL THEN 'YES' ELSE 'NO' END AS parent_exists,
+                   CASE WHEN p.status::text = 'ACTIVE' THEN 'YES' ELSE 'NO' END AS parent_active,
+                   CASE
+                     WHEN a.hierarchy_level = 1 THEN CASE WHEN a.account_role = 'SUPER_ADMIN' THEN 'YES' ELSE 'NO' END
+                     WHEN pa.account_role IS NOT NULL THEN 'YES' ELSE 'NO'
+                   END AS parent_role_valid,
+                   CASE
+                     WHEN a.hierarchy_level = 1 THEN CASE WHEN a.parent_user_id IS NULL THEN 'YES' ELSE 'NO' END
+                     WHEN pa.hierarchy_level = a.hierarchy_level - 1 THEN 'YES' ELSE 'NO'
+                   END AS parent_level_valid,
+                   CASE
+                     WHEN a.hierarchy_level = 1 THEN 'YES'
+                     WHEN pa.id IS NOT NULL THEN 'YES' ELSE 'NO'
+                   END AS parent_effective_period_valid,
+                   CASE
+                     WHEN a.account_role = 'SUPER_ADMIN' AND a.hierarchy_level = 1 THEN 'YES'
+                     WHEN a.account_role = 'SALES_MANAGER' AND a.hierarchy_level IN (2,3) THEN 'YES'
+                     WHEN a.account_role = 'SALES_EXECUTIVE' AND a.hierarchy_level = 4 THEN 'YES'
+                     ELSE 'NO'
+                   END AS account_role_level_valid
+            FROM active a
+            LEFT JOIN users p ON p.id = a.parent_user_id AND p.deleted_at IS NULL
+            LEFT JOIN active pa ON pa.user_id = a.parent_user_id
+            ORDER BY a.hierarchy_level, a.full_name, a.user_id;
+
+            \echo '================ DUDUNG MUAJER ================'
+            WITH active AS (
+              SELECT a.*, u.employee_id, u.full_name, u.role::text AS account_role,
+                     r.name AS hierarchy_role, r.level AS hierarchy_level
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            ), dudung AS (
+              SELECT * FROM active WHERE lower(btrim(full_name)) = 'dudung muajer'
+            )
+            SELECT d.user_id AS dudung_id,
+                   COALESCE(d.employee_id, '-') AS employee_id,
+                   d.full_name,
+                   d.account_role AS dudung_role,
+                   d.hierarchy_role,
+                   d.hierarchy_level AS dudung_hierarchy_level,
+                   d.parent_user_id AS dudung_parent_id,
+                   COALESCE(p.full_name, '-') AS dudung_parent_resolved,
+                   d.hierarchy_level - 1 AS dudung_expected_parent_level,
+                   (SELECT COUNT(DISTINCT candidate.user_id)
+                    FROM active candidate
+                    JOIN users cu ON cu.id = candidate.user_id
+                    WHERE candidate.hierarchy_level = d.hierarchy_level - 1
+                      AND candidate.user_id <> d.user_id
+                      AND candidate.account_role = CASE candidate.hierarchy_level
+                        WHEN 1 THEN 'SUPER_ADMIN'
+                        WHEN 2 THEN 'SALES_MANAGER'
+                        WHEN 3 THEN 'SALES_MANAGER'
+                        WHEN 4 THEN 'SALES_EXECUTIVE'
+                      END
+                      AND cu.status::text = 'ACTIVE') AS dudung_valid_parent_count
+            FROM dudung d
+            LEFT JOIN users p ON p.id = d.parent_user_id AND p.deleted_at IS NULL
+            ORDER BY d.effective_from DESC, d.id;
+
+            \echo '================ SUMMARY COUNTS ================'
+            WITH active AS (
+              SELECT a.*, u.role::text AS account_role, u.status::text AS account_status,
+                     r.level AS hierarchy_level
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            )
+            SELECT COUNT(*) FILTER (WHERE account_status = 'ACTIVE') AS total_active_sales,
+                   COUNT(*) FILTER (WHERE hierarchy_level = 1 AND account_status = 'ACTIVE') AS total_roots,
+                   COUNT(*) FILTER (WHERE hierarchy_level > 1 AND parent_user_id IS NULL) AS total_missing_parent,
+                   COUNT(*) FILTER (WHERE parent_user_id IS NOT NULL AND p.id IS NULL) AS total_orphan_parent,
+                   COUNT(*) FILTER (WHERE hierarchy_level > 1 AND (pa.id IS NULL OR pa.hierarchy_level <> active.hierarchy_level - 1)) AS total_invalid_parent_level,
+                   COUNT(*) FILTER (WHERE NOT (
+                     (account_role = 'SUPER_ADMIN' AND hierarchy_level = 1) OR
+                     (account_role = 'SALES_MANAGER' AND hierarchy_level IN (2,3)) OR
+                     (account_role = 'SALES_EXECUTIVE' AND hierarchy_level = 4)
+                   )) AS total_invalid_role_level,
+                   COUNT(*) FILTER (WHERE
+                     account_status = 'ACTIVE' AND
+                     ((hierarchy_level = 1 AND account_role = 'SUPER_ADMIN' AND parent_user_id IS NULL) OR
+                      (hierarchy_level > 1 AND p.status::text = 'ACTIVE' AND pa.hierarchy_level = active.hierarchy_level - 1)) AND
+                     ((account_role = 'SUPER_ADMIN' AND hierarchy_level = 1) OR
+                      (account_role = 'SALES_MANAGER' AND hierarchy_level IN (2,3)) OR
+                      (account_role = 'SALES_EXECUTIVE' AND hierarchy_level = 4))
+                   ) AS total_valid_hierarchy_rows
+            FROM active
+            LEFT JOIN users p ON p.id = active.parent_user_id AND p.deleted_at IS NULL
+            LEFT JOIN active pa ON pa.user_id = active.parent_user_id;
+
+            \echo '================ STRUCTURAL DEFECTS ================'
+            WITH active AS (
+              SELECT a.*, u.full_name, r.level AS hierarchy_level
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            ), duplicate_users AS (
+              SELECT user_id, COUNT(*) AS active_assignment_count
+              FROM active GROUP BY user_id HAVING COUNT(*) > 1
+            )
+            SELECT 'SELF_PARENT' AS defect, a.user_id, a.full_name, a.parent_user_id, NULL::bigint AS occurrence_count
+            FROM active a WHERE a.user_id = a.parent_user_id
+            UNION ALL
+            SELECT 'DUPLICATE_EFFECTIVE_ASSIGNMENT', a.user_id, a.full_name, NULL::uuid, d.active_assignment_count
+            FROM duplicate_users d JOIN active a ON a.user_id = d.user_id
+            ORDER BY defect, full_name, user_id;
+
+            \echo '================ CYCLE CHECK ================'
+            WITH RECURSIVE active AS (
+              SELECT a.user_id, a.parent_user_id, u.full_name
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            ), walk AS (
+              SELECT user_id AS start_id, user_id, parent_user_id, ARRAY[user_id] AS path, false AS cycle
+              FROM active
+              UNION ALL
+              SELECT w.start_id, p.user_id, p.parent_user_id, w.path || p.user_id,
+                     p.user_id = ANY(w.path) AS cycle
+              FROM walk w
+              JOIN active p ON p.user_id = w.parent_user_id
+              WHERE NOT w.cycle AND cardinality(w.path) <= 20
+            )
+            SELECT DISTINCT w.start_id, u.full_name, w.path AS cycle_path
+            FROM walk w JOIN users u ON u.id = w.start_id
+            WHERE w.cycle
+            ORDER BY u.full_name, w.start_id;
+
+            \echo '================ SAFE TEXTUAL TREE ================'
+            WITH RECURSIVE active AS (
+              SELECT a.user_id, a.parent_user_id, u.full_name, u.role::text AS account_role,
+                     r.name AS hierarchy_role, r.level AS hierarchy_level
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            ), tree AS (
+              SELECT a.*, 0 AS depth, ARRAY[a.user_id] AS path
+              FROM active a WHERE a.parent_user_id IS NULL
+              UNION ALL
+              SELECT c.*, t.depth + 1, t.path || c.user_id
+              FROM tree t JOIN active c ON c.parent_user_id = t.user_id
+              WHERE NOT c.user_id = ANY(t.path) AND t.depth < 10
+            )
+            SELECT repeat('  ', depth) || CASE WHEN depth = 0 THEN 'ROOT: ' ELSE '|-- ' END ||
+                   full_name || ' [' || hierarchy_role || ', Level ' || hierarchy_level || ', ' || account_role || ']' AS hierarchy_tree
+            FROM tree
+            ORDER BY path;
+
+            \echo '================ CLASSIFICATION EVIDENCE ================'
+            WITH active AS (
+              SELECT a.*, u.full_name, u.role::text AS account_role, u.status::text AS account_status,
+                     r.level AS hierarchy_level, r.is_active AS hierarchy_role_active
+              FROM sales_structure_assignments a
+              JOIN users u ON u.id = a.user_id
+              JOIN sales_roles r ON r.id = a.sales_role_id
+              WHERE a.effective_from <= CURRENT_DATE
+                AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+                AND u.deleted_at IS NULL
+            )
+            SELECT
+              CASE WHEN EXISTS (SELECT 1 FROM active WHERE hierarchy_level > 1 AND parent_user_id IS NULL) THEN 'YES' ELSE 'NO' END AS category_a_missing_parent,
+              CASE WHEN NOT EXISTS (SELECT 1 FROM active WHERE account_role = 'SUPER_ADMIN' AND hierarchy_level = 1 AND parent_user_id IS NULL) THEN 'YES' ELSE 'NO' END AS category_b_super_admin_assignment_missing,
+              'SOURCE_QUERY_DOES_NOT_EXCLUDE_SUPER_ADMIN' AS category_c_evidence,
+              CASE WHEN EXISTS (SELECT 1 FROM active WHERE lower(btrim(full_name)) = 'dudung muajer' AND hierarchy_level = 1 AND account_role <> 'SUPER_ADMIN') THEN 'YES' ELSE 'NO' END AS category_d_dudung_incorrect_level,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM active a
+                WHERE a.hierarchy_level > 1 AND NOT EXISTS (
+                  SELECT 1 FROM active p WHERE p.user_id = a.parent_user_id AND p.hierarchy_level = a.hierarchy_level - 1
+                )
+              ) THEN 'YES' ELSE 'NO' END AS category_e_effective_period_mismatch,
+              CASE WHEN EXISTS (SELECT 1 FROM active WHERE NOT (
+                (account_role = 'SUPER_ADMIN' AND hierarchy_level = 1) OR
+                (account_role = 'SALES_MANAGER' AND hierarchy_level IN (2,3)) OR
+                (account_role = 'SALES_EXECUTIVE' AND hierarchy_level = 4)
+              )) THEN 'YES' ELSE 'NO' END AS category_f_role_metadata_mismatch,
+              CASE WHEN EXISTS (SELECT 1 FROM active a LEFT JOIN users p ON p.id = a.parent_user_id AND p.deleted_at IS NULL WHERE a.parent_user_id IS NOT NULL AND p.id IS NULL) THEN 'YES' ELSE 'NO' END AS category_g_orphan_parent,
+              'REQUIRES_DEPLOYED_BINARY_COMPARISON' AS category_h_backend_source_mismatch;
+
+            ROLLBACK;
+            SQL
+            unset database_url PGOPTIONS
+
+            echo 'DATABASE_MUTATION=NO'
+            echo 'DEPLOYMENT_TRIGGERED=NO'
+            echo 'AUDIT_COMPLETE=YES'
