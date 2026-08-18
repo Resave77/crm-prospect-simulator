@@ -62,6 +62,25 @@ type UserDetail struct {
 	UpdatedBy          *uuid.UUID                 `json:"updatedBy"`
 	CreatedAt          time.Time                  `json:"createdAt"`
 	UpdatedAt          time.Time                  `json:"updatedAt"`
+	Timezone           string                     `json:"timezone"`
+	City               *string                    `json:"city"`
+	Province           *string                    `json:"province"`
+	District           *string                    `json:"district"`
+	JobTitle           *string                    `json:"jobTitle"`
+	PositionGrade      *string                    `json:"positionGrade"`
+	SubDepartment      *string                    `json:"subDepartment"`
+	JoinDate           *time.Time                 `json:"joinDate"`
+	Gender             *string                    `json:"gender"`
+	DateOfBirth        *time.Time                 `json:"dateOfBirth"`
+	AvatarURL          *string                    `json:"avatarUrl"`
+	Phones             []PhoneNumber              `json:"phones"`
+}
+
+type PhoneNumber struct {
+	ID string `json:"id"`
+	PhoneNumber string `json:"phoneNumber"`
+	Label *string `json:"label"`
+	IsPrimary bool `json:"isPrimary"`
 }
 
 type OrganizationalRoleSummary struct {
@@ -98,7 +117,21 @@ type CreateUserInput struct {
 	SalesRoleID       *uuid.UUID     `json:"salesRoleId"`
 	ManagerID         *uuid.UUID     `json:"managerId"`
 	TemporaryPassword string         `json:"temporaryPassword"`
+	Timezone string `json:"timezone"`
+	City *string `json:"city"`
+	Province *string `json:"province"`
+	District *string `json:"district"`
+	JobTitle *string `json:"jobTitle"`
+	PositionGrade *string `json:"positionGrade"`
+	SubDepartment *string `json:"subDepartment"`
+	JoinDate *string `json:"joinDate"`
+	Gender *string `json:"gender"`
+	DateOfBirth *string `json:"dateOfBirth"`
+	AvatarPath *string `json:"avatarPath"`
+	Phones []PhoneNumberInput `json:"phones"`
 }
+
+type PhoneNumberInput struct { PhoneNumber string `json:"phoneNumber"`; Label *string `json:"label"`; IsPrimary bool `json:"isPrimary"` }
 
 // OptionalUUID tracks whether a JSON field was present so a PATCH request
 // can distinguish an omitted managerId from an explicit null (clear).
@@ -141,6 +174,34 @@ type UpdateUserInput struct {
 	Role        *authmodel.Role `json:"role"`
 	SalesRoleID OptionalUUID    `json:"salesRoleId"`
 	ManagerID   OptionalUUID    `json:"managerId"`
+	Timezone *string `json:"timezone"`
+	City *string `json:"city"`
+	Province *string `json:"province"`
+	District *string `json:"district"`
+	JobTitle *string `json:"jobTitle"`
+	PositionGrade *string `json:"positionGrade"`
+	SubDepartment *string `json:"subDepartment"`
+	JoinDate *string `json:"joinDate"`
+	Gender *string `json:"gender"`
+	DateOfBirth *string `json:"dateOfBirth"`
+	AvatarPath *string `json:"avatarPath"`
+	Phones *[]PhoneNumberInput `json:"phones"`
+}
+
+// ProfileUpdateInput is deliberately separate from organizational account updates.
+type ProfileUpdateInput struct {
+	Timezone *string `json:"timezone"`
+	City *string `json:"city"`
+	Province *string `json:"province"`
+	District *string `json:"district"`
+	JobTitle *string `json:"jobTitle"`
+	PositionGrade *string `json:"positionGrade"`
+	SubDepartment *string `json:"subDepartment"`
+	JoinDate *string `json:"joinDate"`
+	Gender *string `json:"gender"`
+	DateOfBirth *string `json:"dateOfBirth"`
+	Phones *[]PhoneNumberInput `json:"phones"`
+	AvatarPath *string `json:"avatarPath"`
 }
 
 type UpdateStatusInput struct {

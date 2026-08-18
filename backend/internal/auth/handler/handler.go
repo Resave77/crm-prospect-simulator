@@ -100,16 +100,21 @@ func (h *Handler) ChangePassword(c *fiber.Ctx) error {
 		switch {
 		case errors.Is(err, service.ErrInvalidCredentials):
 			return response.Error(c, fiber.StatusUnauthorized, "INVALID_CREDENTIALS", "The current password is incorrect.")
-		case errors.Is(err, service.ErrMissingFields), errors.Is(err, service.ErrPasswordMismatch),
-			errors.Is(err, service.ErrPasswordTooWeak), errors.Is(err, service.ErrPasswordSame):
-			return response.Error(c, fiber.StatusUnprocessableEntity, "VALIDATION_FAILED", "The password change request is invalid.")
+		case errors.Is(err, service.ErrPasswordTooWeak):
+			return response.Error(c, fiber.StatusUnprocessableEntity, "PASSWORD_TOO_SHORT", "The new password must be at least 6 characters.")
+		case errors.Is(err, service.ErrPasswordSame):
+			return response.Error(c, fiber.StatusUnprocessableEntity, "PASSWORD_SAME_AS_CURRENT", "The new password must differ from the current password.")
+		case errors.Is(err, service.ErrPasswordMismatch):
+			return response.Error(c, fiber.StatusUnprocessableEntity, "PASSWORD_CONFIRMATION_MISMATCH", "The password confirmation does not match.")
+		case errors.Is(err, service.ErrMissingFields):
+			return response.Error(c, fiber.StatusUnprocessableEntity, "PASSWORD_FIELDS_REQUIRED", "Current and new passwords are required.")
 		case service.IsClientAuthError(err):
 			return response.Error(c, fiber.StatusUnauthorized, "ACCESS_TOKEN_INVALID", "The access token is invalid or expired.")
 		default:
 			return err
 		}
 	}
-	h.clearRefreshCookie(c)
+	h.setRefreshCookie(c, result.RefreshToken, result.RefreshExpiresAt)
 	return response.Data(c, fiber.StatusOK, result)
 }
 

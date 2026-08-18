@@ -6,12 +6,15 @@ import axios from 'axios'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import DatePicker from 'primevue/datepicker'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Toast from 'primevue/toast'
 import { useAdminStore } from '../../../stores/admin'
 import type { ApiErrorEnvelope } from '../../../types/auth'
 import type { SalesRole, SalesStructureItem } from '../../../types/admin'
+import ResetPasswordDialog from '../../../components/admin/ResetPasswordDialog.vue'
+import { updateUserProfile } from '../../../api/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +24,13 @@ const error = ref('')
 const notFound = ref(false)
 const saving = ref(false)
 const loaded = ref(false)
+const resetPasswordDialogVisible = ref(false)
+const timezoneOptions = [
+  { label: 'WIB — Asia/Jakarta (UTC+7)', value: 'Asia/Jakarta' },
+  { label: 'WITA — Asia/Makassar (UTC+8)', value: 'Asia/Makassar' },
+  { label: 'WIT — Asia/Jayapura (UTC+9)', value: 'Asia/Jayapura' },
+]
+const genderOptions = [{ label: 'Male', value: 'MALE' }, { label: 'Female', value: 'FEMALE' }]
 
 const id = computed(() => String(route.params.id))
 
@@ -53,6 +63,7 @@ const form = reactive({
   phone: '',
   salesRoleId: '',
   reportsToUserId: '',
+  timezone: 'Asia/Jakarta', city: '', province: '', district: '', jobTitle: '', positionGrade: '', subDepartment: '', joinDate: null as Date | null, gender: '', dateOfBirth: null as Date | null, phoneNumbers: [] as Array<{ phoneNumber: string; label: string; isPrimary: boolean }>,
 })
 
 const accountTypeOptions = [
@@ -115,6 +126,11 @@ async function load() {
     form.accountType = user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'SALES_ACCOUNT'
     form.salesRoleId = user.organizationalRole?.id ?? ''
     form.reportsToUserId = user.reportsToUserId ?? user.managerId ?? ''
+    form.timezone = user.timezone || 'Asia/Jakarta'; form.city = user.city || ''; form.province = user.province || ''; form.district = user.district || ''
+    form.jobTitle = user.jobTitle || ''; form.positionGrade = user.positionGrade || ''; form.subDepartment = user.subDepartment || ''
+    form.joinDate = user.joinDate ? new Date(`${user.joinDate.slice(0, 10)}T00:00:00`) : null; form.gender = user.gender || ''; form.dateOfBirth = user.dateOfBirth ? new Date(`${user.dateOfBirth.slice(0, 10)}T00:00:00`) : null
+    form.phoneNumbers = (user.phones || []).map((phone) => ({ phoneNumber: phone.phoneNumber, label: phone.label || '', isPrimary: phone.isPrimary }))
+    if (!form.phoneNumbers.length && user.phone) form.phoneNumbers = [{ phoneNumber: user.phone, label: '', isPrimary: true }]
     loaded.value = true
   } catch (e) {
     notFound.value = isNotFoundError(e)
@@ -137,6 +153,12 @@ function isAssignableSalesRole(role: SalesRole) {
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function isoDate(value: Date | string | null) {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
 
 watch(
@@ -162,6 +184,7 @@ async function handleSubmit() {
   saving.value = true
   error.value = ''
   try {
+    await updateUserProfile(id.value, { timezone: form.timezone, city: form.city || null, province: form.province || null, district: form.district || null, jobTitle: form.jobTitle || null, positionGrade: form.positionGrade || null, subDepartment: form.subDepartment || null, joinDate: isoDate(form.joinDate), gender: form.gender || null, dateOfBirth: isoDate(form.dateOfBirth), phones: form.phoneNumbers.filter((phone) => phone.phoneNumber.trim()) })
     const user = await store.updateUser(id.value, {
       employeeId: form.employeeId.trim(),
       name: form.name.trim(),
@@ -204,7 +227,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="admin-page">
+  <section class="admin-page compact-admin-page">
     <Toast position="top-right" />
 
     <!-- NOT FOUND -->
@@ -227,10 +250,10 @@ onMounted(async () => {
       </div>
 
       <template v-if="loaded">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
-
         <!-- PAGE HEADER -->
         <header class="page-heading">
+          <div class="compact-heading-main">
+            <Button class="header-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
           <div class="page-title-wrapper">
             <span class="eyebrow">Edit Account</span>
             <h1>Edit Account</h1>
@@ -239,6 +262,7 @@ onMounted(async () => {
               <span class="muted">&mdash;</span>
               <span class="muted">{{ form.name || 'No name set' }}</span>
             </div>
+          </div>
           </div>
           <div class="page-heading-actions">
             <Button label="Cancel" severity="secondary" text size="small" @click="router.push(`/admin/accounts/${id}`)" />
@@ -249,8 +273,15 @@ onMounted(async () => {
         <div class="form-layout">
           <!-- LEFT COLUMN: FORM -->
           <div class="form-stack">
+            <div class="form-card job-section">
+              <div class="form-card-header"><div class="form-card-icon si-blue"><i class="pi pi-briefcase" /></div><div><h3>Job Information</h3><p>Optional employee and organization details.</p></div></div>
+              <div class="form-grid">
+                <div class="form-field"><label>Timezone <span class="required">*</span></label><Select v-model="form.timezone" :options="timezoneOptions" optionLabel="label" optionValue="value" /></div><div class="form-field"><label>City <span class="optional-badge">Optional</span></label><InputText v-model="form.city" /></div><div class="form-field"><label>Province <span class="optional-badge">Optional</span></label><InputText v-model="form.province" /></div><div class="form-field"><label>District <span class="optional-badge">Optional</span></label><InputText v-model="form.district" /></div><div class="form-field"><label>Job Title <span class="optional-badge">Optional</span></label><InputText v-model="form.jobTitle" placeholder="e.g. Sales Supervisor" /></div><div class="form-field"><label>Position Grade <span class="optional-badge">Optional</span></label><InputText v-model="form.positionGrade" /></div><div class="form-field"><label>Sub Department <span class="optional-badge">Optional</span></label><InputText v-model="form.subDepartment" /></div><div class="form-field"><label>Join Date <span class="optional-badge">Optional</span></label><DatePicker v-model="form.joinDate" dateFormat="dd/mm/yy" :maxDate="new Date()" showIcon /></div><div class="form-field"><label>Gender <span class="optional-badge">Optional</span></label><Select v-model="form.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select gender" /></div><div class="form-field"><label>Date of Birth <span class="optional-badge">Optional</span></label><DatePicker v-model="form.dateOfBirth" dateFormat="dd/mm/yy" :maxDate="new Date()" showIcon /></div>
+                <div v-for="(phone, index) in form.phoneNumbers" :key="index" class="form-field"><label>Phone {{ index + 1 }}</label><InputText v-model="phone.phoneNumber" /><Button v-if="index === form.phoneNumbers.length - 1" label="Add Phone" text size="small" @click="form.phoneNumbers.push({ phoneNumber: '', label: '', isPrimary: false })" /></div>
+              </div>
+            </div>
             <!-- ACCOUNT INFORMATION -->
-            <div class="form-card">
+            <div class="form-card user-section">
               <div class="form-card-header">
                 <div class="form-card-icon si-blue"><i class="pi pi-user" /></div>
                 <div>
@@ -272,14 +303,12 @@ onMounted(async () => {
                   <InputText v-model="form.email" placeholder="e.g. budi@yummy.test" />
                 </div>
                 <div class="form-field">
-                  <label>Phone</label>
-                  <InputText v-model="form.phone" placeholder="e.g. 0812-3456-7890" />
                 </div>
               </div>
             </div>
 
             <!-- ROLE & ACCESS -->
-            <div class="form-card">
+            <div class="form-card additional-section">
               <div class="form-card-header">
                 <div class="form-card-icon si-violet"><i class="pi pi-lock" /></div>
                 <div>
@@ -371,6 +400,10 @@ onMounted(async () => {
                     <Tag :value="store.selectedUser?.mustChangePassword ? 'Yes' : 'No'" :severity="store.selectedUser?.mustChangePassword ? 'warn' : 'secondary'" :icon="store.selectedUser?.mustChangePassword ? 'pi pi-key' : ''" />
                   </div>
                 </div>
+                <div class="form-field full account-security-action">
+                  <Button label="Reset Password" icon="pi pi-key" severity="warning" outlined size="small" @click="resetPasswordDialogVisible = true" />
+                  <small>The user will receive a temporary password and must change it after signing in.</small>
+                </div>
               </div>
             </div>
           </div>
@@ -424,6 +457,7 @@ onMounted(async () => {
           </aside>
         </div>
       </template>
+      <ResetPasswordDialog v-model:visible="resetPasswordDialogVisible" :user="store.selectedUser" @reset-success="load" />
     </template>
   </section>
 </template>
@@ -494,6 +528,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 1.25rem;
 }
+.form-stack .user-section { order: 1; }
+.form-stack .job-section { order: 2; }
+.form-stack .additional-section { order: 3; }
 
 /* ── FORM CARDS ────────────────────────────────────────────────────── */
 .form-card {
@@ -656,7 +693,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 1rem;
   position: sticky;
-  top: 1.5rem;
+  top: 84px;
+  align-self: flex-start;
 }
 .sidebar-card {
   background: var(--surface-card);
@@ -806,4 +844,19 @@ onMounted(async () => {
     grid-column: 1;
   }
 }
+
+/* Compact CRM workspace treatment */
+.admin-page { padding: 0.9rem 1.25rem 1.5rem; }
+.page-heading { margin-bottom: 0.8rem; gap: 0.75rem; }
+.page-title-wrapper h1 { font-size: 1.35rem; margin: 0.15rem 0 0; }
+.form-layout { gap: 1rem; }
+.form-card { padding: 1rem 1.1rem; }
+.form-card-header { padding-bottom: 0.65rem; margin-bottom: 0.2rem; }
+.form-stack { gap: 0.85rem; }
+.form-sidebar { gap: 0.85rem; }
+.sidebar-card { padding: 0.95rem 1rem; }
+.compact-admin-page > .p-button { margin-bottom: 0.35rem; }
+.compact-admin-page .page-heading { padding: 0.7rem 0.85rem; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
+.compact-heading-main { display: flex; align-items: center; min-width: 0; gap: 0.35rem; }
+.header-back { flex: 0 0 auto; }
 </style>

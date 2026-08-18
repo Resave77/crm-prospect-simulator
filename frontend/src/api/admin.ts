@@ -7,6 +7,7 @@ import type {
   AdminResetPasswordPayload,
   AdminResetPasswordResult,
   AdminUpdateUserInput,
+  AdminProfileUpdateInput,
   AdminUserDetail,
   AdminUserListParams,
   AdminUserListResult,
@@ -128,4 +129,8 @@ export async function endSalesAssignment(
       { effectiveTo },
     )
   ).data.data
+}
+
+export async function updateUserProfile(id: string, input: AdminProfileUpdateInput) {
+  return (await api.patch<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}/profile`, input)).data.data
 }

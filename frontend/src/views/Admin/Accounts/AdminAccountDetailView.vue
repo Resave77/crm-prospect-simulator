@@ -11,6 +11,7 @@ import { useAdminStore } from '../../../stores/admin'
 import { useAuthStore } from '../../../stores/auth'
 import type { ApiErrorEnvelope } from '../../../types/auth'
 import type { AdminUserStatus } from '../../../types/admin'
+import ResetPasswordDialog from '../../../components/admin/ResetPasswordDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +24,7 @@ const updating = ref(false)
 const statusDialogVisible = ref(false)
 const statusTarget = ref<{ status: AdminUserStatus; label: string } | null>(null)
 const deleteDialogVisible = ref(false)
+const resetPasswordDialogVisible = ref(false)
 
 const id = computed(() => String(route.params.id))
 const user = computed(() => (store.selectedUser?.id === id.value ? store.selectedUser : null))
@@ -96,7 +98,7 @@ onMounted(() => { load() })
 </script>
 
 <template>
-  <section class="admin-page">
+  <section class="admin-page compact-admin-page">
     <!-- NOT FOUND -->
     <template v-if="notFound">
       <div class="state-box">
@@ -117,10 +119,10 @@ onMounted(() => { load() })
       </div>
 
       <template v-if="user">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
-
         <!-- PAGE HEADER -->
         <header class="page-heading">
+          <div class="compact-heading-main">
+            <Button class="header-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
           <div class="page-title-wrapper">
             <span class="eyebrow">Account Detail</span>
             <h1>{{ user.fullName }}</h1>
@@ -130,7 +132,9 @@ onMounted(() => { load() })
               <span class="muted">{{ user.email }}</span>
             </div>
           </div>
+          </div>
           <div class="page-heading-actions">
+            <Button label="Reset Password" icon="pi pi-key" severity="warning" outlined size="small" @click="resetPasswordDialogVisible = true" />
             <Button label="Edit Account" icon="pi pi-pencil" size="small" @click="router.push(`/admin/accounts/${id}/edit`)" />
             <Button label="Delete" icon="pi pi-trash" severity="danger" outlined size="small" :disabled="isSelf || isProtectedSuperAdmin || updating" @click="deleteDialogVisible = true" />
           </div>
@@ -169,6 +173,10 @@ onMounted(() => { load() })
             </div>
 
           </div>
+
+            <div class="detail-card"><div class="detail-card-header"><div class="detail-card-icon si-blue"><i class="pi pi-map-marker" /></div><div><h3>User Information</h3><p>Identity, location, timezone, and contact information.</p></div></div><div class="detail-rows">
+              <div class="detail-row"><span class="detail-label">Timezone</span><span class="detail-value">{{ user.timezone || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">{{ [user.city, user.province, user.district].filter(Boolean).join(', ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Job</span><span class="detail-value">{{ [user.jobTitle, user.positionGrade, user.subDepartment].filter(Boolean).join(' · ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Join Date</span><span class="detail-value">{{ user.joinDate?.slice(0, 10) || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Gender / Birth Date</span><span class="detail-value">{{ [user.gender, user.dateOfBirth?.slice(0, 10)].filter(Boolean).join(' · ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Phone Numbers</span><span class="detail-value">{{ user.phones?.map((phone) => phone.phoneNumber).join(', ') || user.phone || 'â€”' }}</span></div>
+            </div></div>
 
             <!-- ROLE -->
             <div class="detail-card">
@@ -336,6 +344,8 @@ onMounted(() => { load() })
             <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="updating" @click="executeDelete" />
           </template>
         </Dialog>
+
+        <ResetPasswordDialog v-model:visible="resetPasswordDialogVisible" :user="user" @reset-success="load" />
       </template>
     </template>
   </section>
@@ -583,4 +593,17 @@ onMounted(() => { load() })
   .page-heading { flex-direction: column; }
   .page-heading-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Compact CRM workspace treatment */
+.admin-page { padding: 0.9rem 1.25rem 1.5rem; }
+.page-heading { margin-bottom: 0.8rem; gap: 0.75rem; }
+.page-title-wrapper h1 { font-size: 1.35rem; margin: 0.15rem 0 0; }
+.detail-layout { gap: 1rem; }
+.detail-card { padding: 1rem 1.1rem; }
+.detail-card-header { padding-bottom: 0.65rem; margin-bottom: 0.2rem; }
+.detail-row { padding: 0.45rem 0; }
+.compact-admin-page > .p-button { margin-bottom: 0.35rem; }
+.compact-admin-page .page-heading { padding: 0.7rem 0.85rem; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
+.compact-heading-main { display: flex; align-items: center; min-width: 0; gap: 0.35rem; }
+.header-back { flex: 0 0 auto; }
 </style>

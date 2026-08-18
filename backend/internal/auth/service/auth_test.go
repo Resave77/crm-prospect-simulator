@@ -151,7 +151,7 @@ func TestChangePasswordSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !res.PasswordChanged || res.MustChangePassword || !res.ReauthenticationRequired {
+	if !res.PasswordChanged || res.MustChangePassword || res.ReauthenticationRequired || res.AccessToken == "" || res.RefreshToken == "" {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 	if res.SessionsRevoked != 2 {
@@ -175,7 +175,7 @@ func TestChangePasswordIncorrectCurrent(t *testing.T) {
 	}
 }
 
-func TestChangePasswordWeak(t *testing.T) {
+func TestChangePasswordMinimumLength(t *testing.T) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
 	user := model.User{
 		ID: uuid.New(), Email: "admin@yummy.test", PasswordHash: string(hash),
@@ -185,12 +185,23 @@ func TestChangePasswordWeak(t *testing.T) {
 	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
 		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
 
-	// too short, or missing upper/lower/digit
-	for _, weak := range []string{"short1", "nouppercase1", "NOLOWERCASE1", "NoDigitAtAll"} {
+	for _, weak := range []string{"short", "12345", "abcde"} {
 		_, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", weak, weak)
-		if err == nil {
-			t.Fatalf("expected error for weak password %q", weak)
+		if err != ErrPasswordTooWeak {
+			t.Fatalf("err=%v, want ErrPasswordTooWeak for %q", err, weak)
 		}
+	}
+}
+
+func TestChangePasswordAcceptsSixCharacterPassword(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("OldPass123"), bcrypt.MinCost)
+	user := model.User{ID: uuid.New(), PasswordHash: string(hash), Role: model.RoleSalesExecutive, Status: model.UserActive}
+	users := &userRepositoryStub{user: user}
+	auth := NewAuthService(users, &sessionRepositoryStub{sessions: map[uuid.UUID]model.RefreshSession{}},
+		NewTokenManager("01234567890123456789012345678901", "test", "test-api", time.Minute), time.Hour)
+
+	if _, err := auth.ChangePassword(context.Background(), Principal{UserID: user.ID, Role: user.Role}, "OldPass123", "abcdef", "abcdef"); err != nil {
+		t.Fatalf("six-character password rejected: %v", err)
 	}
 }
 
@@ -306,8 +317,8 @@ func TestAuthenticateAccessIncludesMustChangePasswordFromUserRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if principal.MustChangePassword {
-		t.Fatal("principal.MustChangePassword=true, want false while mandatory first-login enforcement is disabled")
+	if !principal.MustChangePassword {
+		t.Fatal("principal.MustChangePassword=false, want true from user row")
 	}
 }
 
@@ -326,15 +337,15 @@ func TestLoginAndRefreshReturnMustChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if login.User.MustChangePassword {
-		t.Fatal("login mustChangePassword=true, want false while mandatory first-login enforcement is disabled")
+	if !login.User.MustChangePassword {
+		t.Fatal("login mustChangePassword=false, want true from user row")
 	}
 	refreshed, err := auth.Refresh(context.Background(), login.RefreshToken, ClientContext{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if refreshed.User.MustChangePassword {
-		t.Fatal("refresh mustChangePassword=true, want false while mandatory first-login enforcement is disabled")
+	if !refreshed.User.MustChangePassword {
+		t.Fatal("refresh mustChangePassword=false, want true from user row")
 	}
 }
 

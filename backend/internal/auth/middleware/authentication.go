@@ -122,22 +122,15 @@ func hasPermission(principal service.Principal, permissionKey string) bool {
 	return false
 }
 
-// TEMP DEMO: RequirePasswordChanged is temporarily disabled for demo/progress deployment.
-
-//
-
-// Keep this middleware registered on protected routes so the original
-
-// first-login password policy can be restored later without changing route
-
-// registration. While disabled, authenticated users continue normally.
-
 func (m *Middleware) RequirePasswordChanged(c *fiber.Ctx) error {
-
-	if _, ok := Principal(c); !ok {
+	principal, ok := Principal(c)
+	if !ok {
 
 		return response.Error(c, fiber.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication is required.")
 
+	}
+	if principal.MustChangePassword {
+		return response.Error(c, fiber.StatusForbidden, "PASSWORD_CHANGE_REQUIRED", "You must change your password before continuing.")
 	}
 
 	return c.Next()

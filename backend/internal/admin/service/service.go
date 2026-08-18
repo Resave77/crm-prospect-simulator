@@ -9,7 +9,6 @@ import (
 	"net/mail"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"crm-prospect-simulator/backend/internal/admin/model"
@@ -34,6 +33,10 @@ var (
 
 type Service struct {
 	repo repository.Repository
+}
+
+type profileRepository interface {
+	UpdateUserProfile(context.Context, uuid.UUID, model.ProfileUpdateInput, uuid.UUID) error
 }
 
 func New(repo repository.Repository) *Service {
@@ -192,6 +195,19 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 	return s.repo.FindUserDetail(ctx, id)
 }
 
+func (s *Service) UpdateUserProfile(ctx context.Context, actor Actor, id uuid.UUID, input model.ProfileUpdateInput) (model.UserDetail, error) {
+	if !actor.Role.IsAdminRole() { return model.UserDetail{}, ErrForbidden }
+	if input.DateOfBirth != nil { if date, err := time.Parse("2006-01-02", *input.DateOfBirth); err != nil { return model.UserDetail{}, fmt.Errorf("%w: date of birth is invalid", ErrValidation) } else if date.After(time.Now()) { return model.UserDetail{}, fmt.Errorf("%w: date of birth cannot be in the future", ErrValidation) } }
+	if input.JoinDate != nil { if _, err := time.Parse("2006-01-02", *input.JoinDate); err != nil { return model.UserDetail{}, fmt.Errorf("%w: join date is invalid", ErrValidation) } }
+	if input.Phones != nil {
+		for _, phone := range *input.Phones { if strings.TrimSpace(phone.PhoneNumber) == "" { continue }; if len(strings.TrimSpace(phone.PhoneNumber)) < 5 { return model.UserDetail{}, fmt.Errorf("%w: phone number is invalid", ErrValidation) } }
+	}
+	repo, ok := s.repo.(profileRepository)
+	if !ok { return model.UserDetail{}, fmt.Errorf("%w: profile updates are unavailable", ErrValidation) }
+	if err := repo.UpdateUserProfile(ctx, id, input, actor.UserID); err != nil { return model.UserDetail{}, err }
+	return s.repo.FindUserDetail(ctx, id)
+}
+
 func effectiveAccountType(accountType model.AccountType) model.AccountType {
 	if accountType == "" {
 		return model.AccountTypeSalesAccount
@@ -312,10 +328,9 @@ func (s *Service) ResetPassword(ctx context.Context, actor Actor, targetID uuid.
 	}
 
 	return model.ResetPasswordResult{
-		UserID:            targetID,
-		TemporaryPassword: temporaryPassword,
-		// TEMP DEMO: mandatory first-login password change is disabled.
-		MustChangePassword: false,
+		UserID:             targetID,
+		TemporaryPassword:  temporaryPassword,
+		MustChangePassword: true,
 		SessionsRevoked:    sessionsRevoked,
 	}, nil
 }
@@ -648,28 +663,8 @@ func shuffleBytes(bs []byte) error {
 }
 
 func validateTemporaryPassword(password string) error {
-	if utf8.RuneCountInString(password) < 8 {
-		return fmt.Errorf("%w: temporary password must be at least 8 characters", ErrWeakTemporaryPassword)
-	}
-	hasUpper, hasLower, hasDigit := false, false, false
-	for _, r := range password {
-		switch {
-		case unicode.IsUpper(r):
-			hasUpper = true
-		case unicode.IsLower(r):
-			hasLower = true
-		case unicode.IsDigit(r):
-			hasDigit = true
-		}
-	}
-	if !hasUpper {
-		return fmt.Errorf("%w: temporary password must contain at least one uppercase letter", ErrWeakTemporaryPassword)
-	}
-	if !hasLower {
-		return fmt.Errorf("%w: temporary password must contain at least one lowercase letter", ErrWeakTemporaryPassword)
-	}
-	if !hasDigit {
-		return fmt.Errorf("%w: temporary password must contain at least one digit", ErrWeakTemporaryPassword)
+	if strings.TrimSpace(password) == "" || utf8.RuneCountInString(password) < 6 {
+		return fmt.Errorf("%w: temporary password must be at least 6 characters", ErrWeakTemporaryPassword)
 	}
 	return nil
 }

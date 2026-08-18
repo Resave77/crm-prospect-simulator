@@ -20,6 +20,16 @@ export interface AuthUser {
   mustChangePassword?: boolean
   managerId?: string
   salesRole?: AuthSalesRole | null
+  timezone?: string | null
+  city?: string | null
+  province?: string | null
+  district?: string | null
+  jobTitle?: string | null
+  positionGrade?: string | null
+  subDepartment?: string | null
+  joinDate?: string | null
+  gender?: string | null
+  dateOfBirth?: string | null
 }
 
 export interface AuthPayload {
@@ -35,6 +45,9 @@ export interface ChangePasswordPayload {
 }
 
 export interface ChangePasswordResult {
+  accessToken: string
+  accessExpiresAt: string
+  user: AuthUser
   passwordChanged: boolean
   mustChangePassword: boolean
   sessionsRevoked: number

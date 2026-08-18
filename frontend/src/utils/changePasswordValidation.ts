@@ -12,26 +12,12 @@ export interface ChangePasswordValidation {
 }
 
 export function validateChangePassword(payload: ChangePasswordPayload): ChangePasswordValidation {
+  const newPasswordLength = Array.from(payload.newPassword).length
   const requirements = [
     {
       key: 'minimum-length',
-      label: 'minimum 8 characters',
-      valid: payload.newPassword.length >= 8,
-    },
-    {
-      key: 'uppercase',
-      label: 'one uppercase letter',
-      valid: /[A-Z]/.test(payload.newPassword),
-    },
-    {
-      key: 'lowercase',
-      label: 'one lowercase letter',
-      valid: /[a-z]/.test(payload.newPassword),
-    },
-    {
-      key: 'digit',
-      label: 'one digit',
-      valid: /\d/.test(payload.newPassword),
+      label: 'minimum 6 characters',
+      valid: payload.newPassword.trim() !== '' && newPasswordLength >= 6,
     },
     {
       key: 'different',

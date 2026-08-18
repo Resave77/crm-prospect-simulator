@@ -23,6 +23,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 const userRoleColumns = `u.id, u.email, u.password_hash, u.full_name, u.employee_id, u.phone,
+	u.timezone, u.city, u.province, u.district, u.job_title, u.position_grade, u.sub_department, u.join_date, u.gender, u.date_of_birth,
 	u.role::text, u.status::text, u.token_version, u.last_login_at,
 	u.must_change_password, u.manager_id, u.created_by, u.updated_by,
 	u.created_at, u.updated_at`
@@ -55,6 +56,9 @@ func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	var user model.User
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var timezone pgtype.Text
+	var city, province, district, jobTitle, positionGrade, subDepartment, gender pgtype.Text
+	var joinDate, dateOfBirth pgtype.Date
 	var salesRoleID *uuid.UUID
 	var salesRoleName *string
 	var salesRoleLevel *int
@@ -62,6 +66,7 @@ func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	var salesRolePermissionKeys []string
 	err := row.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.FullName,
 		&employeeID, &phone,
+		&timezone, &city, &province, &district, &jobTitle, &positionGrade, &subDepartment, &joinDate, &gender, &dateOfBirth,
 		&user.Role, &user.Status, &user.TokenVersion, &user.LastLoginAt,
 		&user.MustChangePassword, &user.ManagerID, &user.CreatedBy, &user.UpdatedBy,
 		&user.CreatedAt, &user.UpdatedAt,
@@ -79,6 +84,10 @@ func (r *PostgresRepository) scanUser(row pgx.Row) (model.User, error) {
 	if phone.Valid {
 		user.Phone = phone.String
 	}
+	if timezone.Valid { user.Timezone = timezone.String }
+	for value, target := range map[pgtype.Text]**string{city:&user.City, province:&user.Province, district:&user.District, jobTitle:&user.JobTitle, positionGrade:&user.PositionGrade, subDepartment:&user.SubDepartment, gender:&user.Gender} { if value.Valid { v := value.String; *target = &v } }
+	if joinDate.Valid { t := joinDate.Time; user.JoinDate = &t }
+	if dateOfBirth.Valid { t := dateOfBirth.Time; user.DateOfBirth = &t }
 	if salesRoleID != nil {
 		user.SalesRole = &model.SalesRoleSummary{
 			ID:             *salesRoleID,

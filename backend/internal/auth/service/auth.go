@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
 	"crm-prospect-simulator/backend/internal/auth/model"
 	"crm-prospect-simulator/backend/internal/auth/repository"
@@ -28,10 +27,15 @@ type AuthResult struct {
 }
 
 type ChangePasswordResult struct {
-	PasswordChanged          bool `json:"passwordChanged"`
-	MustChangePassword       bool `json:"mustChangePassword"`
-	SessionsRevoked          int  `json:"sessionsRevoked"`
-	ReauthenticationRequired bool `json:"reauthenticationRequired"`
+	AccessToken              string           `json:"accessToken"`
+	AccessExpiresAt          time.Time        `json:"accessExpiresAt"`
+	RefreshToken             string           `json:"-"`
+	RefreshExpiresAt         time.Time        `json:"-"`
+	User                     model.PublicUser `json:"user"`
+	PasswordChanged          bool             `json:"passwordChanged"`
+	MustChangePassword       bool             `json:"mustChangePassword"`
+	SessionsRevoked          int              `json:"sessionsRevoked"`
+	ReauthenticationRequired bool             `json:"reauthenticationRequired"`
 }
 
 type Principal struct {
@@ -133,12 +137,6 @@ func (s *AuthService) createLogin(
 	client ClientContext,
 	replaceSessionID uuid.UUID,
 ) (AuthResult, error) {
-	// TEMP DEMO: Mandatory first-login password change is temporarily disabled for the
-	// demo/progress deployment. This modifies only the in-memory auth response
-	// and access-token source; the database column and ChangePassword feature
-	// remain intact for later reactivation.
-	user.MustChangePassword = false
-
 	now := s.now().UTC()
 	sessionID, refreshToken, refreshHash, err := newRefreshCredential()
 	if err != nil {
@@ -206,14 +204,12 @@ func (s *AuthService) AuthenticateAccess(
 	}
 
 	return Principal{
-		UserID:       user.ID,
-		Role:         user.Role,
-		SessionID:    claims.SessionID,
-		TokenVersion: user.TokenVersion,
-		SalesRole:    user.SalesRole,
-
-		// TEMP DEMO: Mandatory first-login password enforcement is disabled.
-		MustChangePassword: false,
+		UserID:             user.ID,
+		Role:               user.Role,
+		SessionID:          claims.SessionID,
+		TokenVersion:       user.TokenVersion,
+		SalesRole:          user.SalesRole,
+		MustChangePassword: user.MustChangePassword,
 	}, nil
 }
 
@@ -226,8 +222,6 @@ func (s *AuthService) Me(
 		return model.PublicUser{}, ErrInvalidToken
 	}
 
-	// TEMP DEMO: Keep frontend auth state aligned with disabled mandatory first-login enforcement.
-	user.MustChangePassword = false
 	return user.Public(), nil
 }
 
@@ -299,33 +293,31 @@ func (s *AuthService) ChangePassword(
 	if err != nil {
 		return ChangePasswordResult{}, err
 	}
+	updatedUser, err := s.users.FindUserByID(ctx, user.ID)
+	if err != nil {
+		return ChangePasswordResult{}, err
+	}
+	updatedUser.MustChangePassword = false
+	login, err := s.createLogin(ctx, updatedUser, ClientContext{}, uuid.Nil)
+	if err != nil {
+		return ChangePasswordResult{}, err
+	}
 
 	return ChangePasswordResult{
+		AccessToken:              login.AccessToken,
+		AccessExpiresAt:          login.AccessExpiresAt,
+		RefreshToken:             login.RefreshToken,
+		RefreshExpiresAt:         login.RefreshExpiresAt,
+		User:                     login.User,
 		PasswordChanged:          true,
 		MustChangePassword:       false,
 		SessionsRevoked:          revoked,
-		ReauthenticationRequired: true,
+		ReauthenticationRequired: false,
 	}, nil
 }
 
 func strongPassword(password string) bool {
-	if len(password) < 8 {
-		return false
-	}
-
-	var upper, lower, digit bool
-	for _, r := range password {
-		switch {
-		case unicode.IsUpper(r):
-			upper = true
-		case unicode.IsLower(r):
-			lower = true
-		case unicode.IsDigit(r):
-			digit = true
-		}
-	}
-
-	return upper && lower && digit
+	return strings.TrimSpace(password) != "" && len([]rune(password)) >= 6
 }
 
 func IsClientAuthError(err error) bool {

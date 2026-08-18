@@ -5,6 +5,7 @@ import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import DatePicker from 'primevue/datepicker'
 import Password from 'primevue/password'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
@@ -17,6 +18,12 @@ const store = useAdminStore()
 const toast = useToast()
 const error = ref('')
 const saving = ref(false)
+const timezoneOptions = [
+  { label: 'WIB — Asia/Jakarta (UTC+7)', value: 'Asia/Jakarta' },
+  { label: 'WITA — Asia/Makassar (UTC+8)', value: 'Asia/Makassar' },
+  { label: 'WIT — Asia/Jayapura (UTC+9)', value: 'Asia/Jayapura' },
+]
+const genderOptions = [{ label: 'Male', value: 'MALE' }, { label: 'Female', value: 'FEMALE' }]
 
 const organizationalRoleOptions = computed(() =>
   store.salesRoles
@@ -38,6 +45,7 @@ const form = reactive({
   salesRoleId: '',
   reportsToUserId: '',
   temporaryPassword: '',
+  timezone: 'Asia/Jakarta', city: '', province: '', district: '', jobTitle: '', positionGrade: '', subDepartment: '', joinDate: null as Date | null, gender: '', dateOfBirth: null as Date | null, phoneNumbers: [{ phoneNumber: '', label: '', isPrimary: true }],
 })
 
 const accountTypeOptions: Array<{
@@ -162,6 +170,12 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function isoDate(value: Date | string | null) {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+}
+
 async function handleSubmit() {
   if (!isFormValid.value) return
 
@@ -178,6 +192,11 @@ async function handleSubmit() {
       salesRoleId: isSalesAccount.value ? form.salesRoleId || null : null,
       managerId: isSalesAccount.value ? form.reportsToUserId || null : null,
       temporaryPassword: form.temporaryPassword,
+      timezone: form.timezone,
+      city: form.city || null, province: form.province || null, district: form.district || null,
+      jobTitle: form.jobTitle || null, positionGrade: form.positionGrade || null, subDepartment: form.subDepartment || null,
+      joinDate: isoDate(form.joinDate) || null, gender: form.gender || null, dateOfBirth: isoDate(form.dateOfBirth) || null,
+      phones: form.phoneNumbers.filter((phone) => phone.phoneNumber.trim()),
     })
 
     toast.add({
@@ -253,7 +272,24 @@ onMounted(async () => {
 
     <div class="content-layout">
       <main class="form-column">
-        <section class="form-section">
+        <section class="form-section job-section">
+          <header class="section-header"><div><h2>Job Information</h2><p>Optional employee and organization details.</p></div><span class="section-status">Optional</span></header>
+          <div class="form-grid">
+            <div class="form-field"><label>Timezone <span class="required">*</span></label><Select v-model="form.timezone" :options="timezoneOptions" optionLabel="label" optionValue="value" /></div>
+            <div class="form-field"><label>City <span class="optional-badge">Optional</span></label><InputText v-model="form.city" /></div>
+            <div class="form-field"><label>Province <span class="optional-badge">Optional</span></label><InputText v-model="form.province" /></div>
+            <div class="form-field"><label>District <span class="optional-badge">Optional</span></label><InputText v-model="form.district" /></div>
+            <div class="form-field"><label>Job Title <span class="optional-badge">Optional</span></label><InputText v-model="form.jobTitle" placeholder="e.g. Sales Supervisor" /></div>
+            <div class="form-field"><label>Position Grade <span class="optional-badge">Optional</span></label><InputText v-model="form.positionGrade" /></div>
+            <div class="form-field"><label>Sub Department <span class="optional-badge">Optional</span></label><InputText v-model="form.subDepartment" /></div>
+            <div class="form-field"><label>Join Date <span class="optional-badge">Optional</span></label><DatePicker v-model="form.joinDate" dateFormat="dd/mm/yy" :maxDate="new Date()" showIcon /></div>
+            <div class="form-field"><label>Gender <span class="optional-badge">Optional</span></label><Select v-model="form.gender" :options="genderOptions" optionLabel="label" optionValue="value" placeholder="Select gender" /></div>
+            <div class="form-field"><label>Date of Birth <span class="optional-badge">Optional</span></label><DatePicker v-model="form.dateOfBirth" dateFormat="dd/mm/yy" :maxDate="new Date()" showIcon /></div>
+            <div v-for="(phone, index) in form.phoneNumbers" :key="index" class="form-field"><label>Phone {{ index + 1 }}</label><InputText v-model="phone.phoneNumber" autocomplete="tel" /><Button v-if="index === form.phoneNumbers.length - 1" label="Add Phone" text size="small" @click="form.phoneNumbers.push({ phoneNumber: '', label: '', isPrimary: false })" /></div>
+          </div>
+        </section>
+
+        <section class="form-section user-section">
           <header class="section-header">
             <div>
               <h2>User Information</h2>
@@ -306,16 +342,6 @@ onMounted(async () => {
                 />
               </div>
               <small>Generated automatically. Backend generation is recommended for production.</small>
-            </div>
-
-            <div class="form-field">
-              <label>Phone <span class="optional-badge">Optional</span></label>
-              <InputText
-                v-model="form.phone"
-                placeholder="e.g. 0812-3456-7890"
-                autocomplete="tel"
-              />
-              <small>Primary contact number for this employee.</small>
             </div>
 
             <div class="form-field">
@@ -408,7 +434,7 @@ onMounted(async () => {
           </div>
         </section>
 
-        <section class="form-section">
+        <section class="form-section additional-section">
           <header class="section-header">
             <div>
               <h2>Role &amp; Access Preview</h2>
@@ -649,10 +675,14 @@ onMounted(async () => {
 }
 
 .form-column {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   gap: 1rem;
 }
+.form-column .user-section { order: 1; }
+.form-column .job-section { order: 2; }
+.form-column .additional-section { order: 3; }
 
 .form-section,
 .preview-card,

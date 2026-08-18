@@ -34,6 +34,17 @@ model User {
   fullName        String           @map("full_name")
   employeeId      String?          @unique @map("employee_id")
   phone           String?          @default("")
+  timezone        String?          @default("Asia/Jakarta")
+  city            String?
+  province        String?
+  district        String?
+  jobTitle        String?          @map("job_title")
+  positionGrade   String?          @map("position_grade")
+  subDepartment   String?          @map("sub_department")
+  joinDate        DateTime?        @map("join_date") @db.Date
+  gender          String?
+  dateOfBirth     DateTime?        @map("date_of_birth") @db.Date
+  avatarPath      String?          @map("avatar_path")
   role            UserRole
   status          UserStatus       @default(ACTIVE)
   tokenVersion    Int              @default(1) @map("token_version")
@@ -61,10 +72,25 @@ model User {
   prospectVisits ProspectVisit[]             @relation("ProspectVisitSalesExecutive")
   prospectComments ProspectComment[]        @relation("ProspectCommentUser")
   prospectAIChats  ProspectAIChat[]
+  phoneNumbers    UserPhoneNumber[]
 
   @@index([salesRoleId])
   @@index([deletedAt])
   @@map("users")
+}
+
+model UserPhoneNumber {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  phoneNumber String   @map("phone_number")
+  label       String?
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_phone_numbers")
 }
 
 model RefreshSession {

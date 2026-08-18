@@ -17,7 +17,10 @@ const props = defineProps<{
   user: AdminUserListItem | null
 }>()
 
-const emit = defineEmits<{ (e: 'update:visible', value: boolean): void }>()
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void
+  (e: 'reset-success'): void
+}>()
 
 const store = useAdminStore()
 const auth = useAuthStore()
@@ -84,6 +87,7 @@ async function submit() {
     const res = await store.resetPassword(props.user.id, payload)
     if (!res) return
     result.value = res
+    emit('reset-success')
     tempPassword.value = ''
     confirmPassword.value = ''
   } catch (e) {

@@ -31,6 +31,7 @@ const listColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
 	u.created_at, u.updated_at`
 
 const detailColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
+	u.timezone, u.city, u.province, u.district, u.job_title, u.position_grade, u.sub_department, u.join_date, u.gender, u.date_of_birth, u.avatar_path,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
 	active_assignment.parent_user_id, COALESCE(parent.full_name, ''),
@@ -153,22 +154,74 @@ func itoa(i int) string {
 
 func (r *PostgresRepository) FindUserDetail(ctx context.Context, id uuid.UUID) (model.UserDetail, error) {
 	row := r.pool.QueryRow(ctx, `SELECT `+detailColumns+` `+userJoin+` WHERE u.id = $1 AND u.deleted_at IS NULL`, id)
-	return scanUserDetail(row)
+	item, err := scanUserDetail(row)
+	if err != nil {
+		return item, err
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, phone_number, label, is_primary FROM user_phone_numbers WHERE user_id = $1 ORDER BY is_primary DESC, created_at`, id)
+	if err != nil {
+		return item, mapError(err)
+	}
+	defer rows.Close()
+	item.Phones = make([]model.PhoneNumber, 0)
+	for rows.Next() {
+		var phone model.PhoneNumber
+		if err := rows.Scan(&phone.ID, &phone.PhoneNumber, &phone.Label, &phone.IsPrimary); err != nil {
+			return item, err
+		}
+		item.Phones = append(item.Phones, phone)
+	}
+	if err := rows.Err(); err != nil {
+		return item, err
+	}
+	if len(item.Phones) == 0 && item.Phone != "" {
+		item.Phones = []model.PhoneNumber{{PhoneNumber: item.Phone, IsPrimary: true}}
+	}
+	return item, nil
 }
 
 func (r *PostgresRepository) CreateUser(ctx context.Context, id uuid.UUID, input model.CreateUserInput, passwordHash string, actorID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, role, status,
-		                   must_change_password, manager_id, sales_role_id, created_by, updated_by, updated_at)
-		-- TEMP DEMO: mandatory first-login password change is disabled, so new accounts are immediately usable.
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', false, $8, $9, $10, $10, now())`,
-		id, strings.ToLower(strings.TrimSpace(input.Email)), passwordHash,
-		strings.TrimSpace(input.FullName), strings.TrimSpace(input.EmployeeID),
-		strings.TrimSpace(input.Phone), input.Role, input.ManagerID, input.SalesRoleID, actorID)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		return fmt.Errorf("begin create user: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO users (id, email, password_hash, full_name, employee_id, phone, timezone, city, province, district,
+		                   job_title, position_grade, sub_department, join_date, gender, date_of_birth, avatar_path,
+		                   role, status, must_change_password, manager_id, sales_role_id, created_by, updated_by, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'Asia/Jakarta'), $8, $9, $10, $11, $12, $13, $14::date, $15, $16::date, $17,
+		        $18, 'ACTIVE', false, $19, $20, $21, $21, now())`,
+		id, strings.ToLower(strings.TrimSpace(input.Email)), passwordHash,
+		strings.TrimSpace(input.FullName), strings.TrimSpace(input.EmployeeID), strings.TrimSpace(input.Phone),
+		nullableString(input.Timezone), input.City, input.Province, input.District, input.JobTitle, input.PositionGrade,
+		input.SubDepartment, input.JoinDate, input.Gender, input.DateOfBirth, input.AvatarPath,
+		input.Role, input.ManagerID, input.SalesRoleID, actorID)
+	if err != nil {
+		tx.Rollback(ctx)
 		return mapError(err)
 	}
+	for _, phone := range input.Phones {
+		number := strings.TrimSpace(phone.PhoneNumber)
+		if number == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO user_phone_numbers (id, user_id, phone_number, label, is_primary) VALUES ($1, $2, $3, $4, $5)`, uuid.New(), id, number, phone.Label, phone.IsPrimary); err != nil {
+			return mapError(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit create user: %w", err)
+	}
 	return nil
+}
+
+func nullableString(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func updateSets(input model.UpdateUserInput, actorID uuid.UUID) (string, []any) {
@@ -238,6 +291,84 @@ func (r *PostgresRepository) UpdateUser(ctx context.Context, id uuid.UUID, input
 	}
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) UpdateUserProfile(ctx context.Context, id uuid.UUID, input model.ProfileUpdateInput, actorID uuid.UUID) error {
+	sets := []string{"updated_by = $2", "updated_at = now()"}
+	args := []any{id, actorID}
+	next := 3
+	add := func(column string, value any) {
+		sets = append(sets, column+" = $"+itoa(next))
+		args = append(args, value)
+		next++
+	}
+	if input.Timezone != nil {
+		add("timezone", strings.TrimSpace(*input.Timezone))
+	}
+	if input.City != nil {
+		add("city", strings.TrimSpace(*input.City))
+	}
+	if input.Province != nil {
+		add("province", strings.TrimSpace(*input.Province))
+	}
+	if input.District != nil {
+		add("district", strings.TrimSpace(*input.District))
+	}
+	if input.JobTitle != nil {
+		add("job_title", strings.TrimSpace(*input.JobTitle))
+	}
+	if input.PositionGrade != nil {
+		add("position_grade", strings.TrimSpace(*input.PositionGrade))
+	}
+	if input.SubDepartment != nil {
+		add("sub_department", strings.TrimSpace(*input.SubDepartment))
+	}
+	if input.JoinDate != nil {
+		sets = append(sets, "join_date = $"+itoa(next)+"::date")
+		args = append(args, *input.JoinDate)
+		next++
+	}
+	if input.Gender != nil {
+		add("gender", strings.TrimSpace(*input.Gender))
+	}
+	if input.DateOfBirth != nil {
+		sets = append(sets, "date_of_birth = $"+itoa(next)+"::date")
+		args = append(args, *input.DateOfBirth)
+		next++
+	}
+	if input.AvatarPath != nil {
+		add("avatar_path", strings.TrimSpace(*input.AvatarPath))
+	}
+	if input.Phones != nil {
+		primary := ""
+		for _, phone := range *input.Phones {
+			if strings.TrimSpace(phone.PhoneNumber) != "" && phone.IsPrimary {
+				primary = strings.TrimSpace(phone.PhoneNumber)
+				break
+			}
+		}
+		if primary != "" {
+			add("phone", primary)
+		}
+	}
+	if _, err := r.pool.Exec(ctx, "UPDATE users SET "+strings.Join(sets, ", ")+" WHERE id = $1 AND deleted_at IS NULL", args...); err != nil {
+		return mapError(err)
+	}
+	if input.Phones != nil {
+		if _, err := r.pool.Exec(ctx, `DELETE FROM user_phone_numbers WHERE user_id = $1`, id); err != nil {
+			return mapError(err)
+		}
+		for _, phone := range *input.Phones {
+			number := strings.TrimSpace(phone.PhoneNumber)
+			if number == "" {
+				continue
+			}
+			if _, err := r.pool.Exec(ctx, `INSERT INTO user_phone_numbers (id,user_id,phone_number,label,is_primary) VALUES ($1,$2,$3,$4,$5)`, uuid.New(), id, number, phone.Label, phone.IsPrimary); err != nil {
+				return mapError(err)
+			}
+		}
 	}
 	return nil
 }
@@ -434,8 +565,7 @@ func (r *PostgresRepository) CountActiveAdministrators(ctx context.Context) (int
 
 const resetPasswordUpdate = `UPDATE users SET
 	password_hash = $1,
-	-- TEMP DEMO: mandatory first-login password change is disabled.
-	must_change_password = FALSE,
+	must_change_password = TRUE,
 	token_version = token_version + 1,
 	updated_by = $2,
 	updated_at = now()
@@ -526,6 +656,9 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 	var item model.UserDetail
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var timezone pgtype.Text
+	var city, province, district, jobTitle, positionGrade, subDepartment, gender, avatarPath pgtype.Text
+	var joinDate, dateOfBirth pgtype.Date
 	var orgRoleID *uuid.UUID
 	var orgRoleName pgtype.Text
 	var orgRoleLevel pgtype.Int2
@@ -537,6 +670,7 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 	var reportsToUserID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
+		&timezone, &city, &province, &district, &jobTitle, &positionGrade, &subDepartment, &joinDate, &gender, &dateOfBirth, &avatarPath,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
 		&reportsToUserID, &item.ReportsToName,
@@ -554,6 +688,23 @@ func scanUserDetail(row pgx.Row) (model.UserDetail, error) {
 	}
 	if phone.Valid {
 		item.Phone = phone.String
+	}
+	if timezone.Valid {
+		item.Timezone = timezone.String
+	}
+	for value, target := range map[pgtype.Text]**string{city: &item.City, province: &item.Province, district: &item.District, jobTitle: &item.JobTitle, positionGrade: &item.PositionGrade, subDepartment: &item.SubDepartment, gender: &item.Gender, avatarPath: &item.AvatarURL} {
+		if value.Valid {
+			v := value.String
+			*target = &v
+		}
+	}
+	if joinDate.Valid {
+		t := joinDate.Time
+		item.JoinDate = &t
+	}
+	if dateOfBirth.Valid {
+		t := dateOfBirth.Time
+		item.DateOfBirth = &t
 	}
 	item.ManagerID = managerID
 	item.ReportsToUserID = reportsToUserID

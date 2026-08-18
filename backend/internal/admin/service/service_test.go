@@ -820,6 +820,32 @@ func TestResetManualValidPasswordHashedExactlyAsSubmitted(t *testing.T) {
 	}
 }
 
+func TestResetManualUsesSimpleSixCharacterPolicy(t *testing.T) {
+	for _, pw := range []string{"password123", "abcdef", "123456"} {
+		t.Run(pw, func(t *testing.T) {
+			target := uuid.New()
+			stub := resetTargetStub(target, authmodel.RoleSalesExecutive, authmodel.UserActive)
+			result, err := newTestService(stub).ResetPassword(context.Background(), adminActor(), target, model.ResetPasswordInput{
+				Mode: model.ResetPasswordModeManual, TemporaryPassword: pw,
+			})
+			if err != nil {
+				t.Fatalf("manual reset with %q: %v", pw, err)
+			}
+			if !result.MustChangePassword || bcrypt.CompareHashAndPassword([]byte(stub.lastReset.passwordHash), []byte(pw)) != nil {
+				t.Fatalf("reset result/hash invalid for %q: %+v", pw, result)
+			}
+		})
+	}
+
+	stub := &repoStub{}
+	_, err := newTestService(stub).ResetPassword(context.Background(), adminActor(), uuid.New(), model.ResetPasswordInput{
+		Mode: model.ResetPasswordModeManual, TemporaryPassword: "abc12",
+	})
+	if !errors.Is(err, ErrWeakTemporaryPassword) {
+		t.Fatalf("five-character password err=%v, want ErrWeakTemporaryPassword", err)
+	}
+}
+
 func TestResetManualMissingPasswordRejected(t *testing.T) {
 	stub := &repoStub{}
 	svc := newTestService(stub)
@@ -849,12 +875,8 @@ func TestResetWeakPasswordsRejected(t *testing.T) {
 	stub := &repoStub{}
 	svc := newTestService(stub)
 	weak := []string{
-		"password",  // no uppercase, no digit
-		"PASSWORD1", // no lowercase
-		"Password",  // no digit
-		"pass1234",  // no uppercase
-		"        ",  // whitespace only
-		"Pass1",     // too short
+		"        ", // whitespace only
+		"Pass1",    // too short
 	}
 	for _, pw := range weak {
 		_, err := svc.ResetPassword(context.Background(), adminActor(), uuid.New(), model.ResetPasswordInput{
@@ -937,8 +959,8 @@ func TestResetResultShape(t *testing.T) {
 	if result.TemporaryPassword == "" {
 		t.Fatal("temporaryPassword must be non-empty")
 	}
-	if result.MustChangePassword {
-		t.Fatal("mustChangePassword must be false while mandatory first-login enforcement is disabled")
+	if !result.MustChangePassword {
+		t.Fatal("mustChangePassword=false, want true after admin reset")
 	}
 	if result.SessionsRevoked != 2 {
 		t.Fatalf("sessionsRevoked=%d, want 2", result.SessionsRevoked)

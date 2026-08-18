@@ -90,6 +90,7 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
   if (to.name === 'Login' && user && homeFor(user) !== FORBIDDEN_ROUTE) return homeFor(user)
   if (to.meta.public) return true
   if (!user) return { name: 'Login', query: { redirect: to.fullPath } }
+  if (user.mustChangePassword && to.name !== 'ChangePassword') return { name: 'ChangePassword' }
   if (to.meta.role && !roleAllowed(to.meta.role, user.role, Boolean(user.salesRole))) return homeFor(user)
   if (to.meta.permission && !hasPermission(user, to.meta.permission)) {
     const fallback = homeFor(user)

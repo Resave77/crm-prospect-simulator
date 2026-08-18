@@ -83,7 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
     changingPassword.value = true
     try {
       const result = await changePasswordRequest(payload)
-      applySession(null)
+      applySession({ accessToken: result.accessToken, accessExpiresAt: result.accessExpiresAt, user: result.user })
       bootstrapped.value = true
       return result
     } finally {

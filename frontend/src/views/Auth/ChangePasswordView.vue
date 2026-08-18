@@ -8,6 +8,7 @@ import Password from 'primevue/password'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '../../stores/auth'
 import { validateChangePassword } from '../../utils/changePasswordValidation'
+import { homeFor } from '../../utils/navigation'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -19,6 +20,7 @@ const form = reactive({
   confirmPassword: '',
 })
 const error = ref('')
+const forcedChange = computed(() => Boolean(auth.user?.mustChangePassword))
 
 const validation = computed(() => validateChangePassword(form))
 const canSubmit = computed(() => validation.value.valid && !auth.changingPassword)
@@ -42,11 +44,11 @@ async function submit() {
     clearPasswords()
     toast.add({
       severity: 'success',
-      summary: 'Password changed',
-      detail: 'Password changed successfully. Please sign in again.',
+      summary: '✓ Password berhasil diubah',
+      detail: 'Your account is ready to use.',
       life: 3500,
     })
-    await router.replace('/login?passwordChanged=1')
+    await router.replace(forcedChange.value ? homeFor(auth.user!) : '/sales/profile')
   } catch (caught) {
     error.value = auth.errorMessage(caught)
   }
@@ -56,6 +58,8 @@ async function submit() {
 <template>
   <main class="change-password-page">
     <Toast />
+
+    <Button v-if="!forcedChange" label="Back to Profile" icon="pi pi-arrow-left" severity="secondary" text class="back-profile" @click="router.push('/sales/profile')" />
 
     <div class="change-password-center">
       <form class="change-password-card" @submit.prevent="submit">
@@ -67,7 +71,9 @@ async function submit() {
           <div>
             <h2>Change Temporary Password</h2>
             <p class="muted">
-              For security, replace your temporary password before continuing to the application.
+              {{ forcedChange
+                ? 'Password sementara harus diganti sebelum melanjutkan.'
+                : 'For security, replace your current password with a new one.' }}
             </p>
           </div>
         </div>

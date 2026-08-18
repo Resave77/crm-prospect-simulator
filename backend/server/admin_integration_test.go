@@ -422,7 +422,7 @@ func TestResetPasswordManualMissingPassword422(t *testing.T) {
 
 func TestResetPasswordWeakPassword422(t *testing.T) {
 	app, token := buildTestApp(adminUser())
-	req := adminResetRequest(uuid.New().String(), `{"mode":"MANUAL","temporaryPassword":"password"}`)
+	req := adminResetRequest(uuid.New().String(), `{"mode":"MANUAL","temporaryPassword":"pass1"}`)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -493,8 +493,8 @@ func TestResetPasswordAutoSuccess(t *testing.T) {
 	if pw, _ := data["temporaryPassword"].(string); pw == "" {
 		t.Fatal("temporaryPassword must be non-empty")
 	}
-	if mustChange, _ := data["mustChangePassword"].(bool); mustChange {
-		t.Fatal("mustChangePassword must be false while mandatory first-login enforcement is disabled")
+	if mustChange, _ := data["mustChangePassword"].(bool); !mustChange {
+		t.Fatal("mustChangePassword=false, want true after admin reset")
 	}
 	if revoked, _ := data["sessionsRevoked"].(float64); revoked != 2 {
 		t.Fatalf("sessionsRevoked=%v, want 2", data["sessionsRevoked"])

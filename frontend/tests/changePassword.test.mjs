@@ -38,7 +38,7 @@ test('change-password store action blocks duplicates and clears auth state after
   const source = await authStore()
   assert.ok(source.includes('const changingPassword = ref(false)'))
   assert.match(source, /if \(changingPassword\.value\)[\s\S]*Password change already in progress\./)
-  assert.match(source, /const result = await changePasswordRequest\(payload\)[\s\S]*applySession\(null\)[\s\S]*return result/)
+  assert.match(source, /const result = await changePasswordRequest\(payload\)[\s\S]*applySession\(\{ accessToken: result\.accessToken, accessExpiresAt: result\.accessExpiresAt, user: result\.user \}\)[\s\S]*return result/)
   assert.equal(source.includes("api.post('/auth/logout')") && source.indexOf('async function changePassword') < source.indexOf("api.post('/auth/logout')"), false)
 })
 

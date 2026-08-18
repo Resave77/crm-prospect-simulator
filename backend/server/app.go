@@ -186,6 +186,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Post("/users", adminHandler.CreateUser)
 	admin.Get("/users/:id", adminHandler.GetUser)
 	admin.Patch("/users/:id", adminHandler.UpdateUser)
+	admin.Patch("/users/:id/profile", adminHandler.UpdateUserProfile)
 	admin.Patch("/users/:id/status", adminHandler.UpdateStatus)
 	admin.Delete("/users/:id", adminHandler.DeleteUser)
 	admin.Post("/users/:id/reset-password", adminHandler.ResetPassword)

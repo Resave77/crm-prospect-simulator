@@ -79,7 +79,7 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="admin-page">
+  <section class="admin-page compact-admin-page">
     <div v-if="notFound" class="state-box">
       <div class="state-icon-wrap"><i class="pi pi-id-card" /></div>
       <strong>Role not found</strong>
@@ -96,9 +96,9 @@ onMounted(load)
       </div>
 
       <template v-if="role">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/role-management')" title="Back to role list" />
-
         <header class="page-heading">
+          <div class="compact-heading-main">
+            <Button class="header-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/role-management')" title="Back to role list" />
           <div class="page-title-wrapper">
             <span class="eyebrow">Role Detail</span>
             <h1>{{ role.name }}</h1>
@@ -107,6 +107,7 @@ onMounted(load)
               <span class="level-chip" :class="`level-chip-${role.level}`">Level {{ role.level }}</span>
               <span class="muted">Updated {{ formatDate(role.updatedAt) }}</span>
             </div>
+          </div>
           </div>
           <div class="page-heading-actions">
             <Button label="Edit Role" icon="pi pi-pencil" size="small" @click="router.push(`/admin/role-management/${id}/edit`)" />
@@ -456,4 +457,17 @@ h1 {
     flex-direction: column;
   }
 }
+
+/* Compact CRM workspace treatment */
+.admin-page { padding: 0.9rem 1.25rem 1.5rem; }
+.page-heading { margin-bottom: 0.8rem; gap: 0.75rem; }
+.page-title-wrapper h1 { font-size: 1.35rem; margin: 0.15rem 0 0; }
+.detail-layout { gap: 1rem; }
+.detail-card { padding: 1rem 1.1rem; }
+.detail-card-header { padding-bottom: 0.65rem; }
+.permission-group { padding: 0.75rem 0.9rem; }
+.compact-admin-page > .p-button { margin-bottom: 0.35rem; }
+.compact-admin-page .page-heading { padding: 0.7rem 0.85rem; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
+.compact-heading-main { display: flex; align-items: center; min-width: 0; gap: 0.35rem; }
+.header-back { flex: 0 0 auto; }
 </style>

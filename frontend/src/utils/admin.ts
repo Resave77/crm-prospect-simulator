@@ -1,11 +1,8 @@
 import type { AdminUserRole } from '../types/admin'
 
 export function adminTemporaryPasswordError(value: string): string | null {
-  if (value.length < 8) return 'Temporary password must be at least 8 characters.'
-  if (!/[A-Z]/.test(value)) return 'Temporary password must contain at least one uppercase letter.'
-  if (!/[a-z]/.test(value)) return 'Temporary password must contain at least one lowercase letter.'
-  if (!/[0-9]/.test(value)) return 'Temporary password must contain at least one number.'
-  return null
+  if (value.trim() === '' || Array.from(value).length < 6) return 'Temporary password must be at least 6 characters.'
+	return null
 }
 
 export function adminRoleLabel(role: string) {

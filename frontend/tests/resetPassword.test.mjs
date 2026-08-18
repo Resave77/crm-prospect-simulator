@@ -7,23 +7,15 @@ test('adminTemporaryPasswordError accepts a password meeting all rules', () => {
   assert.equal(adminTemporaryPasswordError('Passw0rd!2x'), null)
 })
 
-test('adminTemporaryPasswordError rejects passwords shorter than 8 characters', () => {
-  const message = adminTemporaryPasswordError('Ab1cde')
-  assert.match(message ?? '', /at least 8 characters/)
+test('adminTemporaryPasswordError rejects passwords shorter than 6 characters', () => {
+  const message = adminTemporaryPasswordError('abc12')
+  assert.match(message ?? '', /at least 6 characters/)
 })
 
-test('adminTemporaryPasswordError requires an uppercase letter', () => {
-  assert.match(adminTemporaryPasswordError('abc12345') ?? '', /uppercase letter/)
-})
-
-test('adminTemporaryPasswordError requires a lowercase letter', () => {
-  assert.match(adminTemporaryPasswordError('ABC12345') ?? '', /lowercase letter/)
-})
-
-test('adminTemporaryPasswordError requires a number', () => {
-  assert.match(adminTemporaryPasswordError('Abcdefgh') ?? '', /number/)
+test('adminTemporaryPasswordError accepts password123 without character classes', () => {
+  assert.equal(adminTemporaryPasswordError('password123'), null)
 })
 
 test('adminTemporaryPasswordError rejects whitespace-only passwords', () => {
-  assert.notEqual(adminTemporaryPasswordError('        '), null)
+  assert.notEqual(adminTemporaryPasswordError('     '), null)
 })

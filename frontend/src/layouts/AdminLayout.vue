@@ -526,6 +526,9 @@ async function logout() {
   overflow-y: auto;
   overflow-x: hidden;
 }
+.admin-content:has(.compact-admin-page) {
+  padding: 0.75rem 1rem 1rem;
+}
 
 /* ── Mobile Hamburger ──────────────────────────────────────── */
 .mobile-backdrop {

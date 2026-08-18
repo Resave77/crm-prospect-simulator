@@ -86,6 +86,15 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, user)
 }
 
+func (h *Handler) UpdateUserProfile(c *fiber.Ctx) error {
+	actor := actor(c)
+	id, err := uuid.Parse(c.Params("id")); if err != nil { return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.") }
+	var input model.ProfileUpdateInput
+	if err := c.BodyParser(&input); err != nil { return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.") }
+	user, err := h.svc.UpdateUserProfile(c.UserContext(), actor, id, input); if err != nil { return writeError(c, err) }
+	return response.Data(c, fiber.StatusOK, user)
+}
+
 func (h *Handler) UpdateStatus(c *fiber.Ctx) error {
 	actor := actor(c)
 	id, err := uuid.Parse(c.Params("id"))

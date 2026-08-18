@@ -142,6 +142,16 @@ onMounted(loadStats)
             <span class="strip-copy"><span class="strip-label">Phone number</span><span class="strip-value">{{ auth.user?.phone ?? '—' }}</span></span>
           </div>
         </div>
+
+        <div class="account-security">
+          <div class="security-copy">
+            <span class="security-kicker">Account security</span>
+            <strong>Password</strong>
+            <span class="security-mask" aria-label="Password is hidden">••••••••</span>
+          </div>
+          <Button label="Change Password" icon="pi pi-key" outlined size="small" @click="router.push('/change-password')" />
+        </div>
+        <div class="profile-card-strip"><div class="strip-item"><span class="strip-icon"><i class="pi pi-map-marker" /></span><span class="strip-copy"><span class="strip-label">Location</span><span class="strip-value">{{ [auth.user?.city, auth.user?.province, auth.user?.district].filter(Boolean).join(', ') || '—' }}</span></span></div><div class="strip-item"><span class="strip-icon"><i class="pi pi-briefcase" /></span><span class="strip-copy"><span class="strip-label">Job</span><span class="strip-value">{{ [auth.user?.jobTitle, auth.user?.positionGrade, auth.user?.subDepartment].filter(Boolean).join(' · ') || '—' }}</span></span></div><div class="strip-item"><span class="strip-icon"><i class="pi pi-calendar" /></span><span class="strip-copy"><span class="strip-label">Join date</span><span class="strip-value">{{ auth.user?.joinDate?.slice(0, 10) || '—' }}</span></span></div></div>
       </div>
 
       <!-- Error in stats -->
@@ -222,6 +232,12 @@ onMounted(loadStats)
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;
 }
+.account-security { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:0 1.1rem 1.1rem; padding:1rem; border:1px solid #f0e6e8; border-radius:12px; background:#fff8f9; }
+.security-copy { display:grid; gap:.18rem; min-width:0; }
+.security-kicker { color:#b42332; font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.security-copy strong { font-size:.85rem; }
+.security-mask { color:var(--text-muted); letter-spacing:.18em; font-size:.75rem; }
+@media (max-width: 767px) { .account-security { align-items:stretch; flex-direction:column; margin:0 1rem 1rem; } .account-security :deep(button) { width:100%; } }
 .strip-item { text-align: center; min-width: 0; }
 .strip-label {
   display: block; font-size: 0.52rem; font-weight: 700; text-transform: uppercase;

@@ -49,6 +49,18 @@ export interface AdminUserListItem {
 export interface AdminUserDetail extends AdminUserListItem {
   createdBy: string | null
   updatedBy: string | null
+  timezone?: string | null
+  city?: string | null
+  province?: string | null
+  district?: string | null
+  jobTitle?: string | null
+  positionGrade?: string | null
+  subDepartment?: string | null
+  joinDate?: string | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  avatarUrl?: string | null
+  phones?: Array<{ id?: string; phoneNumber: string; label?: string | null; isPrimary: boolean }>
 }
 
 export interface AdminManagerOption {
@@ -83,6 +95,17 @@ export interface AdminCreateUserInput {
   salesRoleId: string | null
   managerId: string | null
   temporaryPassword: string
+  timezone?: string
+  city?: string | null
+  province?: string | null
+  district?: string | null
+  jobTitle?: string | null
+  positionGrade?: string | null
+  subDepartment?: string | null
+  joinDate?: string | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  phones?: AdminProfilePhoneInput[]
 }
 
 export interface AdminUpdateUserInput {
@@ -93,6 +116,22 @@ export interface AdminUpdateUserInput {
   accountType?: AdminAccountType
   salesRoleId?: string | null
   managerId?: string | null
+}
+
+export interface AdminProfilePhoneInput { phoneNumber: string; label?: string | null; isPrimary: boolean }
+export interface AdminProfileUpdateInput {
+  timezone?: string
+  city?: string | null
+  province?: string | null
+  district?: string | null
+  jobTitle?: string | null
+  positionGrade?: string | null
+  subDepartment?: string | null
+  joinDate?: string | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  phones?: AdminProfilePhoneInput[]
+  avatarPath?: string | null
 }
 
 export type AdminResetPasswordMode = 'AUTO' | 'MANUAL'
