@@ -12,7 +12,46 @@ import (
 
 	"crm-prospect-simulator/backend/config"
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
+	usagepkg "crm-prospect-simulator/backend/internal/usage"
+	"github.com/google/uuid"
 )
+
+func TestOpenAIRequestPathsRecordExactlyOneAttributedEvent(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"output_text":"ok","usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}`))
+	}))
+	defer server.Close()
+	recorder := &usagepkg.MemoryRecorder{}
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	client.SetUsageRecorder(recorder)
+	uid := uuid.New()
+	ctx := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uid), "AI_SUMMARY")
+	if _, err := client.GenerateText(ctx, "i", "x"); err != nil {
+		t.Fatal(err)
+	}
+	ctx = usagepkg.WithFeature(ctx, "FIND_MENU")
+	if _, err := client.GenerateWebSearch(ctx, "i", "x"); err != nil {
+		t.Fatal(err)
+	}
+	ctx = usagepkg.WithFeature(ctx, "MENU_PROFILING")
+	if _, err := client.GenerateMultimodal(ctx, "i", "x", []ImageInput{{Bytes: []byte("x"), ContentType: "image/jpeg"}}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 3 {
+		t.Fatalf("mock OpenAI calls=%d, want 3", calls)
+	}
+	events := recorder.Events()
+	if len(events) != 3 {
+		t.Fatalf("usage events=%d, want 3", len(events))
+	}
+	for _, event := range events {
+		if event.Provider != "OPENAI" || event.UserID != uid || !event.Success {
+			t.Fatalf("unexpected event=%+v", event)
+		}
+	}
+}
 
 func TestGenerateTextSendsSecureResponsesRequestAndParsesUsage(t *testing.T) {
 	var captured struct {

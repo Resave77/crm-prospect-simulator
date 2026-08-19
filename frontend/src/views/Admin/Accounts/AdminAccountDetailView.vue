@@ -12,6 +12,7 @@ import { useAuthStore } from '../../../stores/auth'
 import type { ApiErrorEnvelope } from '../../../types/auth'
 import type { AdminUserStatus } from '../../../types/admin'
 import ResetPasswordDialog from '../../../components/admin/ResetPasswordDialog.vue'
+import { getApiUsageSummary, getApiUsageHistory, getApiActivityHistory } from '../../../api/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,8 +26,32 @@ const statusDialogVisible = ref(false)
 const statusTarget = ref<{ status: AdminUserStatus; label: string } | null>(null)
 const deleteDialogVisible = ref(false)
 const resetPasswordDialogVisible = ref(false)
-
+const usageSummary = ref<any[]>([])
+const usageHistory = ref<any[]>([])
+const activityHistory = ref<any[]>([])
+const usageSummaryError = ref('')
+const usageHistoryError = ref('')
+const activityHistoryError = ref('')
+const usageProvider = ref('')
+const usageFeature = ref('')
+const usageDateFrom = ref('')
+const usageDateTo = ref('')
 const id = computed(() => String(route.params.id))
+const usageParams = () => Object.fromEntries(Object.entries({ provider: usageProvider.value, feature: usageFeature.value, dateFrom: usageDateFrom.value, dateTo: usageDateTo.value }).filter(([, value]) => value))
+const reloadUsage = async () => {
+  if (!id.value) return
+  const params = usageParams()
+  const load = async (request: () => Promise<unknown>, target: { value: any[] }, failure: { value: string }, message: string) => {
+    failure.value = ''
+    try { target.value = (await request()) as any[] } catch { target.value = []; failure.value = message }
+  }
+  await Promise.all([
+    load(() => getApiUsageSummary(id.value, params), usageSummary, usageSummaryError, 'Monthly summary is unavailable.'),
+    load(() => getApiUsageHistory(id.value, params), usageHistory, usageHistoryError, 'Provider usage history is unavailable.'),
+    load(() => getApiActivityHistory(id.value), activityHistory, activityHistoryError, 'Activity history is unavailable.'),
+  ])
+}
+
 const user = computed(() => (store.selectedUser?.id === id.value ? store.selectedUser : null))
 const isSelf = computed(() => user.value?.id === auth.user?.id)
 const isProtectedSuperAdmin = computed(() => user.value?.email === 'admin@yummy.test' || user.value?.fullName === 'Yummy Super Admin')
@@ -57,6 +82,7 @@ async function load() {
   notFound.value = false
   try {
     await store.fetchUserById(id.value)
+    await reloadUsage()
   } catch (e) {
     notFound.value = isNotFoundError(e)
     error.value = store.errorMessage(e)
@@ -142,7 +168,6 @@ onMounted(() => { load() })
 
         <!-- DETAIL CARDS -->
         <div class="detail-grid">
-          <div class="detail-stack">
             <!-- IDENTITY -->
             <div class="detail-card">
               <div class="detail-card-header">
@@ -171,8 +196,6 @@ onMounted(() => { load() })
                 </div>
               </div>
             </div>
-
-          </div>
 
             <div class="detail-card"><div class="detail-card-header"><div class="detail-card-icon si-blue"><i class="pi pi-map-marker" /></div><div><h3>User Information</h3><p>Identity, location, timezone, and contact information.</p></div></div><div class="detail-rows">
               <div class="detail-row"><span class="detail-label">Timezone</span><span class="detail-value">{{ user.timezone || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">{{ [user.city, user.province, user.district].filter(Boolean).join(', ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Job</span><span class="detail-value">{{ [user.jobTitle, user.positionGrade, user.subDepartment].filter(Boolean).join(' · ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Join Date</span><span class="detail-value">{{ user.joinDate?.slice(0, 10) || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Gender / Birth Date</span><span class="detail-value">{{ [user.gender, user.dateOfBirth?.slice(0, 10)].filter(Boolean).join(' · ') || 'â€”' }}</span></div><div class="detail-row"><span class="detail-label">Phone Numbers</span><span class="detail-value">{{ user.phones?.map((phone) => phone.phoneNumber).join(', ') || user.phone || 'â€”' }}</span></div>
@@ -230,7 +253,6 @@ onMounted(() => { load() })
               </div>
             </div>
 
-          <div class="detail-stack">
             <!-- SECURITY -->
             <div class="detail-card">
               <div class="detail-card-header">
@@ -314,7 +336,6 @@ onMounted(() => { load() })
                 </div>
               </div>
             </div>
-          </div>
         </div>
 
         <!-- STATUS CONFIRMATION DIALOG -->
@@ -345,6 +366,16 @@ onMounted(() => { load() })
           </template>
         </Dialog>
 
+        <section class="detail-card usage-card">
+          <div class="detail-card-header"><div class="detail-card-icon si-violet"><i class="pi pi-chart-bar" /></div><div><h3>API Usage</h3><p>Monitoring penggunaan API berdasarkan aktivitas yang tercatat di sistem. Estimasi biaya bukan merupakan tagihan resmi dari provider.</p></div></div>
+          <div class="usage-filters"><select v-model="usageProvider" @change="reloadUsage"><option value="">Provider</option><option value="GOOGLE_MAPS">Google Maps</option><option value="OPENAI">OpenAI</option></select><input v-model="usageFeature" placeholder="Operation / Feature" @change="reloadUsage" /><input v-model="usageDateFrom" type="date" aria-label="From date" @change="reloadUsage" /><input v-model="usageDateTo" type="date" aria-label="To date" @change="reloadUsage" /><button type="button" class="usage-clear" @click="usageProvider=''; usageFeature=''; usageDateFrom=''; usageDateTo=''; reloadUsage()">Clear</button></div>
+          <div v-if="usageSummaryError" class="usage-inline-error">{{ usageSummaryError }} <button type="button" @click="reloadUsage">Retry</button></div>
+          <div v-else-if="!usageSummary.length" class="usage-empty">No API usage recorded yet.</div>
+          <div v-else class="usage-table-wrap"><p class="usage-helper">Ringkasan penggunaan API pengguna ini pada periode yang dipilih.</p><table class="usage-table"><thead><tr><th>API / Operasi</th><th>Request Provider Tercatat</th><th>Kuota Gratis</th><th>Penggunaan</th><th>Estimasi Biaya</th></tr></thead><tbody><tr v-for="item in usageSummary" :key="`${item.provider}-${item.operation}`"><td><strong>{{ item.provider === 'GOOGLE_MAPS' ? 'Google Maps' : item.provider }}</strong><small>{{ item.operation.replaceAll('_', ' ') }}</small></td><td>{{ item.requests || 0 }}</td><td>{{ item.freeTierVerified ? item.freeTier : 'Belum dikonfigurasi' }}</td><td>{{ item.freeTierVerified && item.usagePercent != null ? `${item.usagePercent.toFixed(1)}%` : '—' }}</td><td>{{ item.estimatedCost ? item.estimatedCost : 'Belum dikonfigurasi' }}</td></tr></tbody></table></div>
+          <div v-if="usageSummary.length" class="usage-semantics">Hit provider menunjukkan request yang benar-benar dikirim ke layanan eksternal. Aktivitas aplikasi dan cache hit dicatat secara terpisah.</div>
+          <section class="usage-subsection"><h4>Riwayat Penggunaan Provider</h4><p class="usage-helper">Menampilkan riwayat request ke layanan eksternal seperti Google Maps atau OpenAI yang tercatat atas penggunaan akun ini.</p><div v-if="usageHistoryError" class="usage-inline-error">{{ usageHistoryError }} <button type="button" @click="reloadUsage">Retry</button></div><div v-else-if="!usageHistory.length" class="usage-empty">Belum ada riwayat penggunaan provider untuk pengguna ini.</div><div v-else class="usage-history"><div v-for="item in usageHistory.slice(0, 10)" :key="`${item.createdAt}-${item.operation}`" class="usage-history-row"><span>{{ formatDateTime(item.createdAt) }}</span><strong>{{ item.provider === 'GOOGLE_MAPS' ? 'Google Maps' : item.provider }}</strong><span>{{ item.operation.replaceAll('_', ' ') }}</span><span>{{ item.fieldMask || '—' }}</span><span>{{ item.success ? 'Berhasil' : 'Gagal' }}</span></div></div></section>
+          <section class="usage-subsection"><h4>Riwayat Aktivitas</h4><p class="usage-helper">Menampilkan aktivitas CRM yang dilakukan langsung oleh pengguna ini.</p><div v-if="activityHistoryError" class="usage-inline-error">{{ activityHistoryError }} <button type="button" @click="reloadUsage">Retry</button></div><div v-else-if="!activityHistory.length" class="usage-empty"><strong>Belum ada aktivitas yang tercatat untuk pengguna ini.</strong><small>Riwayat aktivitas hanya mencatat tindakan yang dilakukan langsung oleh pengguna ini. Aktivitas yang dilakukan Admin saat melihat atau mengelola akun ini akan tercatat pada riwayat aktivitas Admin.</small><small v-if="usageHistory.length" class="usage-helper">Sebagian riwayat penggunaan API dapat berasal dari data sebelum fitur Activity History diterapkan.</small></div><div v-else class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Operasi</th><th>SKU</th><th>Cache</th><th>Hit Provider</th><th>Status</th><th>Detail</th></tr></thead><tbody><tr v-for="item in activityHistory.slice(0, 10)" :key="`${item.createdAt}-${item.requestId}`"><td>{{ formatDateTime(item.createdAt) }}</td><td>{{ item.trace?.action || '—' }}</td><td>{{ item.trace?.operation || '—' }}</td><td>{{ item.trace?.sku || item.trace?.sku_category || '—' }}</td><td>{{ item.trace?.cache_status || '—' }}</td><td>{{ item.trace?.provider_hit_count ?? '—' }}</td><td>{{ item.responseStatus >= 400 ? 'Gagal' : 'Berhasil' }}</td><td><details><summary>Lihat</summary><small>Endpoint: {{ item.endpoint }} · Request ID: {{ item.requestId }} · Field mask: {{ item.trace?.field_mask || '—' }}</small></details></td></tr></tbody></table></div></section>
+        </section>
         <ResetPasswordDialog v-model:visible="resetPasswordDialogVisible" :user="user" @reset-success="load" />
       </template>
     </template>
@@ -410,7 +441,7 @@ onMounted(() => { load() })
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
+  gap: 0.8rem;
   align-items: start;
 }
 .detail-stack {
@@ -424,7 +455,7 @@ onMounted(() => { load() })
   background: var(--surface-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  padding: 1rem 1.1rem;
   box-shadow: var(--shadow-xs);
 }
 .detail-card-header {
@@ -464,7 +495,7 @@ onMounted(() => { load() })
 .detail-rows {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.25rem;
 }
 .detail-row {
   display: flex;
@@ -606,4 +637,32 @@ onMounted(() => { load() })
 .compact-admin-page .page-heading { padding: 0.7rem 0.85rem; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
 .compact-heading-main { display: flex; align-items: center; min-width: 0; gap: 0.35rem; }
 .header-back { flex: 0 0 auto; }
+.usage-card { margin-top: 1rem; }
+.usage-filters { display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.7rem; }
+.usage-filters select,.usage-filters input,.usage-clear { min-height:30px; padding:.3rem .55rem; border:1px solid var(--border-light); border-radius:7px; background:#fff; color:var(--text-secondary); font-size:.72rem; }
+.usage-clear { cursor:pointer; font-weight:700; }
+.usage-semantics { margin-top:.65rem; color:var(--text-muted); font-size:.7rem; }
+.usage-subsection { margin-top:1rem; }
+.usage-subsection h4 { margin:0 0 .45rem; font-size:.82rem; color:var(--text-primary); }
+.usage-helper { margin:.15rem 0 .55rem; color:var(--text-muted); font-size:.7rem; line-height:1.45; }
+.usage-empty small { display:block; margin-top:.35rem; color:var(--text-muted); font-size:.7rem; line-height:1.45; }
+.usage-table-wrap,.activity-table-wrap { overflow-x:auto; margin-top:.75rem; }
+.usage-table,.activity-table { width:100%; border-collapse:collapse; font-size:.72rem; }
+.usage-table th,.usage-table td,.activity-table th,.activity-table td { padding:.55rem .45rem; border-top:1px solid #eef2f6; text-align:left; vertical-align:top; white-space:nowrap; }
+.usage-table th,.activity-table th { color:var(--text-muted); font-size:.66rem; text-transform:uppercase; letter-spacing:.04em; }
+.usage-table td small { display:block; margin-top:.15rem; color:var(--text-muted); }
+.activity-table td small { display:block; max-width:28rem; white-space:normal; color:var(--text-muted); }
+.activity-table summary { cursor:pointer; color:var(--brand-blue); font-weight:700; }
+.activity-columns { display:grid; grid-template-columns:145px minmax(0,1fr) auto minmax(70px,auto) minmax(80px,auto) auto; gap:.6rem; margin-top:.8rem; padding:.35rem 0; color:var(--text-muted); font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.usage-empty { padding: .75rem; color: var(--text-muted); background: #f8fafc; border-radius: 8px; font-size: .8rem; }
+.usage-inline-error { display:flex; align-items:center; gap:.6rem; padding:.65rem .75rem; color:#991b1b; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:.78rem; }
+.usage-inline-error button { margin-left:auto; border:0; background:transparent; color:#b91c1c; font-weight:700; cursor:pointer; }
+.usage-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.6rem; }
+.usage-stat { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-light); border-radius:9px; }
+.usage-stat span,.usage-stat small { color:var(--text-muted); font-size:.68rem; }
+.usage-stat strong { font-size:1rem; }
+.usage-history { display:grid; gap:.35rem; margin-top:.75rem; }
+.usage-history-row { display:grid; grid-template-columns:145px minmax(0,1fr) auto minmax(120px,auto) minmax(120px,auto); gap:.6rem; padding:.45rem 0; border-top:1px solid #eef2f6; font-size:.72rem; align-items:center; }
+@media (max-width: 768px) { .usage-history-row { grid-template-columns:1fr 1fr; gap:.35rem; } .usage-history-row > :first-child { grid-column:1 / -1; } }
+@media (max-width: 768px) { .activity-columns { display:none; } }
 </style>

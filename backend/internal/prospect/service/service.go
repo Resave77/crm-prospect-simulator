@@ -62,6 +62,8 @@ type MenuImageInput struct {
 type Places interface {
 	Search(context.Context, prospectmodel.PlaceSearchInput) ([]prospectmodel.PlaceResult, error)
 	Detail(context.Context, string) (prospectmodel.PlaceResult, error)
+	DetailCore(context.Context, string) (prospectmodel.PlaceDetails, error)
+	DetailBusinessInfo(context.Context, string) (prospectmodel.PlaceDetails, error)
 	DetailFull(context.Context, string) (prospectmodel.PlaceDetails, error)
 	SearchMenuImages(context.Context, string, int) ([]prospectmodel.MenuImage, error)
 	FetchPhoto(context.Context, string) ([]byte, string, error)
@@ -486,6 +488,26 @@ func (s *Service) PlaceDetailFull(ctx context.Context, placeID string) (prospect
 		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
 	}
 	return s.places.DetailFull(ctx, placeID)
+}
+
+func (s *Service) PlaceDetailCore(ctx context.Context, placeID string) (prospectmodel.PlaceDetails, error) {
+	if strings.TrimSpace(placeID) == "" {
+		return prospectmodel.PlaceDetails{}, ErrFinderInput
+	}
+	if s.places == nil {
+		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
+	}
+	return s.places.DetailCore(ctx, placeID)
+}
+
+func (s *Service) PlaceDetailBusinessInfo(ctx context.Context, placeID string) (prospectmodel.PlaceDetails, error) {
+	if strings.TrimSpace(placeID) == "" {
+		return prospectmodel.PlaceDetails{}, ErrFinderInput
+	}
+	if s.places == nil {
+		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
+	}
+	return s.places.DetailBusinessInfo(ctx, placeID)
 }
 
 func (s *Service) MenuImages(ctx context.Context, query string, limit int) ([]prospectmodel.MenuImage, error) {

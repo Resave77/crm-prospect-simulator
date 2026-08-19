@@ -8,6 +8,7 @@ import (
 	"crm-prospect-simulator/backend/internal/auth/service"
 
 	"crm-prospect-simulator/backend/internal/shared/response"
+	"crm-prospect-simulator/backend/internal/usage"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -45,6 +46,7 @@ func (m *Middleware) Authenticate(c *fiber.Ctx) error {
 	}
 
 	c.Locals(principalKey, principal)
+	c.SetUserContext(usage.WithUser(c.UserContext(), principal.UserID))
 
 	return c.Next()
 

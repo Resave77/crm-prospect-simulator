@@ -73,6 +73,8 @@ model User {
   prospectComments ProspectComment[]        @relation("ProspectCommentUser")
   prospectAIChats  ProspectAIChat[]
   phoneNumbers    UserPhoneNumber[]
+  providerUsageEvents ProviderUsageEvent[]
+  activityLogs        ActivityLog[]
 
   @@index([salesRoleId])
   @@index([deletedAt])
@@ -91,6 +93,57 @@ model UserPhoneNumber {
 
   @@index([userId])
   @@map("user_phone_numbers")
+}
+
+model ProviderUsageEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  requestId         String?  @map("request_id") @db.VarChar(128)
+  provider          String   @db.VarChar(32)
+  feature           String   @db.VarChar(96)
+  operation         String   @db.VarChar(96)
+  apiOrModel        String   @map("api_or_model") @db.VarChar(160)
+  skuCategory       String?  @map("sku_category") @db.VarChar(96)
+  fieldMask         String?  @map("field_mask")
+  inputTokens       Int?     @map("input_tokens")
+  outputTokens      Int?     @map("output_tokens")
+  totalTokens       Int?     @map("total_tokens")
+  requestCount      Int      @default(1) @map("request_count")
+  estimatedCostUsd  Decimal? @map("estimated_cost_usd") @db.Decimal(12, 8)
+  httpStatus        Int?     @map("http_status")
+  success           Boolean  @default(false)
+  errorCode         String?  @map("error_code") @db.VarChar(96)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([provider, createdAt])
+  @@index([feature, createdAt])
+  @@map("provider_usage_events")
+}
+
+model ActivityLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String?  @map("user_id") @db.Uuid
+  requestId       String   @map("request_id") @db.VarChar(128)
+  method          String   @db.VarChar(12)
+  endpoint        String
+  requestBody     Json     @map("request_body")
+  queryParams     Json     @map("query_params")
+  responseBody    Json     @map("response_body")
+  responseStatus  Int      @map("response_status")
+  domain          String   @db.VarChar(32)
+  additionalTrace Json     @map("additional_trace")
+  durationMs      Int?     @map("duration_ms")
+  ip              String?  @db.VarChar(64)
+  userAgent       String?  @map("user_agent")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([requestId])
+  @@index([domain, createdAt])
+  @@map("activity_logs")
 }
 
 model RefreshSession {

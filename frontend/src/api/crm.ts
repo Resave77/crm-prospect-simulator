@@ -206,6 +206,10 @@ export async function getProspectPlaceDetails(prospectId: string, role: UserRole
   const base = crmBaseForRole(role)
   return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/place-details`)).data.data
 }
+export async function getProspectBusinessInfo(prospectId: string, role: UserRole) {
+  const base = role === 'SALES_EXECUTIVE' ? '/sales' : '/admin'
+  return (await api.get<ApiEnvelope<PlaceDetails>>(`${base}/prospects/${prospectId}/business-info`)).data.data
+}
 
 export async function getProspectPhotoTags(prospectId: string, role: UserRole) {
   const base = crmBaseForRole(role)

@@ -16,6 +16,7 @@ import (
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 	prospectrepository "crm-prospect-simulator/backend/internal/prospect/repository"
 	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
+	"crm-prospect-simulator/backend/internal/usage"
 	"crm-prospect-simulator/backend/platform/database"
 	"crm-prospect-simulator/backend/server"
 	"github.com/gofiber/fiber/v2"
@@ -41,7 +42,11 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	authService := service.NewAuthService(repo, repo, tokens, cfg.RefreshTokenTTL)
 	prospectRepo := prospectrepository.NewPostgresRepository(pool)
 	placesClient := prospectservice.NewGooglePlacesClient(cfg.GoogleMapsAPIKey, cfg.GoogleCSEID, cfg.GoogleCSEAPIKey)
+	placesClient.SetCacheTTLs(cfg.GooglePlacesSearchCacheTTL, cfg.GooglePlacesCoreDetailCacheTTL, cfg.GooglePlacesBusinessInfoCacheTTL)
+	usageRecorder := usage.NewPostgresRecorder(pool)
+	placesClient.SetUsageRecorder(usageRecorder)
 	aiClient := aiservice.NewClient(cfg)
+	aiClient.SetUsageRecorder(usageRecorder)
 	prospectAI := aiservice.NewProspectAI(aiClient, cfg.AIChatMaxLength, cfg.AIChatMaxHistory)
 	initialAnalyzer := aiservice.NewInitialAnalyzer(pool, prospectAI)
 	prospectService := prospectservice.New(prospectRepo, placesClient)
@@ -66,5 +71,5 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	customerService := customerservice.New(customerRepo, prospectService)
 	adminRepo := adminrepository.NewPostgresRepository(pool)
 	adminService := adminservice.New(adminRepo)
-	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService, initialAnalyzer), Pool: pool}, cfg, nil
+	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService, initialAnalyzer, pool), Pool: pool}, cfg, nil
 }

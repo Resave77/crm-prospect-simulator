@@ -19,13 +19,15 @@ import (
 	prospecthandler "crm-prospect-simulator/backend/internal/prospect/handler"
 	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
+	usage "crm-prospect-simulator/backend/internal/usage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service, initialAnalyzers ...*aiservice.InitialAnalyzer) *fiber.App {
+func New(cfg config.Config, authService *service.AuthService, prospectService *prospectservice.Service, customerService *customerservice.Service, adminService *adminservice.Service, extras ...any) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "Yummy CRM API",
 		ReadTimeout:  15 * time.Second,
@@ -54,8 +56,19 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	authHandler := authhandler.New(authService, cfg.CookieSecure)
 	authMiddleware := authmiddleware.New(authService)
 	prospectHandler := prospecthandler.New(prospectService, customerService)
-	if len(initialAnalyzers) > 0 {
-		prospectHandler.SetInitialAnalyzer(initialAnalyzers[0])
+	var usagePool *pgxpool.Pool
+	var hasInitialAnalyzer bool
+	for _, extra := range extras {
+		switch v := extra.(type) {
+		case *aiservice.InitialAnalyzer:
+			prospectHandler.SetInitialAnalyzer(v)
+			hasInitialAnalyzer = v != nil
+		case *pgxpool.Pool:
+			usagePool = v
+		}
+	}
+	if usagePool != nil {
+		app.Use(usage.ActivityMiddleware(usage.NewPostgresActivityRecorder(usagePool)))
 	}
 	customerHandler := customerhandler.New(customerService, prospectService)
 	adminHandler := adminhandler.New(adminService)
@@ -89,7 +102,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	ai.Post("/prospects/:id/find-menu", authMiddleware.RequirePermission("view_ai_menu_profiling"), prospectHandler.FindMenu)
 	ai.Post("/prospects/:id/summary", authMiddleware.RequirePermission("view_ai_summary"), prospectHandler.GenerateSummary)
 	ai.Get("/prospects/:id/chat/history", authMiddleware.RequirePermission("use_prospect_ai_chat"), prospectHandler.ChatAIHistory)
-	if len(initialAnalyzers) > 0 && initialAnalyzers[0] != nil {
+	if hasInitialAnalyzer {
 		ai.Get("/prospects/:id/initial-analysis", authMiddleware.RequirePermission("view_ai_summary"), prospectHandler.InitialAnalysis)
 	}
 
@@ -123,6 +136,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Put("/prospects/:id/photo-tags", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.SetPhotoTag)
 	sales.Get("/mention-users", authMiddleware.RequirePermission("view_my_prospects"), prospectHandler.MentionUsers)
 	sales.Get("/prospects/:id/place-details", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectPlaceDetails)
+	sales.Get("/prospects/:id/business-info", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectBusinessInfo)
 	sales.Post("/prospects/:id/request-deletion", authMiddleware.RequirePermission("request_prospect_deletion"), prospectHandler.RequestDeletion)
 	sales.Get("/visits", authMiddleware.RequirePermission("view_own_visits"), prospectHandler.ListMyVisits)
 	sales.Post("/visits/:visitId/delete", authMiddleware.RequirePermission("delete_visit"), prospectHandler.DeleteVisit)
@@ -131,6 +145,15 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/customers/:id/place-details", authMiddleware.RequirePermission("view_my_customer_detail"), customerHandler.MyCustomerPlaceDetails)
 
 	admin := api.Group("/admin", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator))
+	if usagePool != nil {
+		usageHandler := usage.NewHandler(usagePool)
+		admin.Get("/api-usage/summary", usageHandler.Summary)
+		admin.Get("/api-usage/history", usageHandler.History)
+		admin.Get("/api-usage/activity", usageHandler.ActivityHistory)
+		admin.Get("/api-usage/daily", usageHandler.Daily)
+		admin.Get("/api-usage/monthly", usageHandler.Monthly)
+		admin.Get("/api-usage/top-users", usageHandler.TopUsers)
+	}
 	admin.Get("/prospects/won", prospectHandler.WonQueue)
 	admin.Get("/prospects/pipeline", prospectHandler.Pipeline)
 	admin.Get("/sales-executives", prospectHandler.SalesExecutives)
@@ -150,6 +173,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/prospects/:id/photo-tags", prospectHandler.ListPhotoTags)
 	admin.Put("/prospects/:id/photo-tags", prospectHandler.SetPhotoTag)
 	admin.Get("/prospects/:id/place-details", prospectHandler.ProspectPlaceDetails)
+	admin.Get("/prospects/:id/business-info", prospectHandler.ProspectBusinessInfo)
 	admin.Get("/visits", prospectHandler.ListVisitMonitoring)
 	admin.Get("/reports", prospectHandler.Report)
 	admin.Get("/prospects/:prospectId/visits", prospectHandler.ListProspectVisits)

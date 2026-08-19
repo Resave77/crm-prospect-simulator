@@ -67,6 +67,12 @@ func (f *fakePlaces) Search(_ context.Context, _ prospectmodel.PlaceSearchInput)
 func (f *fakePlaces) Detail(_ context.Context, _ string) (prospectmodel.PlaceResult, error) {
 	return prospectmodel.PlaceResult{GooglePlaceID: "place-1"}, nil
 }
+func (f *fakePlaces) DetailCore(_ context.Context, _ string) (prospectmodel.PlaceDetails, error) {
+	return f.DetailFull(context.Background(), "place-1")
+}
+func (f *fakePlaces) DetailBusinessInfo(_ context.Context, _ string) (prospectmodel.PlaceDetails, error) {
+	return f.DetailFull(context.Background(), "place-1")
+}
 func (f *fakePlaces) DetailFull(_ context.Context, _ string) (prospectmodel.PlaceDetails, error) {
 	if f.detailFull.GooglePlaceID == "" {
 		f.detailFull.GooglePlaceID = "place-1"

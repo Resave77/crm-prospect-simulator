@@ -21,6 +21,7 @@ import (
 	"crm-prospect-simulator/backend/internal/prospect/repository"
 	"crm-prospect-simulator/backend/internal/prospect/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
+	"crm-prospect-simulator/backend/internal/usage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -88,6 +89,7 @@ func (h *Handler) MyProspect(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ChatAI(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "TANYA_AI"))
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -278,6 +280,8 @@ func (h *Handler) CustomerMarkers(c *fiber.Ctx) error {
 }
 
 func (h *Handler) SearchPlaces(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_FINDER"))
+	usage.SetTrace(c.UserContext(), "action", "SEARCH_PROSPECT")
 	lat, latErr := strconv.ParseFloat(c.Query("latitude"), 64)
 	lng, lngErr := strconv.ParseFloat(c.Query("longitude"), 64)
 	radius, radiusErr := strconv.ParseFloat(c.Query("radius"), 64)
@@ -301,6 +305,7 @@ func (h *Handler) SearchPlaces(c *fiber.Ctx) error {
 }
 
 func (h *Handler) PlaceDetail(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_DETAIL"))
 	item, err := h.service.PlaceDetail(c.UserContext(), actor(c), c.Params("placeId"))
 	if err != nil {
 		return writeError(c, err)
@@ -309,6 +314,8 @@ func (h *Handler) PlaceDetail(c *fiber.Ctx) error {
 }
 
 func (h *Handler) PlacePhoto(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "VIEW_PHOTOS")
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "VIEW_PHOTOS"))
 	data, contentType, err := h.service.PlacePhoto(c.UserContext(), c.Query("name"))
 	if err != nil {
 		return writeError(c, err)
@@ -632,6 +639,7 @@ func (h *Handler) ListPhotoTags(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ProfileMenu(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "MENU_PROFILING"))
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -656,6 +664,7 @@ func (h *Handler) ProfileMenu(c *fiber.Ctx) error {
 }
 
 func (h *Handler) FindMenu(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "FIND_MENU"))
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -681,6 +690,7 @@ func (h *Handler) FindMenu(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GenerateSummary(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "AI_SUMMARY"))
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -713,6 +723,8 @@ func (h *Handler) SetPhotoTag(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_DETAIL"))
+	usage.SetTrace(c.UserContext(), "action", "VIEW_PROSPECT_DETAIL")
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -730,7 +742,34 @@ func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
 	if item.Prospect.GooglePlaceID == "" {
 		return response.Data(c, fiber.StatusOK, nil)
 	}
-	place, err := h.service.PlaceDetailFull(c.UserContext(), item.Prospect.GooglePlaceID)
+	place, err := h.service.PlaceDetailCore(c.UserContext(), item.Prospect.GooglePlaceID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, place)
+}
+
+func (h *Handler) ProspectBusinessInfo(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_DETAIL_BUSINESS_INFO"))
+	usage.SetTrace(c.UserContext(), "action", "LOAD_BUSINESS_INFO")
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	currentActor := actor(c)
+	var item prospectmodel.Review
+	if currentActor.Role.IsAdminRole() {
+		item, err = h.service.Review(c.UserContext(), currentActor, id)
+	} else {
+		item, err = h.service.MyProspect(c.UserContext(), currentActor, id)
+	}
+	if err != nil {
+		return writeError(c, err)
+	}
+	if item.Prospect.GooglePlaceID == "" {
+		return response.Data(c, fiber.StatusOK, nil)
+	}
+	place, err := h.service.PlaceDetailBusinessInfo(c.UserContext(), item.Prospect.GooglePlaceID)
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -738,6 +777,7 @@ func (h *Handler) ProspectPlaceDetails(c *fiber.Ctx) error {
 }
 
 func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
+	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_DETAIL"))
 	placeID := c.Params("googlePlaceId")
 	if strings.TrimSpace(placeID) == "" {
 		return response.Error(c, 400, "PLACE_ID_REQUIRED", "Google Place ID is required.")

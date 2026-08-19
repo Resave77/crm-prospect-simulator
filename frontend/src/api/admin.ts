@@ -131,6 +131,21 @@ export async function endSalesAssignment(
   ).data.data
 }
 
+export async function getApiUsageSummary(userId: string, params: Record<string, string> = {}) {
+  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/summary', { params: { userId, ...params } })).data.data
+}
+
+export async function getApiUsageHistory(userId: string, params: Record<string, string> = {}) {
+  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/history', { params: { userId, ...params } })).data.data
+}
+export async function getApiActivityHistory(userId: string) {
+  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/activity', { params: { userId } })).data.data
+}
+
+export async function getApiUsageDaily(userId: string, date: string) {
+  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/daily', { params: { userId, date } })).data.data
+}
+
 export async function updateUserProfile(id: string, input: AdminProfileUpdateInput) {
   return (await api.patch<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}/profile`, input)).data.data
 }

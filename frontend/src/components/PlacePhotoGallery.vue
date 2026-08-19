@@ -33,6 +33,11 @@ function photoIndexOf(photo: PlacePhoto) { return props.photos.findIndex((item) 
 
 const menuPhotos = computed(() => props.photos.filter((photo) => tags.value[String(photoIndexOf(photo))]?.category === 'MENU'))
 const regularPhotos = computed(() => props.photos.filter((photo) => tags.value[String(photoIndexOf(photo))]?.category !== 'MENU'))
+const photosEnabled = ref(false)
+const visiblePhotoCount = ref(0)
+const displayedMenuPhotos = computed(() => photosEnabled.value ? menuPhotos.value.slice(0, visiblePhotoCount.value) : [])
+const displayedRegularPhotos = computed(() => photosEnabled.value ? regularPhotos.value.slice(0, visiblePhotoCount.value) : [])
+const hasMorePhotos = computed(() => photosEnabled.value && (displayedMenuPhotos.value.length < menuPhotos.value.length || displayedRegularPhotos.value.length < regularPhotos.value.length))
 
 function categoryOf(photo: PlacePhoto): PhotoCategory {
   const stored = tags.value[String(photoIndexOf(photo))]
@@ -160,9 +165,20 @@ async function loadPhoto(photo: PlacePhoto) {
 
 function loadPhotos() {
   revokeUnusedPhotoUrls()
-  props.photos.forEach((photo) => {
+  ;[...displayedMenuPhotos.value, ...displayedRegularPhotos.value].forEach((photo) => {
     void loadPhoto(photo)
   })
+}
+
+function viewPhotos() {
+  photosEnabled.value = true
+  visiblePhotoCount.value = Math.min(2, Math.max(menuPhotos.value.length, regularPhotos.value.length))
+  loadPhotos()
+}
+
+function loadMorePhotos() {
+  visiblePhotoCount.value += 1
+  loadPhotos()
 }
 
 async function refreshTags() {
@@ -182,16 +198,17 @@ function onResume() {
 onMounted(() => {
   disposed = false
   loadTags()
-  loadPhotos()
   pollId = window.setInterval(refreshTags, 30000)
   document.addEventListener('visibilitychange', onResume)
   window.addEventListener('focus', onResume)
 })
 watch(() => props.prospectId, () => {
   lightbox.value = null
+  photosEnabled.value = false
+  visiblePhotoCount.value = 0
   loadTags()
 })
-watch(() => props.photos, loadPhotos, { deep: true })
+watch(() => props.photos, () => { if (photosEnabled.value) loadPhotos() }, { deep: true })
 onBeforeUnmount(() => {
   disposed = true
   if (pollId) window.clearInterval(pollId)
@@ -205,12 +222,16 @@ onBeforeUnmount(() => {
 <template>
   <div class="ppg">
     <div v-if="tagError" class="ppg-error">{{ tagError }}</div>
+    <div v-if="photos.length && !photosEnabled" class="ppg-consent">
+      <span><i class="pi pi-images" /> Photos are loaded only when requested.</span>
+      <button type="button" @click="viewPhotos">View Photos</button>
+    </div>
 
-    <section v-if="photos.length && (!section || section === 'menu')" class="ppg-section">
+    <section v-if="photosEnabled && photos.length && (!section || section === 'menu')" class="ppg-section">
       <h2 v-if="!section"><i class="pi pi-book" /> Menu</h2>
-      <p v-if="menuPhotos.length" class="ppg-count">{{ menuPhotos.length }} photo{{ menuPhotos.length === 1 ? '' : 's' }} tagged as menu</p>
-      <div v-if="menuPhotos.length" class="ppg-scroll">
-        <div v-for="photo in menuPhotos" :key="photo.name" class="ppg-item">
+      <p v-if="displayedMenuPhotos.length" class="ppg-count">{{ displayedMenuPhotos.length }} photo{{ displayedMenuPhotos.length === 1 ? '' : 's' }} tagged as menu</p>
+      <div v-if="displayedMenuPhotos.length" class="ppg-scroll">
+        <div v-for="photo in displayedMenuPhotos" :key="photo.name" class="ppg-item">
           <div class="ppg-thumb" @click="lightbox = photo">
             <img v-if="resolvedPhotoUrl(photo)" :src="resolvedPhotoUrl(photo)" :alt="'Menu photo'" loading="lazy" />
             <span v-else class="ppg-photo-placeholder">
@@ -238,11 +259,11 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="photos.length && (!section || section === 'photos')" class="ppg-section">
+    <section v-if="photosEnabled && photos.length && (!section || section === 'photos')" class="ppg-section">
       <h2 v-if="!section"><i class="pi pi-images" /> Photos</h2>
-      <p v-if="regularPhotos.length" class="ppg-count">{{ regularPhotos.length }} photo{{ regularPhotos.length === 1 ? '' : 's' }}</p>
-      <div v-if="regularPhotos.length" class="ppg-scroll">
-        <div v-for="photo in regularPhotos" :key="photo.name" class="ppg-item">
+      <p v-if="displayedRegularPhotos.length" class="ppg-count">{{ displayedRegularPhotos.length }} photo{{ displayedRegularPhotos.length === 1 ? '' : 's' }}</p>
+      <div v-if="displayedRegularPhotos.length" class="ppg-scroll">
+        <div v-for="photo in displayedRegularPhotos" :key="photo.name" class="ppg-item">
           <div class="ppg-thumb" @click="lightbox = photo">
             <img v-if="resolvedPhotoUrl(photo)" :src="resolvedPhotoUrl(photo)" :alt="'Place photo'" loading="lazy" />
             <span v-else class="ppg-photo-placeholder">
@@ -269,6 +290,8 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <button v-if="hasMorePhotos" type="button" class="ppg-load-more" @click="loadMorePhotos">Load More Photos</button>
+
     <div v-if="lightbox" class="ppg-lightbox" @click.self="lightbox = null">
       <button class="ppg-lightbox-close" aria-label="Close" @click="lightbox = null"><i class="pi pi-times" /></button>
       <img v-if="resolvedPhotoUrl(lightbox)" :src="resolvedPhotoUrl(lightbox)" :alt="'Photo preview'" @keydown="onLightboxKeydown" />
@@ -287,6 +310,9 @@ onBeforeUnmount(() => {
   padding: 0.5rem 0.75rem; border-radius: 10px; background: #fef2f2;
   color: #991b1b; font-size: 0.72rem;
 }
+.ppg-consent { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.7rem .8rem; border:1px solid var(--border-light); border-radius:10px; background:#f8fafc; color:var(--text-muted); font-size:.72rem; }
+.ppg-consent button, .ppg-load-more { border:1px solid var(--border-light); border-radius:8px; background:#fff; color:var(--brand-blue); padding:.45rem .65rem; font-size:.72rem; font-weight:700; cursor:pointer; }
+.ppg-load-more { justify-self:start; }
 
 .ppg-section { display: grid; gap: 0.6rem; }
 .ppg-section h2 {

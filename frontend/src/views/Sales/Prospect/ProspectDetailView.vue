@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { generateProspectSummary, getMyProspect, getProspectPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
+import { generateProspectSummary, getMyProspect, getProspectPlaceDetails, getProspectBusinessInfo, getProspectInitialAnalysis } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
@@ -24,6 +24,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const review = ref<ProspectReview | null>(null)
 const placeDetails = ref<PlaceDetails | null>(null)
+const businessInfoLoading = ref(false)
+const businessInfoError = ref('')
+const businessInfoLoaded = ref(false)
 const initialAnalysis = ref<ProspectInitialAnalysis | null>(null)
 const summaryLoading = ref(false)
 const summaryError = ref('')
@@ -83,6 +86,25 @@ const displayedReviews = computed(() => {
   const items = placeDetails.value?.reviews ?? []
   return showAllReviews.value ? items : items.slice(0, 4)
 })
+
+const primaryPhone = computed(() => review.value?.prospect.phoneNumber || placeDetails.value?.phoneNumber || '')
+const website = computed(() => review.value?.prospect.websiteUrl || placeDetails.value?.websiteUrl || '')
+const mapsUrl = computed(() => review.value?.prospect.googleMapsUrl || placeDetails.value?.googleMapsUrl || '')
+
+async function loadBusinessInfo() {
+  if (!review.value || businessInfoLoading.value) return
+  businessInfoLoading.value = true
+  businessInfoError.value = ''
+  try {
+    const enriched = await getProspectBusinessInfo(review.value.prospect.id, 'SALES_EXECUTIVE')
+    placeDetails.value = { ...(placeDetails.value ?? {} as PlaceDetails), ...enriched }
+    businessInfoLoaded.value = true
+  } catch (caught) {
+    businessInfoError.value = formatErrorMessage(caught) || 'Business information could not be loaded.'
+  } finally {
+    businessInfoLoading.value = false
+  }
+}
 
 
 function openExpandedPanel(panel: 'summary' | 'discussion' | 'chat') {
@@ -337,7 +359,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="detail-field">
                 <span><i class="pi pi-phone" /> Phone</span>
-                <strong>{{ review.prospect.phoneNumber || 'Not provided' }}</strong>
+                <strong>{{ primaryPhone || 'Not provided' }}</strong>
                 <DataSourceBadge source="google" label="Google" />
               </div>
               <div class="detail-field">
@@ -397,8 +419,8 @@ onBeforeUnmount(() => {
                 />
                 <div class="map-footer">
                   <a
-                    v-if="review.prospect.googleMapsUrl"
-                    :href="review.prospect.googleMapsUrl"
+                    v-if="mapsUrl"
+                    :href="mapsUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -438,12 +460,18 @@ onBeforeUnmount(() => {
                     <i class="pi pi-compass" /><strong>Google GPS:</strong><span>{{ placeDetails.latitude.toFixed(6) }}, {{ placeDetails.longitude.toFixed(6) }}</span>
                   </div>
                   <div v-if="placeDetails.placeCategory"><i class="pi pi-tag" /><strong>Category:</strong><span>{{ placeDetails.placeCategory }}</span></div>
-                  <div v-if="placeDetails.internationalPhone"><i class="pi pi-phone" /><strong>International phone:</strong><span>{{ placeDetails.internationalPhone }}</span></div>
+                  <div v-if="primaryPhone"><i class="pi pi-phone" /><strong>Phone:</strong><span>{{ primaryPhone }}</span></div>
+                  <div v-if="placeDetails.internationalPhone && placeDetails.internationalPhone !== primaryPhone"><i class="pi pi-phone" /><strong>International phone:</strong><span>{{ placeDetails.internationalPhone }}</span></div>
                   <div v-if="placeDetails.utcOffsetMinutes != null"><i class="pi pi-globe" /><strong>Time zone:</strong><span>{{ utcOffsetLabel(placeDetails.utcOffsetMinutes) }}</span></div>
-                  <div v-if="placeDetails.websiteUrl && isValidWebsite(placeDetails.websiteUrl)">
+                  <div v-if="website && isValidWebsite(website)">
                     <i class="pi pi-external-link" /><strong>Website:</strong>
-                    <a :href="placeDetails.websiteUrl" target="_blank" rel="noopener">{{ websiteDisplayUrl(placeDetails.websiteUrl) }}</a>
+                    <a :href="website" target="_blank" rel="noopener">{{ websiteDisplayUrl(website) }}</a>
                   </div>
+                  <div v-if="!businessInfoLoaded && (!primaryPhone || !website)" class="business-info-empty">
+                    <span>Business info is not loaded.</span>
+                    <button type="button" @click="loadBusinessInfo" :disabled="businessInfoLoading">{{ businessInfoLoading ? 'Loading…' : 'Load Business Info' }}</button>
+                  </div>
+                  <div v-if="businessInfoError" class="business-info-error">{{ businessInfoError }}</div>
                 </div>
               </div>
             </div>
@@ -476,12 +504,12 @@ onBeforeUnmount(() => {
 
           <!-- Reviews and histories stay INSIDE the main stack. This prevents a shorter media/menu stack
                from creating the long blank column seen in the screenshots. -->
-          <section v-if="placeDetails?.reviews?.length" class="dcard dcard-reviews">
+          <section class="dcard dcard-reviews">
             <div class="section-heading section-heading-between">
               <h2><i class="pi pi-comments" /> Reviews</h2>
-              <span class="section-count">{{ placeDetails.reviews.length }}</span>
+              <span class="section-count">Deferred</span>
             </div>
-            <div class="reviews-grid">
+            <div v-if="placeDetails?.reviews?.length" class="reviews-grid">
               <article v-for="(item, i) in displayedReviews" :key="i" class="review-card">
                 <div class="review-head">
                   <img v-if="item.authorPhoto" :src="item.authorPhoto" :alt="item.authorName" @error="($event.target as HTMLImageElement).style.display='none'" />
@@ -494,7 +522,8 @@ onBeforeUnmount(() => {
                 <p v-if="item.text">{{ item.text }}</p>
               </article>
             </div>
-            <button v-if="placeDetails.reviews.length > 4" class="section-toggle-btn" type="button" @click="showAllReviews = !showAllReviews">
+            <span v-else class="reviews-deferred">Reviews not loaded.</span>
+            <button v-if="placeDetails?.reviews?.length && placeDetails.reviews.length > 4" class="section-toggle-btn" type="button" @click="showAllReviews = !showAllReviews">
               {{ showAllReviews ? 'Show less' : `Show all ${placeDetails.reviews.length} reviews` }}
               <i :class="showAllReviews ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
             </button>
@@ -570,7 +599,7 @@ onBeforeUnmount(() => {
             <div class="section-heading"><h2>Business &amp; Contact Details</h2></div>
             <dl class="business-list">
               <div><dt>Business name</dt><dd>{{ review.prospect.placeName || 'Not provided' }}</dd></div>
-              <div><dt>Phone (Primary)</dt><dd><a v-if="review.prospect.phoneNumber" :href="`tel:${review.prospect.phoneNumber}`">{{ review.prospect.phoneNumber }}</a><span v-else>Not provided</span></dd></div>
+              <div><dt>Phone (Primary)</dt><dd><a v-if="primaryPhone" :href="`tel:${primaryPhone}`">{{ primaryPhone }}</a><span v-else>Not provided</span></dd></div>
               <div v-if="placeDetails?.internationalPhone"><dt>Phone (International)</dt><dd>{{ placeDetails.internationalPhone }}</dd></div>
               <div><dt>Category</dt><dd>{{ review.prospect.placeCategory || 'Not provided' }}</dd></div>
               <div><dt>Industry</dt><dd>{{ review.prospect.industryGroup || 'Not provided' }}</dd></div>

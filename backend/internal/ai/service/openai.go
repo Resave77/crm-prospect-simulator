@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"crm-prospect-simulator/backend/config"
+	usagepkg "crm-prospect-simulator/backend/internal/usage"
 )
 
 const responsesAPIURL = "https://api.openai.com/v1/responses"
@@ -28,7 +29,10 @@ type Client struct {
 	menuProfileTimeout time.Duration
 	httpClient         *http.Client
 	endpoint           string
+	recorder           usagepkg.Recorder
 }
+
+func (c *Client) SetUsageRecorder(r usagepkg.Recorder) { c.recorder = r }
 
 type Option func(*Client)
 
@@ -154,6 +158,7 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.recordUsage(ctx, 0, 0, 0, 0, false, "request_error")
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 			return TextResult{}, ErrAITimeout
 		}
@@ -164,17 +169,21 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 	requestID := resp.Header.Get("x-request-id")
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "rate_limited")
 		logUpstreamFailure(resp, requestID)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIRateLimited
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "authentication")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIAuthentication
 	case resp.StatusCode >= 500:
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "upstream")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIUnavailable
 	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "rejected")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, ErrAIRequestRejected
@@ -183,10 +192,12 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 	var parsed responseBody
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
 	if err := decoder.Decode(&parsed); err != nil {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "invalid_response")
 		return TextResult{UpstreamRequestID: requestID}, ErrAIInvalidResponse
 	}
 	text := strings.TrimSpace(parsed.OutputText)
 	if text == "" {
+		c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, false, "empty_response")
 		text = strings.TrimSpace(parsed.firstText())
 	}
 	if text == "" {
@@ -197,6 +208,7 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 		requestID = parsed.ID
 	}
 	logResponseMetadata("text", c.model, requestID, resp.StatusCode, started, parsed, text, nil)
+	c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, true, "")
 	return TextResult{
 		Text:              text,
 		InputTokens:       parsed.Usage.InputTokens,
@@ -204,6 +216,24 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 		TotalTokens:       parsed.Usage.TotalTokens,
 		UpstreamRequestID: requestID,
 	}, nil
+}
+
+func (c *Client) recordUsage(ctx context.Context, status, input, output, total int, success bool, code string) {
+	usagepkg.SetTrace(ctx, "provider", "OPENAI")
+	usagepkg.SetTrace(ctx, "operation", "RESPONSES")
+	usagepkg.SetTrace(ctx, "model", c.model)
+	usagepkg.SetTrace(ctx, "provider_attempted", true)
+	usagepkg.SetTrace(ctx, "provider_success", success)
+	usagepkg.SetTrace(ctx, "provider_status", status)
+	usagepkg.SetTrace(ctx, "provider_hit_count", 1)
+	if c.recorder == nil {
+		return
+	}
+	id, ok := usagepkg.UserID(ctx)
+	if !ok {
+		return
+	}
+	c.recorder.Record(ctx, usagepkg.Event{UserID: id, RequestID: usagepkg.RequestID(ctx), Provider: "OPENAI", Feature: usagepkg.Feature(ctx), Operation: "RESPONSES", APIOrModel: c.model, InputTokens: input, OutputTokens: output, TotalTokens: total, HTTPStatus: status, Success: success, ErrorCode: code})
 }
 
 // GenerateWebSearch performs one Responses API request with the hosted web
@@ -284,6 +314,7 @@ func (c *Client) doRequestParsed(ctx context.Context, body requestBody, requestT
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.recordUsage(ctx, 0, 0, 0, 0, false, "request_error")
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 			return TextResult{}, responseBody{}, ErrAITimeout
 		}
@@ -292,26 +323,31 @@ func (c *Client) doRequestParsed(ctx context.Context, body requestBody, requestT
 	defer resp.Body.Close()
 	requestID := resp.Header.Get("x-request-id")
 	if resp.StatusCode == http.StatusTooManyRequests {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "rate_limited")
 		logUpstreamFailure(resp, requestID)
 		return TextResult{UpstreamRequestID: requestID}, responseBody{}, ErrAIRateLimited
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "authentication")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, responseBody{}, ErrAIAuthentication
 	}
 	if resp.StatusCode >= 500 {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "upstream")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, responseBody{}, ErrAIUnavailable
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "rejected")
 		logUpstreamFailure(resp, requestID)
 		io.Copy(io.Discard, resp.Body)
 		return TextResult{UpstreamRequestID: requestID}, responseBody{}, ErrAIRequestRejected
 	}
 	var parsed responseBody
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&parsed); err != nil {
+		c.recordUsage(ctx, resp.StatusCode, 0, 0, 0, false, "invalid_response")
 		return TextResult{UpstreamRequestID: requestID}, responseBody{}, ErrAIInvalidResponse
 	}
 	text := strings.TrimSpace(parsed.OutputText)
@@ -320,12 +356,14 @@ func (c *Client) doRequestParsed(ctx context.Context, body requestBody, requestT
 	}
 	if text == "" {
 		logResponseMetadata("web_search_or_multimodal", c.model, requestID, resp.StatusCode, started, parsed, text, ErrAIInvalidResponse)
+		c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, false, "empty_response")
 		return TextResult{UpstreamRequestID: requestID}, parsed, ErrAIInvalidResponse
 	}
 	if requestID == "" {
 		requestID = parsed.ID
 	}
 	logResponseMetadata("web_search_or_multimodal", c.model, requestID, resp.StatusCode, started, parsed, text, nil)
+	c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, true, "")
 	return TextResult{Text: text, InputTokens: parsed.Usage.InputTokens, OutputTokens: parsed.Usage.OutputTokens, TotalTokens: parsed.Usage.TotalTokens, UpstreamRequestID: requestID}, parsed, nil
 }
 
