@@ -32,6 +32,16 @@ var (
 	ErrMenuSourceNotAvailable = errors.New("MENU_SOURCE_NOT_AVAILABLE")
 )
 
+// GooglePlacesProviderError preserves only safe upstream status metadata for
+// handler-level classification; raw provider bodies never leave the service.
+type GooglePlacesProviderError struct {
+	StatusCode int
+}
+
+func (e *GooglePlacesProviderError) Error() string {
+	return fmt.Sprintf("Google Places provider returned HTTP %d", e.StatusCode)
+}
+
 type Actor struct {
 	UserID         uuid.UUID
 	Role           authmodel.Role

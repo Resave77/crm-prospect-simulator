@@ -433,13 +433,13 @@ func (c *GooglePlacesClient) postPlaces(ctx context.Context, endpoint string, bo
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.record(ctx, operationForEndpoint(endpoint), searchFieldMask, 0, false, "request_error")
-		return nil, "", fmt.Errorf("Google Places request failed: %w", err)
+		return nil, "", fmt.Errorf("%w: %v", &GooglePlacesProviderError{StatusCode: 0}, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		c.record(ctx, operationForEndpoint(endpoint), searchFieldMask, resp.StatusCode, false, "http_error")
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, "", fmt.Errorf("Google Places returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+		return nil, "", fmt.Errorf("%w: %s", &GooglePlacesProviderError{StatusCode: resp.StatusCode}, strings.TrimSpace(string(bodyBytes)))
 	}
 	c.record(ctx, operationForEndpoint(endpoint), searchFieldMask, resp.StatusCode, true, "")
 	var payload googleResponse

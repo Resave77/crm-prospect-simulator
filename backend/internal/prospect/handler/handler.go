@@ -831,6 +831,13 @@ func removeSelfieFiles(references ...string) {
 }
 
 func writeError(c *fiber.Ctx, err error) error {
+	var providerErr *service.GooglePlacesProviderError
+	if errors.As(err, &providerErr) {
+		if providerErr.StatusCode == fiber.StatusForbidden || providerErr.StatusCode == fiber.StatusUnauthorized {
+			return response.Error(c, fiber.StatusServiceUnavailable, "PLACES_PROVIDER_FORBIDDEN", "Google Places is unavailable because the API configuration or permissions are invalid. Contact an administrator.")
+		}
+		return response.Error(c, fiber.StatusBadGateway, "PLACES_PROVIDER_ERROR", "Google Places is temporarily unavailable. Try again later or contact an administrator.")
+	}
 	switch {
 	case errors.Is(err, service.ErrForbidden):
 		return response.Error(c, fiber.StatusForbidden, "ACCESS_FORBIDDEN", "You do not have permission to perform this action.")
