@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { checkOutProspect, transitionProspect } from '../../../api/crm'
-import { useVisitLocation } from '../../../composables/sales/useVisitLocation'
+import { useVisitLocation, type GpsCoords } from '../../../composables/sales/useVisitLocation'
 import {
   isValidEntityType,
   normalizeRouteId,
@@ -28,12 +28,36 @@ const resolvedEntityType = computed(() => {
 const resolvedEntityId = computed(() => normalizeRouteId(route.params.id))
 
 const entity = ref<VisitEntityContext | null>(null)
-const activeVisit = ref<{ id: string; checkInAt: string } | null>(null)
+const activeVisit = ref<{ id: string; checkInAt: string; checkInLatitude: number; checkInLongitude: number } | null>(null)
 const pageState = ref<PageState>('loading')
 const pageError = ref('')
 const submitBusy = ref(false)
+const autoCheckoutStarted = ref(false)
+const CHECKOUT_TOLERANCE_METERS = 500
 
 const location = useVisitLocation()
+
+async function autoCheckOutIfOutside(coords: GpsCoords) {
+  if (autoCheckoutStarted.value || !activeVisit.value || pageState.value !== 'ready') return
+  const distance = location.distanceTo(activeVisit.value.checkInLatitude, activeVisit.value.checkInLongitude)
+  if (distance === null || distance <= CHECKOUT_TOLERANCE_METERS || coords.accuracy > CHECKOUT_TOLERANCE_METERS / 2) return
+  autoCheckoutStarted.value = true
+  try {
+    await checkOutProspect(entity.value!.entityId, activeVisit.value.id, {
+      latitude: coords.latitude, longitude: coords.longitude,
+      followUpNotes: '', visitResult: '', visitOutcome: '', autoCheckOut: true,
+    })
+    localStorage.removeItem(localStorageKey())
+    router.replace({ name: resolvedEntityType.value === 'customer' ? 'SalesCustomerCheckOutSuccess' : 'SalesProspectCheckOutSuccess', params: { id: entity.value!.entityId } })
+  } catch (caught) {
+    autoCheckoutStarted.value = false
+    pageError.value = formatErrorMessage(caught)
+  }
+}
+
+watch(() => location.state.value.coords, (coords) => {
+  if (coords) void autoCheckOutIfOutside(coords)
+})
 
 const storedVisitResult = ref<{ visitResult: string; visitOutcome: string; followUpNotes: string; followUpDate: string } | null>(null)
 const elapsed = ref('—')
@@ -153,7 +177,7 @@ async function initialize() {
         return
       }
 
-      activeVisit.value = { id: open.id, checkInAt: open.checkInAt }
+      activeVisit.value = { id: open.id, checkInAt: open.checkInAt, checkInLatitude: open.checkInLatitude, checkInLongitude: open.checkInLongitude }
       startElapsedTimer()
 
       if (entity.value.latitude == null || entity.value.longitude == null) {
@@ -180,7 +204,7 @@ async function initialize() {
         return
       }
 
-      activeVisit.value = { id: open.id, checkInAt: open.checkInAt }
+      activeVisit.value = { id: open.id, checkInAt: open.checkInAt, checkInLatitude: open.checkInLatitude, checkInLongitude: open.checkInLongitude }
       startElapsedTimer()
 
       if (entity.value.latitude == null || entity.value.longitude == null) {

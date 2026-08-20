@@ -80,6 +80,11 @@ const displayedStatusHistory = computed(() => {
   return showAllStatusHistory.value ? items : items.slice(0, 6)
 })
 
+const lostFeedback = computed(() => {
+  const entries = review.value?.history ?? []
+  return [...entries].reverse().find((entry) => entry.toStatus === 'LOST' && entry.notes?.trim()) ?? null
+})
+
 const displayedReviews = computed(() => {
   const items = placeDetails.value?.reviews ?? []
   return showAllReviews.value ? items : items.slice(0, 4)
@@ -537,6 +542,16 @@ onBeforeUnmount(() => {
             </button>
           </section>
 
+          <section v-if="review.prospect.status === 'LOST' && lostFeedback" class="dcard lost-feedback-card">
+            <div class="section-heading"><h2>Lost Feedback</h2><Tag value="From Sales" severity="danger" /></div>
+            <p class="lost-feedback-intro">Alasan dari sales mengapa prospect tidak mencapai kesepakatan.</p>
+            <blockquote>{{ lostFeedback.notes }}</blockquote>
+            <dl class="lost-feedback-meta">
+              <div><dt>Submitted by</dt><dd>{{ lostFeedback.changedByName }}</dd></div>
+              <div><dt>Lost at</dt><dd>{{ new Date(lostFeedback.createdAt).toLocaleString() }}</dd></div>
+            </dl>
+          </section>
+
           <section class="dcard history-card">
             <div class="section-heading section-heading-between">
               <h2>Status History</h2>
@@ -713,6 +728,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.lost-feedback-card { border-color: #fecaca; background: linear-gradient(180deg, #fff 0%, #fffafa 100%); }
+.lost-feedback-intro { margin: .15rem 0 .65rem; color: #64748b; font-size: .72rem; line-height: 1.45; }
+.lost-feedback-card blockquote { margin: .75rem 0; padding: .75rem .85rem; border-left: 3px solid #e35d6a; border-radius: 0 10px 10px 0; background: #fff1f2; color: #475569; font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
+.lost-feedback-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin: 0; }
+.lost-feedback-meta div { display: grid; gap: .15rem; min-width: 0; }.lost-feedback-meta dt { color: #94a3b8; font-size: .62rem; }.lost-feedback-meta dd { margin: 0; overflow: hidden; color: #475569; font-size: .72rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 480px) { .lost-feedback-meta { grid-template-columns: 1fr; } }
 .detail-page {
   --detail-accent: var(--brand-red);
   --detail-accent-strong: var(--brand-red-hover);

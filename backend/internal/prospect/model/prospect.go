@@ -177,6 +177,7 @@ type CheckInInput struct {
 type CheckOutInput struct {
 	Latitude      float64 `json:"latitude"`
 	Longitude     float64 `json:"longitude"`
+	AutoCheckOut  bool    `json:"autoCheckOut"`
 	FollowUpNotes string  `json:"followUpNotes"`
 	VisitResult   string  `json:"visitResult"`
 	VisitOutcome  string  `json:"visitOutcome"`

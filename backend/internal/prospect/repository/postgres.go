@@ -337,7 +337,43 @@ func (r *PostgresRepository) Create(ctx context.Context, input model.SaveProspec
 func (r *PostgresRepository) CheckIn(ctx context.Context, prospectID, salesExecutiveID uuid.UUID, input model.CheckInInput) (model.Visit, error) {
 	selfie := input.SelfieReference
 	id := uuid.New()
-	_, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return model.Visit{}, fmt.Errorf("begin check in visit: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Validate Visit B and ownership before resolving any previous active visit.
+	var eligible bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM prospects p
+			WHERE p.id=$1 AND p.assigned_sales_executive_id=$2 AND p.status NOT IN ('LOST')
+			OR EXISTS (
+				SELECT 1 FROM customer_sites cs
+				WHERE cs.source_prospect_id=p.id AND cs.sales_executive_id=$2
+			)
+		)`, prospectID, salesExecutiveID).Scan(&eligible); err != nil {
+		return model.Visit{}, fmt.Errorf("validate check in visit: %w", err)
+	}
+	if !eligible {
+		return model.Visit{}, ErrNotOwner
+	}
+
+	// A Sales user may have only one active visit. Resolve an older visit only
+	// after Visit B has passed ownership/status validation. The current Visit B
+	// coordinates are the only reliable location available at this event.
+	if _, err := tx.Exec(ctx, `
+		UPDATE prospect_visits
+		SET check_out_at=now(), check_out_latitude=$2, check_out_longitude=$3,
+			visit_outcome=CASE WHEN visit_outcome='' THEN 'AUTO_NEXT_VISIT' ELSE visit_outcome || ' | AUTO_NEXT_VISIT' END,
+			updated_at=now()
+		WHERE sales_executive_id=$1 AND check_out_at IS NULL AND prospect_id<>$4`,
+		salesExecutiveID, input.Latitude, input.Longitude, prospectID); err != nil {
+		return model.Visit{}, fmt.Errorf("auto check out previous visit: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
 		INSERT INTO prospect_visits (id, prospect_id, sales_executive_id, check_in_at, check_in_latitude, check_in_longitude, selfie_reference, visit_notes, updated_at)
 		SELECT $1, p.id, $3, now(), $4, $5, $6, $7, now() FROM prospects p
 		WHERE p.id = $2
@@ -357,18 +393,18 @@ func (r *PostgresRepository) CheckIn(ctx context.Context, prospectID, salesExecu
 		}
 		return model.Visit{}, fmt.Errorf("check in prospect visit: %w", err)
 	}
-	var exists bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prospect_visits WHERE id=$1)`, id).Scan(&exists); err != nil {
-		return model.Visit{}, err
-	}
-	if !exists {
-		return model.Visit{}, ErrNotOwner
-	}
 	if input.VisitNotes != "" {
-		_, _ = r.pool.Exec(ctx, `UPDATE prospects SET visit_notes=$2, updated_at=now() WHERE id=$1`, prospectID, input.VisitNotes)
+		if _, err := tx.Exec(ctx, `UPDATE prospects SET visit_notes=$2, updated_at=now() WHERE id=$1`, prospectID, input.VisitNotes); err != nil {
+			return model.Visit{}, fmt.Errorf("save visit notes: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.Visit{}, fmt.Errorf("commit check in visit: %w", err)
 	}
 	return r.findVisit(ctx, id)
 }
+
+const checkoutToleranceMeters = 500.0
 
 func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, salesExecutiveID uuid.UUID, input model.CheckOutInput) (model.Visit, error) {
 	command, err := r.pool.Exec(ctx, `
@@ -382,8 +418,12 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 				WHERE cs.source_prospect_id = p.id AND cs.sales_executive_id = $3
 			)
 		)
-		AND v.check_out_at IS NULL`,
-		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome)
+		AND v.check_out_at IS NULL
+		-- Checkout tolerance is measured from the actual check-in position.
+		-- This allows the user to finish the visit without returning to the
+		-- prospect/customer point, while still limiting location drift.
+		AND ($9 OR (2 * 6371000 * ASIN(SQRT(POWER(SIN(RADIANS($4 - v.check_in_latitude) / 2), 2) + COS(RADIANS(v.check_in_latitude)) * COS(RADIANS($4)) * POWER(SIN(RADIANS($5 - v.check_in_longitude) / 2), 2))))) <= `+fmt.Sprintf("%.0f", checkoutToleranceMeters)+`))`,
+		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome, input.AutoCheckOut)
 	if err != nil {
 		return model.Visit{}, fmt.Errorf("check out prospect visit: %w", err)
 	}
@@ -391,6 +431,11 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 		var exists bool
 		_ = r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prospect_visits WHERE id=$1 AND prospect_id=$2)`, visitID, prospectID).Scan(&exists)
 		if exists {
+			var openWithinTolerance bool
+			_ = r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM prospect_visits v WHERE v.id=$1 AND v.check_out_at IS NULL AND (2 * 6371000 * ASIN(SQRT(POWER(SIN(RADIANS($2 - v.check_in_latitude) / 2), 2) + COS(RADIANS(v.check_in_latitude)) * COS(RADIANS($2)) * POWER(SIN(RADIANS($3 - v.check_in_longitude) / 2), 2))))) <= `+fmt.Sprintf("%.0f", checkoutToleranceMeters)+`)`, visitID, input.Latitude, input.Longitude).Scan(&openWithinTolerance)
+			if !openWithinTolerance {
+				return model.Visit{}, ErrVisitOutsideTolerance
+			}
 			return model.Visit{}, ErrVisitClosed
 		}
 		return model.Visit{}, ErrNotOwner

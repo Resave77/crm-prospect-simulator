@@ -11,6 +11,8 @@ import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 import PipelineProspectCard from '../../../components/sales/pipeline/PipelineProspectCard.vue'
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
+import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
+import DailyVisitSchedule from '../../../components/prospect/DailyVisitSchedule.vue'
 
 type PipelineGroup = 'ALL' | 'NEW_LEAD' | 'IN_PROGRESS' | 'WON' | 'LOST'
 type SecondaryStage = 'ALL_PROGRESS' | ProspectStatus
@@ -403,6 +405,11 @@ onBeforeUnmount(() => {
       <span class="pl-total-badge">{{ prospects.length }} active</span>
     </div>
 
+    <div class="pipeline-overview">
+      <ProspectHealthSummary :prospects="prospects" />
+      <DailyVisitSchedule :loading="crm.loading" :prospects="prospects" />
+    </div>
+
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
 
     <div v-if="crm.loading && !prospects.length" class="pl-loading">
@@ -661,10 +668,11 @@ onBeforeUnmount(() => {
           Use this when the prospect needs to return to the previous sales stage.
         </p>
         <p v-if="dialogType === 'won'" class="pl-dialog-success"><i class="pi pi-check-circle" /> Won prospects will wait for Admin review before conversion.</p>
-        <p v-if="dialogType === 'lost'" class="pl-dialog-warning"><i class="pi pi-exclamation-triangle" /> This closes the active sales process for this prospect.</p>
+        <p v-if="dialogType === 'lost'" class="pl-dialog-warning"><i class="pi pi-exclamation-triangle" /> This closes the active sales process. Your feedback helps the company understand why the deal did not proceed.</p>
         <label class="pl-field">
-          <span>{{ target === 'LOST' ? 'Loss reason (required)' : target === 'WON' ? 'Win notes (required)' : 'Progress note (optional)' }}</span>
-          <Textarea v-model="notes" rows="3" fluid placeholder="Add details about this transition..." />
+          <span>{{ target === 'LOST' ? 'Lost feedback (required)' : target === 'WON' ? 'Win notes (required)' : 'Progress note (optional)' }}</span>
+          <Textarea v-model="notes" rows="4" fluid :maxlength="2000" :placeholder="target === 'LOST' ? 'Explain why the customer or deal did not reach agreement...' : 'Add details about this transition...'" />
+          <small v-if="target === 'LOST'" class="pl-field-hint">Please provide a clear reason before marking this prospect as lost.</small>
         </label>
       </div>
       <template #footer>
@@ -684,6 +692,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pipeline-overview { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: .75rem; margin-bottom: .75rem; align-items: start; }
+.pl-field-hint { color: #94a3b8; font-size: .68rem; line-height: 1.4; }
 .pl-page { padding: 0 0 24px; }
 .pl-desktop-only { display: none; }
 
@@ -785,6 +795,7 @@ onBeforeUnmount(() => {
 .pg-tab.active .pg-tab-count { background: rgba(255,255,255,0.22); color: #fff; }
 
 @media (max-width: 480px) {
+  .pipeline-overview { grid-template-columns: 1fr; }
   .pg-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pg-tab { min-height: 44px; padding: 0.5rem 0.3rem; }
   .pg-tab-label { font-size: 0.65rem; }

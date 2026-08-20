@@ -9,13 +9,14 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("prospect not found")
-	ErrInvalidStatus = errors.New("prospect status does not allow this operation")
-	ErrNotOwner      = errors.New("prospect is not assigned to this sales executive")
-	ErrDuplicate     = errors.New("Google Place is already saved as a prospect")
-	ErrVisitOpen     = errors.New("prospect already has an open visit")
-	ErrVisitClosed   = errors.New("visit is already checked out")
-	ErrConflict      = errors.New("prospect is still referenced by existing records")
+	ErrNotFound              = errors.New("prospect not found")
+	ErrInvalidStatus         = errors.New("prospect status does not allow this operation")
+	ErrNotOwner              = errors.New("prospect is not assigned to this sales executive")
+	ErrDuplicate             = errors.New("Google Place is already saved as a prospect")
+	ErrVisitOpen             = errors.New("prospect already has an open visit")
+	ErrVisitClosed           = errors.New("visit is already checked out")
+	ErrVisitOutsideTolerance = errors.New("visit checkout is outside the allowed tolerance radius")
+	ErrConflict              = errors.New("prospect is still referenced by existing records")
 )
 
 type Repository interface {

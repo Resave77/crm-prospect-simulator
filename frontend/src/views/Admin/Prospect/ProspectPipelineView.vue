@@ -5,10 +5,12 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
-import { getSalesExecutives } from '../../../api/crm'
+import Dialog from 'primevue/dialog'
+import { getProspectReview, getSalesExecutives } from '../../../api/crm'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
-import type { ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
+import type { Prospect, ProspectReview, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
+import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
 
 const crm = useCrmStore()
 const router = useRouter()
@@ -18,6 +20,16 @@ const salesFilter = ref('')
 const industryFilter = ref('')
 const statusFilter = ref('')
 const error = ref('')
+const feedbackVisible = ref(false)
+const feedbackLoading = ref(false)
+const feedbackError = ref('')
+const feedbackProspect = ref<Prospect | null>(null)
+const feedbackReview = ref<ProspectReview | null>(null)
+
+const lostFeedback = computed(() => {
+  const entries = feedbackReview.value?.history ?? []
+  return [...entries].reverse().find((entry) => entry.toStatus === 'LOST' && entry.notes?.trim()) ?? null
+})
 
 const industries = ['N&B / Kuliner', 'Retail', 'Hospitality', 'Health & Beauty', 'Services', 'Other']
 
@@ -75,6 +87,21 @@ const activeIndustryCount = computed(
 
 function openTicketing(id: string) {
   router.push(`/admin/prospects/${id}/review`)
+}
+
+async function openFeedback(item: Prospect) {
+  feedbackProspect.value = item
+  feedbackReview.value = null
+  feedbackError.value = ''
+  feedbackVisible.value = true
+  feedbackLoading.value = true
+  try {
+    feedbackReview.value = await getProspectReview(item.id)
+  } catch {
+    feedbackError.value = 'Feedback belum dapat dimuat.'
+  } finally {
+    feedbackLoading.value = false
+  }
 }
 
 function resetFilters() {
@@ -146,6 +173,10 @@ onMounted(async () => {
     <Message v-if="error" severity="error" class="page-message">
       {{ error }}
     </Message>
+
+    <div class="pipeline-overview">
+      <ProspectHealthSummary :prospects="filtered" />
+    </div>
 
     <section class="control-panel">
       <div class="filter-field">
@@ -249,6 +280,16 @@ onMounted(async () => {
               </dl>
 
               <div class="kanban-card-footer">
+                <Button
+                  v-if="item.status === 'LOST'"
+                  label="Lihat feedback"
+                  icon="pi pi-eye"
+                  severity="danger"
+                  text
+                  size="small"
+                  class="feedback-button"
+                  @click.stop="openFeedback(item)"
+                />
                 <span class="kanban-ticketing-link">
                   <i class="pi pi-comments" />
                   Open ticketing
@@ -265,10 +306,37 @@ onMounted(async () => {
         </section>
       </div>
     </section>
+
+    <Dialog v-model:visible="feedbackVisible" modal header="Lost Feedback" :style="{ width: 'min(92vw, 520px)' }">
+      <div class="feedback-preview" v-if="feedbackProspect">
+        <div class="feedback-preview-title">
+          <span class="eyebrow">Customer / Prospect</span>
+          <h2>{{ feedbackProspect.placeName }}</h2>
+          <p>{{ feedbackProspect.formattedAddress }}</p>
+        </div>
+        <div v-if="feedbackLoading" class="feedback-state"><i class="pi pi-spin pi-spinner" /> Memuat feedback...</div>
+        <Message v-else-if="feedbackError" severity="error">{{ feedbackError }}</Message>
+        <div v-else-if="lostFeedback" class="feedback-content">
+          <Tag value="Lost" severity="danger" />
+          <blockquote>{{ lostFeedback.notes }}</blockquote>
+          <div class="feedback-meta"><span><strong>Sales</strong>{{ lostFeedback.changedByName }}</span><span><strong>Waktu</strong>{{ new Date(lostFeedback.createdAt).toLocaleString() }}</span></div>
+        </div>
+        <div v-else class="feedback-state"><i class="pi pi-info-circle" /> Belum ada feedback tertulis untuk prospect ini.</div>
+      </div>
+    </Dialog>
   </section>
 </template>
 
 <style scoped>
+.pipeline-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+.feedback-button { margin: 0; padding: .3rem .45rem !important; border: 1px solid #fecaca !important; border-radius: 7px !important; background: #fff7f7 !important; color: #b4232f !important; font-size: .58rem !important; font-weight: 800 !important; }
+.feedback-button:hover { border-color: #f59aa3 !important; background: #feecee !important; }
+.feedback-preview-title h2 { margin: .25rem 0 .15rem; color: #1e293b; font-size: 1.1rem; }
+.feedback-preview-title p { margin: 0 0 1rem; color: #64748b; font-size: .78rem; }
+.feedback-state { display: flex; align-items: center; gap: .5rem; padding: 1.2rem 0; color: #64748b; font-size: .82rem; }
+.feedback-content blockquote { margin: .75rem 0; padding: .85rem 1rem; border-left: 3px solid #e35d6a; border-radius: 0 10px 10px 0; background: #fff1f2; color: #475569; font-size: .85rem; line-height: 1.6; white-space: pre-wrap; }
+.feedback-meta { display: flex; flex-wrap: wrap; gap: 1rem; color: #475569; font-size: .78rem; }
+.feedback-meta span { display: grid; gap: .15rem; }.feedback-meta strong { color: #94a3b8; font-size: .65rem; text-transform: uppercase; }
 .pipeline-page {
   box-sizing: border-box;
   display: flex;
@@ -662,7 +730,9 @@ onMounted(async () => {
 
 .kanban-card-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
   margin-top: 0.3rem;
   padding-top: 0.4rem;
   border-top: 1px solid #edf1f5;
@@ -670,11 +740,13 @@ onMounted(async () => {
 
 .kanban-ticketing-link {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 0.3rem;
   color: #e63946;
   font-size: 0.56rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .kanban-ticketing-link i {
@@ -733,6 +805,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .pipeline-overview { grid-template-columns: 1fr; }
   .pipeline-page {
     min-height: auto;
     padding: 0.7rem;

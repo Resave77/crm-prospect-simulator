@@ -816,6 +816,8 @@ func writeError(c *fiber.Ctx, err error) error {
 		return response.Error(c, fiber.StatusConflict, "VISIT_ALREADY_OPEN", "Check out the open visit before starting another one.")
 	case errors.Is(err, repository.ErrVisitClosed):
 		return response.Error(c, fiber.StatusConflict, "VISIT_ALREADY_CLOSED", "This visit is already checked out.")
+	case errors.Is(err, repository.ErrVisitOutsideTolerance):
+		return response.Error(c, fiber.StatusUnprocessableEntity, "CHECKOUT_OUTSIDE_TOLERANCE", "You are outside the allowed check-out tolerance.")
 	default:
 		slog.Error("unhandled error", "error", err)
 		return response.Error(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")

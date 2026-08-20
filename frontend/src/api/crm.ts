@@ -47,7 +47,7 @@ export async function checkInProspect(id: string, input: { latitude: number; lon
   if (input.selfie) form.append('selfie', input.selfie)
   return (await api.post<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/check-in`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data
 }
-export async function checkOutProspect(id: string, visitId: string, input: { latitude: number; longitude: number; followUpNotes: string; visitResult: string; visitOutcome: string }) {
+export async function checkOutProspect(id: string, visitId: string, input: { latitude: number; longitude: number; followUpNotes: string; visitResult: string; visitOutcome: string; autoCheckOut?: boolean }) {
   return (await api.patch<ApiEnvelope<ProspectVisit>>(`/sales/prospects/${id}/visits/${visitId}/check-out`, input)).data.data
 }
 export async function getPipeline() { return (await api.get<ApiEnvelope<Prospect[]>>('/admin/prospects/pipeline')).data.data }
