@@ -24,9 +24,20 @@ export function planWeeklyVisits(items: Prospect[], start: Coordinates | null, m
   const remaining = [...located]
   const plan: WeeklyPlan = Object.fromEntries(WORKING_DAYS.map((day) => [day, []]))
   let anchor = start
+  // Use only the number of weekdays needed by the workload. The remainder is
+  // placed at the edges so 8 prospects become 3 / 2 / 3, while preserving
+  // geographic progression and leaving unused weekdays empty.
+  const activeDayCount = Math.min(WORKING_DAYS.length, Math.max(1, Math.ceil(remaining.length / 3)))
+  const baseCapacity = Math.floor(remaining.length / activeDayCount)
+  const extraCapacity = remaining.length % activeDayCount
+  const capacities = Array.from({ length: activeDayCount }, (_, index) => {
+    const getsExtra = index < Math.ceil(extraCapacity / 2) || index >= activeDayCount - Math.floor(extraCapacity / 2)
+    return Math.min(maxPerDay, baseCapacity + (getsExtra ? 1 : 0))
+  })
 
-  for (const day of WORKING_DAYS) {
-    const capacity = Math.min(maxPerDay, remaining.length)
+  for (let dayIndex = 0; dayIndex < activeDayCount; dayIndex += 1) {
+    const day = WORKING_DAYS[dayIndex]
+    const capacity = Math.min(capacities[dayIndex], remaining.length)
     const dayItems: Prospect[] = []
     for (let i = 0; i < capacity; i += 1) {
       const next = remaining.reduce<Prospect | null>((best, candidate) => {

@@ -15,12 +15,13 @@ const days = [...WORKING_DAYS]
 const dayPlans = ref<Record<string, Prospect[]>>({})
 const ROUTE_STORAGE_KEY = 'crm-sales-weekly-route'
 const selectedDay = ref('Monday')
-const selectedProspectId = ref('')
-const moveTargets = ref<Record<string, string>>({})
 const expandedItems = ref<Record<string, boolean>>({})
 const actionItem = ref<Prospect | null>(null)
-const actionMoveDay = ref('')
 const overflow = ref<Prospect[]>([])
+const actionMoveDay = ref('')
+const planningLoading = ref(false)
+const routingLoading = ref(false)
+const planNotice = ref('')
 
 onMounted(() => {
   refreshOnce().catch(() => {})
@@ -60,31 +61,49 @@ const sortedActive = computed(() => {
   })
 })
 
-function buildPreview() {
-  const result = planWeeklyVisits(activeProspects.value, gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null)
+function buildPreview(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
+  const result = planWeeklyVisits(activeProspects.value, start)
   dayPlans.value = result.plan
   overflow.value = result.overflow
 }
 
-function openPreview() {
-  if (!gps.value.coords && !gps.value.loading) refreshOnce().catch(() => {})
-  buildPreview()
-  open.value = true
+async function openPreview() {
+  planningLoading.value = true
+  planNotice.value = ''
+  let start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null
+  try {
+    const fresh = await refreshOnce()
+    start = { latitude: fresh.latitude, longitude: fresh.longitude }
+  } catch {
+    planNotice.value = 'Location unavailable — plan dibuat berdasarkan koordinat prospect.'
+  } finally {
+    buildPreview(start)
+    planningLoading.value = false
+    open.value = true
+  }
 }
 
-function autoRouteToday() {
+async function autoRouteToday() {
+  if (routingLoading.value) return
   const dow = new Date().getDay()
-  if (dow === 0 || dow === 6) return
-  const day = days[dow - 1]
-  dayPlans.value[day] = routeDay(dayPlans.value[day] ?? [], gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null)
-  selectedDay.value = day
-  open.value = true
-}
-
-function move(item: Prospect, from: string, to: string) {
-  if (from === to) return
-  dayPlans.value[from] = dayPlans.value[from].filter((c) => c.id !== item.id)
-  dayPlans.value[to] = [...dayPlans.value[to], item]
+  if (dow === 0 || dow === 6) {
+    planNotice.value = 'Auto routing hanya tersedia pada hari kerja (Senin–Jumat).'
+    return
+  }
+  routingLoading.value = true
+  planNotice.value = ''
+  try {
+    const fresh = await refreshOnce()
+    const day = days[dow - 1]
+    const todayItems = dayPlans.value[day] ?? []
+    dayPlans.value[day] = routeDay(todayItems, { latitude: fresh.latitude, longitude: fresh.longitude })
+    selectedDay.value = day
+    open.value = true
+  } catch {
+    planNotice.value = 'Location access is required to auto-route today\'s visits.'
+  } finally {
+    routingLoading.value = false
+  }
 }
 
 function openDetail(item: Prospect) {
@@ -116,36 +135,25 @@ function statusLabel(s: string) {
 
 const totalPreview = computed(() => Object.values(dayPlans.value).reduce((sum, items) => sum + items.length, 0))
 const selectedDayVisits = computed(() => dayPlans.value[selectedDay.value] ?? [])
-const unscheduledProspects = computed(() => activeProspects.value.filter((item) => !Object.values(dayPlans.value).some((items) => items.some((candidate) => candidate.id === item.id))))
-function addToRoute() {
-  const item = unscheduledProspects.value.find((candidate) => candidate.id === selectedProspectId.value)
-  if (!item) return
-  for (const day of days) dayPlans.value[day] = (dayPlans.value[day] ?? []).filter((candidate) => candidate.id !== item.id)
-  dayPlans.value[selectedDay.value] = [...(dayPlans.value[selectedDay.value] ?? []), item]
-  selectedProspectId.value = ''
-}
 function removeFromRoute(item: Prospect) {
   for (const day of days) dayPlans.value[day] = (dayPlans.value[day] ?? []).filter((candidate) => candidate.id !== item.id)
 }
 function toggleItem(item: Prospect) { expandedItems.value[item.id] = !expandedItems.value[item.id] }
-function openActionModal(item: Prospect) { actionItem.value = item; actionMoveDay.value = '' }
+function openActionModal(item: Prospect) { actionItem.value = item }
 function closeActionModal() { actionItem.value = null }
 function moveFromModal() {
   if (!actionItem.value || !actionMoveDay.value) return
   const from = days.find((day) => dayPlans.value[day]?.some((candidate) => candidate.id === actionItem.value?.id))
-  if (from) move(actionItem.value, from, actionMoveDay.value)
+  if (from) {
+    const item = actionItem.value
+    dayPlans.value[from] = dayPlans.value[from].filter((candidate) => candidate.id !== item.id)
+    dayPlans.value[actionMoveDay.value] = [...(dayPlans.value[actionMoveDay.value] ?? []), item]
+  }
   selectedDay.value = actionMoveDay.value
   closeActionModal()
 }
 function confirmRemove(item: Prospect) {
   if (window.confirm(`Remove ${item.placeName} from this weekly route?`)) removeFromRoute(item)
-}
-function moveFromInline(item: Prospect, from: string) {
-  const to = moveTargets.value[item.id]
-  if (!to || to === from) return
-  move(item, from, to)
-  moveTargets.value[item.id] = ''
-  selectedDay.value = to
 }
 </script>
 
@@ -200,16 +208,16 @@ function moveFromInline(item: Prospect, from: string) {
     </template>
 
     <div v-if="!loading && sortedActive.length" class="inline-weekly-route">
-      <div class="inline-route-heading"><div><span class="schedule-eyebrow">Weekly route</span><strong>Visit plan by day</strong></div><div class="route-header-actions"><span>{{ totalPreview }} prospects</span><button type="button" class="route-primary-btn" @click="openPreview"><i class="pi pi-calendar-plus" /> Plan my week</button><button type="button" class="route-secondary-btn" @click="autoRouteToday"><i class="pi pi-directions" /> Auto route today</button></div></div>
+      <div class="inline-route-heading"><div><span class="schedule-eyebrow">Weekly route</span><strong>Visit plan by day</strong></div><div class="route-header-actions"><span>{{ totalPreview }} prospects</span><button type="button" class="route-primary-btn" :disabled="planningLoading" @click="openPreview"><i :class="planningLoading ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'" /> {{ planningLoading ? 'Planning...' : 'Plan my week' }}</button><button type="button" class="route-secondary-btn" :disabled="routingLoading" @click="autoRouteToday"><i :class="routingLoading ? 'pi pi-spin pi-spinner' : 'pi pi-directions'" /> {{ routingLoading ? 'Getting location...' : 'Auto route today' }}</button></div></div>
+      <div v-if="planNotice" class="route-notice-inline"><i class="pi pi-info-circle" /> {{ planNotice }}</div>
       <div class="day-actions" role="tablist" aria-label="Weekly visit days">
         <button v-for="day in days" :key="day" type="button" class="day-action" :class="{ active: selectedDay === day }" @click="selectedDay = day"><strong>{{ day.slice(0, 3) }}</strong><span>{{ dayPlans[day]?.length ?? 0 }}</span></button>
       </div>
-      <div class="add-route-control"><select v-model="selectedProspectId" aria-label="Select prospect to schedule"><option value="">Select prospect from pipeline...</option><option v-for="item in unscheduledProspects" :key="item.id" :value="item.id">{{ item.placeName }}</option></select><button type="button" :disabled="!selectedProspectId" @click="addToRoute"><i class="pi pi-plus" /> Add to {{ selectedDay.slice(0, 3) }}</button></div>
       <div class="selected-day-list">
         <div class="selected-day-title"><strong>{{ selectedDay }}</strong><span>{{ selectedDayVisits.length }} customers</span></div>
         <div v-for="(item, index) in selectedDayVisits" :key="item.id" class="inline-route-item">
           <span class="route-number">{{ index + 1 }}</span><div class="route-prospect-info route-prospect-link" role="button" tabindex="0" @click="openActionModal(item)" @keydown.enter="openActionModal(item)"><strong>{{ item.placeName }}</strong><small>{{ item.formattedAddress || 'No address' }}</small></div><span v-if="prospectDistance(item)" class="route-dist"><i class="pi pi-map-marker" /> {{ prospectDistance(item) }}</span><i class="pi pi-ellipsis-v route-expand-icon" />
-          <div v-if="expandedItems[item.id]" class="inline-item-actions"><button type="button" class="route-action route-action--detail" @click="openDetail(item)"><i class="pi pi-eye" /><span>View detail</span></button><button type="button" class="route-action route-action--checkin" @click="checkIn(item)"><i class="pi pi-sign-in" /><span>Check in</span></button><select v-model="moveTargets[item.id]" class="inline-move-select" aria-label="Move prospect to another day"><option value="">Move to...</option><option v-for="day in days" :key="day" :value="day" :disabled="day === selectedDay">{{ day }}</option></select><button type="button" class="route-action route-action--move" :disabled="!moveTargets[item.id]" @click="moveFromInline(item, selectedDay)"><i class="pi pi-arrow-right-arrow-left" /><span>Move</span></button><button type="button" class="route-action route-action--remove" @click="removeFromRoute(item)"><i class="pi pi-trash" /><span>Remove</span></button></div>
+          <div v-if="expandedItems[item.id]" class="inline-item-actions"><button type="button" class="route-action route-action--detail" @click="openDetail(item)"><i class="pi pi-eye" /><span>View detail</span></button><button type="button" class="route-action route-action--checkin" @click="checkIn(item)"><i class="pi pi-sign-in" /><span>Check in</span></button><button type="button" class="route-action route-action--remove" @click="removeFromRoute(item)"><i class="pi pi-trash" /><span>Remove</span></button></div>
         </div>
         <div v-if="!selectedDayVisits.length" class="inline-route-empty"><i class="pi pi-calendar-plus" /> No customers planned for {{ selectedDay }}.</div>
         <div v-if="overflow.length" class="schedule-overflow"><i class="pi pi-exclamation-triangle" /><span>{{ overflow.length }} customer(s) need planning next week or manual scheduling.</span></div>
@@ -250,15 +258,6 @@ function moveFromInline(item: Prospect, from: string) {
             v-for="day in days"
             :key="day"
             class="route-day"
-            @dragover.prevent
-            @drop="(event) => {
-              const payload = (event as DragEvent).dataTransfer?.getData('text/plain')
-              if (payload) {
-                const [from, id] = payload.split('|')
-                const item = dayPlans[from]?.find(c => c.id === id)
-                if (item) move(item, from, day)
-              }
-            }"
           >
             <header>
               <strong>{{ day }}</strong>
@@ -269,8 +268,6 @@ function moveFromInline(item: Prospect, from: string) {
               v-for="(item, i) in dayPlans[day]"
               :key="item.id"
               class="route-prospect"
-              draggable="true"
-              @dragstart="(e) => (e as DragEvent).dataTransfer?.setData('text/plain', `${day}|${item.id}`)"
             >
               <span class="route-number">{{ i + 1 }}</span>
               <div class="route-prospect-info">
@@ -745,7 +742,7 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
   }
 }
 .inline-weekly-route { margin-top:.8rem; padding-top:.75rem; border-top:1px solid #edf1f5; }
-.inline-route-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }.inline-route-heading > div { display:grid; gap:.12rem; }.inline-route-heading strong { color:#334155; font-size:.72rem; }.route-header-actions { display:flex !important; align-items:center; gap:.35rem; }.route-header-actions > span { padding:.2rem .45rem; border-radius:999px; background:#f1f5f9; color:#64748b; font-size:.58rem; font-weight:700; }.route-primary-btn,.route-secondary-btn { border:1px solid #dbeafe; border-radius:7px; padding:.34rem .5rem; background:#eff6ff; color:#2563eb; cursor:pointer; font:inherit; font-size:.58rem; font-weight:800; }.route-secondary-btn { border-color:#e2e8f0; background:#fff; color:#475569; }.route-primary-btn:hover,.route-secondary-btn:hover { filter:brightness(.97); }.schedule-overflow { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; padding:.5rem .6rem; border:1px solid #fed7aa; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:.62rem; line-height:1.35; }
+.inline-route-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }.inline-route-heading > div { display:grid; gap:.12rem; }.inline-route-heading strong { color:#334155; font-size:.72rem; }.route-header-actions { display:flex !important; align-items:center; gap:.35rem; }.route-header-actions > span { padding:.2rem .45rem; border-radius:999px; background:#f1f5f9; color:#64748b; font-size:.58rem; font-weight:700; }.route-primary-btn,.route-secondary-btn { border:1px solid #dbeafe; border-radius:7px; padding:.34rem .5rem; background:#eff6ff; color:#2563eb; cursor:pointer; font:inherit; font-size:.58rem; font-weight:800; }.route-secondary-btn { border-color:#e2e8f0; background:#fff; color:#475569; }.route-primary-btn:hover,.route-secondary-btn:hover { filter:brightness(.97); }.route-primary-btn:disabled,.route-secondary-btn:disabled { cursor:wait; opacity:.6; }.route-notice-inline { display:flex; align-items:center; gap:.4rem; margin:-.15rem 0 .55rem; padding:.45rem .6rem; border:1px solid #bfdbfe; border-radius:8px; background:#eff6ff; color:#1d4ed8; font-size:.62rem; line-height:1.35; }.schedule-overflow { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; padding:.5rem .6rem; border:1px solid #fed7aa; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:.62rem; line-height:1.35; }
 .day-actions { display:grid; grid-template-columns:repeat(5,1fr); gap:.35rem; }.day-action { display:grid; gap:.12rem; min-height:42px; place-items:center; border:1px solid #e2e8f0; border-radius:9px; background:#fff; color:#64748b; cursor:pointer; }.day-action strong { font-size:.62rem; }.day-action span { min-width:18px; padding:.08rem .28rem; border-radius:999px; background:#f1f5f9; color:#94a3b8; font-size:.55rem; font-weight:800; }.day-action.active { border-color:#bfdbfe; background:#eff6ff; color:#2563eb; box-shadow:0 0 0 2px rgba(37,99,235,.08); }.day-action.active span { background:#2563eb; color:#fff; }
 .add-route-control { display:grid; grid-template-columns:minmax(0,1fr) 112px auto; gap:.5rem; margin-top:.65rem; padding:.45rem; border:1px solid #edf1f5; border-radius:10px; background:#fbfdff; }.add-route-control select,.add-route-control button { min-width:0; min-height:30px; padding:.28rem .45rem; border:1px solid #dbe3ee; border-radius:7px; background:#fff; color:#475569; font:600 .6rem inherit; }.add-route-control button { border-color:#2563eb; background:#2563eb; color:#fff; cursor:pointer; white-space:nowrap; }.add-route-control button:disabled { opacity:.45; cursor:not-allowed; }
 .selected-day-list { margin-top:.55rem; padding:.5rem; border:1px solid #e5eaf0; border-radius:10px; background:#f8fafc; }.selected-day-title { display:flex; align-items:center; justify-content:space-between; margin:0 .2rem .35rem; color:#334155; font-size:.68rem; }.selected-day-title span { color:#94a3b8; font-size:.58rem; }.inline-route-item { display:flex; align-items:center; gap:.4rem; padding:.45rem; margin:.3rem 0; border:1px solid #e5eaf0; border-radius:9px; background:#fff; }.inline-route-item .route-prospect-info { flex:1; min-width:0; }.inline-route-item .route-action { flex:0 0 auto; width:auto; padding:.35rem .45rem; }.inline-route-empty { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:58px; color:#94a3b8; font-size:.62rem; }
@@ -775,4 +772,17 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
   .action-move-controls select,.action-move-controls button { min-height:38px; }
 }
 .action-move-box { display:grid; gap:.45rem; padding:.7rem .75rem; border:1px solid #dbe5ef; border-radius:10px; background:#f8fafc; }.action-move-box > div:first-child { display:grid; gap:.15rem; }.action-move-box strong { color:#334155; font-size:.72rem; }.action-move-box small { color:#94a3b8; font-size:.59rem; }.action-move-controls { display:flex; gap:.4rem; }.action-move-controls select { flex:1; min-width:0; padding:.45rem; border:1px solid #dbe5ef; border-radius:7px; background:#fff; color:#475569; font-size:.65rem; }.action-move-controls button { padding:.45rem .7rem; border:0; border-radius:7px; background:#4f46e5; color:#fff; font-size:.65rem; font-weight:700; cursor:pointer; }.action-move-controls button:disabled { opacity:.45; cursor:not-allowed; }
+/* Keep the route actions readable in the narrow right-hand dashboard column. */
+.route-primary-btn,.route-secondary-btn { display:inline-flex; align-items:center; justify-content:center; gap:.28rem; min-height:30px; white-space:nowrap; }
+@media (max-width:768px) {
+  .inline-route-heading { align-items:flex-start; flex-direction:column; gap:.5rem; }
+  .route-header-actions { display:grid !important; width:100%; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); gap:.35rem; }
+  .route-header-actions > span { align-self:center; justify-self:start; }
+  .route-primary-btn,.route-secondary-btn { width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+}
+@media (max-width:480px) {
+  .route-header-actions { grid-template-columns:1fr 1fr; }
+  .route-header-actions > span { grid-column:1 / -1; justify-self:start; }
+  .route-primary-btn,.route-secondary-btn { padding-inline:.35rem; font-size:.56rem; }
+}
 </style>
