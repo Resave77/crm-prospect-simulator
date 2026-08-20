@@ -108,11 +108,17 @@ model ProviderUsageEvent {
   inputTokens       Int?     @map("input_tokens")
   outputTokens      Int?     @map("output_tokens")
   totalTokens       Int?     @map("total_tokens")
+  cachedTokens      Int?     @map("cached_tokens")
   requestCount      Int      @default(1) @map("request_count")
   estimatedCostUsd  Decimal? @map("estimated_cost_usd") @db.Decimal(12, 8)
   httpStatus        Int?     @map("http_status")
   success           Boolean  @default(false)
   errorCode         String?  @map("error_code") @db.VarChar(96)
+  credentialAlias   String?  @map("credential_alias") @db.VarChar(128)
+  environment       String?  @db.VarChar(32)
+  hiddenAt          DateTime? @map("hidden_at") @db.Timestamptz(6)
+  hiddenBy          String?   @map("hidden_by") @db.Uuid
+  hideReason        String?   @map("hide_reason")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -137,6 +143,9 @@ model ActivityLog {
   durationMs      Int?     @map("duration_ms")
   ip              String?  @db.VarChar(64)
   userAgent       String?  @map("user_agent")
+  hiddenAt        DateTime? @map("hidden_at") @db.Timestamptz(6)
+  hiddenBy        String?   @map("hidden_by") @db.Uuid
+  hideReason      String?   @map("hide_reason")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 

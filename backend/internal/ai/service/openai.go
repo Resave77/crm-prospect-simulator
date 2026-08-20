@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 
 	"crm-prospect-simulator/backend/config"
 	usagepkg "crm-prospect-simulator/backend/internal/usage"
+	cachelib "github.com/patrickmn/go-cache"
 )
 
 const responsesAPIURL = "https://api.openai.com/v1/responses"
@@ -30,9 +32,16 @@ type Client struct {
 	httpClient         *http.Client
 	endpoint           string
 	recorder           usagepkg.Recorder
+	credentialAlias    string
+	environment        string
+	cache              *cachelib.Cache
+	cacheTTL           time.Duration
 }
 
 func (c *Client) SetUsageRecorder(r usagepkg.Recorder) { c.recorder = r }
+func (c *Client) SetUsageMetadata(alias, environment string) {
+	c.credentialAlias, c.environment = strings.TrimSpace(alias), strings.TrimSpace(environment)
+}
 
 type Option func(*Client)
 
@@ -85,6 +94,7 @@ func NewClient(cfg config.Config, opts ...Option) *Client {
 		timeout:            cfg.OpenAITimeout,
 		findMenuTimeout:    cfg.OpenAIFindMenuTimeout,
 		menuProfileTimeout: cfg.OpenAIMenuProfileTimeout,
+		cacheTTL:           cfg.OpenAICacheTTL,
 		httpClient:         &http.Client{},
 		endpoint:           responsesAPIURL,
 	}
@@ -104,6 +114,10 @@ func NewClient(cfg config.Config, opts ...Option) *Client {
 	if client.maxOutputTokens <= 0 {
 		client.maxOutputTokens = 800
 	}
+	if client.cacheTTL <= 0 {
+		client.cacheTTL = 15 * time.Minute
+	}
+	client.cache = cachelib.New(client.cacheTTL, client.cacheTTL*2)
 	for _, opt := range opts {
 		opt(client)
 	}
@@ -132,6 +146,21 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 	}
 	if maxOutputTokens <= 0 {
 		maxOutputTokens = c.maxOutputTokens
+	}
+	cacheKey, cacheable := c.textCacheKey(ctx, instructions, input, maxOutputTokens)
+	if cacheable {
+		if value, ok := c.cache.Get(cacheKey); ok {
+			if result, ok := value.(TextResult); ok {
+				usagepkg.SetTrace(ctx, "cache_status", "HIT")
+				usagepkg.SetTrace(ctx, "cache_operation", "OPENAI_TEXT")
+				usagepkg.SetTrace(ctx, "provider", "OPENAI")
+				usagepkg.SetTrace(ctx, "operation", "RESPONSES")
+				usagepkg.SetTrace(ctx, "model", c.model)
+				usagepkg.SetTrace(ctx, "provider_attempted", false)
+				usagepkg.SetTrace(ctx, "provider_hit_count", 0)
+				return result, nil
+			}
+		}
 	}
 	body := requestBody{
 		Model:           c.model,
@@ -197,7 +226,7 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 	}
 	text := strings.TrimSpace(parsed.OutputText)
 	if text == "" {
-		c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, false, "empty_response")
+		c.recordUsageWithCached(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, parsed.Usage.CachedTokens(), false, "empty_response")
 		text = strings.TrimSpace(parsed.firstText())
 	}
 	if text == "" {
@@ -208,17 +237,41 @@ func (c *Client) GenerateTextWithOptions(ctx context.Context, instructions, inpu
 		requestID = parsed.ID
 	}
 	logResponseMetadata("text", c.model, requestID, resp.StatusCode, started, parsed, text, nil)
-	c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, true, "")
-	return TextResult{
+	c.recordUsageWithCached(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, parsed.Usage.CachedTokens(), true, "")
+	result := TextResult{
 		Text:              text,
 		InputTokens:       parsed.Usage.InputTokens,
 		OutputTokens:      parsed.Usage.OutputTokens,
 		TotalTokens:       parsed.Usage.TotalTokens,
 		UpstreamRequestID: requestID,
-	}, nil
+	}
+	if cacheable {
+		c.cache.SetDefault(cacheKey, result)
+	}
+	return result, nil
+}
+
+// Only deterministic CRM analyses are application-cacheable. User isolation
+// and the complete request context are part of the key; hits return before
+// provider usage recording, so they create no usage event or cost.
+func (c *Client) textCacheKey(ctx context.Context, instructions, input string, maxOutputTokens int) (string, bool) {
+	feature := usagepkg.Feature(ctx)
+	if feature != "AI_SUMMARY" && feature != "MENU_PROFILING" {
+		return "", false
+	}
+	userID, ok := usagepkg.UserID(ctx)
+	if !ok {
+		return "", false
+	}
+	payload := fmt.Sprintf("openai-app-cache-v1|%s|%s|%s|%d|%s", userID.String(), feature, c.model, maxOutputTokens, strings.TrimSpace(instructions)+"\x00"+strings.TrimSpace(input))
+	return fmt.Sprintf("OPENAI_TEXT:%x", sha256.Sum256([]byte(payload))), true
 }
 
 func (c *Client) recordUsage(ctx context.Context, status, input, output, total int, success bool, code string) {
+	c.recordUsageWithCached(ctx, status, input, output, total, 0, success, code)
+}
+
+func (c *Client) recordUsageWithCached(ctx context.Context, status, input, output, total, cached int, success bool, code string) {
 	usagepkg.SetTrace(ctx, "provider", "OPENAI")
 	usagepkg.SetTrace(ctx, "operation", "RESPONSES")
 	usagepkg.SetTrace(ctx, "model", c.model)
@@ -233,7 +286,7 @@ func (c *Client) recordUsage(ctx context.Context, status, input, output, total i
 	if !ok {
 		return
 	}
-	c.recorder.Record(ctx, usagepkg.Event{UserID: id, RequestID: usagepkg.RequestID(ctx), Provider: "OPENAI", Feature: usagepkg.Feature(ctx), Operation: "RESPONSES", APIOrModel: c.model, InputTokens: input, OutputTokens: output, TotalTokens: total, HTTPStatus: status, Success: success, ErrorCode: code})
+	c.recorder.Record(ctx, usagepkg.Event{UserID: id, RequestID: usagepkg.RequestID(ctx), Provider: "OPENAI", Feature: usagepkg.Feature(ctx), Operation: "RESPONSES", APIOrModel: c.model, InputTokens: input, OutputTokens: output, TotalTokens: total, CachedTokens: cached, HTTPStatus: status, Success: success, ErrorCode: code, CredentialAlias: c.credentialAlias, Environment: c.environment})
 }
 
 // GenerateWebSearch performs one Responses API request with the hosted web
@@ -363,7 +416,7 @@ func (c *Client) doRequestParsed(ctx context.Context, body requestBody, requestT
 		requestID = parsed.ID
 	}
 	logResponseMetadata("web_search_or_multimodal", c.model, requestID, resp.StatusCode, started, parsed, text, nil)
-	c.recordUsage(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, true, "")
+	c.recordUsageWithCached(ctx, resp.StatusCode, parsed.Usage.InputTokens, parsed.Usage.OutputTokens, parsed.Usage.TotalTokens, parsed.Usage.CachedTokens(), true, "")
 	return TextResult{Text: text, InputTokens: parsed.Usage.InputTokens, OutputTokens: parsed.Usage.OutputTokens, TotalTokens: parsed.Usage.TotalTokens, UpstreamRequestID: requestID}, parsed, nil
 }
 
@@ -495,10 +548,15 @@ type contentItem struct {
 }
 
 type usage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens        int `json:"input_tokens"`
+	OutputTokens       int `json:"output_tokens"`
+	TotalTokens        int `json:"total_tokens"`
+	InputTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
 }
+
+func (u usage) CachedTokens() int { return u.InputTokensDetails.CachedTokens }
 
 func (r responseBody) firstText() string {
 	for _, output := range r.Output {

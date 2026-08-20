@@ -30,12 +30,14 @@ const detailBusinessInfoFieldMask = "id,displayName,formattedAddress,primaryType
 var googlePlacePhotoNamePattern = regexp.MustCompile(`^places/[^/?#]+/photos/[^/?#]+$`)
 
 type GooglePlacesClient struct {
-	key      string
-	cseID    string
-	cseKey   string
-	http     *http.Client
-	recorder usage.Recorder
-	cache    *placesCache
+	key             string
+	cseID           string
+	cseKey          string
+	http            *http.Client
+	recorder        usage.Recorder
+	credentialAlias string
+	environment     string
+	cache           *placesCache
 }
 
 type placesCache struct {
@@ -65,6 +67,9 @@ func (c *placesCache) configure(search, core, business time.Duration) {
 }
 
 func (c *GooglePlacesClient) SetUsageRecorder(r usage.Recorder) { c.recorder = r }
+func (c *GooglePlacesClient) SetUsageMetadata(alias, environment string) {
+	c.credentialAlias, c.environment = strings.TrimSpace(alias), strings.TrimSpace(environment)
+}
 func (c *GooglePlacesClient) SetCacheTTLs(search, core, business time.Duration) {
 	if c.cache == nil {
 		c.cache = newPlacesCache()
@@ -465,7 +470,7 @@ func (c *GooglePlacesClient) record(ctx context.Context, operation, mask string,
 	if !ok {
 		return
 	}
-	c.recorder.Record(ctx, usage.Event{UserID: id, RequestID: usage.RequestID(ctx), Provider: "GOOGLE_MAPS", Feature: usage.Feature(ctx), Operation: operation, APIOrModel: "Places API (New)", SKUCategory: operation, FieldMask: mask, HTTPStatus: status, Success: success, ErrorCode: code})
+	c.recorder.Record(ctx, usage.Event{UserID: id, RequestID: usage.RequestID(ctx), Provider: "GOOGLE_MAPS", Feature: usage.Feature(ctx), Operation: operation, APIOrModel: "Places API (New)", SKUCategory: operation, FieldMask: mask, HTTPStatus: status, Success: success, ErrorCode: code, CredentialAlias: c.credentialAlias, Environment: c.environment})
 }
 
 func (c *GooglePlacesClient) FetchPhoto(ctx context.Context, name string) ([]byte, string, error) {
@@ -618,14 +623,14 @@ func (c *GooglePlacesClient) detailCached(ctx context.Context, placeID, operatio
 	}
 	usage.SetTrace(ctx, "cache_status", "MISS")
 	usage.SetTrace(ctx, "cache_operation", operation)
-	value, err := c.detailWithMask(ctx, placeID, mask)
+	value, err := c.detailWithMask(ctx, placeID, operation, mask)
 	if err == nil {
 		cacheStore.SetDefault(key, value)
 	}
 	return value, err
 }
 
-func (c *GooglePlacesClient) detailWithMask(ctx context.Context, placeID, fieldMask string) (prospectmodel.PlaceDetails, error) {
+func (c *GooglePlacesClient) detailWithMask(ctx context.Context, placeID, operation, fieldMask string) (prospectmodel.PlaceDetails, error) {
 	if c.key == "" {
 		return prospectmodel.PlaceDetails{}, ErrPlacesDisabled
 	}
@@ -641,15 +646,15 @@ func (c *GooglePlacesClient) detailWithMask(ctx context.Context, placeID, fieldM
 	req.Header.Set("X-Goog-FieldMask", fieldMask)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		c.record(ctx, "PLACE_DETAILS", "", 0, false, "request_error")
+		c.record(ctx, operation, fieldMask, 0, false, "request_error")
 		return prospectmodel.PlaceDetails{}, fmt.Errorf("Google Place detail full request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		c.record(ctx, "PLACE_DETAILS", "", resp.StatusCode, false, "http_error")
+		c.record(ctx, operation, fieldMask, resp.StatusCode, false, "http_error")
 		return prospectmodel.PlaceDetails{}, fmt.Errorf("Google Place detail full returned HTTP %d", resp.StatusCode)
 	}
-	c.record(ctx, "PLACE_DETAILS", "", resp.StatusCode, true, "")
+	c.record(ctx, operation, fieldMask, resp.StatusCode, true, "")
 	var place googlePlace
 	if err := json.NewDecoder(resp.Body).Decode(&place); err != nil {
 		return prospectmodel.PlaceDetails{}, err

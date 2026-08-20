@@ -19,7 +19,7 @@ func TestActivityMiddlewareKeepsUnauthenticatedUserIDNull(t *testing.T) {
 	recorder := &activityRecorderStub{}
 	app := fiber.New()
 	app.Use(ActivityMiddleware(recorder))
-	app.Get("/public", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+	app.Get("/public", func(c *fiber.Ctx) error { SetTrace(c.UserContext(), "action", "LOGIN"); return c.SendStatus(fiber.StatusOK) })
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/public", nil))
 	if err != nil {
@@ -45,7 +45,7 @@ func TestActivityMiddlewareUsesAuthenticatedUserID(t *testing.T) {
 		return c.Next()
 	})
 	app.Use(ActivityMiddleware(recorder))
-	app.Get("/private", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+	app.Get("/private", func(c *fiber.Ctx) error { SetTrace(c.UserContext(), "action", "VIEW_PROSPECT_DETAIL"); return c.SendStatus(fiber.StatusOK) })
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/private", nil))
 	if err != nil {

@@ -90,6 +90,7 @@ func (h *Handler) MyProspect(c *fiber.Ctx) error {
 
 func (h *Handler) ChatAI(c *fiber.Ctx) error {
 	c.SetUserContext(usage.WithFeature(c.UserContext(), "TANYA_AI"))
+	usage.SetTrace(c.UserContext(), "action", "TANYA_AI")
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -640,6 +641,7 @@ func (h *Handler) ListPhotoTags(c *fiber.Ctx) error {
 
 func (h *Handler) ProfileMenu(c *fiber.Ctx) error {
 	c.SetUserContext(usage.WithFeature(c.UserContext(), "MENU_PROFILING"))
+	usage.SetTrace(c.UserContext(), "action", "MENU_PROFILING")
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -665,6 +667,7 @@ func (h *Handler) ProfileMenu(c *fiber.Ctx) error {
 
 func (h *Handler) FindMenu(c *fiber.Ctx) error {
 	c.SetUserContext(usage.WithFeature(c.UserContext(), "FIND_MENU"))
+	usage.SetTrace(c.UserContext(), "action", "FIND_MENU")
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
@@ -691,6 +694,7 @@ func (h *Handler) FindMenu(c *fiber.Ctx) error {
 
 func (h *Handler) GenerateSummary(c *fiber.Ctx) error {
 	c.SetUserContext(usage.WithFeature(c.UserContext(), "AI_SUMMARY"))
+	usage.SetTrace(c.UserContext(), "action", "AI_SUMMARY")
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")

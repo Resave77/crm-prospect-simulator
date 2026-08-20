@@ -11,6 +11,7 @@ import (
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	authmodel "crm-prospect-simulator/backend/internal/auth/model"
 	"crm-prospect-simulator/backend/internal/shared/response"
+	"crm-prospect-simulator/backend/internal/usage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -70,6 +71,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateUser(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "UPDATE_ACCOUNT")
 	actor := actor(c)
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -87,6 +89,7 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateUserProfile(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "UPDATE_ACCOUNT")
 	actor := actor(c)
 	id, err := uuid.Parse(c.Params("id")); if err != nil { return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.") }
 	var input model.ProfileUpdateInput
@@ -96,6 +99,7 @@ func (h *Handler) UpdateUserProfile(c *fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateStatus(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "UPDATE_ACCOUNT")
 	actor := actor(c)
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

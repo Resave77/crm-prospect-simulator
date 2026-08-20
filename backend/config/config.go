@@ -24,6 +24,7 @@ type Config struct {
 	AllowedOrigins                   string
 	CookieSecure                     bool
 	GoogleMapsAPIKey                 string
+	GooglePlacesCredentialAlias      string
 	GoogleCSEID                      string
 	GoogleCSEAPIKey                  string
 	GooglePlacesSearchCacheTTL       time.Duration
@@ -31,10 +32,12 @@ type Config struct {
 	GooglePlacesBusinessInfoCacheTTL time.Duration
 	AIEnabled                        bool
 	OpenAIAPIKey                     string
+	OpenAICredentialAlias            string
 	OpenAIModel                      string
 	OpenAITimeout                    time.Duration
 	OpenAIFindMenuTimeout            time.Duration
 	OpenAIMenuProfileTimeout         time.Duration
+	OpenAICacheTTL                   time.Duration
 	OpenAIMaxTokens                  int
 	AIChatMaxLength                  int
 	AIChatMaxHistory                 int
@@ -71,6 +74,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	openAICacheTTL := safeDuration("OPENAI_CACHE_TTL", 15*time.Minute)
 	openAIMaxTokens, err := positiveInt("OPENAI_MAX_OUTPUT_TOKENS", 800)
 	if err != nil {
 		return Config{}, err
@@ -99,6 +103,7 @@ func Load() (Config, error) {
 		AllowedOrigins:                   value("ALLOWED_ORIGINS", "http://localhost:5173"),
 		CookieSecure:                     secure,
 		GoogleMapsAPIKey:                 strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY")),
+		GooglePlacesCredentialAlias:      value("GOOGLE_PLACES_CREDENTIAL_ALIAS", ""),
 		GoogleCSEID:                      strings.TrimSpace(os.Getenv("GOOGLE_CSE_ID")),
 		GoogleCSEAPIKey:                  strings.TrimSpace(os.Getenv("GOOGLE_CSE_API_KEY")),
 		GooglePlacesSearchCacheTTL:       googleSearchCacheTTL,
@@ -106,10 +111,12 @@ func Load() (Config, error) {
 		GooglePlacesBusinessInfoCacheTTL: googleBusinessCacheTTL,
 		AIEnabled:                        aiEnabled,
 		OpenAIAPIKey:                     strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAICredentialAlias:            value("OPENAI_CREDENTIAL_ALIAS", ""),
 		OpenAIModel:                      strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
 		OpenAITimeout:                    openAITimeout,
 		OpenAIFindMenuTimeout:            openAIFindMenuTimeout,
 		OpenAIMenuProfileTimeout:         openAIMenuProfileTimeout,
+		OpenAICacheTTL:                   openAICacheTTL,
 		OpenAIMaxTokens:                  openAIMaxTokens,
 		AIChatMaxLength:                  chatMaxLength,
 		AIChatMaxHistory:                 chatMaxHistory,

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { generateProspectSummary, getProspectReview, getProspectPlaceDetails, getProspectInitialAnalysis } from '../../../api/crm'
+import { generateProspectSummary, getProspectReview, getProspectInitialAnalysis } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
@@ -209,13 +209,11 @@ onMounted(async () => {
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
-    const [reviewData, placeData, analysisData] = await Promise.all([
+    const [reviewData, analysisData] = await Promise.all([
       getProspectReview(prospectId),
-      getProspectPlaceDetails(prospectId, 'ADMINISTRATOR').catch(() => null),
       loadInitialAnalysis(prospectId),
     ])
     review.value = reviewData
-    placeDetails.value = placeData
     initialAnalysis.value = analysisData
     if (canViewAISummary.value && !analysisLoadFailed.value && !hasPersistedSummary(analysisData)) void ensureSummary()
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }

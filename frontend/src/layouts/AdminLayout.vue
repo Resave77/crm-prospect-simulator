@@ -85,6 +85,9 @@ async function logout() {
         <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
           <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
         </RouterLink>
+        <RouterLink to="/admin/api-usage" @click="closeSidebar" :title="sidebarCollapsed ? 'Monitoring API' : ''">
+          <i class="pi pi-chart-line" /> <span v-show="!sidebarCollapsed">Monitoring API</span>
+        </RouterLink>
       </nav>
     </aside>
     <div class="admin-workspace">

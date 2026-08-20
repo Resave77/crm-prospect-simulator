@@ -149,10 +149,12 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 		usageHandler := usage.NewHandler(usagePool)
 		admin.Get("/api-usage/summary", usageHandler.Summary)
 		admin.Get("/api-usage/history", usageHandler.History)
+		admin.Post("/api-usage/history/hide", usageHandler.HideHistory)
 		admin.Get("/api-usage/activity", usageHandler.ActivityHistory)
 		admin.Get("/api-usage/daily", usageHandler.Daily)
 		admin.Get("/api-usage/monthly", usageHandler.Monthly)
 		admin.Get("/api-usage/top-users", usageHandler.TopUsers)
+		admin.Get("/api-usage/project-summary", usageHandler.ProjectSummary)
 	}
 	admin.Get("/prospects/won", prospectHandler.WonQueue)
 	admin.Get("/prospects/pipeline", prospectHandler.Pipeline)

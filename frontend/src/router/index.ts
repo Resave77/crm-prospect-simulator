@@ -52,6 +52,7 @@ const router = createRouter({
         { path: 'visit-monitoring', name: 'AdminVisitMonitoring', component: () => import('../views/Admin/Visit/VisitMonitoringView.vue'), meta: { permission: 'view_visit_monitoring' } },
         { path: 'prospect-assignment', name: 'AdminProspectAssignment', component: () => import('../views/Admin/SimulationPlaceholderView.vue'), meta: { title: 'Prospect Assignment', description: 'Assignment is available while saving a Place in Prospect Finder; bulk reassignment is deferred.' } },
         { path: 'reports', name: 'AdminReports', component: () => import('../views/Admin/Reports/ReportsAnalyticsView.vue'), meta: { permission: 'view_reports' } },
+        { path: 'api-usage', name: 'AdminApiUsage', component: () => import('../views/Admin/ApiUsage/AdminApiUsageView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'view_accounts' } },
       ],
     },
     {

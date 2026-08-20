@@ -53,6 +53,124 @@ func TestOpenAIRequestPathsRecordExactlyOneAttributedEvent(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderReportedCachedTokensAreRecorded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"output_text":"ok","usage":{"input_tokens":100,"output_tokens":50,"total_tokens":150,"input_tokens_details":{"cached_tokens":40}}}`))
+	}))
+	defer server.Close()
+	recorder := &usagepkg.MemoryRecorder{}
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	client.SetUsageRecorder(recorder)
+	uid := uuid.New()
+	ctx := usagepkg.WithUser(context.Background(), uid)
+	if _, err := client.GenerateText(ctx, "i", "x"); err != nil {
+		t.Fatal(err)
+	}
+	events := recorder.Events()
+	if len(events) != 1 || events[0].CachedTokens != 40 {
+		t.Fatalf("cached tokens=%+v, want 40", events)
+	}
+}
+
+func TestOpenAIApplicationCacheSkipsProviderAndUsageEvent(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"output_text":"cached result","usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6}}`))
+	}))
+	defer server.Close()
+	recorder := &usagepkg.MemoryRecorder{}
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	client.SetUsageRecorder(recorder)
+	ctx := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uuid.New()), "AI_SUMMARY")
+	first, err := client.GenerateText(ctx, "instructions", "same CRM facts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := client.GenerateText(ctx, "instructions", "same CRM facts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || len(recorder.Events()) != 1 || first.Text != second.Text {
+		t.Fatalf("calls=%d events=%d first=%+v second=%+v", calls, len(recorder.Events()), first, second)
+	}
+}
+
+func TestOpenAIApplicationCacheDoesNotCacheWebSearch(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"output_text":"fresh","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	ctx := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uuid.New()), "FIND_MENU")
+	_, _ = client.GenerateWebSearch(ctx, "find", "prospect")
+	_, _ = client.GenerateWebSearch(ctx, "find", "prospect")
+	if calls != 2 {
+		t.Fatalf("web search calls=%d, want 2", calls)
+	}
+}
+
+func TestOpenAIApplicationCacheIsolationInvalidationAndTTL(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"output_text":"response","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+	cfg := testConfig()
+	cfg.OpenAICacheTTL = 25 * time.Millisecond
+	client := NewClient(cfg, WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	userA := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uuid.New()), "AI_SUMMARY")
+	userB := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uuid.New()), "AI_SUMMARY")
+	if _, err := client.GenerateText(userA, "template-v1", "facts-v1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GenerateText(userA, "template-v1", "facts-v1"); err != nil {
+		t.Fatal(err)
+	}
+	modelB := cfg
+	modelB.OpenAIModel = "gpt-other"
+	clientB := NewClient(modelB, WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	if _, err := clientB.GenerateText(userA, "template-v1", "facts-v1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GenerateText(userB, "template-v1", "facts-v1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GenerateText(userA, "template-v1", "facts-v2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GenerateText(userA, "template-v2", "facts-v2"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(35 * time.Millisecond)
+	if _, err := client.GenerateText(userA, "template-v2", "facts-v2"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 6 {
+		t.Fatalf("provider calls=%d, want 6 (one hit, then user/model/input/instruction/TTL misses)", calls)
+	}
+}
+
+func TestOpenAIApplicationCacheDoesNotCacheFailedResponses(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":{"message":"temporary"}}`))
+	}))
+	defer server.Close()
+	client := NewClient(testConfig(), WithEndpoint(server.URL), WithHTTPClient(server.Client()))
+	ctx := usagepkg.WithFeature(usagepkg.WithUser(context.Background(), uuid.New()), "AI_SUMMARY")
+	_, _ = client.GenerateText(ctx, "i", "x")
+	_, _ = client.GenerateText(ctx, "i", "x")
+	if calls != 2 {
+		t.Fatalf("failed response calls=%d, want 2", calls)
+	}
+}
+
 func TestGenerateTextSendsSecureResponsesRequestAndParsesUsage(t *testing.T) {
 	var captured struct {
 		Authorization string

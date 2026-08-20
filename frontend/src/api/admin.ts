@@ -131,19 +131,56 @@ export async function endSalesAssignment(
   ).data.data
 }
 
+export interface ApiUsageSummaryRow {
+  provider: string
+  operation: string
+  requests: number
+  success: number
+  failed: number
+  billableRequests: number
+  grossCostMicros?: number
+  estimatedPayableCostMicros?: number
+  estimatedCostMicros?: number
+  estimatedCost: number
+  costState?: 'VERIFIED_ESTIMATE' | 'UNCONFIGURED' | 'SKU_UNKNOWN' | 'BILLING_UNKNOWN' | 'PRICING_UNVERIFIED' | 'USAGE_UNKNOWN'
+  costStatus?: 'ESTIMATE' | 'UNCONFIGURED' | 'BILLING_UNKNOWN'
+  currency?: string
+  sku?: string
+  totalTokens?: number
+}
+
+export interface ApiUsageProjectGroup extends ApiUsageSummaryRow {
+  freeUsageCap: number
+  freeUsageConsumed: number
+  paidRequests: number
+  skuCategory: string
+  apiOrModel: string
+  usagePercent?: number
+  freeTier?: number
+  freeTierVerified?: boolean
+}
+
 export async function getApiUsageSummary(userId: string, params: Record<string, string> = {}) {
-  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/summary', { params: { userId, ...params } })).data.data
+  return (await api.get<ApiEnvelope<ApiUsageSummaryRow[]>>('/admin/api-usage/summary', { params: { userId, ...params } })).data.data
 }
 
 export async function getApiUsageHistory(userId: string, params: Record<string, string> = {}) {
   return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/history', { params: { userId, ...params } })).data.data
 }
-export async function getApiActivityHistory(userId: string) {
-  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/activity', { params: { userId } })).data.data
+export async function getApiActivityHistory(userId: string, params: Record<string, string> = {}) {
+  return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/activity', { params: { userId, ...params } })).data.data
+}
+
+export async function hideApiUsageHistory(userId: string, requestId: string, reason = '') {
+  return (await api.post<ApiEnvelope<unknown>>('/admin/api-usage/history/hide', { userId, requestId, reason })).data.data
 }
 
 export async function getApiUsageDaily(userId: string, date: string) {
   return (await api.get<ApiEnvelope<unknown[]>>('/admin/api-usage/daily', { params: { userId, date } })).data.data
+}
+
+export async function getApiUsageProjectSummary(params: Record<string, string> = {}) {
+  return (await api.get<ApiEnvelope<{ groups: ApiUsageProjectGroup[]; contributors: unknown[] }>>('/admin/api-usage/project-summary', { params })).data.data
 }
 
 export async function updateUserProfile(id: string, input: AdminProfileUpdateInput) {

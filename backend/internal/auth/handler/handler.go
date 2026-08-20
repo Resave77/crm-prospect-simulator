@@ -8,6 +8,7 @@ import (
 	authmiddleware "crm-prospect-simulator/backend/internal/auth/middleware"
 	"crm-prospect-simulator/backend/internal/auth/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
+	"crm-prospect-simulator/backend/internal/usage"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -34,6 +35,7 @@ type changePasswordRequest struct {
 }
 
 func (h *Handler) Login(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "LOGIN")
 	var request loginRequest
 	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
@@ -67,6 +69,7 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Logout(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "LOGOUT")
 	if err := h.auth.Logout(c.UserContext(), c.Cookies(refreshCookieName)); err != nil {
 		return err
 	}
@@ -87,6 +90,7 @@ func (h *Handler) LogoutAll(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ChangePassword(c *fiber.Ctx) error {
+	usage.SetTrace(c.UserContext(), "action", "CHANGE_PASSWORD")
 	principal, ok := authmiddleware.Principal(c)
 	if !ok {
 		return response.Error(c, fiber.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication is required.")

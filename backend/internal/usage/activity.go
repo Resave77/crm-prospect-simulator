@@ -61,7 +61,9 @@ func ActivityMiddleware(recorder ActivityRecorder) fiber.Handler {
 		if err != nil && status < 400 {
 			status = 500
 		}
-		recorder.RecordActivity(ctx, Activity{UserID: userID, RequestID: RequestID(ctx), Method: c.Method(), Endpoint: c.OriginalURL(), RequestBody: requestBody, QueryParams: query, ResponseBody: responseBody, ResponseStatus: status, Domain: Domain(c.Path()), AdditionalTrace: trace, DurationMS: time.Since(started).Milliseconds(), IP: c.IP(), UserAgent: c.Get(fiber.HeaderUserAgent)})
+		if ShouldPersistActivity(c.Method(), c.OriginalURL(), status, GetTrace(ctx), authenticated) {
+			recorder.RecordActivity(ctx, Activity{UserID: userID, RequestID: RequestID(ctx), Method: c.Method(), Endpoint: c.OriginalURL(), RequestBody: requestBody, QueryParams: query, ResponseBody: responseBody, ResponseStatus: status, Domain: Domain(c.Path()), AdditionalTrace: trace, DurationMS: time.Since(started).Milliseconds(), IP: c.IP(), UserAgent: c.Get(fiber.HeaderUserAgent)})
+		}
 		return err
 	}
 }
