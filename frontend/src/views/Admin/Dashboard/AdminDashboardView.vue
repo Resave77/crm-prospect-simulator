@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { useAuthStore } from '../../../stores/auth'
+import YummySocialLinks from '../../../components/layout/YummySocialLinks.vue'
 import { useCrmStore } from '../../../stores/crm'
 import { getAdminVisits } from '../../../api/crm'
 import type { ProspectStatus, VisitMonitoringItem } from '../../../types/crm'
@@ -53,7 +54,7 @@ onMounted(async () => {
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
     <div class="dashboard-header">
       <div><span class="dashboard-eyebrow">Workspace overview</span><h1>Admin Dashboard</h1><p>Monitor sales activity and pipeline momentum, {{ auth.user?.fullName }}.</p></div>
-      <RouterLink class="date-control" to="/admin/visit-monitoring"><i class="pi pi-calendar" /> {{ formattedDate }}</RouterLink>
+      <div class="dashboard-header-actions"><YummySocialLinks /><RouterLink class="date-control" to="/admin/visit-monitoring"><i class="pi pi-calendar" /> {{ formattedDate }}</RouterLink></div>
     </div>
     <div v-if="loading" class="metric-grid dashboard-skeletons"><div v-for="n in 4" :key="n" class="metric-card skeleton-metric"><i /><strong /><small /></div></div>
     <div v-else class="metric-grid">
@@ -101,6 +102,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
 }
+.dashboard-header-actions { display:flex; flex-direction:column; align-items:flex-end; gap:.65rem; flex-shrink:0; }
 .dashboard-header h1 {
   margin: 0;
   font-size: 1.65rem;
@@ -459,7 +461,14 @@ onMounted(async () => {
 @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
   .admin-dashboard { padding:.15rem 0; }
-  .dashboard-header { align-items:flex-start; gap:.8rem; margin-bottom:1rem; }
+  .dashboard-header { align-items:flex-start; flex-direction:column; gap:.85rem; margin-bottom:1rem; }
+  .dashboard-header-actions { width:100%; align-items:stretch; gap:.65rem; }
+  .dashboard-header-actions :deep(.yummy-social-links) { width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; }
+  .dashboard-header-actions :deep(.yummy-social-link) { width:auto; min-height:46px; justify-content:center; padding:.45rem .35rem; border-radius:12px; }
+  .dashboard-header-actions :deep(.yummy-social-label) { display:inline; font-size:.64rem; }
+  .dashboard-header-actions :deep(.yummy-social-link > i) { display:none; }
+  .dashboard-header-actions :deep(.yummy-social-icon) { width:20px; height:20px; flex-shrink:0; }
+  .dashboard-header-actions .date-control { align-self:flex-end; }
   .dashboard-header h1 { font-size:1.35rem; }
   .dashboard-header p { font-size:.72rem; }
   .date-control { padding:.48rem; font-size:0; }
