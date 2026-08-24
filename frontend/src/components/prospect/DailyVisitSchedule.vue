@@ -20,8 +20,9 @@ const actionItem = ref<Prospect | null>(null)
 const overflow = ref<Prospect[]>([])
 const actionMoveDay = ref('')
 const planningLoading = ref(false)
-const routingLoading = ref(false)
 const planNotice = ref('')
+const maxVisitsPerDay = ref<number | null>(null)
+const hasValidCapacity = computed(() => maxVisitsPerDay.value == null || (Number.isInteger(maxVisitsPerDay.value) && maxVisitsPerDay.value > 0))
 
 onMounted(() => {
   refreshOnce().catch(() => {})
@@ -61,13 +62,21 @@ const sortedActive = computed(() => {
   })
 })
 
-function buildPreview(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
-  const result = planWeeklyVisits(activeProspects.value, start)
+function buildWeeklyRoute(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
+  const result = planWeeklyVisits(activeProspects.value, start, maxVisitsPerDay.value ?? Number.POSITIVE_INFINITY)
   dayPlans.value = result.plan
   overflow.value = result.overflow
 }
 
-async function openPreview() {
+function buildTodayRoute(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
+  const ordered = routeDay(activeProspects.value, start)
+  const capacity = maxVisitsPerDay.value ?? Math.max(1, ordered.length)
+  dayPlans.value = Object.fromEntries(days.map((day, index) => [day, ordered.slice(index * capacity, (index + 1) * capacity)]))
+  overflow.value = []
+}
+
+async function autoRoute(mode: 'weekly' | 'today') {
+  if (!hasValidCapacity.value) return
   planningLoading.value = true
   planNotice.value = ''
   let start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null
@@ -77,32 +86,10 @@ async function openPreview() {
   } catch {
     planNotice.value = 'Location unavailable — plan dibuat berdasarkan koordinat prospect.'
   } finally {
-    buildPreview(start)
+    if (mode === 'weekly') buildWeeklyRoute(start)
+    else buildTodayRoute(start)
     planningLoading.value = false
-    open.value = true
-  }
-}
-
-async function autoRouteToday() {
-  if (routingLoading.value) return
-  const dow = new Date().getDay()
-  if (dow === 0 || dow === 6) {
-    planNotice.value = 'Auto routing hanya tersedia pada hari kerja (Senin–Jumat).'
-    return
-  }
-  routingLoading.value = true
-  planNotice.value = ''
-  try {
-    const fresh = await refreshOnce()
-    const day = days[dow - 1]
-    const todayItems = dayPlans.value[day] ?? []
-    dayPlans.value[day] = routeDay(todayItems, { latitude: fresh.latitude, longitude: fresh.longitude })
-    selectedDay.value = day
-    open.value = true
-  } catch {
-    planNotice.value = 'Location access is required to auto-route today\'s visits.'
-  } finally {
-    routingLoading.value = false
+    selectedDay.value = days.find((day) => (dayPlans.value[day] ?? []).length > 0) ?? 'Monday'
   }
 }
 
@@ -185,7 +172,6 @@ function confirmRemove(item: Prospect) {
           <span v-if="gps.loading">Getting your location...</span>
           <span v-else-if="gps.error">Location unavailable — showing alphabetical order</span>
           <span v-else>Tap to enable GPS for distance sorting</span>
-          <button v-if="!gps.loading && !gps.coords" class="gps-btn" type="button" @click="refreshOnce().catch(() => {})">Enable</button>
         </div>
 
         <div v-for="(item, idx) in sortedActive.slice(0, 5)" :key="item.id" class="schedule-item">
@@ -208,7 +194,7 @@ function confirmRemove(item: Prospect) {
     </template>
 
     <div v-if="!loading && sortedActive.length" class="inline-weekly-route">
-      <div class="inline-route-heading"><div><span class="schedule-eyebrow">Weekly route</span><strong>Visit plan by day</strong></div><div class="route-header-actions"><span>{{ totalPreview }} prospects</span><button type="button" class="route-primary-btn" :disabled="planningLoading" @click="openPreview"><i :class="planningLoading ? 'pi pi-spin pi-spinner' : 'pi pi-calendar-plus'" /> {{ planningLoading ? 'Planning...' : 'Plan my week' }}</button><button type="button" class="route-secondary-btn" :disabled="routingLoading" @click="autoRouteToday"><i :class="routingLoading ? 'pi pi-spin pi-spinner' : 'pi pi-directions'" /> {{ routingLoading ? 'Getting location...' : 'Auto route today' }}</button></div></div>
+      <div class="inline-route-heading"><div><span class="schedule-eyebrow">Route planning</span><strong>Visit plan by day</strong></div><div class="route-header-actions"><span>{{ totalPreview }} prospects</span><label class="capacity-control">Max customer / hari <input v-model.number="maxVisitsPerDay" type="number" min="1" max="99" placeholder="Opsional" aria-label="Maximum customer per day" /></label><button v-if="!gps.loading && !gps.coords" type="button" class="route-gps-btn" @click="refreshOnce().catch(() => {})"><i class="pi pi-map-marker" /> Enable GPS</button><button type="button" class="route-primary-btn" :disabled="planningLoading" @click="autoRoute('weekly')"><i class="pi pi-calendar" /> Auto routing week</button><button type="button" class="route-today-btn" :disabled="planningLoading" @click="autoRoute('today')"><i class="pi pi-calendar-plus" /> Auto routing today</button></div></div>
       <div v-if="planNotice" class="route-notice-inline"><i class="pi pi-info-circle" /> {{ planNotice }}</div>
       <div class="day-actions" role="tablist" aria-label="Weekly visit days">
         <button v-for="day in days" :key="day" type="button" class="day-action" :class="{ active: selectedDay === day }" @click="selectedDay = day"><strong>{{ day.slice(0, 3) }}</strong><span>{{ dayPlans[day]?.length ?? 0 }}</span></button>
@@ -742,10 +728,10 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
   }
 }
 .inline-weekly-route { margin-top:.8rem; padding-top:.75rem; border-top:1px solid #edf1f5; }
-.inline-route-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }.inline-route-heading > div { display:grid; gap:.12rem; }.inline-route-heading strong { color:#334155; font-size:.72rem; }.route-header-actions { display:flex !important; align-items:center; gap:.35rem; }.route-header-actions > span { padding:.2rem .45rem; border-radius:999px; background:#f1f5f9; color:#64748b; font-size:.58rem; font-weight:700; }.route-primary-btn,.route-secondary-btn { border:1px solid #dbeafe; border-radius:7px; padding:.34rem .5rem; background:#eff6ff; color:#2563eb; cursor:pointer; font:inherit; font-size:.58rem; font-weight:800; }.route-secondary-btn { border-color:#e2e8f0; background:#fff; color:#475569; }.route-primary-btn:hover,.route-secondary-btn:hover { filter:brightness(.97); }.route-primary-btn:disabled,.route-secondary-btn:disabled { cursor:wait; opacity:.6; }.route-notice-inline { display:flex; align-items:center; gap:.4rem; margin:-.15rem 0 .55rem; padding:.45rem .6rem; border:1px solid #bfdbfe; border-radius:8px; background:#eff6ff; color:#1d4ed8; font-size:.62rem; line-height:1.35; }.schedule-overflow { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; padding:.5rem .6rem; border:1px solid #fed7aa; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:.62rem; line-height:1.35; }
+.inline-route-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.7rem; }.inline-route-heading > div { display:grid; gap:.12rem; }.inline-route-heading strong { color:#334155; font-size:.72rem; }.route-header-actions { display:flex !important; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:.5rem; }.route-header-actions > span { padding:.25rem .55rem; border-radius:999px; background:#f1f5f9; color:#64748b; font-size:.58rem; font-weight:700; }.capacity-control { display:flex; align-items:center; gap:.35rem; min-height:30px; padding-left:.15rem; color:#64748b; font-size:.58rem; font-weight:700; white-space:nowrap; }.capacity-control input { width:76px; min-height:30px; padding:.25rem .45rem; border:1px solid #cbd5e1; border-radius:8px; color:#0f172a; font:600 .65rem inherit; outline:none; }.capacity-control input:focus { border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.12); }.route-primary-btn,.route-today-btn,.route-secondary-btn { display:inline-flex; align-items:center; justify-content:center; gap:.3rem; min-height:30px; border:1px solid #dbeafe; border-radius:8px; padding:.35rem .6rem; background:#eff6ff; color:#2563eb; cursor:pointer; font:inherit; font-size:.58rem; font-weight:800; white-space:nowrap; }.route-today-btn { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }.route-secondary-btn { border-color:#e2e8f0; background:#fff; color:#475569; }.route-primary-btn:hover,.route-today-btn:hover,.route-secondary-btn:hover { filter:brightness(.97); transform:translateY(-1px); }.route-primary-btn:disabled,.route-today-btn:disabled,.route-secondary-btn:disabled { cursor:wait; opacity:.6; transform:none; }.route-notice-inline { display:flex; align-items:center; gap:.4rem; margin:-.15rem 0 .55rem; padding:.45rem .6rem; border:1px solid #bfdbfe; border-radius:8px; background:#eff6ff; color:#1d4ed8; font-size:.62rem; line-height:1.35; }.schedule-overflow { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; padding:.5rem .6rem; border:1px solid #fed7aa; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:.62rem; line-height:1.35; }
 .day-actions { display:grid; grid-template-columns:repeat(5,1fr); gap:.35rem; }.day-action { display:grid; gap:.12rem; min-height:42px; place-items:center; border:1px solid #e2e8f0; border-radius:9px; background:#fff; color:#64748b; cursor:pointer; }.day-action strong { font-size:.62rem; }.day-action span { min-width:18px; padding:.08rem .28rem; border-radius:999px; background:#f1f5f9; color:#94a3b8; font-size:.55rem; font-weight:800; }.day-action.active { border-color:#bfdbfe; background:#eff6ff; color:#2563eb; box-shadow:0 0 0 2px rgba(37,99,235,.08); }.day-action.active span { background:#2563eb; color:#fff; }
 .add-route-control { display:grid; grid-template-columns:minmax(0,1fr) 112px auto; gap:.5rem; margin-top:.65rem; padding:.45rem; border:1px solid #edf1f5; border-radius:10px; background:#fbfdff; }.add-route-control select,.add-route-control button { min-width:0; min-height:30px; padding:.28rem .45rem; border:1px solid #dbe3ee; border-radius:7px; background:#fff; color:#475569; font:600 .6rem inherit; }.add-route-control button { border-color:#2563eb; background:#2563eb; color:#fff; cursor:pointer; white-space:nowrap; }.add-route-control button:disabled { opacity:.45; cursor:not-allowed; }
-.selected-day-list { margin-top:.55rem; padding:.5rem; border:1px solid #e5eaf0; border-radius:10px; background:#f8fafc; }.selected-day-title { display:flex; align-items:center; justify-content:space-between; margin:0 .2rem .35rem; color:#334155; font-size:.68rem; }.selected-day-title span { color:#94a3b8; font-size:.58rem; }.inline-route-item { display:flex; align-items:center; gap:.4rem; padding:.45rem; margin:.3rem 0; border:1px solid #e5eaf0; border-radius:9px; background:#fff; }.inline-route-item .route-prospect-info { flex:1; min-width:0; }.inline-route-item .route-action { flex:0 0 auto; width:auto; padding:.35rem .45rem; }.inline-route-empty { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:58px; color:#94a3b8; font-size:.62rem; }
+.selected-day-list { margin-top:.65rem; padding:.7rem; border:1px solid #e5eaf0; border-radius:12px; background:#f8fafc; }.selected-day-title { display:flex; align-items:center; justify-content:space-between; min-height:28px; margin:0 .25rem .45rem; color:#334155; font-size:.7rem; }.selected-day-title span { color:#94a3b8; font-size:.6rem; }.inline-route-item { display:grid; grid-template-columns:28px minmax(0,1fr) auto 18px; align-items:center; gap:.55rem; min-height:64px; padding:.65rem .6rem; margin:.45rem 0; border:1px solid #e2e8f0; border-radius:10px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.025); }.inline-route-item .route-prospect-info { flex:1; min-width:0; }.inline-route-item .route-action { flex:0 0 auto; width:auto; padding:.35rem .45rem; }.inline-route-item .route-prospect-info strong { font-size:.68rem; line-height:1.3; }.inline-route-item .route-prospect-info small { display:block; margin-top:.18rem; line-height:1.35; }.inline-route-empty { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:76px; color:#94a3b8; font-size:.62rem; }
 @media (max-width:480px) { .inline-route-item { flex-wrap:wrap; }.inline-route-item .route-prospect-info { min-width:calc(100% - 34px); }.inline-route-item .route-dist { margin-left:1.65rem; }.inline-route-item .route-action { flex:1; min-height:34px; }.day-action { min-height:40px; } }
 @media (max-width:480px) { .add-route-control { grid-template-columns:1fr; }.add-route-control button { width:100%; } }
 .inline-move-select { min-height:30px; max-width:105px; padding:.25rem; border:1px solid #e2e8f0; border-radius:7px; background:#fff; color:#64748b; font:600 .57rem inherit; }.route-action--move { border-color:#c7d2fe; background:#eef2ff; color:#4f46e5; }.route-action--remove { border-color:#fecaca; background:#fff1f2; color:#dc2626; }.route-action:disabled { cursor:not-allowed; opacity:.45; }
@@ -773,16 +759,29 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
 }
 .action-move-box { display:grid; gap:.45rem; padding:.7rem .75rem; border:1px solid #dbe5ef; border-radius:10px; background:#f8fafc; }.action-move-box > div:first-child { display:grid; gap:.15rem; }.action-move-box strong { color:#334155; font-size:.72rem; }.action-move-box small { color:#94a3b8; font-size:.59rem; }.action-move-controls { display:flex; gap:.4rem; }.action-move-controls select { flex:1; min-width:0; padding:.45rem; border:1px solid #dbe5ef; border-radius:7px; background:#fff; color:#475569; font-size:.65rem; }.action-move-controls button { padding:.45rem .7rem; border:0; border-radius:7px; background:#4f46e5; color:#fff; font-size:.65rem; font-weight:700; cursor:pointer; }.action-move-controls button:disabled { opacity:.45; cursor:not-allowed; }
 /* Keep the route actions readable in the narrow right-hand dashboard column. */
-.route-primary-btn,.route-secondary-btn { display:inline-flex; align-items:center; justify-content:center; gap:.28rem; min-height:30px; white-space:nowrap; }
+.route-primary-btn,.route-today-btn,.route-secondary-btn { display:inline-flex; align-items:center; justify-content:center; gap:.28rem; min-height:30px; white-space:nowrap; }
+.route-header-actions { flex-wrap:wrap; }
+.route-gps-btn { display:inline-flex; align-items:center; justify-content:center; gap:.28rem; min-height:30px; padding:.34rem .55rem; border:1px solid #bae6fd; border-radius:7px; background:#f0f9ff; color:#0369a1; cursor:pointer; font:800 .58rem inherit; white-space:nowrap; transition:background .12s, border-color .12s, transform .12s; }
+.route-gps-btn:hover { border-color:#7dd3fc; background:#e0f2fe; transform:translateY(-1px); }
 @media (max-width:768px) {
   .inline-route-heading { align-items:flex-start; flex-direction:column; gap:.5rem; }
-  .route-header-actions { display:grid !important; width:100%; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); gap:.35rem; }
-  .route-header-actions > span { align-self:center; justify-self:start; }
-  .route-primary-btn,.route-secondary-btn { width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .route-header-actions { display:grid !important; width:100%; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.55rem; padding:.65rem; border:1px solid #eef2f7; border-radius:12px; background:#fbfdff; }
+  .route-header-actions > span { grid-column:1 / -1; align-self:center; justify-self:start; }
+  .capacity-control { grid-column:1 / -1; justify-content:space-between; min-height:34px; padding:.15rem .1rem; }
+  .capacity-control input { width:92px; min-height:34px; }
+  .route-gps-btn { width:100%; }
+  .route-primary-btn,.route-today-btn,.route-secondary-btn { width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 }
 @media (max-width:480px) {
-  .route-header-actions { grid-template-columns:1fr 1fr; }
-  .route-header-actions > span { grid-column:1 / -1; justify-self:start; }
-  .route-primary-btn,.route-secondary-btn { padding-inline:.35rem; font-size:.56rem; }
+  .route-header-actions { gap:.45rem; padding:.55rem; }
+  .route-gps-btn { grid-column:1 / -1; }
+  .route-primary-btn,.route-today-btn,.route-secondary-btn { padding-inline:.35rem; font-size:.56rem; }
+}
+
+@media (min-width:769px) {
+  .inline-route-heading { padding-bottom:.2rem; border-bottom:1px solid #f1f5f9; }
+  .route-header-actions { max-width:760px; }
+  .route-header-actions > span { margin-right:.15rem; }
+  .route-primary-btn,.route-today-btn,.route-gps-btn { box-shadow:0 1px 2px rgba(15,23,42,.04); }
 }
 </style>

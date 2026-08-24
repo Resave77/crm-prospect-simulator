@@ -745,6 +745,20 @@ func (s *Service) RejectDeletion(ctx context.Context, actor Actor, id uuid.UUID)
 	return s.repository.RejectDeletion(ctx, id)
 }
 
+func (s *Service) CancelDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.can("request_prospect_deletion") {
+		return ErrForbidden
+	}
+	ownerID, err := s.repository.FindProspectOwner(ctx, id)
+	if err != nil {
+		return fmt.Errorf("find prospect owner: %w", err)
+	}
+	if ownerID != actor.UserID {
+		return ErrForbidden
+	}
+	return s.repository.RejectDeletion(ctx, id)
+}
+
 func (s *Service) ListComments(ctx context.Context, actor Actor, prospectID uuid.UUID) ([]prospectmodel.ProspectComment, error) {
 	if err := s.ensureCommentAccess(ctx, actor, prospectID); err != nil {
 		return nil, err

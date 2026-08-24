@@ -58,6 +58,9 @@ export async function deleteProspect(id: string) {
 export async function requestProspectDeletion(id: string) {
   await api.post(`/sales/prospects/${id}/request-deletion`)
 }
+export async function cancelProspectDeletion(id: string) {
+  await api.post(`/sales/prospects/${id}/cancel-deletion`)
+}
 export async function approveProspectDeletion(id: string) {
   await api.post(`/admin/prospects/${id}/approve-deletion`)
 }

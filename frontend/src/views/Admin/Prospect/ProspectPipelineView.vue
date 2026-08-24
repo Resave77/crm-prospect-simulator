@@ -6,7 +6,7 @@ import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
-import { getProspectReview, getSalesExecutives } from '../../../api/crm'
+import { getProspectReview, getSalesExecutives, deleteProspect } from '../../../api/crm'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectReview, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
@@ -101,6 +101,16 @@ async function openFeedback(item: Prospect) {
     feedbackError.value = 'Feedback belum dapat dimuat.'
   } finally {
     feedbackLoading.value = false
+  }
+}
+
+async function deleteLost(item: Prospect) {
+  if (item.status !== 'LOST' || !window.confirm(`Hapus prospect "${item.placeName}" secara permanen?`)) return
+  try {
+    await deleteProspect(item.id)
+    crm.pipeline = crm.pipeline.filter((prospect) => prospect.id !== item.id)
+  } catch (caught) {
+    error.value = crm.errorMessage(caught)
   }
 }
 
@@ -289,6 +299,17 @@ onMounted(async () => {
                   size="small"
                   class="feedback-button"
                   @click.stop="openFeedback(item)"
+                />
+                <Button
+                  v-if="item.status === 'LOST'"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  text
+                  size="small"
+                  class="delete-button"
+                  aria-label="Hapus prospect"
+                  title="Hapus prospect"
+                  @click.stop="deleteLost(item)"
                 />
                 <span class="kanban-ticketing-link">
                   <i class="pi pi-comments" />
@@ -539,7 +560,7 @@ onMounted(async () => {
   min-width: 0;
   padding: 0.65rem;
   display: grid;
-  grid-auto-columns: minmax(260px, 1fr);
+  grid-auto-columns: minmax(292px, 1fr);
   grid-auto-flow: column;
   gap: 0.65rem;
   overflow-x: auto;
@@ -550,7 +571,7 @@ onMounted(async () => {
 
 .pipeline-column {
   width: auto;
-  min-width: 260px;
+  min-width: 292px;
   min-height: 420px;
   overflow: hidden;
   border: 1px solid #e2e8f0;
@@ -611,6 +632,8 @@ onMounted(async () => {
 }
 
 .kanban-card {
+  min-height: 168px;
+  box-sizing: border-box;
   padding: 0.66rem;
   border: 1px solid #e5eaf0;
   border-radius: 9px;
@@ -675,7 +698,8 @@ onMounted(async () => {
   font-weight: 750;
   line-height: 1.35;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .address-row {
@@ -725,10 +749,14 @@ onMounted(async () => {
   font-weight: 750;
   text-align: right;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .kanban-card-footer {
+  position: relative;
+  justify-content: flex-start;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -748,6 +776,7 @@ onMounted(async () => {
   font-weight: 800;
   white-space: nowrap;
 }
+.kanban-card-footer .delete-button { margin-left: auto; width: 30px; min-width: 30px; padding: .3rem !important; justify-content: center; }
 
 .kanban-ticketing-link i {
   font-size: 0.6rem;

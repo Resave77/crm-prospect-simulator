@@ -14,6 +14,8 @@ const emit = defineEmits<{
   movePrev: [item: Prospect]
   markLost: [item: Prospect]
   markWon: [item: Prospect]
+  deleteLost: [item: Prospect]
+  cancelLostDeletion: [item: Prospect]
   viewDetail: [item: Prospect]
 }>()
 
@@ -22,6 +24,13 @@ const prv = () => previousStage(props.item.status)
 const isTerminal = () => props.item.status === 'WON' || props.item.status === 'LOST'
 const isNewLead = () => props.item.status === 'NEW_LEAD'
 const isNegotiation = () => props.item.status === 'NEGOTIATION'
+function cardTone() {
+  if (props.item.status === 'LOST') return 'pipeline-card--lost'
+  if (props.item.status === 'WON' || props.item.status === 'CONVERTED') return 'pipeline-card--won'
+  if (props.item.status === 'NEW_LEAD') return 'pipeline-card--unvisited'
+  if (props.item.status === 'NEGOTIATION' || props.item.status === 'PROPOSAL_SENT') return 'pipeline-card--attention'
+  return 'pipeline-card--progress'
+}
 function openDetail() { emit('viewDetail', props.item) }
 function onCardKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail() }
@@ -32,7 +41,7 @@ function onCardKeydown(event: KeyboardEvent) {
   <article
     :id="`prospect-card-${item.id}`"
     class="pipeline-card"
-    :class="{ 'pipeline-card--highlight': highlight, 'pipeline-card--compact': compact }"
+    :class="[cardTone(), { 'pipeline-card--highlight': highlight, 'pipeline-card--compact': compact }]"
     role="link"
     tabindex="0"
     @click="openDetail"
@@ -71,6 +80,14 @@ function onCardKeydown(event: KeyboardEvent) {
           </template>
         </div>
         <div class="cpt-actions">
+          <button
+            v-if="item.status === 'LOST' && !item.deletionRequested"
+            class="pact pact-delete-lost"
+            title="Request deletion to admin"
+            aria-label="Request deletion to admin"
+            @click.stop="emit('deleteLost', item)"
+          ><i class="pi pi-trash" /></button>
+          <span v-else-if="item.status === 'LOST' && item.deletionRequested" class="deletion-pending"><i class="pi pi-clock" title="Waiting for admin approval" /><button type="button" title="Cancel deletion request" aria-label="Cancel deletion request" @click.stop="emit('cancelLostDeletion', item)"><i class="pi pi-undo" /></button></span>
           <button
             v-if="prv() && !isTerminal()"
             class="pact pact-back"
@@ -158,6 +175,8 @@ function onCardKeydown(event: KeyboardEvent) {
 
       <div class="cm-actions">
         <div class="cm-actions-row">
+          <button v-if="item.status === 'LOST' && !item.deletionRequested" class="pact pact-delete-lost" title="Request deletion to admin" aria-label="Request deletion to admin" @click.stop="emit('deleteLost', item)"><i class="pi pi-trash" /></button>
+          <span v-else-if="item.status === 'LOST' && item.deletionRequested" class="deletion-pending"><i class="pi pi-clock" title="Waiting for admin approval" /><button type="button" title="Cancel deletion request" aria-label="Cancel deletion request" @click.stop="emit('cancelLostDeletion', item)"><i class="pi pi-undo" /></button></span>
           <button class="pact pact-detail" @click.stop="emit('viewDetail', item)">
             <i class="pi pi-eye" />
             <span>View Detail</span>
@@ -204,6 +223,9 @@ function onCardKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
+.pact-delete-lost, .deletion-pending { margin-left:auto; flex:0 0 auto !important; }
+.pact-delete-lost { width:28px; min-width:28px; padding:.3rem !important; justify-content:center; color:#b4232f; }
+.deletion-pending { display:inline-flex; align-items:center; gap:.35rem; color:#d97706; font-size:.75rem; }.deletion-pending button { display:grid; place-items:center; width:24px; height:24px; padding:0; border:1px solid #fde68a; border-radius:7px; background:#fffbeb; color:#b45309; cursor:pointer; }.deletion-pending button:hover { background:#fef3c7; }
 .pipeline-card {
   background: #fff;
   border: 1px solid #e8edf3;
@@ -212,6 +234,21 @@ function onCardKeydown(event: KeyboardEvent) {
   transition: border-color 0.2s, box-shadow 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
+.pipeline-card--lost { border-color: #fecaca; background: linear-gradient(180deg, #fff 0%, #fff7f7 100%); }
+.pipeline-card--won { border-color: #bbf7d0; background: linear-gradient(180deg, #fff 0%, #f7fff9 100%); }
+.pipeline-card--unvisited { border-color: #cbd5e1; background: linear-gradient(180deg, #fff 0%, #f8fafc 100%); }
+.pipeline-card--progress { border-color: #bfdbfe; background: linear-gradient(180deg, #fff 0%, #f8fbff 100%); }
+.pipeline-card--attention { border-color: #fed7aa; background: linear-gradient(180deg, #fff 0%, #fffaf3 100%); }
+.pipeline-card--lost::before,
+.pipeline-card--won::before,
+.pipeline-card--unvisited::before,
+.pipeline-card--progress::before,
+.pipeline-card--attention::before { content: ''; display: block; height: 3px; margin: -14px -14px 12px; border-radius: 16px 16px 0 0; }
+.pipeline-card--lost::before { background: #ef4444; }
+.pipeline-card--won::before { background: #22c55e; }
+.pipeline-card--unvisited::before { background: #94a3b8; }
+.pipeline-card--progress::before { background: #3b82f6; }
+.pipeline-card--attention::before { background: #f59e0b; }
 .pipeline-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
 .pipeline-card[role="link"] { cursor: pointer; }
 .pipeline-card[role="link"]:focus-visible { outline: 3px solid rgba(37,99,235,.3); outline-offset: 2px; }
@@ -237,6 +274,7 @@ function onCardKeydown(event: KeyboardEvent) {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   overflow: hidden;
 }
+.pipeline-card--compact::before { margin: 0; border-radius: 8px 8px 0 0; }
 .cpt-body {
   box-sizing: border-box;
   min-width: 0;

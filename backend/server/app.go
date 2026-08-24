@@ -138,6 +138,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/prospects/:id/place-details", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectPlaceDetails)
 	sales.Get("/prospects/:id/business-info", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectBusinessInfo)
 	sales.Post("/prospects/:id/request-deletion", authMiddleware.RequirePermission("request_prospect_deletion"), prospectHandler.RequestDeletion)
+	sales.Post("/prospects/:id/cancel-deletion", authMiddleware.RequirePermission("request_prospect_deletion"), prospectHandler.CancelDeletion)
 	sales.Get("/visits", authMiddleware.RequirePermission("view_own_visits"), prospectHandler.ListMyVisits)
 	sales.Post("/visits/:visitId/delete", authMiddleware.RequirePermission("delete_visit"), prospectHandler.DeleteVisit)
 	sales.Get("/customers", authMiddleware.RequirePermission("view_my_customers"), customerHandler.MyCustomers)

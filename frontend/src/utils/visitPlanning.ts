@@ -16,43 +16,27 @@ function stableSort(items: Prospect[]) {
   return [...items].sort((a, b) => a.placeName.localeCompare(b.placeName) || a.id.localeCompare(b.id))
 }
 
-/** Deterministic geographic planner. It never drops eligible records: overflow is returned separately. */
+/**
+ * Deterministic weekly planner. Prospects are first ordered by their distance
+ * from the sales starting point, then distributed across the five workdays.
+ * This keeps the weekly sequence nearest-to-farthest and balances the load.
+ */
 export function planWeeklyVisits(items: Prospect[], start: Coordinates | null, maxPerDay = MAX_VISITS_PER_DAY) {
   const eligible = stableSort(items.filter((item) => !['LOST', 'CONVERTED', 'WON'].includes(item.status)))
   const located = eligible.filter((item) => item.latitude != null && item.longitude != null)
   const withoutLocation = eligible.filter((item) => item.latitude == null || item.longitude == null)
-  const remaining = [...located]
   const plan: WeeklyPlan = Object.fromEntries(WORKING_DAYS.map((day) => [day, []]))
-  let anchor = start
-  // Use only the number of weekdays needed by the workload. The remainder is
-  // placed at the edges so 8 prospects become 3 / 2 / 3, while preserving
-  // geographic progression and leaving unused weekdays empty.
-  const activeDayCount = Math.min(WORKING_DAYS.length, Math.max(1, Math.ceil(remaining.length / 3)))
-  const baseCapacity = Math.floor(remaining.length / activeDayCount)
-  const extraCapacity = remaining.length % activeDayCount
-  const capacities = Array.from({ length: activeDayCount }, (_, index) => {
-    const getsExtra = index < Math.ceil(extraCapacity / 2) || index >= activeDayCount - Math.floor(extraCapacity / 2)
-    return Math.min(maxPerDay, baseCapacity + (getsExtra ? 1 : 0))
+  const ordered = [...located].sort((a, b) => {
+    const delta = distance(start, a) - distance(start, b)
+    return delta || a.placeName.localeCompare(b.placeName) || a.id.localeCompare(b.id)
   })
 
-  for (let dayIndex = 0; dayIndex < activeDayCount; dayIndex += 1) {
-    const day = WORKING_DAYS[dayIndex]
-    const capacity = Math.min(capacities[dayIndex], remaining.length)
-    const dayItems: Prospect[] = []
-    for (let i = 0; i < capacity; i += 1) {
-      const next = remaining.reduce<Prospect | null>((best, candidate) => {
-        if (!best) return candidate
-        const candidateDistance = distance(anchor, candidate)
-        const bestDistance = distance(anchor, best)
-        return candidateDistance < bestDistance || (candidateDistance === bestDistance && candidate.placeName.localeCompare(best.placeName) < 0) ? candidate : best
-      }, null)
-      if (!next) break
-      dayItems.push(next)
-      remaining.splice(remaining.indexOf(next), 1)
-      anchor = { latitude: next.latitude!, longitude: next.longitude! }
-    }
-    plan[day] = dayItems
-    if (!remaining.length) break
+  // Fill all weekdays as evenly as possible: 10 prospects => 2 per day.
+  const dayCount = WORKING_DAYS.length
+  const capacity = Math.min(maxPerDay, Math.ceil(ordered.length / dayCount))
+  const remaining = [...ordered]
+  for (let dayIndex = 0; dayIndex < dayCount && remaining.length; dayIndex += 1) {
+    plan[WORKING_DAYS[dayIndex]] = remaining.splice(0, capacity)
   }
 
   // Records without coordinates remain visible as explicit unplanned items.
