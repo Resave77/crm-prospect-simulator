@@ -30,6 +30,7 @@ defineProps<{
   statusFor: (item: SalesStructureItem) => string
   roleLabel: (role: string) => string
   roleSeverity: (role: string) => string
+  canMutate?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -179,7 +180,7 @@ function runAction(
           <Tag :value="assignedUserIds.has(data.id) ? 'Assigned' : 'Unassigned'" :severity="assignedUserIds.has(data.id) ? 'info' : 'secondary'" />
         </template>
       </Column>
-      <Column header="Action" :style="{ width: '130px' }">
+      <Column v-if="canMutate" header="Action" :style="{ width: '130px' }">
         <template #body="{ data }">
           <Button v-if="!assignedUserIds.has(data.id)" label="Assign" icon="pi pi-user-plus" text rounded size="small" @click="emit('assign-user', data)" />
           <span v-else class="cell-hint">Assigned</span>

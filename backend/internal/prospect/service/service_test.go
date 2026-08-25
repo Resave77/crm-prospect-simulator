@@ -13,6 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestNormalizeChatJSONAcceptsMarkdownWrappedObject(t *testing.T) {
+	got, err := normalizeChatJSON("Berikut jawabannya:\n```json\n{\"answer\":\"Siap\",\"skill\":\"AUTO\"}\n```\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(got, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["answer"] != "Siap" {
+		t.Fatalf("answer=%v, want Siap", payload["answer"])
+	}
+}
+
 type fakeProspectRepository struct {
 	prospect      prospectmodel.Prospect
 	accessible    *bool

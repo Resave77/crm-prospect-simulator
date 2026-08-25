@@ -28,6 +28,12 @@ interface ExplorerGroup {
   orphans: AdminPermission[]
 }
 
+interface ExplorerSection {
+  key: string
+  label: string
+  groups: ExplorerGroup[]
+}
+
 interface LandingOption {
   route: string
   label: string
@@ -61,7 +67,7 @@ const GROUP_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   accounts: 'Accounts',
   roles: 'Roles',
-  sales_structure: 'Sales Organization',
+  sales_structure: 'Shared · Sales Organization',
   prospects: 'Prospects',
   customers: 'Customers',
   visits: 'Visits',
@@ -182,6 +188,19 @@ watch(catalog, () => {
   }
 })
 
+function sectionForGroup(group: ExplorerGroup) {
+  if (group.key === 'sales_structure') return 'shared'
+  if (['dashboard', 'prospects', 'customers', 'visits', 'profile'].includes(group.key)) return 'sales'
+  return 'admin'
+}
+
+const sections = computed<ExplorerSection[]>(() => {
+  const labels = { admin: 'ADMIN / MANAGEMENT', sales: 'SALES / USER', shared: 'SHARED' }
+  return (['admin', 'sales', 'shared'] as const)
+    .map((key) => ({ key, label: labels[key], groups: groups.value.filter((group) => sectionForGroup(group) === key) }))
+    .filter((section) => section.groups.length)
+})
+
 const totalPermissions = computed(() => catalog.value.length)
 const selectedCount = computed(() => selectedKeys.value.size)
 const allSelected = computed(() => totalPermissions.value > 0 && catalog.value.every((p) => selectedKeys.value.has(p.key)))
@@ -296,6 +315,18 @@ function clearVisible() {
 
 function clearAll() {
   selectedKeys.value.clear()
+}
+
+function expandAll() {
+  for (const group of groups.value) {
+    expandedGroups.value.add(group.key)
+    for (const menu of group.menus) expandedMenus.value.add(menu.key)
+  }
+}
+
+function collapseAll() {
+  expandedGroups.value.clear()
+  expandedMenus.value.clear()
 }
 
 function normalizedPermissionSet(keys: string[]) {
@@ -577,6 +608,12 @@ onMounted(async () => {
           <!-- RIGHT: PERMISSIONS EXPLORER -->
           <div class="explorer-column">
             <div class="panel explorer-panel">
+              <div class="explorer-heading">
+                <div>
+                  <h2>Permissions Explorer</h2>
+                  <p>Choose page access and actions for this role.</p>
+                </div>
+              </div>
               <div class="explorer-toolbar">
                 <div class="toolbar-row">
                   <div class="search-field">
@@ -585,6 +622,8 @@ onMounted(async () => {
                     <button v-if="searchActive" type="button" class="clear-search" title="Clear search" @click="searchQuery = ''"><i class="pi pi-times" /></button>
                   </div>
                   <div class="toolbar-actions">
+                    <Button label="Expand All" size="small" severity="secondary" text @click="expandAll" />
+                    <Button label="Collapse All" size="small" severity="secondary" text @click="collapseAll" />
                     <Button label="Select Visible" size="small" severity="secondary" outlined @click="selectVisible" />
                     <Button label="Clear Visible" size="small" severity="secondary" text @click="clearVisible" />
                     <Button label="Clear All" size="small" severity="danger" text @click="clearAll" />
@@ -604,10 +643,12 @@ onMounted(async () => {
               <div v-if="store.permissionsLoading && !store.permissions.length" class="explorer-loading">
                 <Skeleton v-for="n in 6" :key="n" class="skeleton-row" />
               </div>
-              <div v-else-if="!groups.length" class="explorer-empty">No permissions available.</div>
+              <div v-else-if="!groups.length" class="explorer-empty">No permissions match your search.</div>
 
               <div v-else class="explorer-tree">
-                <div v-for="group in groups" :key="group.key" class="perm-group">
+                <section v-for="section in sections" :key="section.key" class="permission-section">
+                  <div class="permission-section-heading">{{ section.label }}</div>
+                  <div v-for="group in section.groups" :key="group.key" class="perm-group">
                   <button type="button" class="perm-group-header" @click="toggleGroup(group)">
                     <i class="pi" :class="isGroupOpen(group) ? 'pi-chevron-down' : 'pi-chevron-right'" />
                     <span class="perm-group-label">{{ group.label }}</span>
@@ -619,6 +660,7 @@ onMounted(async () => {
                         <div class="perm-menu-header">
                           <Checkbox :model-value="menuState(menu.key) === 'checked'" :indeterminate="menuState(menu.key) === 'indeterminate'" binary @update:model-value="(checked) => toggleMenu(menu, Boolean(checked))" />
                           <span class="perm-name perm-menu-name">{{ menu.permission.name }}</span>
+                          <span v-if="section.key === 'shared'" class="shared-badge">Shared</span>
                           <code class="key-badge">{{ menu.permission.key }}</code>
                           <button type="button" class="chevron-btn" :title="isMenuOpen(menu) ? 'Collapse' : 'Expand'" @click="toggleMenuOpen(menu)">
                             <i class="pi" :class="isMenuOpen(menu) ? 'pi-chevron-down' : 'pi-chevron-right'" />
@@ -646,7 +688,8 @@ onMounted(async () => {
                       <code class="key-badge">{{ orphan.key }}</code>
                     </div>
                   </div>
-                </div>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -926,6 +969,18 @@ h1 {
   max-height: calc(100vh - 185px);
   overflow: hidden;
 }
+.explorer-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 0.95rem 0.55rem;
+  border-bottom: 1px solid #eef2f7;
+}
+.explorer-heading h2 { margin: 0; color: #0f172a; font-size: 1rem; letter-spacing: -0.01em; }
+.explorer-heading p { margin: 0.2rem 0 0; color: #64748b; font-size: 0.72rem; }
+.permission-section { margin: 0.35rem 0 0.7rem; }
+.permission-section-heading { padding: 0.55rem 0.6rem 0.3rem; color: #64748b; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.11em; }
+.shared-badge { flex: 0 0 auto; padding: 0.14rem 0.42rem; border: 1px solid #bfdbfe; border-radius: 999px; color: #2563eb; background: #eff6ff; font-size: 0.62rem; font-weight: 700; }
 .explorer-toolbar {
   flex: 0 0 auto;
   position: sticky;
@@ -1144,6 +1199,7 @@ h1 {
 }
 .key-badge {
   flex: 0 1 220px;
+  max-width: 38%;
   align-self: center;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 0.66rem;
@@ -1153,8 +1209,9 @@ h1 {
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   padding: 0.16rem 0.45rem;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
 }
 .chevron-btn {

@@ -91,10 +91,18 @@ func (h *Handler) UpdateUser(c *fiber.Ctx) error {
 func (h *Handler) UpdateUserProfile(c *fiber.Ctx) error {
 	usage.SetTrace(c.UserContext(), "action", "UPDATE_ACCOUNT")
 	actor := actor(c)
-	id, err := uuid.Parse(c.Params("id")); if err != nil { return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.") }
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.")
+	}
 	var input model.ProfileUpdateInput
-	if err := c.BodyParser(&input); err != nil { return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.") }
-	user, err := h.svc.UpdateUserProfile(c.UserContext(), actor, id, input); if err != nil { return writeError(c, err) }
+	if err := c.BodyParser(&input); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	user, err := h.svc.UpdateUserProfile(c.UserContext(), actor, id, input)
+	if err != nil {
+		return writeError(c, err)
+	}
 	return response.Data(c, fiber.StatusOK, user)
 }
 
@@ -159,7 +167,11 @@ func (h *Handler) ResetPassword(c *fiber.Ctx) error {
 
 func actor(c *fiber.Ctx) service.Actor {
 	principal, _ := authmiddleware.Principal(c)
-	return service.Actor{UserID: principal.UserID, Role: principal.Role}
+	var permissionKeys []string
+	if principal.SalesRole != nil {
+		permissionKeys = principal.SalesRole.PermissionKeys
+	}
+	return service.Actor{UserID: principal.UserID, Role: principal.Role, PermissionKeys: permissionKeys}
 }
 
 func queryInt(c *fiber.Ctx, key string, fallback int) int {

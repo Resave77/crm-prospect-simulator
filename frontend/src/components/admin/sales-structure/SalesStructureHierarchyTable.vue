@@ -44,10 +44,12 @@ const props = withDefaults(
      * mengakhiri assignment.
      */
     canEndAssignment?: boolean
+    canMutate?: boolean
   }>(),
   {
     isProtected: undefined,
     canEndAssignment: false,
+    canMutate: false,
   },
 )
 
@@ -89,11 +91,11 @@ const actionItems = computed<MenuItem[]>(() => {
   const alreadyEnded = Boolean(item.effectiveTo)
 
   const items: MenuItem[] = [
-    {
+    ...(props.canMutate ? [{
       label: 'View Details',
       icon: 'pi pi-eye',
       command: () => emit('open-node', item),
-    },
+    }] : []),
     {
       separator: true,
     },
@@ -234,6 +236,7 @@ function openActionMenu(
       @update:selection="emit('update:selection', $event)"
     >
       <Column
+        v-if="canMutate"
         selection-mode="multiple"
         class="selection-column"
         header-class="selection-column"

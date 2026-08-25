@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { generateProspectSummary, getProspectReview, getProspectInitialAnalysis } from '../../../api/crm'
+import { generateProspectSummary, getProspectReview, getProspectInitialAnalysis, getProspectPlaceDetails } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
@@ -209,12 +209,14 @@ onMounted(async () => {
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
-    const [reviewData, analysisData] = await Promise.all([
+    const [reviewData, analysisData, placeData] = await Promise.all([
       getProspectReview(prospectId),
       loadInitialAnalysis(prospectId),
+      getProspectPlaceDetails(prospectId, 'ADMINISTRATOR'),
     ])
     review.value = reviewData
     initialAnalysis.value = analysisData
+    placeDetails.value = placeData
     if (canViewAISummary.value && !analysisLoadFailed.value && !hasPersistedSummary(analysisData)) void ensureSummary()
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
@@ -456,15 +458,6 @@ onBeforeUnmount(() => {
             <div ref="photoGalleryShell" class="photo-gallery-shell">
               <PlacePhotoGallery :photos="(placeDetails?.photos ?? [])" :prospect-id="review.prospect.id" role="ADMINISTRATOR" section="photos" />
             </div>
-          </section>
-
-          <!-- Keep a compact menu state only when photo resources exist; it collapses instead of reserving a tall blank area -->
-          <section v-if="hasPhotos" class="dcard dcard-menu">
-            <div class="section-heading">
-              <h2><i class="pi pi-book" /> Menu</h2>
-              <DataSourceBadge source="google" label="Google" />
-            </div>
-            <PlacePhotoGallery :photos="(placeDetails?.photos ?? [])" :prospect-id="review.prospect.id" role="ADMINISTRATOR" section="menu" />
           </section>
 
           <AIMenuProfilingCard

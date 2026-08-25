@@ -227,7 +227,7 @@ func (s *Service) EndSalesAssignment(ctx context.Context, actor Actor, assignmen
 }
 
 func (s *Service) ListSalesStructure(ctx context.Context, actor Actor, effectiveDate time.Time) ([]model.SalesStructureItem, error) {
-	if !actor.Role.IsAdminRole() {
+	if !actor.Role.IsAdminRole() && !actor.HasPermission("view_sales_structure") {
 		return nil, ErrForbidden
 	}
 	return s.repo.ListSalesStructure(ctx, truncateDate(effectiveDate))

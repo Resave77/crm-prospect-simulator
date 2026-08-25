@@ -94,7 +94,7 @@ export async function deleteSalesRole(id: string) {
 }
 
 export async function getSalesStructure(effectiveDate: string) {
-  const response = await api.get<ApiEnvelope<unknown>>('/admin/sales-structure', {
+  const response = await api.get<ApiEnvelope<unknown>>('/sales/hierarchy', {
     params: { effectiveDate },
   })
   return asArray<SalesStructureItem>(

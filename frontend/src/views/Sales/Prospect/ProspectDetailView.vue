@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
-import { generateProspectSummary, getMyProspect, getProspectBusinessInfo, getProspectInitialAnalysis } from '../../../api/crm'
+import { generateProspectSummary, getMyProspect, getProspectBusinessInfo, getProspectInitialAnalysis, getProspectPlaceDetails } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import type { ProspectReview, PlaceDetails, ProspectInitialAnalysis } from '../../../types/crm'
 import EntityLocationMap from '../../../components/sales/EntityLocationMap.vue'
@@ -226,12 +226,14 @@ onMounted(async () => {
   try {
     await auth.refreshUser().catch(() => undefined)
     const prospectId = String(route.params.id)
-    const [reviewData, analysisData] = await Promise.all([
+    const [reviewData, analysisData, placeData] = await Promise.all([
       getMyProspect(prospectId),
       loadInitialAnalysis(prospectId),
+      getProspectPlaceDetails(prospectId, 'SALES_EXECUTIVE'),
     ])
     review.value = reviewData
     initialAnalysis.value = analysisData
+    placeDetails.value = placeData
     if (canViewAISummary.value && !analysisLoadFailed.value && !hasPersistedSummary(analysisData)) void ensureSummary()
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
@@ -466,8 +468,14 @@ onBeforeUnmount(() => {
                     <a :href="website" target="_blank" rel="noopener">{{ websiteDisplayUrl(website) }}</a>
                   </div>
                   <div v-if="!businessInfoLoaded && (!primaryPhone || !website)" class="business-info-empty">
-                    <span>Business info is not loaded.</span>
-                    <button type="button" @click="loadBusinessInfo" :disabled="businessInfoLoading">{{ businessInfoLoading ? 'Loading…' : 'Load Business Info' }}</button>
+                    <div class="business-info-copy">
+                      <i class="pi pi-sparkles" aria-hidden="true" />
+                      <span><strong>More business details available</strong><small>Load phone, website, hours, and contact information.</small></span>
+                    </div>
+                    <button class="business-info-button" type="button" @click="loadBusinessInfo" :disabled="businessInfoLoading">
+                      <i :class="businessInfoLoading ? 'pi pi-spin pi-spinner' : 'pi pi-plus-circle'" aria-hidden="true" />
+                      <span>{{ businessInfoLoading ? 'Loading...' : 'Load details' }}</span>
+                    </button>
                   </div>
                   <div v-if="businessInfoError" class="business-info-error">{{ businessInfoError }}</div>
                 </div>
@@ -886,6 +894,15 @@ onBeforeUnmount(() => {
 .google-rows > div > i { margin-top: .12rem; color: #8e8587; font-size: .65rem; }
 .google-rows a { color: var(--detail-accent); text-decoration: none; }
 .copy-mini { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--detail-border); border-radius: 6px; background: #fff; color: var(--detail-accent); cursor: pointer; }
+.business-info-empty { grid-column: 1 / -1; display: flex !important; align-items: center; justify-content: space-between; gap: .75rem !important; margin-top: .25rem; padding: .65rem .7rem; border: 1px solid #f0d9dc; border-radius: 11px; background: linear-gradient(135deg, #fff9fa, #fff); }
+.business-info-copy { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
+.business-info-copy > i { width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 8px; background: #fff0f1; color: var(--detail-accent); }
+.business-info-copy span { display: grid; gap: .12rem; min-width: 0; }
+.business-info-copy strong { color: #4b3e41; font-size: .67rem; }
+.business-info-copy small { color: var(--text-muted); font-size: .6rem; line-height: 1.35; }
+.business-info-button { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; flex: 0 0 auto; min-height: 30px; padding: 0 .65rem; border: 1px solid #e9aeb5; border-radius: 8px; background: #fff; color: var(--detail-accent); font-size: .64rem; font-weight: 800; cursor: pointer; transition: .18s ease; }
+.business-info-button:hover:not(:disabled) { border-color: var(--detail-accent); background: #fff0f1; transform: translateY(-1px); }
+.business-info-button:disabled { cursor: wait; opacity: .65; }
 
 /* Media */
 .photo-gallery-shell { min-width: 0; overflow: hidden; }

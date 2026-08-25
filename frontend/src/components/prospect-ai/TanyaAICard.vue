@@ -118,7 +118,10 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
           <span>Tanyakan hal spesifik tentang prospek ini.</span>
         </div>
       </template>
-      <div v-if="loading" class="tanya-loading-indicator"><i class="pi pi-spin pi-spinner" /><strong>Thinking...</strong></div>
+      <div v-if="loading" class="tanya-loading-indicator" role="status" aria-live="polite" aria-label="Tanya AI sedang berpikir">
+        <span class="tanya-thinking-avatar" aria-hidden="true"><i class="pi pi-sparkles" /></span>
+        <span class="tanya-thinking-copy"><strong>Thinking</strong><span class="tanya-thinking-dots"><i /><i /><i /></span></span>
+      </div>
     </div>
 
     <div class="tanya-chips" aria-label="AI prompt suggestions" @click.stop>
@@ -383,28 +386,56 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
 .tanya-loading-indicator {
   display: inline-flex;
   align-items: center;
-  gap: .5rem;
+  gap: .6rem;
   margin-top: auto;
   align-self: flex-start;
-  padding: .55rem .85rem .55rem .65rem;
-  border-radius: 10px 10px 10px 2px;
-  background: #fff;
-  border: 1px solid #f1d4d7;
-  color: #b42332;
-  font-size: .74rem;
-  font-weight: 700;
-  letter-spacing: .01em;
+  padding: .5rem .85rem .5rem .55rem;
+  border-radius: 16px 16px 16px 5px;
+  background: rgba(255,255,255,.88);
+  border: 1px solid rgba(226, 203, 208, .9);
+  box-shadow: 0 8px 20px rgba(90, 48, 58, .08);
 }
-.tanya-loading-indicator i {
-  width: 24px;
-  height: 24px;
+.tanya-thinking-avatar {
+  width: 27px;
+  height: 27px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #ef4e5d, #d62839);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #f45163, #c91f3e);
   color: #fff;
-  font-size: .65rem;
-  box-shadow: 0 2px 6px rgba(214, 40, 57, .25);
+  font-size: .72rem;
+  box-shadow: 0 4px 10px rgba(214, 40, 57, .24);
+  animation: tanya-thinking-pulse 1.8s ease-in-out infinite;
+}
+.tanya-thinking-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  color: #475569;
+  font-size: .74rem;
+  font-weight: 700;
+}
+.tanya-thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.tanya-thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #d62839;
+  animation: tanya-thinking-dot 1.2s ease-in-out infinite;
+}
+.tanya-thinking-dots i:nth-child(2) { animation-delay: .16s; }
+.tanya-thinking-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes tanya-thinking-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes tanya-thinking-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
 }
 .tanya-history-error button {
   min-height: 32px;

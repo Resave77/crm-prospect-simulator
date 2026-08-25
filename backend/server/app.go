@@ -224,6 +224,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Patch("/sales-roles/:id/status", adminHandler.UpdateSalesRoleStatus)
 	admin.Delete("/sales-roles/:id", adminHandler.DeleteSalesRole)
 	admin.Get("/sales-structure", adminHandler.ListSalesStructure)
+	sales.Get("/hierarchy", authMiddleware.RequirePermission("view_sales_structure"), adminHandler.ListSalesStructure)
 	admin.Post("/sales-structure/assignments", adminHandler.CreateSalesAssignment)
 	admin.Post("/sales-structure/assignments/:id/move", adminHandler.MoveSalesAssignment)
 	admin.Patch("/sales-structure/assignments/:id/end", adminHandler.EndSalesAssignment)

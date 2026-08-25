@@ -44,8 +44,21 @@ func New(repo repository.Repository) *Service {
 }
 
 type Actor struct {
-	UserID uuid.UUID
-	Role   authmodel.Role
+	UserID         uuid.UUID
+	Role           authmodel.Role
+	PermissionKeys []string
+}
+
+func (a Actor) HasPermission(key string) bool {
+	if a.Role == authmodel.RoleSuperAdmin {
+		return true
+	}
+	for _, candidate := range a.PermissionKeys {
+		if candidate == key {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ListUsers(ctx context.Context, actor Actor, filter model.ListFilter) (model.UserListResult, error) {
@@ -196,15 +209,38 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, id uuid.UUID, inp
 }
 
 func (s *Service) UpdateUserProfile(ctx context.Context, actor Actor, id uuid.UUID, input model.ProfileUpdateInput) (model.UserDetail, error) {
-	if !actor.Role.IsAdminRole() { return model.UserDetail{}, ErrForbidden }
-	if input.DateOfBirth != nil { if date, err := time.Parse("2006-01-02", *input.DateOfBirth); err != nil { return model.UserDetail{}, fmt.Errorf("%w: date of birth is invalid", ErrValidation) } else if date.After(time.Now()) { return model.UserDetail{}, fmt.Errorf("%w: date of birth cannot be in the future", ErrValidation) } }
-	if input.JoinDate != nil { if _, err := time.Parse("2006-01-02", *input.JoinDate); err != nil { return model.UserDetail{}, fmt.Errorf("%w: join date is invalid", ErrValidation) } }
+	if !actor.Role.IsAdminRole() {
+		return model.UserDetail{}, ErrForbidden
+	}
+	if input.DateOfBirth != nil {
+		if date, err := time.Parse("2006-01-02", *input.DateOfBirth); err != nil {
+			return model.UserDetail{}, fmt.Errorf("%w: date of birth is invalid", ErrValidation)
+		} else if date.After(time.Now()) {
+			return model.UserDetail{}, fmt.Errorf("%w: date of birth cannot be in the future", ErrValidation)
+		}
+	}
+	if input.JoinDate != nil {
+		if _, err := time.Parse("2006-01-02", *input.JoinDate); err != nil {
+			return model.UserDetail{}, fmt.Errorf("%w: join date is invalid", ErrValidation)
+		}
+	}
 	if input.Phones != nil {
-		for _, phone := range *input.Phones { if strings.TrimSpace(phone.PhoneNumber) == "" { continue }; if len(strings.TrimSpace(phone.PhoneNumber)) < 5 { return model.UserDetail{}, fmt.Errorf("%w: phone number is invalid", ErrValidation) } }
+		for _, phone := range *input.Phones {
+			if strings.TrimSpace(phone.PhoneNumber) == "" {
+				continue
+			}
+			if len(strings.TrimSpace(phone.PhoneNumber)) < 5 {
+				return model.UserDetail{}, fmt.Errorf("%w: phone number is invalid", ErrValidation)
+			}
+		}
 	}
 	repo, ok := s.repo.(profileRepository)
-	if !ok { return model.UserDetail{}, fmt.Errorf("%w: profile updates are unavailable", ErrValidation) }
-	if err := repo.UpdateUserProfile(ctx, id, input, actor.UserID); err != nil { return model.UserDetail{}, err }
+	if !ok {
+		return model.UserDetail{}, fmt.Errorf("%w: profile updates are unavailable", ErrValidation)
+	}
+	if err := repo.UpdateUserProfile(ctx, id, input, actor.UserID); err != nil {
+		return model.UserDetail{}, err
+	}
 	return s.repo.FindUserDetail(ctx, id)
 }
 

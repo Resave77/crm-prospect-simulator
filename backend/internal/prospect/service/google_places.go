@@ -241,7 +241,7 @@ const (
 	// Finder list data is intentionally limited to fields needed to render and
 	// select a result. Contact, rating, website, hours, reviews, and photos are
 	// detail-time concerns and must not be requested for every search result.
-	searchFieldMask    = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.businessStatus,places.location"
+	searchFieldMask    = "places.id,places.displayName,places.formattedAddress,places.primaryTypeDisplayName,places.types,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri,places.location"
 	singleTileRadius   = 5000.0
 	defaultTileSize    = 3500.0
 	maxTiles           = 16

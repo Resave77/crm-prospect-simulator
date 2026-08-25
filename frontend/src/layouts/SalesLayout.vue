@@ -80,6 +80,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
+import { sharedNavigationItems } from '../utils/navigation'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -92,6 +93,7 @@ const salesNavItems = [
   { label: 'Prospect Pipeline', to: '/sales/pipeline', icon: 'pi pi-chart-line', permission: 'menu_sales_pipeline' },
   { label: 'History', to: '/sales/history', icon: 'pi pi-history', permission: 'view_sales_history' },
   { label: 'Profile', to: '/sales/profile', icon: 'pi pi-user', permission: 'view_own_profile' },
+  ...sharedNavigationItems,
 ]
 
 const visibleNavItems = computed(() => salesNavItems.filter((item) => auth.hasPermission(item.permission)))
@@ -109,6 +111,7 @@ const pageTitle = computed(() => {
     '/sales/pipeline': 'Prospect Pipeline',
     '/sales/history': 'Visit History',
     '/sales/profile': 'My Profile',
+    '/sales/hierarchy': 'Sales Hierarchy',
   }
   return titles[p] ?? 'Yummy CRM'
 })

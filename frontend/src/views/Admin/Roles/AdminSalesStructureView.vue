@@ -12,9 +12,13 @@ import AssignSalesDialog from '../../../components/admin/sales-structure/AssignS
 import SalesStructureFlatTable from '../../../components/admin/sales-structure/SalesStructureFlatTable.vue'
 import SalesStructureHierarchyTable from '../../../components/admin/sales-structure/SalesStructureHierarchyTable.vue'
 import { useAdminStore } from '../../../stores/admin'
+import { useAuthStore } from '../../../stores/auth'
 import type { AdminUserListItem, SalesRoleLevel, SalesStructureItem } from '../../../types/admin'
 
 const store = useAdminStore()
+const auth = useAuthStore()
+const canAssignSales = computed(() => auth.hasPermission('create_sales_assignment'))
+const canMoveSales = computed(() => auth.hasPermission('move_sales_assignment'))
 const toast = useToast()
 const error = ref('')
 const dialogVisible = ref(false)
@@ -778,7 +782,9 @@ watch(() => form.effectiveMonth, () => {
 onMounted(async () => {
   viewMode.value = 'tree'
   error.value = ''
-  const results = await Promise.allSettled([store.fetchSalesRoles(), store.fetchSalesStructure(effectiveDate.value), fetchSalesUsers(1)])
+  const reads = [store.fetchSalesStructure(effectiveDate.value)]
+  if (canAssignSales.value) reads.push(store.fetchSalesRoles(), fetchSalesUsers(1))
+  const results = await Promise.allSettled(reads)
   const failed = results.find((result) => result.status === 'rejected')
   if (failed && failed.status === 'rejected') error.value = store.errorMessage(failed.reason)
 })
@@ -813,7 +819,7 @@ onMounted(async () => {
         </button>
       </div>
 
-      <Button
+      <Button v-if="canAssignSales"
         label="Assign Sales"
         icon="pi pi-plus"
         size="small"
@@ -889,6 +895,7 @@ onMounted(async () => {
       :status-for="statusFor"
       :is-protected="isProtectedAssignment"
       :can-end-assignment="false"
+      :can-mutate="canMoveSales"
       @expand-all="expandAll"
       @collapse-all="collapseAll"
       @toggle-node="toggleNode"
@@ -916,6 +923,7 @@ onMounted(async () => {
       :has-more-users="hasMoreUsers"
       :sales-users-total="salesUsersTotal"
       :next-guidance="nextGuidance"
+      :can-mutate="canAssignSales || canMoveSales"
       :level-class="levelClass"
       :position-label="positionLabel"
       :status-for="statusFor"

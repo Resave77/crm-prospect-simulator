@@ -266,15 +266,45 @@ func (s *Service) ChatAI(ctx context.Context, actor Actor, id uuid.UUID, message
 	if err != nil {
 		return "", err
 	}
+	cleanResult, err := normalizeChatJSON(result)
+	if err != nil {
+		return "", err
+	}
 	var parsed struct{ Answer, Skill, Insight, Why, RecommendedAction string }
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+	if err := json.Unmarshal(cleanResult, &parsed); err != nil {
 		return "", err
 	}
 	_, err = chatRepo.CreateAIChat(ctx, prospectmodel.ProspectAIChat{ProspectID: id, UserID: actor.UserID, Message: message, Answer: parsed.Answer, Skill: parsed.Skill, Insight: parsed.Insight, Why: parsed.Why, RecommendedAction: parsed.RecommendedAction})
 	if err != nil {
 		return "", err
 	}
-	return result, nil
+	return string(cleanResult), nil
+}
+
+// normalizeChatJSON tolerates models that wrap an otherwise valid JSON answer
+// in a markdown code fence or add a short preamble. The HTTP handler expects a
+// JSON object, so returning the canonical object also keeps the response shape
+// stable for the frontend.
+func normalizeChatJSON(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "```") {
+		lines := strings.Split(value, "\n")
+		if len(lines) >= 3 {
+			lines = lines[1:]
+			if strings.HasPrefix(strings.TrimSpace(lines[len(lines)-1]), "```") {
+				lines = lines[:len(lines)-1]
+			}
+			value = strings.TrimSpace(strings.Join(lines, "\n"))
+		}
+	}
+	if start, end := strings.Index(value, "{"), strings.LastIndex(value, "}"); start >= 0 && end > start {
+		value = value[start : end+1]
+	}
+	var object map[string]any
+	if err := json.Unmarshal([]byte(value), &object); err != nil {
+		return nil, err
+	}
+	return json.Marshal(object)
 }
 
 func (s *Service) AIChatHistory(ctx context.Context, actor Actor, id uuid.UUID) ([]prospectmodel.ProspectAIChat, error) {

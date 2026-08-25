@@ -5,6 +5,10 @@ export const ADMIN_DASHBOARD_ROUTE = '/admin/dashboard'
 export const SALES_DASHBOARD_ROUTE = '/sales/dashboard'
 export const FORBIDDEN_ROUTE = '/forbidden'
 
+export const sharedNavigationItems = [
+  { label: 'Sales Structure', to: '/sales/hierarchy', icon: 'pi pi-sitemap', permission: 'view_sales_structure' },
+] as const
+
 export function isAdminRole(role: UserRole) {
   return role === 'SUPER_ADMIN' || role === 'ADMINISTRATOR'
 }

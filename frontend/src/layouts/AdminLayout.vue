@@ -49,40 +49,40 @@ async function logout() {
       </div>
       <small v-show="!sidebarCollapsed" class="nav-caption">MAIN</small>
       <nav aria-label="Administrator navigation">
-        <RouterLink to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
+        <RouterLink v-if="auth.hasPermission('view_admin_dashboard')" to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
           <i class="pi pi-home" /> <span v-show="!sidebarCollapsed">Dashboard</span>
         </RouterLink>
 
         <small v-show="!sidebarCollapsed" class="nav-caption">CUSTOMERS &amp; PROSPECTS</small>
-        <RouterLink to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Existing' : ''">
+        <RouterLink v-if="auth.hasPermission('view_customers')" to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Existing' : ''">
           <i class="pi pi-users" /> <span v-show="!sidebarCollapsed">Customer Existing</span>
         </RouterLink>
-        <RouterLink to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
+        <RouterLink v-if="auth.hasPermission('view_prospect_finder')" to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
           <i class="pi pi-compass" /> <span v-show="!sidebarCollapsed">Prospect Finder</span>
         </RouterLink>
-        <RouterLink to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Prospect' : ''">
+        <RouterLink v-if="auth.hasPermission('view_prospect_list')" to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Prospect' : ''">
           <i class="pi pi-list" /> <span v-show="!sidebarCollapsed">Customer Prospect</span>
         </RouterLink>
-        <RouterLink to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
+        <RouterLink v-if="auth.hasPermission('view_prospect_pipeline')" to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
           <i class="pi pi-th-large" /> <span v-show="!sidebarCollapsed">Prospect Pipeline</span>
         </RouterLink>
-        <RouterLink to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
+        <RouterLink v-if="auth.hasPermission('view_visit_monitoring')" to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
           <i class="pi pi-map-marker" /> <span v-show="!sidebarCollapsed">Visit Monitoring</span>
         </RouterLink>
 
         <small v-show="!sidebarCollapsed" class="nav-caption">MANAGEMENT</small>
-        <RouterLink to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
+        <RouterLink v-if="auth.hasPermission('view_accounts')" to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
           <i class="pi pi-user-edit" /> <span v-show="!sidebarCollapsed">Employee Management</span>
         </RouterLink>
-        <RouterLink to="/admin/role-management" @click="closeSidebar" :title="sidebarCollapsed ? 'Role Management' : ''">
+        <RouterLink v-if="auth.hasPermission('view_roles')" to="/admin/role-management" @click="closeSidebar" :title="sidebarCollapsed ? 'Role Management' : ''">
           <i class="pi pi-id-card" /> <span v-show="!sidebarCollapsed">Role Management</span>
         </RouterLink>
-        <RouterLink to="/admin/sales-structure" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Structure' : ''">
+        <RouterLink v-if="auth.hasPermission('view_sales_structure')" to="/admin/sales-structure" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Structure' : ''">
           <i class="pi pi-sitemap" /> <span v-show="!sidebarCollapsed">Sales Structure</span>
         </RouterLink>
 
         <small v-show="!sidebarCollapsed" class="nav-caption">REPORTS</small>
-        <RouterLink to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
+        <RouterLink v-if="auth.hasPermission('view_reports')" to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
           <i class="pi pi-chart-bar" /> <span v-show="!sidebarCollapsed">Reports</span>
         </RouterLink>
         <RouterLink to="/admin/api-usage" @click="closeSidebar" :title="sidebarCollapsed ? 'Monitoring API' : ''">

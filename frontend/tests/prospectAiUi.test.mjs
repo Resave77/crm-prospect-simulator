@@ -263,7 +263,9 @@ test('Sales Prospect Detail removes the legacy Google menu gallery without affec
   assert.match(sales, /:analysis="initialAnalysis"/)
   assert.match(sales, /:place-details="placeDetails"/)
 
-  // Admin is outside this cleanup and must retain its existing photo behavior.
+  // Admin also uses AI for menu analysis; Google menu-photo gallery is removed there too.
   assert.match(admin, new RegExp(`${galleryPhotos}[^>]*section="photos"`))
-  assert.match(admin, new RegExp(`${galleryPhotos}[^>]*section="menu"`))
+  assert.doesNotMatch(admin, /<PlacePhotoGallery[^>]*section="menu"/)
+  assert.doesNotMatch(admin, /class="dcard dcard-menu"/)
+  assert.match(admin, /<AIMenuProfilingCard/)
 })

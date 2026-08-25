@@ -14,7 +14,7 @@ import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
-import { getPlacePhotoBlob } from '../../../api/crm'
+import { getPlaceDetails, getPlacePhotoBlob } from '../../../api/crm'
 import { listCategories, type MasterDataCategory } from '../../../api/masterData'
 import { categoryIcon } from '../../../utils/categoryIcons'
 import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
@@ -82,7 +82,9 @@ const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
 const customerMarkers = ref<CustomerMarker[]>([])
 const customersLoading = ref(false)
-const placeDetails = ref<PlaceDetails | null>(null)
+// Detail enrichment is disabled in Finder; keep an empty shape for legacy
+// hidden sections while rendering search metadata only.
+const placeDetails = ref<PlaceDetails>({} as PlaceDetails)
 const placeDetailsLoading = ref(false)
 const placeDetailsError = ref('')
 const menuImages = ref<MenuImage[]>([])
@@ -208,6 +210,10 @@ async function loadMasterData() {
 
 const selectedPlaceCategory = computed(() =>
   placeDetails.value?.placeCategory?.trim() || selected.value?.category?.trim() || '',
+)
+const selectedGoogleMapsUrl = computed(() =>
+  placeDetails.value?.googleMapsUrl || selected.value?.googleMapsUrl ||
+  (selected.value?.googlePlaceId ? `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(selected.value.googlePlaceId)}` : ''),
 )
 const pinCategory = 'Custom Pin'
 
@@ -389,15 +395,6 @@ function menuImageQuery() {
   const keyword = foodKeywords.find(([type]) => types.includes(type))?.[1] ?? 'restaurant menu'
   return `"${d.placeName}" ${d.formattedAddress} ${keyword} menu harga daftar harga`.trim()
 }
-
-watch(
-  () => (placeDetails.value?.photos ?? []).map((photo) => `${photo.name}:${photo.photoUrl}`).join('|'),
-  () => {
-    visiblePhotoCount.value = 1
-    loadPlacePhotoObjectUrls((placeDetails.value?.photos ?? []).slice(0, 1), true)
-  },
-  { immediate: true },
-)
 
 const filteredResults = ref<PlaceResult[]>([])
 
@@ -715,7 +712,7 @@ function renderMarkers() {
   nextTick(() => map?.invalidateSize())
 }
 
-function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = null; queried.value = false; nextTick(() => map?.invalidateSize()) }
+function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = {} as PlaceDetails; queried.value = false; nextTick(() => map?.invalidateSize()) }
 
 async function loadSavedPlaceIds() {
   try {
@@ -728,15 +725,15 @@ async function loadSavedPlaceIds() {
 
 async function selectResult(item: PlaceResult, focusMap = true) {
   selected.value = item
-  placeDetails.value = null
+  placeDetails.value = {} as PlaceDetails
   placeDetailsError.value = ''
   menuImages.value = []
   menuImagesError.value = ''
   detailOpen.value = true
-  if (item.googlePlaceId) {
+  if (!item.isCustomer && item.googlePlaceId) {
     placeDetailsLoading.value = true
     try {
-      placeDetails.value = await crmApi.getPlaceDetails(item.googlePlaceId)
+      placeDetails.value = await getPlaceDetails(item.googlePlaceId)
     } catch (caught) {
       placeDetailsError.value = crmError(caught)
     } finally {
@@ -779,6 +776,7 @@ watch([latitude, longitude], () => {
 })
 
 async function search() {
+  if (loading.value) return
   error.value = ''
   success.value = ''
   loading.value = true
@@ -786,7 +784,7 @@ async function search() {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: searchCategoryKeys().join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
     queried.value = true
     selected.value = null
-    placeDetails.value = null
+    placeDetails.value = {} as PlaceDetails
     detailOpen.value = false
     await nextTick()
     renderMarkers()
@@ -1043,7 +1041,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="filter-actions">
-            <Button :label="!geoResolved ? 'Detecting location...' : 'PROSES CARI PROSPEK'" icon="pi pi-search" fluid :loading="loading || !geoResolved" :disabled="!categories.length || !geoResolved" @click="search" />
+            <Button :label="!geoResolved ? 'Detecting location...' : 'PROSES CARI PROSPEK'" icon="pi pi-search" fluid :loading="loading || !geoResolved" :disabled="loading || !categories.length || !geoResolved" @click="search" />
           </div>
 
           <div v-if="queried" class="query-results-footer">
@@ -1191,11 +1189,11 @@ onBeforeUnmount(() => {
                 <a :href="placeDetails?.websiteUrl || selected.website" target="_blank" rel="noreferrer" class="detail-info-link">Open website →</a>
               </div>
             </div>
-            <div v-if="placeDetails?.googleMapsUrl || selected.googleMapsUrl" class="detail-info-item">
+            <div v-if="selectedGoogleMapsUrl" class="detail-info-item">
               <i class="pi pi-external-link" />
               <div>
                 <span class="detail-info-label">Google Maps</span>
-                <a :href="placeDetails?.googleMapsUrl || selected.googleMapsUrl" target="_blank" rel="noreferrer" class="detail-info-link">View listing →</a>
+                <a :href="selectedGoogleMapsUrl" target="_blank" rel="noreferrer" class="detail-info-link">View listing →</a>
               </div>
             </div>
             <div class="detail-info-item">
@@ -1205,28 +1203,21 @@ onBeforeUnmount(() => {
                 <span class="detail-info-value detail-types">{{ placeDetails?.placeTypes?.join(', ') || selected.placeTypes?.join(', ') || selected.markerCategory }}</span>
               </div>
             </div>
-            <div class="detail-info-item">
-              <i class="pi pi-info-circle" />
-              <div>
-                <span class="detail-info-label">Status</span>
-                <Tag :value="(placeDetails?.businessStatus || selected.businessStatus || 'UNKNOWN')" :severity="(placeDetails?.businessStatus || selected.businessStatus) === 'OPERATIONAL' ? 'success' : 'warn'" />
-              </div>
-            </div>
           </div>
         </div>
 
-        <div v-if="placeDetails?.openingHours" class="detail-section">
+        <div v-if="placeDetails && false && placeDetails.openingHours" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-clock" /> Opening Hours</h3>
           <div class="detail-hours-grid">
-            <div class="detail-hours-badge" :class="{ 'is-open': placeDetails.openingHours.openNow }">
+            <div class="detail-hours-badge" :class="{ 'is-open': placeDetails.openingHours?.openNow }">
               <span class="hours-dot" />
-              {{ placeDetails.openingHours.openNow ? 'Open now' : 'Closed' }}
+              {{ placeDetails.openingHours?.openNow ? 'Open now' : 'Closed' }}
             </div>
-            <div v-for="day in placeDetails.openingHours.weekdays" :key="day" class="detail-hours-day">{{ day }}</div>
+            <div v-for="day in (placeDetails.openingHours?.weekdays ?? [])" :key="day" class="detail-hours-day">{{ day }}</div>
           </div>
         </div>
 
-        <div v-if="placeDetails" class="detail-section">
+        <div v-if="placeDetails && false" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-cog" /> Services &amp; Options</h3>
           <div class="detail-options-grid">
             <div v-if="placeDetails.delivery !== undefined" class="detail-option-chip" :class="{ active: placeDetails.delivery }">
@@ -1244,7 +1235,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails?.parkingOptions" class="detail-section">
+        <div v-if="placeDetails && false && placeDetails.parkingOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-car" /> Parking</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['freeStreetParking','paidStreetParking','freeParkingLot','paidParkingLot','valetParking','garageParking']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1253,7 +1244,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails?.paymentOptions" class="detail-section">
+        <div v-if="placeDetails && false && placeDetails.paymentOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-credit-card" /> Payment</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['cashOnly','creditCardOnly','debitCardOnly','nfcOnly']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1262,7 +1253,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails?.accessibilityOptions" class="detail-section">
+        <div v-if="placeDetails && false && placeDetails.accessibilityOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-universal-access" /> Accessibility</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['wheelchairAccessibleEntrance','wheelchairAccessibleParking','wheelchairAccessibleRestroom','wheelchairAccessibleSeating']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1271,7 +1262,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails?.reviews?.length" class="detail-section">
+        <div v-if="placeDetails && false && placeDetails.reviews?.length" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-comments" /> Reviews ({{ placeDetails.reviews.length }})</h3>
           <div class="detail-reviews-list">
             <div v-for="review in placeDetails.reviews.slice(0, 5)" :key="review.authorName + review.time" class="detail-review">
@@ -1286,7 +1277,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails" class="detail-section">
+        <div v-if="placeDetails && false" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-book" /> Menu Photos</h3>
           <div v-if="menuPhotos.length" class="detail-photos-row">
             <template v-for="photo in menuPhotos" :key="photo.name">
@@ -1311,7 +1302,7 @@ onBeforeUnmount(() => {
           <div v-else class="detail-photo-empty"><i class="pi pi-book" /> Menu photos are not loaded automatically</div>
         </div>
 
-        <div v-if="placeDetails" class="detail-section">
+        <div v-if="false && placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
           <div v-if="visiblePhotos.length" class="detail-photos-row">
             <template v-for="(photo, index) in visiblePhotos" :key="photo.name">
@@ -2467,6 +2458,9 @@ onBeforeUnmount(() => {
   margin-top: 0.32rem;
   flex-wrap: wrap;
 }
+
+/* Finder detail keeps category only; rating/review badges are list metadata. */
+.detail-hero-meta :deep(.p-tag) { display: none; }
 
 .detail-hero-meta > span {
   color: var(--text-muted);

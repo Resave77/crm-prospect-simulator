@@ -77,6 +77,7 @@ const router = createRouter({
         { path: 'my-customers/:id/check-out/success', name: 'SalesCustomerCheckOutSuccess', component: () => import('../views/Sales/Visit/CheckOutSuccessView.vue'), meta: { permission: 'check_out_customer', entityType: 'customer' } },
         { path: 'history', name: 'SalesHistory', component: () => import('../views/Sales/HistoryView.vue'), meta: { permission: 'view_sales_history' } },
         { path: 'profile', name: 'SalesProfile', component: () => import('../views/Sales/ProfileView.vue'), meta: { permission: 'view_own_profile' } },
+        { path: 'hierarchy', name: 'SalesHierarchy', component: () => import('../views/Admin/Roles/AdminSalesStructureView.vue'), meta: { permission: 'view_sales_structure' } },
       ],
     },
     { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
