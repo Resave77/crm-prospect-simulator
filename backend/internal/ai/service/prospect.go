@@ -28,6 +28,7 @@ const (
 
 const maxGoogleReviewsForAI = 5
 const maxGoogleReviewTextLength = 500
+const salesCompanyName = "PT Yummy Food Utama"
 
 const menuProfilingInstructions = `Anda adalah AI Sales Copilot di Yummy CRM. Analisis data menu prospect F&B yang sudah ditemukan dan tersimpan untuk menghasilkan insight penjualan yang akurat, ringkas, profesional, dan dapat digunakan Sales Executive.
 
@@ -125,7 +126,15 @@ func (s *ProspectAI) AskProspectAIWithSkill(ctx context.Context, review prospect
 	question = boundString(question, s.maxChatLength)
 	history = boundHistory(history, s.maxHistory, s.maxChatLength)
 	extra := map[string]any{"history": history, "question": question, "skill": skill, "savedAIAnalysis": saved}
-	return s.client.GenerateText(ctx, salesCopilotInstructions(skill), s.contextJSON(review, details, comments, extra))
+	result, err := s.client.GenerateText(ctx, salesCopilotInstructions(skill), s.contextJSON(review, details, comments, extra))
+	if err != nil {
+		return result, err
+	}
+	result.Text = strings.NewReplacer(
+		"[nama perusahaan]", salesCompanyName,
+		"[perusahaan]", salesCompanyName,
+	).Replace(result.Text)
+	return result, nil
 }
 
 func (s *ProspectAI) contextJSON(review prospectmodel.Review, details *prospectmodel.PlaceDetails, comments []prospectmodel.ProspectComment, extra map[string]any) string {
@@ -180,7 +189,7 @@ func (s *ProspectAI) contextJSON(review prospectmodel.Review, details *prospectm
 }
 
 func salesCopilotInstructions(skill string) string {
-	base := "Return ONLY valid JSON matching {answer:string,skill:string,insight:string,why:string,recommendedAction:string}. Answer in Indonesian, concise and actionable for sales. Use only supplied CRM data. Missing data must be 'Data belum tersedia'. Do not assume buying intent, authority, budget, or timing. Yoghurt is only a general category; do not invent SKU, brand, flavour, specification, or price. Consider the current funnel stage and recommend a realistic next step."
+	base := "Return ONLY valid JSON matching {answer:string,skill:string,insight:string,why:string,recommendedAction:string}. Answer in Indonesian, concise and actionable for sales. Use only supplied CRM data. Missing data must be 'Data belum tersedia'. Do not assume buying intent, authority, budget, or timing. Yoghurt is only a general category; do not invent SKU, brand, flavour, specification, or price. Consider the current funnel stage and recommend a realistic next step. When referring to the sales representative's company, always use the exact name 'PT Yummy Food Utama'; never output placeholders such as '[nama perusahaan]' or '[perusahaan]'."
 	if instruction := skillInstructions[strings.ToUpper(strings.TrimSpace(skill))]; instruction != "" {
 		return base + " " + instruction
 	}
