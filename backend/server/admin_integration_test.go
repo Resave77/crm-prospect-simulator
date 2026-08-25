@@ -1,4 +1,4 @@
-package server
+﻿package server
 
 import (
 	"context"
@@ -121,7 +121,7 @@ func buildTestAppWithAdmin(user authmodel.User, adminSvc *adminservice.Service) 
 	jwtSecret := "01234567890123456789012345678901"
 	tokens := authservice.NewTokenManager(jwtSecret, "test", "test-api", time.Minute)
 	authSvc := authservice.NewAuthService(users, sessions, tokens, time.Hour)
-	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, nil, nil, adminSvc)
+	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, nil, nil, adminSvc, nil)
 	access, _, _ := tokens.IssueAccess(user, uuid.New(), time.Now())
 	return app, access
 }
@@ -554,7 +554,7 @@ func TestBumpedTokenVersionInvalidatesOldAccessToken(t *testing.T) {
 	tokens := authservice.NewTokenManager(jwtSecret, "test", "test-api", time.Minute)
 	authSvc := authservice.NewAuthService(users, sessions, tokens, time.Hour)
 	adminSvc := adminservice.New(&adminRepoStub{})
-	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, nil, nil, adminSvc)
+	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, nil, nil, adminSvc, nil)
 	access, _, _ := tokens.IssueAccess(user, uuid.New(), time.Now())
 
 	user.TokenVersion = 2

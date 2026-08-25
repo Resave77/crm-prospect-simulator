@@ -190,9 +190,9 @@ func DefaultPermissionKeys(level int) []string {
 	case 2:
 		return []string{"menu_sales_dashboard", "view_sales_dashboard", "view_team_dashboard", "menu_sales_structure", "view_sales_structure", "menu_my_prospects", "view_my_prospects", "menu_my_customers", "view_my_customers", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	case 3:
-		return []string{"menu_sales_dashboard", "view_sales_dashboard", "view_team_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
+		return []string{"menu_sales_dashboard", "view_sales_dashboard", "view_team_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "request_prospect_deletion", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	case 4:
-		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "check_in_prospect", "check_out_prospect", "menu_sales_pipeline", "update_prospect_pipeline", "update_visit_result", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "check_in_customer", "check_out_customer", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
+		return []string{"menu_sales_dashboard", "view_sales_dashboard", "menu_my_prospects", "view_my_prospects", "view_my_prospect_detail", "request_prospect_deletion", "check_in_prospect", "check_out_prospect", "menu_sales_pipeline", "update_prospect_pipeline", "update_visit_result", "menu_my_customers", "view_my_customers", "view_my_customer_detail", "check_in_customer", "check_out_customer", "menu_sales_history", "view_sales_history", "view_own_visits", "menu_profile", "view_own_profile", "change_own_password"}
 	default:
 		return []string{}
 	}

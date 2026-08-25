@@ -453,3 +453,31 @@ model RolePermission {
   @@index([permissionId])
   @@map("role_permissions")
 }
+
+model MasterDataSegment {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  description String   @default("")
+  status      String   @default("ACTIVE") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categories  MasterDataCategory[]
+
+  @@map("segments")
+}
+
+model MasterDataCategory {
+  id          String            @id @default(uuid()) @db.Uuid
+  segmentId   String            @map("segment_id") @db.Uuid
+  name        String            @db.VarChar(100)
+  description String            @default("")
+  placeApi    String            @default("") @map("place_api")
+  status      String            @default("ACTIVE") @db.VarChar(20)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  segment     MasterDataSegment @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+
+  @@unique([segmentId, name])
+  @@index([segmentId])
+  @@map("categories")
+}

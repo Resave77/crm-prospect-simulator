@@ -13,6 +13,7 @@ import PipelineProspectCard from '../../../components/sales/pipeline/PipelinePro
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
 import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
 import DailyVisitSchedule from '../../../components/prospect/DailyVisitSchedule.vue'
+import { requestProspectDeletion, cancelProspectDeletion } from '../../../api/crm'
 
 type PipelineGroup = 'ALL' | 'NEW_LEAD' | 'IN_PROGRESS' | 'WON' | 'LOST'
 type SecondaryStage = 'ALL_PROGRESS' | ProspectStatus
@@ -51,12 +52,43 @@ const pageSize = ref(15)
 const showFilters = ref(false)
 const DESKTOP_BREAKPOINT = 769
 const isDesktop = ref(window.innerWidth >= DESKTOP_BREAKPOINT)
+const deletionBusy = ref(false)
+const deletionConfirm = ref<{ item: Prospect; action: 'request' | 'cancel' } | null>(null)
 
 const draftFilters = ref({ industryGroup: '', visitStatus: '' })
 const appliedFilters = ref({ industryGroup: '', visitStatus: '' })
 
 function updateViewportMode() {
   isDesktop.value = window.innerWidth >= DESKTOP_BREAKPOINT
+}
+
+async function requestLostDeletion(item: Prospect) {
+  if (deletionBusy.value || item.status !== 'LOST' || item.deletionRequested) return
+  deletionConfirm.value = { item, action: 'request' }
+}
+
+async function executeDeletionConfirm() {
+  const confirmation = deletionConfirm.value
+  if (!confirmation) return
+  deletionConfirm.value = null
+  const item = confirmation.item
+  if (confirmation.action === 'cancel') return executeCancelDeletion(item)
+  deletionBusy.value = true
+  try {
+    await requestProspectDeletion(item.id)
+    crm.myProspects = crm.myProspects.map((prospect) => prospect.id === item.id ? { ...prospect, deletionRequested: true } : prospect)
+    toast.add({ severity: 'success', summary: 'Request sent', detail: 'Penghapusan menunggu konfirmasi admin.', life: 3500 })
+  } catch (caught) {
+    error.value = crm.errorMessage(caught)
+  } finally { deletionBusy.value = false }
+}
+async function cancelLostDeletion(item: Prospect) {
+  if (!deletionConfirm.value) deletionConfirm.value = { item, action: 'cancel' }
+  return
+}
+async function executeCancelDeletion(item: Prospect) {
+  try { await cancelProspectDeletion(item.id); crm.myProspects = crm.myProspects.map((p) => p.id === item.id ? { ...p, deletionRequested: false } : p); toast.add({ severity: 'info', summary: 'Request cancelled', detail: 'Request penghapusan berhasil dibatalkan.', life: 3000 }) }
+  catch (caught) { error.value = crm.errorMessage(caught) }
 }
 
 window.addEventListener('resize', updateViewportMode)
@@ -535,6 +567,8 @@ onBeforeUnmount(() => {
                 @mark-lost="(i) => openTransition(i, 'LOST')"
                 @mark-won="(i) => openTransition(i, 'WON')"
                 @view-detail="viewDetail"
+                @delete-lost="requestLostDeletion"
+                @cancel-lost-deletion="cancelLostDeletion"
               />
 
               <div v-if="!prospectsForStage(stage).length" class="pl-column-empty">
@@ -565,6 +599,8 @@ onBeforeUnmount(() => {
             @mark-lost="(i) => openTransition(i, 'LOST')"
             @mark-won="(i) => openTransition(i, 'WON')"
             @view-detail="viewDetail"
+            @delete-lost="requestLostDeletion"
+            @cancel-lost-deletion="cancelLostDeletion"
           />
           <PipelineProspectCard
             v-else
@@ -575,6 +611,8 @@ onBeforeUnmount(() => {
             @mark-lost="(i) => openTransition(i, 'LOST')"
             @mark-won="(i) => openTransition(i, 'WON')"
             @view-detail="viewDetail"
+            @delete-lost="requestLostDeletion"
+            @cancel-lost-deletion="cancelLostDeletion"
           />
         </template>
 
@@ -645,6 +683,26 @@ onBeforeUnmount(() => {
       </template>
     </Dialog>
 
+    <Dialog
+      v-if="deletionConfirm"
+      :visible="deletionConfirm !== null"
+      modal
+      :closable="!deletionBusy"
+      :style="{ width: 'min(92vw, 430px)' }"
+      :pt="{ mask: { style: 'backdrop-filter: blur(6px); background: rgba(15, 23, 42, .42);' }, root: { class: 'deletion-confirm-dialog' } }"
+      @update:visible="(visible) => { if (!visible && !deletionBusy) deletionConfirm = null }"
+    >
+      <div class="deletion-confirm-content">
+        <div class="deletion-confirm-icon"><i :class="deletionConfirm.action === 'request' ? 'pi pi-trash' : 'pi pi-undo'" /></div>
+        <h2>{{ deletionConfirm.action === 'request' ? 'Ajukan penghapusan?' : 'Batalkan request?' }}</h2>
+        <p v-if="deletionConfirm.action === 'request'">Prospect <strong>{{ deletionConfirm.item.placeName }}</strong> akan diajukan untuk dihapus dan menunggu persetujuan admin.</p>
+        <p v-else>Request penghapusan <strong>{{ deletionConfirm.item.placeName }}</strong> akan dibatalkan.</p>
+      </div>
+      <template #footer>
+        <div class="deletion-confirm-footer"><Button label="Batal" severity="secondary" outlined :disabled="deletionBusy" @click="deletionConfirm = null" /><Button :label="deletionConfirm.action === 'request' ? 'Ajukan request' : 'Batalkan request'" severity="danger" :loading="deletionBusy" @click="executeDeletionConfirm" /></div>
+      </template>
+    </Dialog>
+
     <!-- ── TRANSITION DIALOG ── -->
     <Dialog
       :visible="selected !== null"
@@ -692,7 +750,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pipeline-overview { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: .75rem; margin-bottom: .75rem; align-items: start; }
+.deletion-confirm-content { display:grid; justify-items:center; gap:.55rem; padding:.7rem .5rem .35rem; text-align:center; }.deletion-confirm-icon { display:grid; place-items:center; width:52px; height:52px; border-radius:16px; background:#fff1f2; color:#dc2626; font-size:1.15rem; }.deletion-confirm-content h2 { margin:.15rem 0 0; color:#1e293b; font-size:1.05rem; }.deletion-confirm-content p { max-width:320px; margin:0; color:#64748b; font-size:.78rem; line-height:1.55; }.deletion-confirm-content strong { color:#334155; }.deletion-confirm-footer { display:flex; justify-content:flex-end; gap:.55rem; width:100%; }.deletion-confirm-footer .p-button { min-height:34px; border-radius:9px; font-size:.72rem; }
+.pipeline-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; align-items: stretch; }
 .pl-field-hint { color: #94a3b8; font-size: .68rem; line-height: 1.4; }
 .pl-page { padding: 0 0 24px; }
 .pl-desktop-only { display: none; }

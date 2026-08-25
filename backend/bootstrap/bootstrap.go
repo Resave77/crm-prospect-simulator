@@ -13,6 +13,8 @@ import (
 	"crm-prospect-simulator/backend/internal/auth/service"
 	customerrepository "crm-prospect-simulator/backend/internal/customer/repository"
 	customerservice "crm-prospect-simulator/backend/internal/customer/service"
+	masterdatarepository "crm-prospect-simulator/backend/internal/masterdata/repository"
+	masterdataservice "crm-prospect-simulator/backend/internal/masterdata/service"
 	prospectmodel "crm-prospect-simulator/backend/internal/prospect/model"
 	prospectrepository "crm-prospect-simulator/backend/internal/prospect/repository"
 	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
@@ -71,7 +73,9 @@ func Build(ctx context.Context) (*Application, config.Config, error) {
 	})
 	customerRepo := customerrepository.NewPostgresRepository(pool)
 	customerService := customerservice.New(customerRepo, prospectService)
+	masterDataRepo := masterdatarepository.NewPostgresRepository(pool)
+	masterDataService := masterdataservice.New(masterDataRepo)
 	adminRepo := adminrepository.NewPostgresRepository(pool)
 	adminService := adminservice.New(adminRepo)
-	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService, initialAnalyzer, pool), Pool: pool}, cfg, nil
+	return &Application{Fiber: server.New(cfg, authService, prospectService, customerService, adminService, masterDataService, initialAnalyzer, pool), Pool: pool}, cfg, nil
 }

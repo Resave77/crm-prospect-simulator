@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import Message from 'primevue/message'
 import { getTeamDashboard } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
+import YummySocialLinks from '../../../components/layout/YummySocialLinks.vue'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, TeamDashboard } from '../../../types/crm'
 import { isActiveProspectStatus } from '../../../utils/prospectPipeline'
@@ -138,9 +139,9 @@ onMounted(async () => {
           <small>{{ formattedDate }}</small>
         </div>
       </RouterLink>
-      <RouterLink class="sales-settings-btn" to="/sales/profile" aria-label="Open settings">
-        <i class="pi pi-sliders-h" />
-      </RouterLink>
+      <div class="sales-dashboard-actions">
+        <YummySocialLinks />
+      </div>
     </header>
 
     <Message v-if="error" severity="error">{{ error }}</Message>
@@ -201,7 +202,7 @@ onMounted(async () => {
         <div class="team-member-list">
           <article v-for="member in teamDashboard.members" :key="member.userId" class="team-member-row">
             <div class="team-member-main">
-              <strong>{{ member.fullName }}</strong>
+              <div class="team-member-name-row"><strong>{{ member.fullName }}</strong><a class="member-ig-icon" href="https://www.instagram.com/yummydairy/" target="_blank" rel="noopener noreferrer" title="Instagram Yummy Dairy" aria-label="Visit Instagram Yummy Dairy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="5" /><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none" /></svg></a></div>
               <small>{{ member.roleName }}</small>
             </div>
             <div class="team-member-metrics">
@@ -412,6 +413,9 @@ onMounted(async () => {
   border-radius: 14px;
   box-shadow: var(--shadow-xs);
 }
+.sales-dash-header > :deep(.yummy-social-links) { margin-left:auto; }
+.sales-dashboard-actions { display:flex; align-items:center; justify-content:flex-end; gap:.7rem; min-width:0; }
+.sales-dashboard-actions :deep(.yummy-social-links) { flex-wrap:nowrap; }
 .sales-identity {
   display: flex; gap: 0.75rem; align-items: center; color: #0f172a; text-decoration: none;
 }
@@ -440,6 +444,31 @@ onMounted(async () => {
   transition: all 0.2s ease;
 }
 .sales-settings-btn:hover { color: #e63946; border-color: #ffd9dc; background: #fff0f1; }
+.sales-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+.sales-ig-btn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.sales-ig-btn:hover {
+  background: linear-gradient(135deg, #fce18a, #ff5c87, #d942ff);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(225, 55, 90, .3);
+}
 
 /* ── Ready card ────────────────────────────────────────────── */
 .ready-card {
@@ -632,6 +661,32 @@ onMounted(async () => {
 }
 .team-member-row:last-child { border-bottom: 0; }
 .team-member-main { display: grid; gap: 0.12rem; min-width: 0; }
+.team-member-name-row {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  min-width: 0;
+}
+.team-member-name-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.member-ig-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #94a3b8;
+  transition: color .15s ease, background .15s ease;
+}
+.member-ig-icon:hover {
+  background: linear-gradient(135deg, #fce18a, #ff5c87, #d942ff);
+  color: #fff;
+}
 .team-member-main strong {
   overflow: hidden;
   color: #0f172a;
@@ -965,6 +1020,7 @@ onMounted(async () => {
 
 @media (min-width: 1024px) {
   .sales-dash-header { padding: 0.9rem 1.1rem; }
+  .sales-dashboard-actions { gap:.55rem; }
   .sales-avatar { width: 64px; height: 46px; }
   .sales-identity-text strong { font-size: 1.25rem; }
   .sales-identity-text small { font-size: 0.85rem; }
@@ -1002,7 +1058,13 @@ onMounted(async () => {
   .team-member-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
   .team-member-metrics span { min-height: 40px; padding: 0.38rem; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
   .team-status-strip { display: flex; justify-content: flex-start; gap: 0.35rem; }
-  .sales-dash-header { padding: 0.8rem; border-radius: 17px; box-shadow: 0 6px 18px rgba(73,34,41,.06); }
+  .sales-dash-header { flex-direction:column; align-items:stretch; padding: 0.8rem; border-radius: 17px; box-shadow: 0 6px 18px rgba(73,34,41,.06); gap:.8rem; }
+  .sales-dashboard-actions { width:100%; flex-direction:column; align-items:stretch; gap:0; }
+  .sales-dashboard-actions :deep(.yummy-social-links) { width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; }
+  .sales-dashboard-actions :deep(.yummy-social-link) { width:auto; min-height:46px; justify-content:center; padding:.45rem .35rem; border-radius:12px; }
+  .sales-dashboard-actions :deep(.yummy-social-label) { display:inline; font-size:.64rem; }
+  .sales-dashboard-actions :deep(.yummy-social-link > i) { display:none; }
+  .sales-dashboard-actions :deep(.yummy-social-icon) { width:20px; height:20px; flex-shrink:0; }
   .dashboard-overview { gap: 0.7rem; }
   .ready-card { min-height: 190px; padding: 1.1rem; border-radius: 19px; }
   .ready-card strong { font-size: 1.3rem; }

@@ -15,6 +15,8 @@ import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
 import { getPlacePhotoBlob } from '../../../api/crm'
+import { listCategories, type MasterDataCategory } from '../../../api/masterData'
+import { categoryIcon } from '../../../utils/categoryIcons'
 import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
 const toast = useToast()
@@ -33,6 +35,27 @@ const categoryOptions = [
   { key: 'baking_supply', label: 'Toko Bahan Kue / Baking Supply', icon: '🥣' },
   { key: 'institutional', label: 'Institutional', icon: '🏫' },
 ] as const
+
+const masterDataNameToKey: Record<string, string> = {
+  'resto & café': 'resto_cafe',
+  'resto & cafe': 'resto_cafe',
+  'qsr / fast food': 'qsr_fast_food',
+  'qsr/fast food': 'qsr_fast_food',
+  'bakery & dessert': 'bakery_dessert',
+  'hotels & accommodation': 'hotels_accommodation',
+  'hotel & akomodasi': 'hotels_accommodation',
+  'catering & event': 'catering_event',
+  'modern trade': 'modern_trade',
+  'convenience store': 'convenience_store',
+  'general trade': 'general_trade',
+  'distributor / agent': 'distributor_agent',
+  'distributor / agen': 'distributor_agent',
+  'industry / manufacturer': 'industry_manufacturer',
+  'industri / manufaktur': 'industry_manufacturer',
+  'toko bahan kue / baking supply': 'baking_supply',
+  'institutional': 'institutional',
+  'institusi': 'institutional',
+}
 const ratingOptions = [
   { value: 0, label: 'All' }, { value: 3, label: '3★' }, { value: 4, label: '4★' }, { value: 4.5, label: '4.5★' }, { value: 4.8, label: '4.8★' },
 ] as const
@@ -43,7 +66,8 @@ const menuFilterOptions = [
   { value: 'all', label: 'All' }, { value: 'likely', label: 'Likely Has Menu' }, { value: 'ready', label: 'Menu Ready' }, { value: 'not_ready', label: 'Menu Not Ready' },
 ] as const
 const keyword = ref('')
-const categories = ref<string[]>(categoryOptions.map(o => o.key))
+const masterCategories = ref<MasterDataCategory[]>([])
+const categories = ref<string[]>([])
 const radius = ref(5000)
 const minRating = ref(0)
 const savedFilter = ref<'all' | 'saved' | 'unsaved'>('all')
@@ -99,6 +123,89 @@ const selectedSalesCount = computed(() => {
   const exec = sales.value.find(s => s.id === salesExecutiveId.value)
   return exec?.activeProspectCount ?? 0
 })
+
+function selectAllCategories() {
+  categories.value = categoryOptions.map(o => o.key)
+}
+
+const activeMasterCategories = computed(() =>
+  masterCategories.value.filter(c => c.status === 'ACTIVE'),
+)
+
+const categoryGroups = computed(() => {
+  const b2b: MasterDataCategory[] = []
+  const b2c: MasterDataCategory[] = []
+  const others: MasterDataCategory[] = []
+  for (const category of activeMasterCategories.value) {
+    const segmentName = (category.segmentName ?? '').trim().toUpperCase()
+    if (segmentName === 'B2B') b2b.push(category)
+    else if (segmentName === 'B2C') b2c.push(category)
+    else others.push(category)
+  }
+  return [
+    { key: 'b2b', title: 'B2B', subtitle: 'Business to Business', items: b2b },
+    { key: 'b2c', title: 'B2C', subtitle: 'Business to Consumer', items: b2c },
+    { key: 'other', title: 'Lainnya', subtitle: '', items: others },
+  ].filter(group => group.items.length > 0)
+})
+
+const activeCategoryGroupKey = ref('')
+
+const activeCategoryGroup = computed(() =>
+  categoryGroups.value.find(group => group.key === activeCategoryGroupKey.value)
+    ?? categoryGroups.value[0],
+)
+
+type CategoryGroup = (typeof categoryGroups.value)[number]
+
+function groupIcon(key: string) {
+  const GROUP_ICONS: Record<string, string> = { b2b: '🏢', b2c: '🛍️', other: '📌' }
+  return GROUP_ICONS[key] ?? '📁'
+}
+
+function selectAllGroup(group: CategoryGroup) {
+  categories.value = [...new Set([...categories.value, ...group.items.map(item => item.id)])]
+}
+
+function clearAllGroup(group: CategoryGroup) {
+  const ids = new Set(group.items.map(item => item.id))
+  categories.value = categories.value.filter(id => !ids.has(id))
+}
+
+function groupSelectedCount(group: CategoryGroup) {
+  return group.items.filter(item => categories.value.includes(item.id)).length
+}
+
+function resolveCategoryKey(masterDataId: string): string {
+  const cat = masterCategories.value.find(c => c.id === masterDataId)
+  if (!cat) return ''
+  const normalized = cat.name.trim().toLowerCase()
+  if (masterDataNameToKey[normalized]) return masterDataNameToKey[normalized]
+  for (const [key, mapped] of Object.entries(masterDataNameToKey)) {
+    if (normalized.includes(key) || key.includes(normalized)) return mapped
+  }
+  return ''
+}
+
+function searchCategoryKeys(): string[] {
+  const keys: string[] = []
+  for (const id of categories.value) {
+    const key = resolveCategoryKey(id)
+    if (key) keys.push(key)
+    else keys.push(id)
+  }
+  return [...new Set(keys)]
+}
+
+async function loadMasterData() {
+  try {
+    masterCategories.value = await listCategories()
+    categories.value = activeMasterCategories.value.map(o => o.id)
+  } catch (caught) {
+    toast.add({ severity: 'warn', summary: 'Master data unavailable', detail: crmError(caught), life: 6000 })
+  }
+}
+
 const selectedPlaceCategory = computed(() =>
   placeDetails.value?.placeCategory?.trim() || selected.value?.category?.trim() || '',
 )
@@ -337,10 +444,6 @@ watch([results, resultSearch, minRating, savedFilter, menuFilter, savedPlaceIds]
 watch(filteredResults, () => {
   if (map && results.value.length) renderMarkers()
 })
-
-function selectAllCategories() {
-  categories.value = categoryOptions.map(o => o.key)
-}
 
 function openPhotoPreview(url: string, alt: string, attribution?: string) {
   previewPhoto.value = { url, alt, attribution }
@@ -680,7 +783,7 @@ async function search() {
   success.value = ''
   loading.value = true
   try {
-    results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: categories.value.join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
+    results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: searchCategoryKeys().join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
     queried.value = true
     selected.value = null
     placeDetails.value = null
@@ -771,6 +874,7 @@ onMounted(async () => {
   useGPS()
   loadCustomerMarkers()
   loadSavedPlaceIds()
+  loadMasterData()
   try {
     sales.value = await crmApi.getSalesExecutives()
     salesExecutiveId.value = sales.value[0]?.id ?? ''
@@ -856,21 +960,44 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="filter-section">
-            <div class="filter-section-header">
+            <div class="filter-section-header category-header">
               <span class="filter-section-title">Categories</span>
               <span class="category-count">{{ categories.length }} selected</span>
             </div>
-            <div class="category-tools">
-              <button type="button" class="category-tool" @click="selectAllCategories"><i class="pi pi-check" /> Select All</button>
-              <button type="button" class="category-tool clear" @click="categories = []"><i class="pi pi-times" /> Clear All</button>
-            </div>
-            <div class="category-grid">
-              <label v-for="option in categoryOptions" :key="option.key" class="category-chip" :class="{ active: categories.includes(option.key) }">
-                <Checkbox v-model="categories" :input-id="option.key" :value="option.key" />
-                <span class="category-chip-icon">{{ option.icon }}</span>
-                <span class="category-chip-label">{{ option.label }}</span>
-              </label>
-            </div>
+            <p v-if="!activeCategoryGroup" class="category-empty">
+              <i class="pi pi-info-circle" />
+              No categories yet. Add them in Master Data.
+            </p>
+            <template v-else>
+              <div class="category-toolbar">
+                <div class="category-tabs">
+                  <button
+                    v-for="group in categoryGroups"
+                    :key="group.key"
+                    type="button"
+                    class="category-tab"
+                    :class="{ active: activeCategoryGroup.key === group.key }"
+                    @click="activeCategoryGroupKey = group.key"
+                  >
+                    <span class="category-tab-icon">{{ groupIcon(group.key) }}</span>
+                    {{ group.title }}
+                    <span class="category-tab-count">{{ groupSelectedCount(group) }}/{{ group.items.length }}</span>
+                  </button>
+                </div>
+                <div class="category-tools">
+                  <button type="button" class="category-tool" @click="selectAllGroup(activeCategoryGroup)"><i class="pi pi-check" /> Select All</button>
+                  <button type="button" class="category-tool clear" @click="clearAllGroup(activeCategoryGroup)"><i class="pi pi-times" /> Clear All</button>
+                </div>
+              </div>
+              <div v-if="activeCategoryGroup.subtitle" class="category-group-subtitle">{{ activeCategoryGroup.subtitle }}</div>
+              <div class="category-grid">
+                <label v-for="option in activeCategoryGroup.items" :key="option.id" class="category-chip" :class="{ active: categories.includes(option.id) }">
+                  <Checkbox v-model="categories" :input-id="option.id" :value="option.id" />
+                  <span class="category-chip-icon">{{ categoryIcon(option.name) }}</span>
+                  <span class="category-chip-label">{{ option.name }}</span>
+                </label>
+              </div>
+            </template>
           </div>
 
           <div class="filter-section">
@@ -1494,6 +1621,79 @@ onBeforeUnmount(() => {
 
 .filter-section-header .filter-section-title { margin-bottom: 0; }
 
+.category-header { margin-top: 0.35rem; }
+.category-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+.category-tabs { display: flex; gap: 0.3rem; }
+.category-tab-icon { font-size: 0.68rem; line-height: 1; }
+.category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.category-tab:hover { background: var(--brand-blue-50); border-color: var(--brand-blue); }
+.category-tab.active {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #fff;
+}
+.category-tab-count {
+  padding: 0.06rem 0.34rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--brand-blue);
+  font-size: 0.52rem;
+  font-weight: 700;
+}
+.category-tab:not(.active) .category-tab-count {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+.category-group-subtitle {
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+.category-tools {
+  display: flex;
+  gap: 0.4rem;
+}
+.category-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.7rem 0.75rem;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+.category-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  color: #b45309;
+  font-size: 0.65rem;
+}
+
 .category-count {
   padding: 0.12rem 0.5rem;
   color: var(--brand-blue);
@@ -1538,11 +1738,6 @@ onBeforeUnmount(() => {
 }
 
 /* Categories */
-.category-tools {
-  display: flex;
-  gap: 0.4rem;
-  margin: 0 0 0.45rem;
-}
 
 .category-tool {
   display: inline-flex;

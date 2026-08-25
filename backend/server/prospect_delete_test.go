@@ -1,4 +1,4 @@
-package server
+﻿package server
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func buildTestAppWithProspects(user authmodel.User, prospectRepo prospectrepo.Re
 	authSvc := authservice.NewAuthService(users, sessions, tokens, time.Hour)
 	prospectSvc := prospectservice.New(prospectRepo)
 	adminSvc := adminservice.New(&adminRepoStub{})
-	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, prospectSvc, nil, adminSvc)
+	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, authSvc, prospectSvc, nil, adminSvc, nil)
 	access, _, _ := tokens.IssueAccess(user, uuid.New(), time.Now())
 	return app, access
 }

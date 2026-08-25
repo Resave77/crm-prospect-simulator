@@ -26,7 +26,7 @@ defineEmits<{ retry: [] }>()
       <i class="pi pi-spin pi-spinner" />
       <div>
         <strong>{{ context === 'customer' ? 'Memuat insight customer...' : 'Membuat ringkasan prospect...' }}</strong>
-        <span>{{ context === 'customer' ? 'Mengambil insight tersimpan dari riwayat prospect.' : 'AI sedang menganalisis data prospect.' }}</span>
+        <span>{{ context === 'customer' ? 'Mengambil insight tersimpan dari riwayat prospect.' : ' menganalisis data prospect.' }}</span>
       </div>
     </div>
     <div v-else-if="analysis?.summary" class="ai-state ai-empty"><i class="pi pi-check-circle" /><div><strong>{{ String(analysis.summary.summary || 'AI Summary tersedia.') }}</strong><span>Potential: {{ String(analysis.summary.potential || 'UNKNOWN') }}</span></div></div>

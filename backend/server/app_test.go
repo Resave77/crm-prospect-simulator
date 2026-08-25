@@ -1,4 +1,4 @@
-package server
+﻿package server
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestHealthRoutesReturnJSON(t *testing.T) {
-	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, nil, nil, nil, nil)
+	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, nil, nil, nil, nil, nil)
 	for _, path := range []string{"/api/health", "/api/v1/health"} {
 		response, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil {
@@ -30,7 +30,7 @@ func TestHealthRoutesReturnJSON(t *testing.T) {
 }
 
 func TestUnknownAPIRouteReturnsJSON404(t *testing.T) {
-	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, nil, nil, nil, nil)
+	app := New(config.Config{AllowedOrigins: "http://localhost:5173"}, nil, nil, nil, nil, nil)
 	response, err := app.Test(httptest.NewRequest("GET", "/api/unknown", nil))
 	if err != nil {
 		t.Fatal(err)

@@ -16,6 +16,8 @@ import (
 	"crm-prospect-simulator/backend/internal/auth/service"
 	customerhandler "crm-prospect-simulator/backend/internal/customer/handler"
 	customerservice "crm-prospect-simulator/backend/internal/customer/service"
+	masterdatahandler "crm-prospect-simulator/backend/internal/masterdata/handler"
+	masterdataservice "crm-prospect-simulator/backend/internal/masterdata/service"
 	prospecthandler "crm-prospect-simulator/backend/internal/prospect/handler"
 	prospectservice "crm-prospect-simulator/backend/internal/prospect/service"
 	"crm-prospect-simulator/backend/internal/shared/response"
@@ -57,6 +59,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	authMiddleware := authmiddleware.New(authService)
 	prospectHandler := prospecthandler.New(prospectService, customerService)
 	var usagePool *pgxpool.Pool
+	var masterDataService *masterdataservice.Service
 	var hasInitialAnalyzer bool
 	for _, extra := range extras {
 		switch v := extra.(type) {
@@ -65,6 +68,8 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 			hasInitialAnalyzer = v != nil
 		case *pgxpool.Pool:
 			usagePool = v
+		case *masterdataservice.Service:
+			masterDataService = v
 		}
 	}
 	if usagePool != nil {
@@ -72,6 +77,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	}
 	customerHandler := customerhandler.New(customerService, prospectService)
 	adminHandler := adminhandler.New(adminService)
+	masterDataHandler := masterdatahandler.New(masterDataService)
 
 	health := func(c *fiber.Ctx) error {
 		return response.Data(c, fiber.StatusOK, fiber.Map{"status": "ok"})
@@ -138,6 +144,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	sales.Get("/prospects/:id/place-details", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectPlaceDetails)
 	sales.Get("/prospects/:id/business-info", authMiddleware.RequirePermission("view_my_prospect_detail"), prospectHandler.ProspectBusinessInfo)
 	sales.Post("/prospects/:id/request-deletion", authMiddleware.RequirePermission("request_prospect_deletion"), prospectHandler.RequestDeletion)
+	sales.Post("/prospects/:id/cancel-deletion", authMiddleware.RequirePermission("request_prospect_deletion"), prospectHandler.CancelDeletion)
 	sales.Get("/visits", authMiddleware.RequirePermission("view_own_visits"), prospectHandler.ListMyVisits)
 	sales.Post("/visits/:visitId/delete", authMiddleware.RequirePermission("delete_visit"), prospectHandler.DeleteVisit)
 	sales.Get("/customers", authMiddleware.RequirePermission("view_my_customers"), customerHandler.MyCustomers)
@@ -193,6 +200,21 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
 	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
 	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
+
+	masterData := api.Group("/master-data", authMiddleware.Authenticate, authMiddleware.RequirePasswordChanged, authMiddleware.RequireRole(model.RoleSuperAdmin, model.RoleAdministrator))
+	masterData.Get("/segments", masterDataHandler.ListSegments)
+	masterData.Post("/segments", masterDataHandler.CreateSegment)
+	masterData.Put("/segments/:id", masterDataHandler.UpdateSegment)
+	masterData.Delete("/segments/:id", masterDataHandler.DeleteSegment)
+	masterData.Get("/segments/:id/categories", masterDataHandler.SegmentCategories)
+	masterData.Get("/categories", masterDataHandler.ListCategories)
+	masterData.Post("/categories", masterDataHandler.CreateCategory)
+	masterData.Put("/categories/:id", masterDataHandler.UpdateCategory)
+	masterData.Delete("/categories/:id", masterDataHandler.DeleteCategory)
+	masterData.Get("/trash/segments", masterDataHandler.ListTrashedSegments)
+	masterData.Post("/trash/segments/:id/restore", masterDataHandler.RestoreSegment)
+	masterData.Get("/trash/categories", masterDataHandler.ListTrashedCategories)
+	masterData.Post("/trash/categories/:id/restore", masterDataHandler.RestoreCategory)
 
 	admin.Get("/permissions", adminHandler.ListPermissions)
 	admin.Get("/sales-roles", adminHandler.ListSalesRoles)

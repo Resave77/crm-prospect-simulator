@@ -41,16 +41,16 @@ function count(statuses: readonly string[]) {
 </template>
 
 <style scoped>
-.health-card { align-self: start; height: fit-content; padding: 1.05rem 1.15rem .9rem; border: 1px solid #e5eaf0; border-radius: 16px; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+.health-card { align-self: stretch; height: fit-content; padding: 1.2rem 1.3rem 1rem; border: 1px solid #dfe7f0; border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fbfdff 100%); box-shadow: 0 4px 14px rgba(15,23,42,.045); }
 .health-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .health-eyebrow { color: #94a3b8; font-size: .58rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 h2 { margin: .18rem 0 0; color: #0f172a; font-size: 1.02rem; letter-spacing: -.01em; }
 .health-total { padding: .3rem .6rem; border: 1px solid #e5eaf0; border-radius: 999px; background: #f8fafc; color: #64748b; font-size: .62rem; font-weight: 750; white-space: nowrap; }
-.health-track { display: flex; gap: 4px; height: 8px; margin: 1.05rem 0 .9rem; overflow: hidden; border-radius: 99px; background: #f1f5f9; }
+.health-track { display: flex; gap: 4px; height: 9px; margin: 1.15rem 0 1rem; overflow: hidden; border-radius: 99px; background: #eef2f7; }
 .health-segment { min-width: 8px; border-radius: 99px; }
 .health-segment--red { background: #e35d6a; }.health-segment--orange { background: #f59e0b; }.health-segment--yellow { background: #facc15; }.health-segment--blue { background: #3b82f6; }
-.health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
-.health-item { display: grid; grid-template-columns: auto 1fr; gap: .15rem .35rem; align-items: center; min-width: 0; padding: .35rem .25rem; }
+.health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
+.health-item { display: grid; grid-template-columns: auto 1fr; gap: .18rem .4rem; align-items: center; min-width: 0; padding: .45rem .4rem; border: 1px solid #eef2f7; border-radius: 10px; background: rgba(248,250,252,.75); }
 .health-item strong { grid-column: 2; color: #0f172a; font-size: 1rem; line-height: 1.1; }.health-label { overflow: hidden; color: #64748b; font-size: .6rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .health-dot { width: 7px; height: 7px; grid-row: span 2; border-radius: 50%; }.health-dot--red { background:#e35d6a; }.health-dot--orange { background:#f59e0b; }.health-dot--yellow { background:#facc15; }.health-dot--blue { background:#3b82f6; }
 .health-note { display: flex; gap: .35rem; margin: .75rem 0 0; padding-top: .65rem; border-top: 1px solid #f1f5f9; color: #94a3b8; font-size: .6rem; line-height: 1.4; }.health-note i { margin-top: 1px; }

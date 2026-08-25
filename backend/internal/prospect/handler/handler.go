@@ -472,6 +472,17 @@ func (h *Handler) RejectDeletion(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deletionRejected": true})
 }
 
+func (h *Handler) CancelDeletion(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.CancelDeletion(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"deletionCancelled": true})
+}
+
 func (h *Handler) ListComments(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
