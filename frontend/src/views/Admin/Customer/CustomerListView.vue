@@ -8,6 +8,7 @@ import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
 import { useCustomerListStore } from '../../../stores/customerList'
 import { deleteCustomer } from '../../../api/crm'
+import MasterDataPanel from '../../../components/admin/MasterDataPanel.vue'
 
 const store = useCustomerListStore()
 const router = useRouter()
@@ -350,7 +351,7 @@ async function executeDeleteCompany() {
       </div>
       <div class="page-heading-actions">
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
-        <Button :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
+        <Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
       </div>
     </header>
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
@@ -640,15 +641,7 @@ async function executeDeleteCompany() {
     </div>
 
     <!-- ======================== MASTER DATA TAB ======================== -->
-    <div v-if="activeTab === 'master'" class="placeholder-panel">
-      <div class="placeholder-inner">
-        <div class="placeholder-icon">
-          <i class="pi pi-database" />
-        </div>
-        <strong>Master Data Management</strong>
-        <span>Segment configurations, categories, and reference data will be available here soon.</span>
-      </div>
-    </div>
+    <MasterDataPanel v-if="activeTab === 'master'" />
   </section>
 </template>
 

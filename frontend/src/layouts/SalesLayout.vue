@@ -44,6 +44,9 @@
         </button>
         <div class="topbar-title">{{ pageTitle }}</div>
         <div class="topbar-spacer" />
+        <a class="topbar-icon-btn ig-link" href="https://www.instagram.com/yummydairy/" target="_blank" rel="noopener noreferrer" title="Instagram Yummy Dairy" aria-label="Visit Instagram Yummy Dairy">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="5" /><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none" /></svg>
+        </a>
         <details class="profile-menu">
           <summary>
             <span class="avatar-initials">{{ initials }}</span>
@@ -445,6 +448,12 @@ function toggleCollapse() {
   background: var(--surface-hover);
   color: var(--brand-blue);
   border-color: var(--border-default);
+}
+
+.ig-link:hover {
+  background: linear-gradient(135deg, #fce18a, #ff5c87, #d942ff);
+  color: #fff;
+  border-color: transparent;
 }
 
 .topbar-title {

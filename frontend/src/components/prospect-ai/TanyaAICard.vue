@@ -98,22 +98,27 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
     <p v-if="!expanded" class="tanya-mobile-hint">Ketuk untuk lihat percakapan</p>
 
     <div class="tanya-messages">
-      <div v-if="loading" class="tanya-empty"><i class="pi pi-spin pi-spinner" /><strong>AI sedang menganalisis...</strong><span>Tunggu sebentar.</span></div>
-      <div v-else-if="error" class="tanya-empty"><i class="pi pi-exclamation-triangle" /><strong>AI tidak tersedia.</strong><span>{{ error }}</span></div>
-      <div v-else-if="historyLoading" class="tanya-empty"><i class="pi pi-spin pi-spinner" /><strong>Memuat percakapan...</strong></div>
-      <div v-else-if="historyError" class="tanya-empty tanya-history-error"><i class="pi pi-exclamation-triangle" /><strong>Riwayat percakapan tidak dapat dimuat.</strong><button type="button" @click.stop="loadHistory">Coba lagi</button></div>
-      <div v-else-if="expanded && history.length" ref="threadRef" class="tanya-history"><div v-for="item in visibleHistory" :key="item.id" class="tanya-turn"><div class="tanya-user-meta"><span v-if="authorLabel(item)">{{ authorLabel(item) }}</span><time :datetime="item.createdAt">{{ timestampLabel(item.createdAt) }}</time></div><div class="tanya-user-bubble">{{ item.message }}</div><div class="tanya-ai-bubble"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><div class="tanya-answer"><strong>{{ item.answer }}</strong><span v-if="item.insight"><b>Insight</b>{{ item.insight }}</span><span v-if="item.why"><b>Why</b>{{ item.why }}</span><span v-if="item.recommendedAction"><b>Next step</b>{{ item.recommendedAction }}</span></div></div></div></div>
-      <div v-else-if="latestHistory" class="tanya-preview">
-        <div class="tanya-last-request"><span>Permintaan terakhir</span><p>{{ latestHistory.message }}</p></div>
-        <div class="tanya-preview-heading"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><strong>Respons AI terbaru</strong></div>
-        <p class="tanya-preview-answer">{{ latestHistory.answer }}</p>
-        <div class="tanya-preview-meta"><span v-if="authorLabel(latestHistory)">{{ authorLabel(latestHistory) }}</span><time :datetime="latestHistory.createdAt">{{ timestampLabel(latestHistory.createdAt) }}</time></div>
-      </div>
-      <div v-else class="tanya-empty">
-        <i class="pi pi-sparkles" />
-        <strong>Tanya AI siap digunakan.</strong>
-        <span>Tanyakan hal spesifik tentang prospek ini.</span>
-      </div>
+      <template v-if="loading">
+        <div v-if="expanded && history.length" ref="threadRef" class="tanya-history tanya-history-loading"><div v-for="item in visibleHistory" :key="item.id" class="tanya-turn"><div class="tanya-user-meta"><span v-if="authorLabel(item)">{{ authorLabel(item) }}</span><time :datetime="item.createdAt">{{ timestampLabel(item.createdAt) }}</time></div><div class="tanya-user-bubble">{{ item.message }}</div><div class="tanya-ai-bubble"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><div class="tanya-answer"><strong>{{ item.answer }}</strong><span v-if="item.insight"><b>Insight</b>{{ item.insight }}</span><span v-if="item.why"><b>Why</b>{{ item.why }}</span><span v-if="item.recommendedAction"><b>Next step</b>{{ item.recommendedAction }}</span></div></div></div></div>
+      </template>
+      <template v-else>
+        <div v-if="error" class="tanya-empty"><i class="pi pi-exclamation-triangle" /><strong>AI tidak tersedia.</strong><span>{{ error }}</span></div>
+        <div v-else-if="historyLoading" class="tanya-empty"><i class="pi pi-spin pi-spinner" /><strong>Memuat percakapan...</strong></div>
+        <div v-else-if="historyError" class="tanya-empty tanya-history-error"><i class="pi pi-exclamation-triangle" /><strong>Riwayat percakapan tidak dapat dimuat.</strong><button type="button" @click.stop="loadHistory">Coba lagi</button></div>
+        <div v-else-if="expanded && history.length" ref="threadRef" class="tanya-history"><div v-for="item in visibleHistory" :key="item.id" class="tanya-turn"><div class="tanya-user-meta"><span v-if="authorLabel(item)">{{ authorLabel(item) }}</span><time :datetime="item.createdAt">{{ timestampLabel(item.createdAt) }}</time></div><div class="tanya-user-bubble">{{ item.message }}</div><div class="tanya-ai-bubble"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><div class="tanya-answer"><strong>{{ item.answer }}</strong><span v-if="item.insight"><b>Insight</b>{{ item.insight }}</span><span v-if="item.why"><b>Why</b>{{ item.why }}</span><span v-if="item.recommendedAction"><b>Next step</b>{{ item.recommendedAction }}</span></div></div></div></div>
+        <div v-else-if="latestHistory" class="tanya-preview">
+          <div class="tanya-last-request"><span>Permintaan terakhir</span><p>{{ latestHistory.message }}</p></div>
+          <div class="tanya-preview-heading"><span class="tanya-ai-avatar"><i class="pi pi-sparkles" /></span><strong>Respons AI terbaru</strong></div>
+          <p class="tanya-preview-answer">{{ latestHistory.answer }}</p>
+          <div class="tanya-preview-meta"><span v-if="authorLabel(latestHistory)">{{ authorLabel(latestHistory) }}</span><time :datetime="latestHistory.createdAt">{{ timestampLabel(latestHistory.createdAt) }}</time></div>
+        </div>
+        <div v-else class="tanya-empty">
+          <i class="pi pi-sparkles" />
+          <strong>Tanya AI siap digunakan.</strong>
+          <span>Tanyakan hal spesifik tentang prospek ini.</span>
+        </div>
+      </template>
+      <div v-if="loading" class="tanya-loading-indicator"><i class="pi pi-spin pi-spinner" /><strong>Thinking...</strong></div>
     </div>
 
     <div class="tanya-chips" aria-label="AI prompt suggestions" @click.stop>
@@ -371,6 +376,35 @@ watch(() => history.value.length, () => { if (props.expanded) scrollThreadToLate
   color: var(--text-muted);
   font-size: 0.74rem;
   line-height: 1.45;
+}
+.tanya-history-loading {
+  margin-bottom: .5rem;
+}
+.tanya-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: auto;
+  align-self: flex-start;
+  padding: .55rem .85rem .55rem .65rem;
+  border-radius: 10px 10px 10px 2px;
+  background: #fff;
+  border: 1px solid #f1d4d7;
+  color: #b42332;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.tanya-loading-indicator i {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #ef4e5d, #d62839);
+  color: #fff;
+  font-size: .65rem;
+  box-shadow: 0 2px 6px rgba(214, 40, 57, .25);
 }
 .tanya-history-error button {
   min-height: 32px;
