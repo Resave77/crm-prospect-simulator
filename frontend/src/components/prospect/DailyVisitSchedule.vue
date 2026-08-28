@@ -21,6 +21,7 @@ const overflow = ref<Prospect[]>([])
 const actionMoveDay = ref('')
 const planningLoading = ref(false)
 const planNotice = ref('')
+const showAllPreview = ref(false)
 const maxVisitsPerDay = ref<number | null>(null)
 const hasValidCapacity = computed(() => maxVisitsPerDay.value == null || (Number.isInteger(maxVisitsPerDay.value) && maxVisitsPerDay.value > 0))
 
@@ -174,7 +175,7 @@ function confirmRemove(item: Prospect) {
           <span v-else>Tap to enable GPS for distance sorting</span>
         </div>
 
-        <div v-for="(item, idx) in sortedActive.slice(0, 5)" :key="item.id" class="schedule-item">
+        <div v-for="(item, idx) in (showAllPreview ? sortedActive : sortedActive.slice(0, 3))" :key="item.id" class="schedule-item">
           <span class="schedule-rank">{{ idx + 1 }}</span>
           <span :class="['schedule-dot', statusDot(item.status)]" />
           <div class="schedule-item-info">
@@ -187,9 +188,10 @@ function confirmRemove(item: Prospect) {
           </span>
         </div>
 
-        <div v-if="sortedActive.length > 5" class="schedule-more">
-          +{{ sortedActive.length - 5 }} more prospects
-        </div>
+        <button v-if="sortedActive.length > 3" type="button" class="schedule-more" @click="showAllPreview = !showAllPreview">
+          {{ showAllPreview ? 'Show less' : `+${sortedActive.length - 3} more prospects` }}
+          <i :class="showAllPreview ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" />
+        </button>
       </div>
     </template>
 
@@ -457,12 +459,18 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
 .schedule-dist i { font-size: .5rem; }
 
 .schedule-more {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   text-align: center;
   padding: .3rem;
   color: #94a3b8;
   font-size: .6rem;
   font-weight: 600;
 }
+
+.schedule-more i { margin-left: .25rem; font-size: .5rem; }
 
 .schedule-preview-btn,
 .route-done {
@@ -783,5 +791,10 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
   .route-header-actions { max-width:760px; }
   .route-header-actions > span { margin-right:.15rem; }
   .route-primary-btn,.route-today-btn,.route-gps-btn { box-shadow:0 1px 2px rgba(15,23,42,.04); }
+}
+@media (max-width:768px) {
+  .schedule-item-info small,
+  .inline-route-item .route-prospect-info small,
+  .route-prospect-info small { display:none; }
 }
 </style>
