@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
@@ -8,18 +8,34 @@ import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
 import { useCustomerListStore } from '../../../stores/customerList'
 import { deleteCustomer } from '../../../api/crm'
+import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
+import { fallbackCategories, fallbackSegments } from '../../../utils/masterDataFallback'
 import MasterDataPanel from '../../../components/admin/MasterDataPanel.vue'
 
 const store = useCustomerListStore()
 const router = useRouter()
+const route = useRoute()
 const error = ref('')
 const activeTab = ref('site')
+
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'site' || tab === 'company' || tab === 'master') activeTab.value = tab
+}, { immediate: true })
 const deleteDialogVisible = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const deleting = ref(false)
+const trashVisible = ref(false)
+const bulkMoving = ref(false)
+const selectedCustomerId = ref('')
+const customerActionVisible = ref(false)
+const hoveredCustomerId = ref('')
+const hoveredCell = ref('')
+const selectedCustomer = computed(() => store.items.find((c) => c.id === selectedCustomerId.value))
 const companyDeleteDialogVisible = ref(false)
 const companyDeleteTarget = ref<{ id: string; name: string; sites: number } | null>(null)
+const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
+const masterSegments = ref<MasterDataSegment[]>(fallbackSegments)
 
 const tabs = [
   { key: 'site', label: 'Customer Site', icon: 'pi pi-map-marker' },
@@ -27,8 +43,12 @@ const tabs = [
   { key: 'master', label: 'Master Data', icon: 'pi pi-database' }
 ]
 
+const segmentOptions = computed(() => [{ label: 'All Segments', value: '' }, ...masterSegments.value.map((s) => ({ label: s.name, value: s.name }))])
+const categoryOptions = computed(() => [{ label: 'All Categories', value: '' }, ...masterCategories.value.map((c) => ({ label: c.name, value: c.name }))])
+
 function selectTab(tabKey: string) {
   activeTab.value = tabKey
+  router.replace({ query: { ...route.query, tab: tabKey } })
 }
 
 const sortOptions = [
@@ -40,14 +60,6 @@ const sortOptions = [
   { label: 'Updated Date', value: 'updated' }
 ]
 
-const segmentOptions = computed(() => {
-  const segs = store.filterOptions?.segments ?? []
-  return [{ label: 'All Segments', value: '' }, ...segs.map((s) => ({ label: s, value: s }))]
-})
-const categoryOptions = computed(() => {
-  const cats = store.filterOptions?.categories ?? []
-  return [{ label: 'All Categories', value: '' }, ...cats.map((c) => ({ label: c, value: c }))]
-})
 const regionOptions = computed(() => {
   const regs = store.filterOptions?.regions ?? []
   return [{ label: 'All Regions', value: '' }, ...regs.map((r) => ({ label: r, value: r }))]
@@ -224,16 +236,6 @@ function resetCompanyFilters() {
   companySelectedSort.value = 'name'
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null
-function onKeywordSearch(value: string) {
-  if (searchTimeout) clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    store.setParam('keyword', value)
-    store.setParam('page', 1)
-    load()
-  }, 350)
-}
-
 function load() {
   error.value = ''
   store.fetchCustomers().catch((e) => { error.value = store.errorMessage(e) })
@@ -279,6 +281,13 @@ function getPageNumbers(): (number | '...')[] {
 
 onMounted(async () => {
   try {
+    try {
+      const [categories, segments] = await Promise.all([listCategories(), listSegments()])
+      if (categories?.length) masterCategories.value = categories
+      if (segments?.length) masterSegments.value = segments
+    } catch (masterError) {
+      console.warn('Master Data API unavailable; using frontend defaults.', masterError)
+    }
     await store.fetchFilterOptions()
     await load()
   } catch (e) { error.value = store.errorMessage(e) }
@@ -302,6 +311,23 @@ async function executeDelete() {
     error.value = store.errorMessage(e)
   } finally {
     deleting.value = false
+  }
+}
+
+async function moveSelectedToTrash() {
+  const ids = [...store.selectedIds]
+  if (!ids.length) return
+  bulkMoving.value = true
+  try {
+    const removed = new Set(ids)
+    store.allCustomers = store.allCustomers.filter((c) => !removed.has(c.id))
+    store.items = store.items.filter((c) => !removed.has(c.id))
+    store.total = store.allCustomers.length
+    store.selectedIds = new Set()
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    bulkMoving.value = false
   }
 }
 
@@ -336,7 +362,6 @@ async function executeDeleteCompany() {
   <section class="admin-page">
     <header class="workspace-header">
       <div class="workspace-heading">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded class="back-button" @click="router.back()" title="Back" />
         <div class="page-title-wrapper">
           <span class="eyebrow">Customer Management</span>
           <h1>Customers & Companies</h1>
@@ -350,6 +375,7 @@ async function executeDeleteCompany() {
         <button type="button" class="summary-item" @click="selectTab('company')"><i class="pi pi-clock si-amber" /><span>ERP Pending</span><strong>{{ erpPendingCount }}</strong></button>
       </div>
       <div class="page-heading-actions">
+        <Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="trashVisible = true" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
         <Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
       </div>
@@ -363,21 +389,10 @@ async function executeDeleteCompany() {
 
     <!-- ======================== CUSTOMER SITE TAB ======================== -->
     <template v-if="activeTab === 'site'">
+      <div v-if="store.selectedIds.size" class="selection-toolbar"><strong>{{ store.selectedIds.size }} selected</strong><Button label="Cancel" text size="small" :disabled="bulkMoving" @click="store.selectedIds = new Set()" /><Button label="Move Selected to Trash" icon="pi pi-trash" severity="danger" size="small" :loading="bulkMoving" @click="moveSelectedToTrash" /></div>
       <div class="panel-stack">
         <!-- FILTERS -->
         <div class="filter-panel">
-          <div class="search-row">
-            <div class="search-field">
-              <i class="pi pi-search" />
-              <input
-                type="text"
-                placeholder="Search by customer name, code, company..."
-                :value="store.params.keyword"
-                @input="onKeywordSearch(($event.target as HTMLInputElement).value)"
-              />
-            </div>
-          </div>
-
           <div class="filter-grid">
             <div class="filter-field">
               <label>Region</label>
@@ -430,57 +445,36 @@ async function executeDeleteCompany() {
                   <th class="th-check">
                     <input type="checkbox" :checked="store.isAllSelected()" @change="store.toggleSelectAll()" />
                   </th>
-                  <th>Code</th>
-                  <th>Customer Site</th>
-                  <th>Parent Company</th>
+                  <th>Site Code + Company Tier</th>
+                  <th>Customer Site + Company</th>
                   <th>Region</th>
+                  <th>Site Location</th>
                   <th>Segment</th>
-                  <th>Category</th>
                   <th>Sales Executive</th>
-                  <th>Converted</th>
-                  <th class="th-action">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="c in store.items" :key="c.id" class="clickable-row" @dblclick="router.push(`/admin/customers/${c.id}`)">
+                <tr v-for="c in store.items" :key="c.id" :class="['clickable-row', { 'row-selected': selectedCustomerId === c.id }]" @click="selectedCustomerId = c.id; customerActionVisible = true">
                   <td class="td-check">
                     <input type="checkbox" :checked="store.selectedIds.has(c.id)" @change="store.toggleSelect(c.id)" />
                   </td>
                   <td>
-                    <code class="code-tag code-blue">{{ c.customerCode }}</code>
+                    <div class="cell-stack"><code class="code-tag code-blue">{{ c.customerCode }}</code><Tag value="Regular Account" severity="success" /></div>
                   </td>
-                  <td>
-                    <button class="link-btn" @click="router.push(`/admin/customers/${c.id}`)">
-                      {{ c.name }}
-                    </button>
-                  </td>
-                  <td>
+                  <td class="customer-name-cell" @mouseenter="hoveredCustomerId = c.id" @mouseleave="hoveredCustomerId = ''">
                     <div class="cell-stack">
-                      <span class="cell-primary">{{ c.parentCompanyName }}</span>
+                      <button class="link-btn" @click.stop="selectedCustomerId = c.id">{{ c.name }}</button>
                       <span class="cell-sub">{{ c.parentCode }}</span>
                     </div>
+                    <div v-if="hoveredCustomerId === c.id" class="customer-preview"><strong>{{ c.name }}</strong><span>Company: {{ c.parentCompanyName }}</span><span>Customer Site: {{ c.name }}</span><span>PO Number: {{ c.customerCode }}</span></div>
                   </td>
-                  <td>
-                    <span class="cell-text">{{ c.region || '—' }}</span>
+                  <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-region`" @mouseleave="hoveredCell = ''"><span class="cell-text">{{ c.region || '—' }}</span><div v-if="hoveredCell === `${c.id}-region`" class="cell-preview">Region: {{ c.region || 'Unavailable' }}</div></td>
+                  <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-location`" @mouseleave="hoveredCell = ''"><div class="cell-stack"><span class="cell-primary">{{ c.address?.district || c.address?.subDistrict || '—' }}</span><span class="cell-sub">{{ c.address?.province || '' }}</span></div><div v-if="hoveredCell === `${c.id}-location`" class="cell-preview">{{ c.address?.district || c.address?.subDistrict || 'Location unavailable' }}<br>{{ c.address?.province || '' }}</div></td>
+                  <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-segment`" @mouseleave="hoveredCell = ''">
+                    <Tag :value="c.segment" :severity="segmentSeverity(c.segment)" /><div v-if="hoveredCell === `${c.id}-segment`" class="cell-preview">Segment: {{ c.segment || 'Unavailable' }}</div>
                   </td>
-                  <td>
-                    <Tag :value="c.segment" :severity="segmentSeverity(c.segment)" />
-                  </td>
-                  <td>
-                    <span class="cell-text">{{ c.category }}</span>
-                  </td>
-                  <td>
-                    <span class="cell-text">{{ c.salesExecutiveName || 'Unassigned' }}</span>
-                  </td>
-                  <td>
-                    <span class="cell-date">{{ formatDate(c.convertedAt) }}</span>
-                  </td>
-                  <td class="td-action">
-                    <div class="row-actions">
-                      <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="router.push(`/admin/customers/${c.id}`)" />
-                      <Button icon="pi pi-pencil" text rounded size="small" class="act-edit" title="Edit" @click="router.push(`/admin/customers/${c.id}/edit`)" />
-                      <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDelete(c.id, c.name)" />
-                    </div>
+                  <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-sales`" @mouseleave="hoveredCell = ''">
+                    <span class="cell-text">{{ c.salesExecutiveName || 'Unassigned' }}</span><div v-if="hoveredCell === `${c.id}-sales`" class="cell-preview">Sales Executive: {{ c.salesExecutiveName || 'Unassigned' }}</div>
                   </td>
                 </tr>
               </tbody>
@@ -490,7 +484,7 @@ async function executeDeleteCompany() {
           <!-- PAGINATION -->
           <div v-if="store.pages > 1" class="pagination-bar">
             <span class="pagination-info">
-              Showing <strong>{{ (store.page - 1) * store.limit + 1 }}</strong>–<strong>{{ Math.min(store.page * store.limit, store.total) }}</strong> of <strong>{{ store.total }}</strong>
+              Page {{ store.page }} of {{ store.pages }} / {{ store.total }} records
             </span>
             <div class="pagination-controls">
               <Button icon="pi pi-angle-left" text rounded size="small" :disabled="store.page <= 1" @click="goToPage(store.page - 1)" />
@@ -643,9 +637,29 @@ async function executeDeleteCompany() {
     <!-- ======================== MASTER DATA TAB ======================== -->
     <MasterDataPanel v-if="activeTab === 'master'" />
   </section>
+  <Dialog v-model:visible="trashVisible" modal header="Trash" :style="{ width: '520px' }" :breakpoints="{ '640px': '92vw' }">
+    <div class="trash-modal-body">
+      <div class="trash-empty-icon"><i class="pi pi-trash" /></div>
+      <strong>Trash is empty</strong>
+      <span>Deleted customer sites and companies will appear here.</span>
+    </div>
+  </Dialog>
+  <Dialog v-model:visible="customerActionVisible" modal :header="selectedCustomer?.name || 'Customer Actions'" :style="{ width: '460px' }" :breakpoints="{ '640px': '92vw' }">
+    <div v-if="selectedCustomer" class="customer-action-modal"><p>Choose what you want to do with this customer site / branch record.</p><div><button class="customer-action-card" @click="router.push(`/admin/customers/${selectedCustomer.id}`)"><i class="pi pi-eye" /><span><strong>View Detail Customer Site</strong><small>Open the full customer site profile and review details.</small></span></button><button class="customer-action-card" @click="router.push(`/admin/customers/${selectedCustomer.id}/edit`)"><i class="pi pi-pencil" /><span><strong>Edit Customer Site</strong><small>Open the customer site form and update the current information.</small></span></button><button class="customer-action-card danger" @click="customerActionVisible = false; confirmDelete(selectedCustomer.id, selectedCustomer.name)"><i class="pi pi-exclamation-triangle" /><span><strong>Move to Trash</strong><small>Move this customer site to Trash. It can be restored later.</small></span></button></div></div>
+  </Dialog>
 </template>
 
 <style scoped>
 .admin-page{box-sizing:border-box;display:flex;min-width:0;min-height:calc(100dvh - 4rem);flex-direction:column;gap:.75rem;padding:.85rem 1rem 1rem;overflow-x:hidden;background:#f8fafc}.workspace-header{display:grid;grid-template-columns:minmax(260px,1fr) auto auto;align-items:center;gap:.9rem;padding:.72rem .85rem;border:1px solid #e5eaf0;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.workspace-heading{display:flex;min-width:0;align-items:center;gap:.65rem}.back-button{flex:0 0 auto}.page-title-wrapper{min-width:0;display:grid;gap:.04rem}.page-title-wrapper .eyebrow{color:#64748b;font-size:.56rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.page-title-wrapper h1{margin:0;color:#0f172a;font-size:1.08rem;line-height:1.2;letter-spacing:-.02em}.page-title-wrapper .muted{margin:0;overflow:hidden;color:#94a3b8;font-size:.67rem;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.workspace-summary{display:grid;grid-template-columns:repeat(4,minmax(74px,auto));overflow:hidden;border:1px solid #e5eaf0;border-radius:9px;background:#f8fafc}.summary-item{display:grid;grid-template-columns:18px auto;grid-template-rows:auto auto;column-gap:.3rem;min-width:78px;padding:.4rem .55rem;border:0;border-right:1px solid #e5eaf0;background:transparent;text-align:left;cursor:pointer}.summary-item:last-child{border-right:0}.summary-item:hover{background:#fff0f1}.summary-item i{grid-row:1/3;align-self:center;font-size:.74rem}.summary-item span{color:#94a3b8;font-size:.5rem;font-weight:800;text-transform:uppercase}.summary-item strong{color:#0f172a;font-size:.78rem}.si-blue{color:#e63946}.si-violet{color:#ef4e5d}.si-emerald{color:#059669}.si-amber{color:#d97706}.page-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:.45rem}.page-message{margin:0}.tabs-bar{display:flex;min-width:0;gap:.35rem;padding:.32rem;overflow-x:auto;border:1px solid #e5eaf0;border-radius:10px;background:#fff;scrollbar-width:none}.tabs-bar::-webkit-scrollbar{display:none}.tab-item{display:inline-flex;min-height:34px;align-items:center;gap:.42rem;padding:.42rem .72rem;border:1px solid transparent;border-radius:8px;background:transparent;color:#64748b;font-size:.72rem;font-weight:700;white-space:nowrap;cursor:pointer}.tab-item:hover{background:#f8fafc;color:#0f172a}.tab-item.active{border-color:#f4b3ba;background:#fff0f1;color:#d62839}.tab-item strong{min-width:20px;padding:.08rem .35rem;border-radius:999px;background:rgba(148,163,184,.14);font-size:.58rem;text-align:center}.tab-item.active strong{background:#ffd9dc}.panel-stack{display:flex;min-width:0;flex-direction:column;gap:.65rem}.filter-panel{display:grid;grid-template-columns:minmax(250px,1.35fr) minmax(0,3.65fr);align-items:end;gap:.7rem;padding:.65rem;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.search-row{min-width:0;margin:0}.search-field{display:flex;min-height:38px;align-items:center;gap:.55rem;padding:.45rem .7rem;border:1px solid #dbe3ee;border-radius:8px;background:#f8fafc}.search-field:focus-within{border-color:#e63946;background:#fff;box-shadow:0 0 0 3px rgba(230,57,70,.08)}.search-field i{color:#94a3b8;font-size:.76rem}.search-field input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#0f172a;font-size:.76rem}.search-field input::placeholder{color:#94a3b8}.filter-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr)) auto;align-items:end;gap:.5rem;min-width:0}.filter-field{display:grid;min-width:0;gap:.22rem}.filter-field label{color:#64748b;font-size:.55rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}.filter-field :deep(.p-select){min-width:0;height:38px;border-radius:8px;font-size:.72rem}.filter-field :deep(.p-select-label){padding-block:.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.filter-action{display:flex;align-items:flex-end;justify-content:flex-end;padding-bottom:.02rem}.table-panel{min-width:0;overflow:hidden;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.table-scroll{width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin}.data-table{width:100%;min-width:980px;table-layout:fixed;border-collapse:collapse;font-size:.74rem}.data-table thead th{position:sticky;top:0;z-index:2;padding:.58rem .65rem;border-bottom:1px solid #e5eaf0;background:#f8fafc;color:#64748b;font-size:.58rem;font-weight:800;letter-spacing:.05em;text-align:left;text-transform:uppercase;white-space:nowrap}.data-table tbody td{height:48px;padding:.48rem .65rem;overflow:hidden;border-bottom:1px solid #edf1f6;color:#1e293b;text-overflow:ellipsis;vertical-align:middle}.data-table tbody tr:last-child td{border-bottom:0}.data-table tbody tr:hover{background:#fffbfb}.clickable-row{cursor:default}.th-check,.td-check{width:42px;text-align:center}.th-action{width:112px;text-align:center}.code-tag{display:inline-block;max-width:100%;overflow:hidden;padding:.14rem .42rem;border-radius:5px;background:#f1f5f9;color:#475569;font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.66rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.code-blue{background:#fff0f1;color:#e63946}.link-btn{max-width:100%;overflow:hidden;border:0;background:transparent;color:#d62839;font:inherit;font-weight:750;text-align:left;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.link-btn:hover{text-decoration:underline;text-underline-offset:2px}.cell-stack{display:grid;min-width:0;gap:.04rem}.cell-primary,.cell-text,.cell-date,.cell-badge{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cell-primary{color:#0f172a;font-size:.73rem;font-weight:700}.cell-sub{color:#94a3b8;font-family:Consolas,monospace;font-size:.6rem}.cell-text{color:#475569;font-size:.7rem}.cell-date{color:#64748b;font-size:.68rem}.cell-badge{color:#334155;font-size:.68rem;font-weight:700}.site-status-cell{display:flex;min-width:0;align-items:center;gap:.3rem}.td-action{text-align:center}.row-actions{display:inline-flex;align-items:center;justify-content:center;gap:.12rem;padding:.12rem;border:1px solid #e5eaf0;border-radius:999px;background:#fff}.row-actions :deep(.p-button){width:1.85rem;height:1.85rem}.act-view{color:#e63946!important}.act-view:hover{background:#fff0f1!important}.act-edit{color:#059669!important}.act-edit:hover{background:#ecfdf5!important}.act-delete{color:#dc2626!important}.act-delete:hover{background:#fef2f2!important}.state-box{min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:2rem;color:#64748b;text-align:center}.state-icon{color:#e63946;font-size:1.5rem}.state-icon-wrap{display:grid;width:50px;height:50px;place-content:center;border-radius:13px;background:#f1f5f9;color:#94a3b8}.state-box strong{color:#0f172a;font-size:.86rem}.pagination-bar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.58rem .75rem;border-top:1px solid #e5eaf0;background:#f8fafc}.pagination-info{color:#64748b;font-size:.67rem}.pagination-info strong{color:#0f172a}.pagination-controls{display:flex;align-items:center;gap:.12rem}.pagination-num{min-width:28px;height:28px;color:#475569;font-size:.68rem;font-weight:700}.pagination-num.is-active{background:#e63946!important;color:#fff!important}.pagination-dots{padding:0 .2rem;color:#94a3b8}.placeholder-panel{min-height:320px;display:grid;place-content:center;border:1px solid #e5eaf0;border-radius:10px;background:#fff}.placeholder-inner{display:flex;max-width:360px;flex-direction:column;align-items:center;gap:.45rem;color:#64748b;text-align:center}.placeholder-icon{display:grid;width:58px;height:58px;place-content:center;margin-bottom:.25rem;border-radius:15px;background:#fff0f1;color:#e63946}.placeholder-inner strong{color:#0f172a;font-size:.9rem}.placeholder-inner span{font-size:.75rem;line-height:1.5}@media(max-width:1280px){.workspace-header{grid-template-columns:minmax(240px,1fr) auto}.workspace-summary{grid-column:1/-1;grid-row:2}.filter-panel{grid-template-columns:1fr}.filter-grid{grid-template-columns:repeat(3,minmax(130px,1fr)) auto}}@media(max-width:900px){.admin-page{min-height:auto;padding:.75rem;overflow:visible}.workspace-header{grid-template-columns:1fr auto}.workspace-summary{grid-template-columns:repeat(4,1fr);width:100%}.page-title-wrapper .muted{white-space:normal}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-action{grid-column:1/-1}.data-table{min-width:920px}}@media(max-width:640px){.admin-page{padding:.6rem;gap:.6rem}.workspace-header{grid-template-columns:1fr;align-items:stretch}.workspace-heading{align-items:flex-start}.page-heading-actions{display:grid;grid-template-columns:1fr 1fr}.page-heading-actions :deep(.p-button){width:100%}.workspace-summary{grid-template-columns:repeat(2,1fr)}.summary-item:nth-child(2){border-right:0}.summary-item:nth-child(-n+2){border-bottom:1px solid #e5eaf0}.filter-panel{padding:.55rem}.filter-grid{grid-template-columns:1fr}.filter-action{grid-column:auto}.pagination-bar{flex-direction:column;align-items:stretch}.pagination-controls{justify-content:center}.data-table{min-width:860px}}
+.selection-toolbar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border:1px solid #fecaca;border-radius:9px;background:#fff5f5;color:#991b1b}.selection-toolbar strong{margin-right:auto;font-size:.72rem}.selection-toolbar :deep(.p-button){font-size:.68rem}
+.data-table tbody tr.row-selected{background:#fff8f8;box-shadow:inset 3px 0 #e63946}.data-table tbody tr{cursor:pointer}
+.customer-name-cell{position:relative;overflow:visible!important}.customer-preview{position:absolute;z-index:50;left:.25rem;top:calc(100% - .1rem);display:grid;min-width:205px;gap:.16rem;padding:.55rem .65rem;border:1px solid #dce5f0;border-radius:8px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.57rem;line-height:1.25}.customer-preview strong{color:#075de3;font-size:.62rem}.customer-preview span{white-space:nowrap}
+.preview-cell{position:relative;overflow:visible!important}.cell-preview{position:absolute;z-index:60;left:.3rem;top:calc(100% - .05rem);min-width:145px;padding:.5rem .6rem;border:1px solid #dce5f0;border-radius:7px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.6rem;line-height:1.35;white-space:nowrap}
+@media(min-width:901px){.table-panel:has(.customer-name-cell),.table-panel:has(.customer-name-cell) .table-scroll{overflow:visible}}
+.trash-modal-body{display:flex;flex-direction:column;align-items:center;gap:.45rem;padding:1.4rem 1rem 1.7rem;text-align:center;color:#64748b}.trash-empty-icon{display:grid;place-items:center;width:58px;height:58px;margin-bottom:.25rem;border-radius:16px;background:#fff1f2;color:#dc2626;font-size:1.35rem}.trash-modal-body strong{color:#172033;font-size:.95rem}.trash-modal-body span{font-size:.72rem}
+.table-panel>.state-box{min-height:120px;padding:1.25rem}.table-panel>.state-box .state-icon{font-size:1.1rem}.table-panel>.state-box span{font-size:.7rem}
+.customer-action-modal{display:grid;gap:.35rem}.customer-action-modal strong{color:#172033;font-size:.95rem}.customer-action-modal>span{color:#94a3b8;font-family:monospace;font-size:.68rem}.customer-action-modal>div{display:grid;gap:.5rem;margin-top:.75rem}.customer-action-modal :deep(.p-button){justify-content:center;width:100%}
+.customer-action-modal>p{margin:0 0 .7rem;color:#64748b;font-size:.72rem;line-height:1.5}.customer-action-card{display:flex;align-items:center;gap:.75rem;width:100%;padding:.85rem .8rem;border:1px solid #dfe6ef;border-radius:13px;background:#fff;color:#172033;text-align:left;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s}.customer-action-card:hover{border-color:#b8c9df;background:#f8fbff;box-shadow:0 3px 10px rgba(15,23,42,.06)}.customer-action-card>i{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:.85rem}.customer-action-card>span{display:grid;gap:.2rem;min-width:0}.customer-action-card strong{font-size:.74rem}.customer-action-card small{color:#64748b;font-size:.64rem;line-height:1.35}.customer-action-card.danger{border-color:#fecaca;background:#fff7f7}.customer-action-card.danger:hover{background:#fff1f2;border-color:#fca5a5}.customer-action-card.danger>i{background:#fff;color:#dc2626}.customer-action-card.danger strong,.customer-action-card.danger small{color:#b91c1c}
+@media(min-width:901px){.panel-stack .filter-panel{display:flex;align-items:flex-end;gap:.5rem;padding:.5rem .6rem}.panel-stack .filter-panel .search-row{flex:0 1 280px}.panel-stack .filter-panel .filter-grid{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr)) auto;flex:1;gap:.4rem}.panel-stack .filter-field :deep(.p-select){height:36px}.panel-stack .filter-field label{font-size:.52rem}}
 </style>
 

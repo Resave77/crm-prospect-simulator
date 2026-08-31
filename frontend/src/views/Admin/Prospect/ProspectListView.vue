@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
 import { getPipeline, getSalesExecutives, deleteProspect, approveProspectDeletion, rejectProspectDeletion } from '../../../api/crm'
+import { listCategories, type MasterDataCategory } from '../../../api/masterData'
+import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
 
 const crm = useCrmStore()
 const router = useRouter()
+const route = useRoute()
 const prospects = ref<Prospect[]>([])
 const sales = ref<SalesExecutiveOption[]>([])
 const error = ref('')
@@ -22,6 +25,13 @@ const searchQuery = ref('')
 const salesFilter = ref('')
 const categoryFilter = ref('')
 const statusFilter = ref('')
+const hoveredProspectId = ref('')
+const hoveredProspectCell = ref('')
+const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
+
+watch(() => route.query.search, (value) => {
+  searchQuery.value = typeof value === 'string' ? value : ''
+}, { immediate: true })
 
 const deleteDialogVisible = ref(false)
 const deleteTargetId = ref('')
@@ -35,15 +45,13 @@ const deletionBusy = ref(false)
 const actionDialogVisible = ref(false)
 const actionTarget = ref<Prospect | null>(null)
 
-const categoryOptions = computed(() => {
-  const categories = [...new Set(prospects.value.map((item) => item.placeCategory).filter(Boolean))].sort()
-  return [{ label: 'All Categories', value: '' }, ...categories.map((value) => ({ label: value, value }))]
-})
+const categoryOptions = computed(() => [{ label: 'All Categories', value: '' }, ...masterCategories.value.map((category) => ({ label: category.name, value: category.name }))])
 const statusOptions = computed(() => [{ label: 'All Pipeline Statuses', value: '' }, ...BOARD_STATUSES.map((v) => ({ label: v.replaceAll('_', ' '), value: v }))])
 const salesOptions = computed(() => [{ label: 'All Sales Executives', value: '' }, ...sales.value.map((s) => ({ label: s.fullName, value: s.id }))])
 
 const filtered = computed(() => {
-  return filterProspects(prospects.value, {
+  const visibleProspects = prospects.value.filter((item) => item.status !== 'CONVERTED')
+  return filterProspects(visibleProspects, {
     salesExecutiveId: salesFilter.value,
     industryGroup: '',
     category: categoryFilter.value,
@@ -182,6 +190,12 @@ onMounted(async () => {
     const [salesResult] = await Promise.all([getSalesExecutives(), crm.loadPipeline()])
     sales.value = salesResult
     prospects.value = crm.pipeline
+    try {
+      const categoryResult = await listCategories()
+      if (categoryResult?.length) masterCategories.value = categoryResult
+    } catch {
+      masterCategories.value = fallbackCategories
+    }
   } catch (e) {
     error.value = crm.errorMessage(e)
   } finally {
@@ -194,15 +208,6 @@ onMounted(async () => {
   <section class="prospect-page">
     <header class="workspace-header">
       <div class="workspace-heading">
-        <Button
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          rounded
-          class="back-button"
-          @click="router.back()"
-          title="Back"
-        />
         <div class="page-title-wrapper">
           <span class="eyebrow">Prospect Management</span>
           <h1>Prospect List</h1>
@@ -214,7 +219,7 @@ onMounted(async () => {
         <button type="button" class="summary-item">
           <i class="pi pi-inbox si-blue" />
           <span>Total</span>
-          <strong>{{ prospects.length }}</strong>
+          <strong>{{ prospects.filter((item) => item.status !== 'CONVERTED').length }}</strong>
         </button>
         <button type="button" class="summary-item">
           <i class="pi pi-chart-line si-violet" />
@@ -233,36 +238,12 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="page-heading-actions">
-        <Button
-          label="Prospect Finder"
-          icon="pi pi-search"
-          severity="success"
-          outlined
-          size="small"
-          @click="router.push('/admin/prospect-finder')"
-        />
-        <Button
-          label="View Pipeline"
-          icon="pi pi-columns"
-          severity="secondary"
-          outlined
-          size="small"
-          @click="router.push('/admin/prospects/pipeline')"
-        />
-      </div>
     </header>
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
     <div class="panel-stack">
       <div class="filter-panel">
-        <div class="search-row">
-          <div class="search-field">
-            <i class="pi pi-search" />
-            <input type="text" v-model="searchQuery" placeholder="Search by place name, address..." />
-          </div>
-        </div>
         <div class="filter-grid">
           <div class="filter-field">
             <label>Sales Executive</label>
@@ -308,7 +289,6 @@ onMounted(async () => {
                 <th>Sales Executive</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th class="th-action">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -321,15 +301,16 @@ onMounted(async () => {
                   @click="openActions(p)"
                   @keydown.enter="openActions(p)"
                 >
-                <td>
+                <td class="prospect-name-cell" @mouseenter="hoveredProspectId = p.id" @mouseleave="hoveredProspectId = ''">
                   <div class="cell-stack">
-                    <button class="link-btn" type="button" @click.stop="openActions(p)">{{ p.placeName }}</button>
+                    <strong class="prospect-name">{{ p.placeName }}</strong>
                     <span class="cell-sub">{{ p.formattedAddress }}</span>
                   </div>
+                  <div v-if="hoveredProspectId === p.id" class="prospect-preview"><strong>{{ p.placeName }}</strong><span>Category: {{ p.placeCategory }}</span><span>Address: {{ p.formattedAddress || 'Address unavailable' }}</span><span>Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</span></div>
                 </td>
-                <td><span class="cell-text">{{ p.placeCategory }}</span></td>
-                <td><span class="cell-text">{{ p.assignedSalesExecutive }}</span></td>
-                <td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-category`" @mouseleave="hoveredProspectCell = ''"><span class="cell-text">{{ p.placeCategory }}</span><div v-if="hoveredProspectCell === `${p.id}-category`" class="cell-preview">Category: {{ p.placeCategory || 'Unavailable' }}</div></td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-sales`" @mouseleave="hoveredProspectCell = ''"><span class="cell-text">{{ p.assignedSalesExecutive || 'Unassigned' }}</span><div v-if="hoveredProspectCell === `${p.id}-sales`" class="cell-preview">Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</div></td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-status`" @mouseleave="hoveredProspectCell = ''">
                   <div class="status-cell">
                     <span v-if="p.status === 'WON'" class="won-badge">
                       <i class="pi pi-trophy" />
@@ -343,17 +324,7 @@ onMounted(async () => {
                     <span v-if="p.deletionRequested" class="deletion-badge">Deletion Requested</span>
                   </div>
                 </td>
-                <td><span class="cell-date">{{ formatDate(p.createdAt) }}</span></td>
-                <td class="td-action">
-                  <Button
-                    label="Manage"
-                    severity="secondary"
-                    outlined
-                    size="small"
-                    class="manage-button"
-                    @click.stop="openActions(p)"
-                  />
-                </td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-created`" @mouseleave="hoveredProspectCell = ''"><span class="cell-date">{{ formatDate(p.createdAt) }}</span><div v-if="hoveredProspectCell === `${p.id}-created`" class="cell-preview">Created: {{ formatDate(p.createdAt) }}</div></td>
               </tr>
             </tbody>
           </table>
@@ -1226,4 +1197,8 @@ onMounted(async () => {
   color: #b91c1c;
 }
 
+@media(min-width:901px){.prospect-page{width:100%;max-width:none;min-height:100%;box-sizing:border-box}.prospect-page .workspace-header,.prospect-page .filter-panel,.prospect-page .table-panel{width:100%;box-sizing:border-box}.prospect-page .filter-panel{display:flex;align-items:flex-end;justify-content:flex-start;gap:.6rem;padding:.55rem .7rem}.prospect-page .filter-grid{display:grid;grid-template-columns:repeat(3,minmax(145px,185px)) auto;flex:0 1 auto;gap:.5rem}.prospect-page .filter-field :deep(.p-select){height:36px;background:#fff}.prospect-page .data-table{min-width:0;width:100%;font-size:.74rem}.prospect-page .data-table thead th{height:44px;padding:.55rem .7rem;background:#f4f6f9;color:#3f5068}.prospect-page .data-table tbody td{height:58px;padding:.55rem .7rem}.prospect-page .pagination-bar{min-height:48px;padding:.55rem .75rem}.prospect-page .summary-strip{border-radius:10px}.prospect-page .page-heading-actions :deep(.p-button){min-height:34px;border-radius:8px}}
+.prospect-name{display:block;max-width:100%;overflow:hidden;color:#172033;font-size:.76rem;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.prospect-row{cursor:pointer;transition:background .16s,box-shadow .16s}.prospect-row:hover{background:#fffafa}.prospect-row:focus-visible{outline:2px solid #e63946;outline-offset:-2px}.action-dialog-body{padding:.15rem}.action-summary{padding:.75rem;border:1px solid #e1e8f0;border-radius:12px;background:#f8fafc}.action-summary-main{display:grid;gap:.25rem}.action-summary-main strong{font-size:.9rem;color:#172033}.action-summary-main span{font-size:.68rem;color:#64748b;line-height:1.4}
+.prospect-name-cell{position:relative;overflow:visible!important}.prospect-preview{position:absolute;z-index:50;left:.25rem;top:calc(100% - .1rem);display:grid;min-width:220px;gap:.16rem;padding:.55rem .65rem;border:1px solid #dce5f0;border-radius:8px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.57rem;line-height:1.25}.prospect-preview strong{color:#075de3;font-size:.62rem}.prospect-preview span{white-space:nowrap}@media(min-width:901px){.table-panel:has(.prospect-name-cell),.table-panel:has(.prospect-name-cell) .table-scroll{overflow:visible}}
+.preview-cell{position:relative;overflow:visible!important}.cell-preview{position:absolute;z-index:60;left:.25rem;top:calc(100% - .05rem);min-width:145px;padding:.5rem .6rem;border:1px solid #dce5f0;border-radius:7px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.6rem;line-height:1.35;white-space:nowrap}.prospect-page .table-panel{overflow:visible}.prospect-page .table-scroll{overflow:visible}
 </style>

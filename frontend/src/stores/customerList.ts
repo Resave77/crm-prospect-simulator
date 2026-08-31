@@ -7,7 +7,7 @@ import type { CustomerListParams, CustomerSite, ListFilterOptions } from '../typ
 
 const defaultParams: CustomerListParams = {
   page: 1,
-  limit: 20,
+  limit: 10,
   keyword: '',
   segment: '',
   category: '',
@@ -21,7 +21,7 @@ export const useCustomerListStore = defineStore('customerList', () => {
   const allCustomers = ref<CustomerSite[]>([])
   const total = ref(0)
   const page = ref(1)
-  const limit = ref(20)
+  const limit = ref(10)
   const pages = ref(0)
   const loading = ref(false)
   const filterOptions = ref<ListFilterOptions | null>(null)
@@ -157,6 +157,7 @@ export const useCustomerListStore = defineStore('customerList', () => {
       selectedIds.value = new Set(items.value.map((i) => i.id))
     }
   }
+  function clearSelection() { selectedIds.value = new Set() }
 
   function isAllSelected() {
     return items.value.length > 0 && selectedIds.value.size === items.value.length
@@ -164,14 +165,17 @@ export const useCustomerListStore = defineStore('customerList', () => {
 
   function errorMessage(error: unknown) {
     if (axios.isAxiosError<ApiErrorEnvelope>(error)) {
-      return error.response?.data?.error?.message ?? 'Customer service is unavailable.'
+      return error.response?.data?.error?.message ?? error.message ?? 'Customer service is unavailable.'
     }
-    return error instanceof Error ? error.message : 'An unexpected error occurred.'
+    if (error instanceof Error) return error.message
+    if (typeof error === 'string') return error
+    if (error && typeof error === 'object' && 'message' in error) return String((error as { message?: unknown }).message)
+    return 'Customer service is unavailable. Please try again.'
   }
 
   return {
     items, allCustomers, total, page, limit, pages, loading, filterOptions, params, selectedIds,
     fetchCustomers, fetchFilterOptions, setParam, setPage, resetFilters,
-    toggleSelect, toggleSelectAll, isAllSelected, errorMessage
+    toggleSelect, toggleSelectAll, clearSelection, isAllSelected, errorMessage
   }
 })

@@ -137,15 +137,6 @@ onMounted(async () => {
   <section class="pipeline-page">
     <header class="workspace-header">
       <div class="workspace-heading">
-        <Button
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          rounded
-          class="back-button"
-          @click="router.back()"
-          title="Back"
-        />
 
         <div class="title-block">
           <span class="eyebrow">Prospect Management</span>

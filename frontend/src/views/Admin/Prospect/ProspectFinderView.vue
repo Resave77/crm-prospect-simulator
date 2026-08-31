@@ -16,6 +16,7 @@ import { useToast } from 'primevue/usetoast'
 import * as crmApi from '../../../api/crm'
 import { getPlaceDetails, getPlacePhotoBlob } from '../../../api/crm'
 import { listCategories, type MasterDataCategory } from '../../../api/masterData'
+import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { categoryIcon } from '../../../utils/categoryIcons'
 import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
 
@@ -137,17 +138,15 @@ const activeMasterCategories = computed(() =>
 const categoryGroups = computed(() => {
   const b2b: MasterDataCategory[] = []
   const b2c: MasterDataCategory[] = []
-  const others: MasterDataCategory[] = []
   for (const category of activeMasterCategories.value) {
     const segmentName = (category.segmentName ?? '').trim().toUpperCase()
     if (segmentName === 'B2B') b2b.push(category)
     else if (segmentName === 'B2C') b2c.push(category)
-    else others.push(category)
   }
   return [
+    { key: 'all', title: 'All', subtitle: 'All available categories', items: activeMasterCategories.value },
     { key: 'b2b', title: 'B2B', subtitle: 'Business to Business', items: b2b },
     { key: 'b2c', title: 'B2C', subtitle: 'Business to Consumer', items: b2c },
-    { key: 'other', title: 'Lainnya', subtitle: '', items: others },
   ].filter(group => group.items.length > 0)
 })
 
@@ -201,12 +200,15 @@ function searchCategoryKeys(): string[] {
 
 async function loadMasterData() {
   try {
-    masterCategories.value = await listCategories()
+    const loaded = (await listCategories()) ?? []
+    masterCategories.value = loaded.length ? loaded : fallbackCategories
     categories.value = activeMasterCategories.value.map(o => o.id)
   } catch (caught) {
-    toast.add({ severity: 'warn', summary: 'Master data unavailable', detail: crmError(caught), life: 6000 })
+    masterCategories.value = fallbackCategories
   }
 }
+
+function clearAllCategories() { categories.value = [] }
 
 const selectedPlaceCategory = computed(() =>
   placeDetails.value?.placeCategory?.trim() || selected.value?.category?.trim() || '',
@@ -897,15 +899,6 @@ onBeforeUnmount(() => {
   <section class="finder-page">
     <header class="finder-page-header">
       <div class="finder-heading-left">
-        <Button
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          rounded
-          class="finder-back"
-          @click="$router.back()"
-          title="Back"
-        />
         <div class="finder-page-title">
           <span class="finder-eyebrow">Prospect Management</span>
           <h1>Prospect Finder</h1>
@@ -983,8 +976,7 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
                 <div class="category-tools">
-                  <button type="button" class="category-tool" @click="selectAllGroup(activeCategoryGroup)"><i class="pi pi-check" /> Select All</button>
-                  <button type="button" class="category-tool clear" @click="clearAllGroup(activeCategoryGroup)"><i class="pi pi-times" /> Clear All</button>
+                  <button type="button" class="category-tool clear" @click="clearAllCategories"><i class="pi pi-times" /> Clear All</button>
                 </div>
               </div>
               <div v-if="activeCategoryGroup.subtitle" class="category-group-subtitle">{{ activeCategoryGroup.subtitle }}</div>

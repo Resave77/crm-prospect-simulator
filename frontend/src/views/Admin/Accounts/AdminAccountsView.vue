@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
+import InputNumber from 'primevue/inputnumber'
+import Checkbox from 'primevue/checkbox'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
@@ -18,16 +20,21 @@ import type { AdminUserListItem } from '../../../types/admin'
 const store = useAdminStore()
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const error = ref('')
 const updating = ref(false)
 const first = ref(0)
+const goToPage = ref(1)
+const selectedIds = ref<string[]>([])
+const bulkDeleteVisible = ref(false)
 const deactivateDialogVisible = ref(false)
 const deactivateTarget = ref<{ id: string; name: string } | null>(null)
 const deleteDialogVisible = ref(false)
 const deleteTarget = ref<AdminUserListItem | null>(null)
 const actionDialogVisible = ref(false)
 const actionTarget = ref<AdminUserListItem | null>(null)
+watch(() => route.query.search, (value) => { store.setParam('search', typeof value === 'string' ? value : ''); store.setParam('page', 1); first.value = 0; load() }, { immediate: true })
 
 const statusOptions = [
   { label: 'All Status', value: '' },
@@ -39,17 +46,6 @@ const selectedStatus = computed({
   get: () => store.params.status,
   set: (val) => { store.setParam('status', val); store.setParam('page', 1); first.value = 0; load() },
 })
-
-let searchTimeout: ReturnType<typeof setTimeout> | null = null
-function onKeywordSearch(value: string) {
-  if (searchTimeout) clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    store.setParam('search', value.trim())
-    store.setParam('page', 1)
-    first.value = 0
-    load()
-  }, 350)
-}
 
 function load() {
   error.value = ''
@@ -70,6 +66,69 @@ function onPage(event: { first: number; rows: number; page: number }) {
   } else {
     store.setPage(event.page + 1)
   }
+  load()
+}
+
+const allPageSelected = computed(() => store.users.length > 0 && store.users.every((user) => selectedIds.value.includes(user.id)))
+
+function toggleSelected(id: string, checked: boolean) {
+  selectedIds.value = checked
+    ? Array.from(new Set([...selectedIds.value, id]))
+    : selectedIds.value.filter((selectedId) => selectedId !== id)
+}
+
+function toggleSelectAll(checked: boolean) {
+  selectedIds.value = checked
+    ? Array.from(new Set([...selectedIds.value, ...store.users.map((user) => user.id)]))
+    : selectedIds.value.filter((id) => !store.users.some((user) => user.id === id))
+}
+
+function cancelSelection() {
+  selectedIds.value = []
+}
+
+async function executeBulkDelete() {
+  if (!selectedIds.value.length) return
+  updating.value = true
+  error.value = ''
+  try {
+    await Promise.all(selectedIds.value.map((id) => store.deleteUser(id)))
+    selectedIds.value = []
+    bulkDeleteVisible.value = false
+    await load()
+    toast.add({ severity: 'success', summary: 'Soft Delete Berhasil', detail: 'Akun terpilih berhasil dipindahkan ke trash.', life: 3500 })
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    updating.value = false
+  }
+}
+
+const pageNumbers = computed(() => Array.from({ length: store.pages }, (_, index) => index + 1))
+
+const selectedPageSize = computed({
+  get: () => store.limit,
+  set: (value: number) => {
+    store.setParam('limit', Number(value))
+    store.setParam('page', 1)
+    first.value = 0
+    goToPage.value = 1
+    load()
+  },
+})
+
+function goToSelectedPage() {
+  const target = Math.min(Math.max(Number(goToPage.value) || 1, 1), Math.max(store.pages, 1))
+  goToPage.value = target
+  store.setPage(target)
+  first.value = (target - 1) * store.limit
+  load()
+}
+
+function selectPage(page: number) {
+  goToPage.value = page
+  store.setPage(page)
+  first.value = (page - 1) * store.limit
   load()
 }
 
@@ -211,16 +270,6 @@ onMounted(() => { load() })
       </div>
 
       <div class="toolbar-controls">
-        <div class="search-field">
-          <i class="pi pi-search" />
-          <input
-            type="text"
-            placeholder="Search name, email, or employee ID"
-            :value="store.params.search"
-            @input="onKeywordSearch(($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
         <Select
           v-model="selectedStatus"
           :options="statusOptions"
@@ -241,6 +290,16 @@ onMounted(() => { load() })
         />
 
         <Button
+          label="Trash"
+          icon="pi pi-trash"
+          severity="secondary"
+          outlined
+          size="small"
+          class="trash-button"
+          @click="router.push('/admin/accounts/trash')"
+        />
+
+        <Button
           label="Create Account"
           icon="pi pi-plus"
           size="small"
@@ -250,7 +309,34 @@ onMounted(() => { load() })
       </div>
     </header>
 
+    <div v-if="selectedIds.length" class="bulk-action-bar">
+      <strong>{{ selectedIds.length }} selected</strong>
+      <div>
+        <Button label="Soft Delete" icon="pi pi-trash" size="small" class="soft-delete-button" @click="bulkDeleteVisible = true" />
+        <Button label="Cancel" severity="secondary" text size="small" @click="cancelSelection" />
+      </div>
+    </div>
+
     <div class="table-shell">
+      <div class="accounts-pagination-top">
+        <div class="accounts-page-links">
+          <Button
+            v-for="pageNumber in pageNumbers"
+            :key="pageNumber"
+            :label="String(pageNumber)"
+            text
+            size="small"
+            :class="['accounts-page-link', { active: pageNumber === store.page }]"
+            @click="selectPage(pageNumber)"
+          />
+          <span class="accounts-page-report">Page {{ store.page }} of {{ store.pages || 1 }} / {{ store.total }} records</span>
+        </div>
+        <div class="accounts-page-settings">
+          <label>Page size <Select v-model="selectedPageSize" :options="[10, 20, 50]" /></label>
+          <label>Go to <InputNumber v-model="goToPage" :min="1" :max="Math.max(store.pages, 1)" /></label>
+          <Button label="Set" outlined size="small" @click="goToSelectedPage" />
+        </div>
+      </div>
       <div v-if="store.loading && !store.users.length" class="skeleton-area">
         <Skeleton v-for="n in 8" :key="n" class="skeleton-row" />
       </div>
@@ -263,10 +349,6 @@ onMounted(() => { load() })
         :totalRecords="store.total"
         v-model:first="first"
         :rows="store.limit"
-        :rowsPerPageOptions="[10, 20, 50]"
-        paginator
-        paginatorTemplate="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-        currentPageReportTemplate="Showing {first} to {last} of {totalRecords} accounts"
         dataKey="id"
         class="accounts-table"
         @page="onPage"
@@ -279,6 +361,15 @@ onMounted(() => { load() })
             <span>Try another keyword or change the status filter.</span>
           </div>
         </template>
+
+        <Column header="" class="select-column">
+          <template #header>
+            <Checkbox :modelValue="allPageSelected" binary @update:modelValue="toggleSelectAll($event)" />
+          </template>
+          <template #body="{ data }">
+            <Checkbox :modelValue="selectedIds.includes(data.id)" binary @update:modelValue="toggleSelected(data.id, $event)" @click.stop />
+          </template>
+        </Column>
 
         <Column header="Employee" class="employee-column">
           <template #body="{ data }">
@@ -337,22 +428,6 @@ onMounted(() => { load() })
           </template>
         </Column>
 
-        <Column header="Actions" class="actions-column">
-          <template #body="{ data }">
-            <div class="row-actions" @click.stop>
-              <Button
-                icon="pi pi-ellipsis-v"
-                text
-                rounded
-                size="small"
-                class="more-action"
-                title="Open account actions"
-                aria-label="Open account actions"
-                @click="openActions(data)"
-              />
-            </div>
-          </template>
-        </Column>
       </DataTable>
     </div>
 
@@ -534,6 +609,13 @@ onMounted(() => { load() })
         />
       </template>
     </Dialog>
+    <Dialog v-model:visible="bulkDeleteVisible" modal header="Soft Delete Accounts" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
+      <p class="bulk-delete-copy">Move {{ selectedIds.length }} selected account{{ selectedIds.length === 1 ? '' : 's' }} to trash?</p>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text :disabled="updating" @click="bulkDeleteVisible = false" />
+        <Button label="Soft Delete" icon="pi pi-trash" class="soft-delete-button" :loading="updating" @click="executeBulkDelete" />
+      </template>
+    </Dialog>
   </section>
 </template>
 
@@ -561,7 +643,7 @@ onMounted(() => { load() })
   gap: 1rem;
   width: 100%;
   min-width: 0;
-  padding: 0.8rem 1rem;
+  padding: 0.6rem 0.8rem;
   border-bottom: 1px solid #e5eaf0;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(10px);
@@ -597,10 +679,10 @@ onMounted(() => { load() })
 
 .toolbar-controls {
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) 165px auto auto;
+  grid-template-columns: 165px auto auto;
   align-items: center;
   gap: 0.55rem;
-  width: min(850px, 100%);
+  width: auto;
   min-width: 0;
 }
 
@@ -1233,4 +1315,6 @@ onMounted(() => { load() })
     text-align: center;
   }
 }
+.accounts-pagination-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.55rem .7rem;border:1px solid #e5eaf0;border-radius:10px 10px 0 0;background:#fff}.accounts-page-links,.accounts-page-settings{display:flex;align-items:center;gap:.35rem}.accounts-page-link{min-width:28px;height:28px;padding:0;color:#475569}.accounts-page-link.active{border-radius:50%;background:#fff0f1;color:#d62839;font-weight:800}.accounts-page-report{margin-left:.45rem;color:#64748b;font-size:.68rem;white-space:nowrap}.accounts-page-settings{gap:.55rem}.accounts-page-settings label{display:flex;align-items:center;gap:.35rem;color:#64748b;font-size:.62rem;white-space:nowrap}.accounts-page-settings :deep(.p-select),.accounts-page-settings :deep(.p-inputnumber-input){height:32px;border:1px solid #dbe3ee;border-radius:7px;font-size:.68rem}.accounts-page-settings :deep(.p-select){width:72px}.accounts-page-settings :deep(.p-inputnumber){width:58px}.accounts-page-settings :deep(.p-inputnumber-input){width:58px;padding:.35rem}.accounts-page-settings :deep(.p-button){height:32px;padding:0 .7rem;font-size:.68rem}.table-shell>.accounts-table{border-top:0;border-radius:0 0 10px 10px}@media(max-width:700px){.accounts-pagination-top{align-items:flex-start;flex-direction:column}.accounts-page-settings{width:100%;justify-content:flex-end}.accounts-page-report{margin-left:.2rem}}
+.select-column{width:46px;text-align:center}.bulk-action-bar{display:flex;align-items:center;justify-content:space-between;padding:.65rem .8rem;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}.bulk-action-bar strong{font-size:.72rem}.bulk-action-bar>div{display:flex;align-items:center;gap:.5rem}.soft-delete-button{border:0!important;background:#e11d2e!important;color:#fff!important}.bulk-delete-copy{margin:0;color:#475569;font-size:.85rem}.accounts-toolbar{flex-wrap:nowrap;min-height:58px}.toolbar-controls{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;gap:.45rem}.accounts-pagination-top{flex-wrap:nowrap;min-height:48px;white-space:nowrap}.accounts-page-links,.accounts-page-settings{flex-wrap:nowrap;white-space:nowrap}.accounts-page-settings label{flex-shrink:0}.accounts-page-report{overflow:hidden;text-overflow:ellipsis}
 </style>

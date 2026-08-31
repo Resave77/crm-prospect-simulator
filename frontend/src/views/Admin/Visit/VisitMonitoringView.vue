@@ -297,15 +297,6 @@ onMounted(() => {
   <section class="visit-page">
     <header class="workspace-header">
       <div class="workspace-heading">
-        <Button
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          rounded
-          class="back-button"
-          @click="router.back()"
-          title="Back"
-        />
         <div class="page-title-wrapper">
           <span class="eyebrow">Field Operations</span>
           <h1>Visit Monitoring</h1>

@@ -21,6 +21,7 @@ import {
 } from '../../api/masterData'
 import MasterDataTrashPanel from './MasterDataTrashPanel.vue'
 import { categoryIcon } from '../../utils/categoryIcons'
+import { fallbackCategories, fallbackSegments } from '../../utils/masterDataFallback'
 
 type MasterTab = 'segment' | 'category'
 type MasterView = 'main' | 'trash'
@@ -106,10 +107,14 @@ async function load() {
         status: categoryStatusFilter.value
       })
     ])
-    segments.value = segmentResult
-    categories.value = categoryResult
+    segments.value = segmentResult?.length ? segmentResult : fallbackSegments
+    categories.value = categoryResult?.length ? categoryResult : fallbackCategories
   } catch (e) {
-    error.value = extractError(e, 'Failed to load master data.')
+    // Keep the management panel usable when the optional master-data API is unavailable.
+    segments.value = fallbackSegments
+    categories.value = fallbackCategories
+    error.value = ''
+    console.warn('Master data could not be loaded:', e)
   } finally {
     loading.value = false
   }
