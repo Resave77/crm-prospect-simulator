@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
@@ -16,6 +15,7 @@ import type { SalesRole, SalesRoleLevel } from '../../../types/admin'
 
 const store = useAdminStore()
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const error = ref('')
 const showGuidance = ref(true)
@@ -208,6 +208,11 @@ function clearFilters() {
   statusFilter.value = 'ACTIVE'
 }
 
+watch(() => route.query.search, (value) => { search.value = typeof value === 'string' ? value : '' }, { immediate: true })
+watch(() => route.query.status, (value) => {
+  const status = typeof value === 'string' ? value : 'ACTIVE'
+  statusFilter.value = status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
+}, { immediate: true })
 onMounted(load)
 </script>
 
@@ -225,14 +230,6 @@ onMounted(load)
       </div>
 
       <div class="toolbar-controls">
-        <div class="search-field">
-          <i class="pi pi-search" />
-          <InputText
-            v-model="search"
-            placeholder="Search role name, description, or landing page"
-          />
-        </div>
-
         <Select
           v-model="levelFilter"
           :options="levelFilterOptions"
@@ -1286,4 +1283,5 @@ onMounted(load)
     width: 100%;
   }
 }
+.roles-toolbar{min-height:58px;padding:.55rem .75rem;flex-wrap:nowrap}.roles-toolbar .toolbar-controls{display:flex;align-items:center;justify-content:flex-end;gap:.45rem;flex-wrap:nowrap}.roles-toolbar .toolbar-select{min-width:150px;height:34px}.roles-toolbar .create-button,.roles-toolbar .reset-button{height:34px;white-space:nowrap}.summary-strip{padding:.55rem .7rem;gap:.45rem}.summary-item{padding:.35rem .6rem}
 </style>

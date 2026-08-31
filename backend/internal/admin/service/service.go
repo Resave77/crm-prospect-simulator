@@ -306,6 +306,11 @@ func (s *Service) DeleteUser(ctx context.Context, actor Actor, id uuid.UUID) err
 	return s.repo.DeleteUser(ctx, id)
 }
 
+func (s *Service) RestoreUser(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() { return ErrForbidden }
+	return s.repo.RestoreUser(ctx, id)
+}
+
 func (s *Service) ensurePrimarySuperAdminMutable(ctx context.Context, actor Actor, targetID uuid.UUID) error {
 	if actor.Role == authmodel.RoleSuperAdmin {
 		return nil

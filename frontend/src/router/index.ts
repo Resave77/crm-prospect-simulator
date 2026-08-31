@@ -29,6 +29,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/Admin/Dashboard/AdminDashboardView.vue'), meta: { permission: 'view_admin_dashboard' } },
         { path: 'accounts', name: 'AdminAccounts', component: () => import('../views/Admin/Accounts/AdminAccountsView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'view_accounts' } },
         { path: 'accounts/create', name: 'AdminAccountCreate', component: () => import('../views/Admin/Accounts/AdminAccountCreateView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'create_account' } },
+        { path: 'accounts/trash', redirect: '/admin/accounts?view=trash' },
         { path: 'accounts/:id', name: 'AdminAccountDetail', component: () => import('../views/Admin/Accounts/AdminAccountDetailView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'view_accounts' } },
         { path: 'accounts/:id/edit', name: 'AdminAccountEdit', component: () => import('../views/Admin/Accounts/AdminAccountEditView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'update_account' } },
         { path: 'role-management', name: 'AdminRoleManagement', component: () => import('../views/Admin/Roles/AdminRoleManagementView.vue'), meta: { role: 'ADMINISTRATOR', permission: 'view_roles' } },

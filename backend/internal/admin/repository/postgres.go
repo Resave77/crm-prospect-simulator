@@ -114,7 +114,8 @@ func (r *PostgresRepository) ListUsers(ctx context.Context, filter model.ListFil
 }
 
 func buildListWhere(filter model.ListFilter) (string, []any) {
-	conditions := []string{`u.deleted_at IS NULL`}
+	conditions := []string{}
+	if !filter.IncludeDeleted { conditions = append(conditions, `u.deleted_at IS NULL`) } else { conditions = append(conditions, `u.deleted_at IS NOT NULL`) }
 	args := make([]any, 0)
 	idx := 1
 
@@ -474,6 +475,13 @@ func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	return nil
+}
+
+func (r *PostgresRepository) RestoreUser(ctx context.Context, id uuid.UUID) error {
+	command, err := r.pool.Exec(ctx, `UPDATE users SET deleted_at = NULL, status = 'ACTIVE', updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, id)
+	if err != nil { return mapError(err) }
+	if command.RowsAffected() == 0 { return ErrNotFound }
 	return nil
 }
 

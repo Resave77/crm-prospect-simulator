@@ -515,7 +515,6 @@ onMounted(async () => {
       <template v-if="!isEdit || loaded">
         <header class="page-heading">
           <div class="compact-heading-main">
-            <Button class="header-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/role-management')" title="Back to role list" />
           <div class="page-title-wrapper">
             <span class="eyebrow">{{ isEdit ? 'Edit Role' : 'Create Role' }}</span>
             <h1>{{ isEdit ? (form.name || 'Edit Sales Role') : 'Create Sales Role' }}</h1>

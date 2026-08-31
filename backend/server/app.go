@@ -195,9 +195,11 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/customers", customerHandler.AdminCustomers)
 	admin.Get("/customers/list", customerHandler.AdminCustomersList)
 	admin.Get("/customers/filter-options", customerHandler.CustomerFilterOptions)
+	admin.Get("/customers/trash", customerHandler.TrashedCustomers)
 	admin.Get("/customers/:id", customerHandler.AdminCustomerDetail)
 	admin.Get("/customers/:id/place-details", customerHandler.AdminCustomerPlaceDetails)
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
+	admin.Post("/customers/:id/restore", customerHandler.RestoreCustomer)
 	admin.Get("/companies/:id", customerHandler.GetParentCompanyByCode)
 	admin.Patch("/companies/:id", customerHandler.UpdateParentCompany)
 
@@ -238,6 +240,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Patch("/users/:id/profile", adminHandler.UpdateUserProfile)
 	admin.Patch("/users/:id/status", adminHandler.UpdateStatus)
 	admin.Delete("/users/:id", adminHandler.DeleteUser)
+	admin.Post("/users/:id/restore", adminHandler.RestoreUser)
 	admin.Post("/users/:id/reset-password", adminHandler.ResetPassword)
 
 	app.Use(func(c *fiber.Ctx) error {

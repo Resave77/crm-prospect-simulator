@@ -329,13 +329,24 @@ func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UU
 }
 
 func (r *PostgresRepository) DeleteCustomer(ctx context.Context, id uuid.UUID) error {
-	command, err := r.pool.Exec(ctx, `DELETE FROM customer_sites WHERE id = $1`, id)
+	command, err := r.pool.Exec(ctx, `UPDATE customer_sites SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return fmt.Errorf("delete customer site: %w", err)
 	}
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	return nil
+}
+
+func (r *PostgresRepository) ListTrashedCustomers(ctx context.Context) ([]model.CustomerSite, error) {
+	return r.listCustomers(ctx, customerSelect+` WHERE cs.deleted_at IS NOT NULL ORDER BY cs.updated_at DESC`)
+}
+
+func (r *PostgresRepository) RestoreCustomer(ctx context.Context, id uuid.UUID) error {
+	command, err := r.pool.Exec(ctx, `UPDATE customer_sites SET deleted_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, id)
+	if err != nil { return fmt.Errorf("restore customer site: %w", err) }
+	if command.RowsAffected() == 0 { return ErrNotFound }
 	return nil
 }
 
@@ -383,11 +394,11 @@ func (r *PostgresRepository) resolveParentCompany(ctx context.Context, tx pgx.Tx
 }
 
 func (r *PostgresRepository) ListCustomers(ctx context.Context) ([]model.CustomerSite, error) {
-	return r.listCustomers(ctx, customerSelect+` ORDER BY cs.converted_at DESC`)
+	return r.listCustomers(ctx, customerSelect+` WHERE cs.deleted_at IS NULL ORDER BY cs.converted_at DESC`)
 }
 
 func (r *PostgresRepository) ListCustomersForSales(ctx context.Context, salesExecutiveID uuid.UUID) ([]model.CustomerSite, error) {
-	return r.listCustomers(ctx, customerSelect+` WHERE cs.sales_executive_id = $1 ORDER BY cs.converted_at DESC`, salesExecutiveID)
+	return r.listCustomers(ctx, customerSelect+` WHERE cs.sales_executive_id = $1 AND cs.deleted_at IS NULL ORDER BY cs.converted_at DESC`, salesExecutiveID)
 }
 
 func (r *PostgresRepository) ListTeamCustomers(ctx context.Context, actorID uuid.UUID) (model.TeamCustomers, error) {
@@ -625,7 +636,7 @@ func (r *PostgresRepository) distinctColumn(ctx context.Context, query string) (
 }
 
 func buildCustomerWhere(params model.CustomerListParams) (string, []any) {
-	conditions := make([]string, 0)
+	conditions := []string{`cs.deleted_at IS NULL`}
 	args := make([]any, 0)
 	idx := 1
 

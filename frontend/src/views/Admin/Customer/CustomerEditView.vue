@@ -154,7 +154,6 @@ onMounted(async () => {
       <Message v-if="error" severity="error">{{ error }}</Message>
 
       <!-- PAGE HEADER -->
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push(`/admin/customers/${route.params.id}`)" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
           <span class="eyebrow">Edit Customer</span>

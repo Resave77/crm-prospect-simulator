@@ -67,7 +67,6 @@ function resetForm() {
     <!-- FORM -->
     <template v-else>
       <!-- PAGE HEADER -->
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
           <span class="eyebrow">New Company</span>

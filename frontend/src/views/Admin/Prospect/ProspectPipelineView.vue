@@ -895,4 +895,5 @@ onMounted(async () => {
     min-width: 88vw;
   }
 }
+.control-panel{grid-template-columns:repeat(3,minmax(145px,1fr)) auto;gap:.5rem;padding:.55rem .65rem}.filter-field{gap:.18rem}.filter-field :deep(.p-select),.reset-button{height:35px}.filter-field :deep(.p-select-label){padding-block:.42rem}.pipeline-overview{margin-bottom:.6rem}.workspace-header{padding:.65rem .75rem}.summary-strip{gap:.4rem}.summary-item{padding:.38rem .55rem}.record-tag{font-size:.68rem}@media(max-width:850px){.control-panel{grid-template-columns:repeat(2,minmax(150px,1fr)) auto}}@media(max-width:560px){.control-panel{grid-template-columns:1fr 1fr}.control-panel .reset-button{grid-column:1/-1;justify-self:start}}
 </style>

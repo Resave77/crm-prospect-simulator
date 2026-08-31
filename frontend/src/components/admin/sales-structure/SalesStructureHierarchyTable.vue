@@ -236,13 +236,6 @@ function openActionMenu(
       @update:selection="emit('update:selection', $event)"
     >
       <Column
-        v-if="canMutate"
-        selection-mode="multiple"
-        class="selection-column"
-        header-class="selection-column"
-      />
-
-      <Column
         header="Level"
         class="level-column"
         header-class="level-column"

@@ -33,12 +33,23 @@ func (h *Handler) ListUsers(c *fiber.Ctx) error {
 		Role:      c.Query("role"),
 		Status:    c.Query("status"),
 		ManagerID: c.Query("managerId"),
+		IncludeDeleted: c.Query("includeDeleted") == "true",
 	}
 	result, err := h.svc.ListUsers(c.UserContext(), actor, filter)
 	if err != nil {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, result)
+}
+
+func (h *Handler) RestoreUser(c *fiber.Ctx) error {
+	actor := actor(c)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil { return response.Error(c, fiber.StatusBadRequest, "USER_ID_INVALID", "User ID is invalid.") }
+	if err := h.svc.RestoreUser(c.UserContext(), actor, id); err != nil { return writeError(c, err) }
+	user, err := h.svc.GetUserDetail(c.UserContext(), actor, id)
+	if err != nil { return writeError(c, err) }
+	return response.Data(c, fiber.StatusOK, user)
 }
 
 func (h *Handler) GetUser(c *fiber.Ctx) error {

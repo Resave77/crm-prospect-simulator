@@ -132,6 +132,12 @@ export async function getAdminCustomerPlaceDetails(id: string) {
 export async function deleteCustomer(id: string) {
   await api.delete(`/admin/customers/${id}`)
 }
+export async function listTrashedCustomers() {
+  return (await api.get<ApiEnvelope<CustomerSite[]>>('/admin/customers/trash')).data.data
+}
+export async function restoreCustomer(id: string) {
+  await api.post(`/admin/customers/${id}/restore`)
+}
 
 export async function getAdminVisits(filters: VisitMonitoringFilters) {
   const params: Record<string, string> = {}

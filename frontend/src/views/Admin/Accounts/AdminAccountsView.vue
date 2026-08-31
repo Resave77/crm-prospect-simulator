@@ -34,7 +34,26 @@ const deleteDialogVisible = ref(false)
 const deleteTarget = ref<AdminUserListItem | null>(null)
 const actionDialogVisible = ref(false)
 const actionTarget = ref<AdminUserListItem | null>(null)
+const trashVisible = ref(route.query.view === 'trash')
+const restoringId = ref<string | null>(null)
+const trashedUsers = computed(() => store.users.filter((user) => user.status === 'INACTIVE'))
+watch(() => route.query.view, (value) => {
+  trashVisible.value = value === 'trash'
+  store.setParam('includeDeleted', trashVisible.value)
+  store.setParam('page', 1)
+  first.value = 0
+  store.users = []
+  store.total = 0
+  load()
+}, { immediate: true })
 watch(() => route.query.search, (value) => { store.setParam('search', typeof value === 'string' ? value : ''); store.setParam('page', 1); first.value = 0; load() }, { immediate: true })
+watch(() => route.query.status, (value) => {
+  const status = typeof value === 'string' && (value === 'ACTIVE' || value === 'INACTIVE') ? value : ''
+  store.setParam('status', status)
+  store.setParam('page', 1)
+  first.value = 0
+  load()
+}, { immediate: true })
 
 const statusOptions = [
   { label: 'All Status', value: '' },
@@ -49,6 +68,7 @@ const selectedStatus = computed({
 
 function load() {
   error.value = ''
+  store.setParam('includeDeleted', trashVisible.value)
   store.fetchUsers().catch((e) => { error.value = store.errorMessage(e) })
 }
 
@@ -67,6 +87,14 @@ function onPage(event: { first: number; rows: number; page: number }) {
     store.setPage(event.page + 1)
   }
   load()
+}
+
+async function restoreAccount(user: AdminUserListItem) {
+  restoringId.value = user.id
+  try {
+    await store.restoreUser(user.id)
+    toast.add({ severity: 'success', summary: 'Account Restored', detail: `${accountDisplayName(user)} dikembalikan ke daftar akun.`, life: 3500 })
+  } catch (e) { error.value = store.errorMessage(e) } finally { restoringId.value = null }
 }
 
 const allPageSelected = computed(() => store.users.length > 0 && store.users.every((user) => selectedIds.value.includes(user.id)))
@@ -191,6 +219,20 @@ function confirmDeactivate(user: AdminUserListItem) {
   deactivateDialogVisible.value = true
 }
 
+function deactivateSelectedAccount() {
+  if (!actionTarget.value) return
+  const user = actionTarget.value
+  closeActions()
+  confirmDeactivate(user)
+}
+
+function activateSelectedAccount() {
+  if (!actionTarget.value) return
+  const id = actionTarget.value.id
+  closeActions()
+  void activate(id)
+}
+
 function confirmDelete(user: AdminUserListItem) {
   deleteTarget.value = user
   deleteDialogVisible.value = true
@@ -296,7 +338,7 @@ onMounted(() => { load() })
           outlined
           size="small"
           class="trash-button"
-          @click="router.push('/admin/accounts/trash')"
+          @click="trashVisible = true; router.replace({ query: { ...route.query, view: 'trash' } })"
         />
 
         <Button
@@ -516,7 +558,7 @@ onMounted(() => { load() })
         outlined
         size="small"
         :disabled="isSelf(actionTarget.id) || isProtectedSuperAdmin(actionTarget) || updating"
-        @click="closeActions(); confirmDeactivate(actionTarget)"
+        @click="deactivateSelectedAccount"
       />
       <Button
         v-else
@@ -526,7 +568,7 @@ onMounted(() => { load() })
         outlined
         size="small"
         :disabled="updating"
-        @click="closeActions(); activate(actionTarget.id)"
+        @click="activateSelectedAccount"
       />
     </div>
 
@@ -616,6 +658,16 @@ onMounted(() => { load() })
         <Button label="Soft Delete" icon="pi pi-trash" class="soft-delete-button" :loading="updating" @click="executeBulkDelete" />
       </template>
     </Dialog>
+    <Dialog v-model:visible="trashVisible" modal header="Trash Accounts" :style="{ width: 'min(760px, calc(100vw - 2rem))' }" :draggable="false" @hide="router.replace({ query: { ...route.query, view: undefined } })">
+      <div class="trash-content">
+        <p class="trash-intro">Akun yang dihapus tersimpan di sini dan bisa dikembalikan kapan saja.</p>
+        <div v-if="store.loading" class="trash-loading">Loading trash...</div>
+        <div v-else-if="!trashedUsers.length" class="trash-empty"><i class="pi pi-trash" /><strong>Trash masih kosong</strong><span>Tidak ada akun yang dihapus.</span></div>
+        <div v-else class="trash-list">
+          <div v-for="user in trashedUsers" :key="user.id" class="trash-row"><div><strong>{{ user.fullName || user.email }}</strong><span>{{ user.employeeId || '-' }} · {{ user.email }}</span></div><Button label="Restore" icon="pi pi-undo" size="small" :loading="restoringId === user.id" @click="restoreAccount(user)" /></div>
+        </div>
+      </div>
+    </Dialog>
   </section>
 </template>
 
@@ -628,6 +680,8 @@ onMounted(() => { load() })
   overflow-x: hidden;
   background: #ffffff;
 }
+
+.trash-content{display:grid;gap:.8rem}.trash-intro{margin:0;color:#64748b;font-size:.8rem}.trash-list{display:grid;gap:.5rem;max-height:55vh;overflow:auto}.trash-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem;border:1px solid #e5eaf0;border-radius:10px}.trash-row div{display:grid;gap:.2rem}.trash-row strong{color:#172033;font-size:.82rem}.trash-row span{color:#94a3b8;font-size:.7rem}.trash-empty{display:grid;justify-items:center;gap:.35rem;padding:2rem;color:#94a3b8}.trash-empty i{font-size:1.7rem;color:#ef4444}.trash-empty strong{color:#172033;font-size:.9rem}.trash-empty span,.trash-loading{font-size:.75rem}
 
 .page-message {
   margin: 0.75rem 1rem 0;
@@ -1316,5 +1370,5 @@ onMounted(() => { load() })
   }
 }
 .accounts-pagination-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.55rem .7rem;border:1px solid #e5eaf0;border-radius:10px 10px 0 0;background:#fff}.accounts-page-links,.accounts-page-settings{display:flex;align-items:center;gap:.35rem}.accounts-page-link{min-width:28px;height:28px;padding:0;color:#475569}.accounts-page-link.active{border-radius:50%;background:#fff0f1;color:#d62839;font-weight:800}.accounts-page-report{margin-left:.45rem;color:#64748b;font-size:.68rem;white-space:nowrap}.accounts-page-settings{gap:.55rem}.accounts-page-settings label{display:flex;align-items:center;gap:.35rem;color:#64748b;font-size:.62rem;white-space:nowrap}.accounts-page-settings :deep(.p-select),.accounts-page-settings :deep(.p-inputnumber-input){height:32px;border:1px solid #dbe3ee;border-radius:7px;font-size:.68rem}.accounts-page-settings :deep(.p-select){width:72px}.accounts-page-settings :deep(.p-inputnumber){width:58px}.accounts-page-settings :deep(.p-inputnumber-input){width:58px;padding:.35rem}.accounts-page-settings :deep(.p-button){height:32px;padding:0 .7rem;font-size:.68rem}.table-shell>.accounts-table{border-top:0;border-radius:0 0 10px 10px}@media(max-width:700px){.accounts-pagination-top{align-items:flex-start;flex-direction:column}.accounts-page-settings{width:100%;justify-content:flex-end}.accounts-page-report{margin-left:.2rem}}
-.select-column{width:46px;text-align:center}.bulk-action-bar{display:flex;align-items:center;justify-content:space-between;padding:.65rem .8rem;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}.bulk-action-bar strong{font-size:.72rem}.bulk-action-bar>div{display:flex;align-items:center;gap:.5rem}.soft-delete-button{border:0!important;background:#e11d2e!important;color:#fff!important}.bulk-delete-copy{margin:0;color:#475569;font-size:.85rem}.accounts-toolbar{flex-wrap:nowrap;min-height:58px}.toolbar-controls{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;gap:.45rem}.accounts-pagination-top{flex-wrap:nowrap;min-height:48px;white-space:nowrap}.accounts-page-links,.accounts-page-settings{flex-wrap:nowrap;white-space:nowrap}.accounts-page-settings label{flex-shrink:0}.accounts-page-report{overflow:hidden;text-overflow:ellipsis}
+.select-column{width:46px;text-align:center}.bulk-action-bar{display:flex;align-items:center;justify-content:space-between;padding:.65rem .8rem;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}.bulk-action-bar strong{font-size:.72rem}.bulk-action-bar>div{display:flex;align-items:center;gap:.5rem}.soft-delete-button{border:0!important;background:#e11d2e!important;color:#fff!important}.bulk-delete-copy{margin:0;color:#475569;font-size:.85rem}.accounts-toolbar{flex-wrap:nowrap;min-height:56px;padding:.5rem .7rem}.toolbar-controls{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;gap:.4rem}.toolbar-controls :deep(.p-select),.toolbar-controls :deep(.p-button){height:34px}.toolbar-controls :deep(.p-select){min-width:130px}.accounts-pagination-top{flex-wrap:nowrap;min-height:48px;white-space:nowrap}.accounts-page-links,.accounts-page-settings{flex-wrap:nowrap;white-space:nowrap}.accounts-page-settings label{flex-shrink:0}.accounts-page-report{overflow:hidden;text-overflow:ellipsis}.table-shell{overflow:hidden;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.accounts-pagination-top{border:0;border-bottom:1px solid #e5eaf0;border-radius:0;background:#fff}.accounts-table{border:0!important;border-radius:0!important}.accounts-table :deep(.p-datatable-thead > tr > th){padding:.6rem .7rem;background:#f4f6f9;color:#475569;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;border-right:1px solid #e5eaf0}.accounts-table :deep(.p-datatable-tbody > tr > td){padding:.65rem .7rem;border-color:#e5eaf0;border-right:1px solid #e5eaf0}.accounts-table :deep(.p-datatable-tbody > tr:hover > td){background:#fffafa}@media(max-width:700px){.accounts-toolbar{align-items:flex-start;flex-direction:column}.toolbar-controls{width:100%;justify-content:flex-start;flex-wrap:wrap}}
 </style>

@@ -29,6 +29,10 @@ export async function getUsers(params: AdminUserListParams) {
   return (await api.get<ApiEnvelope<AdminUserListResult>>('/admin/users', { params })).data.data
 }
 
+export async function restoreUser(id: string) {
+  return (await api.post<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}/restore`)).data.data
+}
+
 export async function getUser(id: string) {
   return (await api.get<ApiEnvelope<AdminUserDetail>>(`/admin/users/${id}`)).data.data
 }

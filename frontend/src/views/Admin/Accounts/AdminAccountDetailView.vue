@@ -340,7 +340,6 @@ onMounted(() => { load() })
         <!-- PAGE HEADER -->
         <header class="page-heading">
           <div class="compact-heading-main">
-            <Button class="header-back" icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/accounts')" title="Back to account list" />
           <div class="page-title-wrapper">
             <span class="eyebrow">Account Detail</span>
             <h1>{{ user.fullName }}</h1>

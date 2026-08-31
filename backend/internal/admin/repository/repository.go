@@ -26,6 +26,7 @@ type Repository interface {
 	SetCurrentSalesAssignment(ctx context.Context, userID uuid.UUID, salesRoleID *uuid.UUID, parentUserID *uuid.UUID, actorID uuid.UUID) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status authmodel.UserStatus, actorID uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	RestoreUser(ctx context.Context, id uuid.UUID) error
 	ListActiveManagers(ctx context.Context) ([]model.ManagerOption, error)
 	ExistsByEmail(ctx context.Context, email string, excludeID *uuid.UUID) (bool, error)
 	ExistsByEmployeeID(ctx context.Context, employeeID string, excludeID *uuid.UUID) (bool, error)

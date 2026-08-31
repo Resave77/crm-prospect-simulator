@@ -16,6 +16,7 @@ type ListFilter struct {
 	Role      string
 	Status    string
 	ManagerID string
+	IncludeDeleted bool
 }
 
 type UserListItem struct {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
@@ -16,6 +17,7 @@ import { useAuthStore } from '../../../stores/auth'
 import type { AdminUserListItem, SalesRoleLevel, SalesStructureItem } from '../../../types/admin'
 
 const store = useAdminStore()
+const route = useRoute()
 const auth = useAuthStore()
 const canAssignSales = computed(() => auth.hasPermission('create_sales_assignment'))
 const canMoveSales = computed(() => auth.hasPermission('move_sales_assignment'))
@@ -70,6 +72,8 @@ const statusFilter = ref<'ACTIVE' | 'ENDED' | ''>('')
 const systemRoleFilter = ref('')
 const orgRoleFilter = ref('')
 const parentFilter = ref('')
+
+watch(() => route.query.search, (value) => { search.value = typeof value === 'string' ? value : '' }, { immediate: true })
 
 const salesUsers = ref<AdminUserListItem[]>([])
 const salesUsersTotal = ref(0)
@@ -844,23 +848,11 @@ onMounted(async () => {
       <button class="tab-btn" :class="{ active: activeTab === 'all' }" type="button" @click="activeTab = 'all'">All Sales Users <span class="tab-count">{{ totalActiveSales }}</span></button>
     </div>
 
-    <div class="toolbar-panel">
-      <div class="search-field">
-        <i class="pi pi-search" />
-        <input
-          v-model="searchInput"
-          type="search"
-          :placeholder="viewMode === 'tree' ? 'Search tree by employee, region, position, role, or manager...' : activeTab === 'assigned' ? 'Search sales, reports to, position, or role...' : 'Search active users by name, email, or employee ID...'"
-        />
-      </div>
-      <div class="filter-field">
+    <div v-if="viewMode === 'tree' || activeTab === 'assigned'" class="filter-panel">
+      <div class="filter-field effective-month-field">
         <label>Effective Month</label>
         <input v-model="store.selectedEffectiveMonth" type="month" />
       </div>
-      <Button label="Reset" icon="pi pi-replay" severity="secondary" text size="small" @click="clearFilters" />
-    </div>
-
-    <div v-if="viewMode === 'tree' || activeTab === 'assigned'" class="filter-panel">
       <div class="filter-field">
         <label>Role Level</label>
         <Select v-model="levelFilter" :options="levelFilterOptions" optionLabel="label" optionValue="value" />
@@ -877,7 +869,7 @@ onMounted(async () => {
         <label>Reports To</label>
         <Select v-model="parentFilter" :options="parentFilterOptions" optionLabel="label" optionValue="value" filter placeholder="All parents" />
       </div>
-
+      <Button label="Reset" icon="pi pi-replay" severity="secondary" text size="small" @click="clearFilters" />
     </div>
 
     <SalesStructureHierarchyTable
@@ -1503,4 +1495,5 @@ input[type='month'] {
     width: 100%;
   }
 }
+.toolbar-panel{display:none}.filter-panel{display:grid;grid-template-columns:1.1fr repeat(4,minmax(0,1fr)) auto;align-items:end;gap:.5rem;padding:.6rem .7rem;flex-wrap:nowrap}.filter-panel .filter-field{min-width:0}.filter-panel :deep(.p-select){height:34px;width:100%}.filter-panel input[type="month"]{box-sizing:border-box;width:100%;height:34px;padding:.35rem .5rem;border:1px solid #dbe3ee;border-radius:8px;color:#334155;font-size:.72rem}.filter-panel>.p-button{height:34px;white-space:nowrap}.view-switcher,.tab-bar{gap:.35rem}.view-btn,.tab-btn{padding:.45rem .7rem;font-size:.74rem}.tree-panel,.table-panel{overflow:hidden;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.tree-panel :deep(.p-datatable-thead > tr > th),.table-panel :deep(.p-datatable-thead > tr > th){background:#f4f6f9;border-color:#e5eaf0;color:#475569;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase}.tree-panel :deep(.p-datatable-tbody > tr > td),.table-panel :deep(.p-datatable-tbody > tr > td){border-color:#e5eaf0;padding:.6rem .7rem}.tree-panel :deep(.p-datatable-tbody > tr:hover > td),.table-panel :deep(.p-datatable-tbody > tr:hover > td){background:#fffafa}@media(max-width:850px){.filter-panel{grid-template-columns:repeat(2,minmax(0,1fr));flex-wrap:wrap}.filter-panel>.p-button{justify-self:start}}
 </style>

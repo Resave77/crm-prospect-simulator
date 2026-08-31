@@ -326,7 +326,6 @@ async function executeConvert() {
 <template>
   <section class="admin-page conversion-page">
     <div class="cv-header">
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" title="Back" />
       <div class="cv-header-text">
         <p class="eyebrow">Prospect Conversion</p>
         <h1>Convert to Customer</h1>

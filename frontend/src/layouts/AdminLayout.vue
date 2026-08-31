@@ -18,6 +18,7 @@ const cloudSyncing = ref(false)
 
 const shortcutItems = computed(() => {
   const path = route.path
+  if (path === '/admin/prospect-finder' || path === '/admin/prospects/list' || path === '/admin/visit-monitoring') return []
   let items = []
 
   if (path.includes('billing')) {
@@ -31,9 +32,16 @@ const shortcutItems = computed(() => {
       { label: 'Invoice Mapping', to: '/admin/billing/invoice-mapping', permission: 'view_billing' },
       { label: 'Bank Account', to: '/admin/billing/bank-account', permission: 'view_billing' },
     ]
+  } else if (path === '/admin/prospects/list') {
+    // Prospect List shortcuts stay focused on prospect workflows and are
+    // available directly from the navbar without opening the sidebar.
+    items = [
+      { label: 'Prospect List', to: '/admin/prospects/list', permission: 'view_prospect_list' },
+      { label: 'Prospect Pipeline', to: '/admin/prospects/pipeline', permission: 'view_prospect_pipeline' },
+      { label: 'Visit Monitoring', to: '/admin/visit-monitoring', permission: 'view_visit_monitoring' },
+    ]
   } else if (path.includes('/prospects')) {
     items = [
-      { label: 'Prospect Finder', to: '/admin/prospect-finder', permission: 'view_prospect_finder' },
       { label: 'Prospect List', to: '/admin/prospects/list', permission: 'view_prospect_list' },
       { label: 'Prospect Pipeline', to: '/admin/prospects/pipeline', permission: 'view_prospect_pipeline' },
     ]
@@ -42,20 +50,46 @@ const shortcutItems = computed(() => {
       { label: 'Customer Site', to: { path: '/admin/customers', query: { tab: 'site' } }, permission: 'view_customers' },
       { label: 'Company', to: { path: '/admin/customers', query: { tab: 'company' } }, permission: 'view_customers' },
       { label: 'Master Data', to: { path: '/admin/customers', query: { tab: 'master' } }, permission: 'view_customers' },
+      { label: 'Add Segment', to: { path: '/admin/customers', query: { tab: 'master', action: 'add-segment' } }, permission: 'view_customers' },
+      { label: 'Add Category', to: { path: '/admin/customers', query: { tab: 'master', action: 'add-category' } }, permission: 'view_customers' },
+      { label: 'Master Data Trash', to: { path: '/admin/customers', query: { tab: 'master', action: 'trash' } }, permission: 'view_customers' },
       { label: 'Add Customer', to: '/admin/customers/add', permission: 'view_customers' },
       { label: 'Add Company', to: '/admin/companies/add', permission: 'view_customers' },
     ]
   } else if (path.includes('/accounts')) {
     items = [
       { label: 'Employee List', to: '/admin/accounts', permission: 'view_accounts' },
-      { label: 'Create Employee', to: '/admin/accounts/create', permission: 'view_accounts' },
+      { label: 'Create Account', to: '/admin/accounts/create', permission: 'view_accounts' },
+      { label: 'Trash', to: { path: '/admin/accounts', query: { view: 'trash' } }, permission: 'view_accounts' },
+      { label: 'Active Accounts', to: { path: '/admin/accounts', query: { status: 'ACTIVE' } }, permission: 'view_accounts' },
+      { label: 'Inactive Accounts', to: { path: '/admin/accounts', query: { status: 'INACTIVE' } }, permission: 'view_accounts' },
+    ]
+  } else if (path === '/admin/role-management' || path.startsWith('/admin/role-management/')) {
+    items = [
       { label: 'Role Management', to: '/admin/role-management', permission: 'view_roles' },
+      { label: 'Add Role', to: '/admin/role-management/create', permission: 'view_roles' },
+      { label: 'Active Roles', to: { path: '/admin/role-management', query: { status: 'ACTIVE' } }, permission: 'view_roles' },
+      { label: 'Inactive Roles', to: { path: '/admin/role-management', query: { status: 'INACTIVE' } }, permission: 'view_roles' },
       { label: 'Sales Structure', to: '/admin/sales-structure', permission: 'view_sales_structure' },
+      { label: 'Employee Management', to: '/admin/accounts', permission: 'view_accounts' },
+    ]
+  } else if (path === '/admin/sales-structure' || path.startsWith('/admin/sales-structure/')) {
+    items = [
+      { label: 'Sales Structure', to: '/admin/sales-structure', permission: 'view_sales_structure' },
+      { label: 'Role Management', to: '/admin/role-management', permission: 'view_roles' },
+      { label: 'Employee Management', to: '/admin/accounts', permission: 'view_accounts' },
+    ]
+  } else if (path === '/admin/visit-monitoring') {
+    items = [
+      { label: 'Visit Monitoring', to: '/admin/visit-monitoring', permission: 'view_visit_monitoring' },
+      { label: 'Prospect List', to: '/admin/prospects/list', permission: 'view_prospect_list' },
+      { label: 'Customer Existing', to: '/admin/customers', permission: 'view_customers' },
     ]
   } else if (path.includes('/visit-monitoring')) {
     items = [
-      { label: 'Customer List', to: '/admin/customers', permission: 'view_customers' },
+      { label: 'Visit Monitoring', to: '/admin/visit-monitoring', permission: 'view_visit_monitoring' },
       { label: 'Prospect List', to: '/admin/prospects/list', permission: 'view_prospect_list' },
+      { label: 'Customer Existing', to: '/admin/customers', permission: 'view_customers' },
     ]
   } else if (path.includes('/reports')) {
     items = [
@@ -66,7 +100,6 @@ const shortcutItems = computed(() => {
   } else {
     items = [
       { label: 'Customer List', to: '/admin/customers', permission: 'view_customers' },
-      { label: 'Prospect Finder', to: '/admin/prospect-finder', permission: 'view_prospect_finder' },
       { label: 'Prospect List', to: '/admin/prospects/list', permission: 'view_prospect_list' },
       { label: 'Prospect Pipeline', to: '/admin/prospects/pipeline', permission: 'view_prospect_pipeline' },
     ]
@@ -99,7 +132,7 @@ const subPage = computed(() => {
   return null
 })
 
-function isShortcutActive(item: { to: string | { path: string; query?: Record<string, string> } }) {
+function isShortcutActive(item: { to: string | { path: string; query?: Record<string, string | undefined> } }) {
   if (typeof item.to === 'string') return route.path === item.to || route.path.startsWith(`${item.to}/`)
   return route.path === item.to.path && (route.query.tab || 'site') === item.to.query?.tab
 }
@@ -111,6 +144,12 @@ function runSearch() {
   if (route.path.includes('/prospects/list')) {
     router.replace({ path: route.path, query: value ? { ...route.query, search: value } : { ...route.query, search: undefined } })
   } else if (route.path.includes('/accounts')) {
+    router.replace({ path: route.path, query: value ? { ...route.query, search: value } : { ...route.query, search: undefined } })
+  } else if (route.path.includes('/role-management')) {
+    router.replace({ path: route.path, query: value ? { ...route.query, search: value } : { ...route.query, search: undefined } })
+  } else if (route.path.includes('/sales-structure')) {
+    router.replace({ path: route.path, query: value ? { ...route.query, search: value } : { ...route.query, search: undefined } })
+  } else if (route.path.includes('/visit-monitoring')) {
     router.replace({ path: route.path, query: value ? { ...route.query, search: value } : { ...route.query, search: undefined } })
   } else {
     router.push({ path: '/admin/prospects/list', query: value ? { search: value } : {} })

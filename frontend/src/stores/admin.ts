@@ -92,6 +92,11 @@ export const useAdminStore = defineStore('admin', () => {
     await fetchUsers()
   }
 
+  async function restoreUser(id: string) {
+    await adminApi.restoreUser(id)
+    await fetchUsers()
+  }
+
   async function fetchUserById(id: string) {
     detailLoading.value = true
     try {
@@ -309,6 +314,7 @@ async function endSalesAssignment(
     createUser,
     updateStatus,
     deleteUser,
+    restoreUser,
     fetchUserById,
     updateUser,
     clearSelectedUser,

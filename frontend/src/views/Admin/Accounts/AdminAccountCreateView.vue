@@ -231,14 +231,6 @@ onMounted(async () => {
 
     <header class="topbar">
       <div class="topbar-left">
-        <Button
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          rounded
-          title="Back to Accounts"
-          @click="router.push('/admin/accounts')"
-        />
 
         <div>
           <span class="eyebrow">Account Management</span>

@@ -174,6 +174,16 @@ func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID)
 	return s.repository.DeleteCustomer(ctx, id)
 }
 
+func (s *Service) ListTrashedCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
+	if !actor.can("view_customers") { return nil, ErrForbidden }
+	return s.repository.ListTrashedCustomers(ctx)
+}
+
+func (s *Service) RestoreCustomer(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.can("view_customers") { return ErrForbidden }
+	return s.repository.RestoreCustomer(ctx, id)
+}
+
 func (s *Service) FindParentCompanyByCode(ctx context.Context, actor Actor, code string) (customermodel.ParentCompany, error) {
 	if !actor.Role.IsAdminRole() {
 		return customermodel.ParentCompany{}, ErrForbidden

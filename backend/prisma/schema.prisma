@@ -307,7 +307,8 @@ model ParentCompany {
 }
 
 model CustomerSite {
-  id                       String        @id @default(uuid()) @db.Uuid
+	id                       String        @id @default(uuid()) @db.Uuid
+	deletedAt                DateTime?     @map("deleted_at") @db.Timestamptz(6)
   customerCode             String        @unique @map("customer_code")
   parentCompanyId          String        @map("parent_company_id") @db.Uuid
   sourceProspectId         String        @unique @map("source_prospect_id") @db.Uuid
@@ -347,7 +348,8 @@ model CustomerSite {
 
   @@index([salesExecutiveId, convertedAt])
   @@index([parentCompanyId])
-  @@map("customer_sites")
+	@@index([deletedAt])
+	@@map("customer_sites")
 }
 
 model ProspectComment {

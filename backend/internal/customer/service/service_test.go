@@ -27,6 +27,8 @@ func (f *fakeCustomerRepository) AutoConvert(context.Context, uuid.UUID) (custom
 	return customermodel.CustomerSite{}, nil
 }
 func (f *fakeCustomerRepository) DeleteCustomer(context.Context, uuid.UUID) error { return nil }
+func (f *fakeCustomerRepository) ListTrashedCustomers(context.Context) ([]customermodel.CustomerSite, error) { return nil, nil }
+func (f *fakeCustomerRepository) RestoreCustomer(context.Context, uuid.UUID) error { return nil }
 func (f *fakeCustomerRepository) ListCustomers(context.Context) ([]customermodel.CustomerSite, error) {
 	return nil, nil
 }

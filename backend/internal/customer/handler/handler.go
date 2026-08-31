@@ -184,6 +184,18 @@ func (h *Handler) DeleteCustomer(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+func (h *Handler) TrashedCustomers(c *fiber.Ctx) error {
+	items, err := h.service.ListTrashedCustomers(c.UserContext(), actor(c))
+	if err != nil { return writeError(c, err) }
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) RestoreCustomer(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id")); if err != nil { return response.Error(c, 400, "CUSTOMER_ID_INVALID", "Customer ID is invalid.") }
+	if err := h.service.RestoreCustomer(c.UserContext(), actor(c), id); err != nil { return writeError(c, err) }
+	return response.Data(c, fiber.StatusOK, fiber.Map{"restored": true})
+}
+
 func (h *Handler) GetParentCompanyByCode(c *fiber.Ctx) error {
 	code := c.Params("id")
 	item, err := h.service.FindParentCompanyByCode(c.UserContext(), actor(c), code)

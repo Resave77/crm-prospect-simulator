@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -27,6 +28,7 @@ type MasterTab = 'segment' | 'category'
 type MasterView = 'main' | 'trash'
 
 const activeTab = ref<MasterTab>('segment')
+const route = useRoute()
 const view = ref<MasterView>('main')
 const loading = ref(false)
 const error = ref('')
@@ -39,6 +41,12 @@ const segmentStatusFilter = ref('')
 const categorySearch = ref('')
 const categorySegmentFilter = ref('')
 const categoryStatusFilter = ref('')
+
+watch(() => route.query.action, (action) => {
+  if (action === 'add-segment') openAddSegment()
+  if (action === 'add-category') openAddCategory()
+  if (action === 'trash') view.value = 'trash'
+}, { immediate: true })
 
 const statusOptions = [
   { label: 'All Status', value: '' },

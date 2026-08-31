@@ -76,6 +76,7 @@ export interface AdminUserListParams {
   search: string
   role: AdminUserRole | ''
   status: AdminUserStatus | ''
+  includeDeleted?: boolean
 }
 
 export interface AdminUserListResult {

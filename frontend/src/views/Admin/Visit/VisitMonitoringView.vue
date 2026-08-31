@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
-import InputText from 'primevue/inputtext'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import vTooltip from 'primevue/tooltip'
@@ -27,6 +26,7 @@ interface GroupedVisitRow {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(false)
 const error = ref('')
@@ -44,6 +44,8 @@ const showDeleteModal = ref(false)
 const deleteBusy = ref(false)
 const showVisitResultModal = ref(false)
 const visitResultItem = ref<VisitMonitoringItem | null>(null)
+const actionDialogVisible = ref(false)
+const actionTarget = ref<GroupedVisitRow | null>(null)
 
 const filters = ref<VisitMonitoringFilters>({
   dateFrom: '',
@@ -73,6 +75,7 @@ const openVisits = computed(() => visits.value.filter((v) => !v.checkOutAt).leng
 const totalProspects = computed(() => groupedVisits.value.length)
 
 const customerSearch = ref('')
+watch(() => route.query.search, (value) => { customerSearch.value = typeof value === 'string' ? value : '' }, { immediate: true })
 const groupedVisits = computed(() => {
   const groups = new Map<string, VisitMonitoringItem[]>()
   for (const v of visits.value) {
@@ -236,6 +239,30 @@ function goToProspect(item: GroupedVisitRow | VisitMonitoringItem) {
   router.push({ name: 'AdminProspectReview', params: { id: item.prospectId } })
 }
 
+function openActions(item: GroupedVisitRow) {
+  actionTarget.value = item
+  actionDialogVisible.value = true
+}
+
+function closeActions() {
+  actionDialogVisible.value = false
+  actionTarget.value = null
+}
+
+function viewSelectedDetails() {
+  if (!actionTarget.value) return
+  const target = actionTarget.value
+  closeActions()
+  openDetail(target)
+}
+
+function viewSelectedProspect() {
+  if (!actionTarget.value) return
+  const target = actionTarget.value
+  closeActions()
+  goToProspect(target)
+}
+
 function downloadVisitData(item: VisitMonitoringItem) {
   const data = {
     evidenceId: item.id,
@@ -345,10 +372,6 @@ onMounted(() => {
           <Select v-model="selectedSales" :options="salesOptions" optionLabel="label" optionValue="value" placeholder="All Sales" @change="applyFilters" />
         </div>
         <div class="filter-field">
-          <label>Search</label>
-          <InputText v-model="customerSearch" placeholder="Search customer / industry..." />
-        </div>
-        <div class="filter-field">
           <label>Radius</label>
           <Select v-model="selectedRadius" :options="radiusOptions" optionLabel="label" optionValue="value" @change="applyFilters" />
         </div>
@@ -384,21 +407,34 @@ onMounted(() => {
           <thead>
             <tr>
               <th>Prospect</th>
+              <th>Category</th>
+              <th>Site Location</th>
               <th>Sales Executive</th>
               <th>Last Visit</th>
               <th>Status</th>
               <th>Visits</th>
-              <th class="th-action">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in filteredGroupedVisits" :key="row.prospectId" class="visit-row" @dblclick="openDetail(row)">
+            <tr v-for="row in filteredGroupedVisits" :key="row.prospectId" class="visit-row" @click="openActions(row)">
               <td>
                 <div class="prospect-cell">
-                  <strong class="prospect-name" @click="goToProspect(row)">{{ row.customerName }}</strong>
+                  <strong class="prospect-name">{{ row.customerName }}</strong>
                   <small class="prospect-meta">{{ row.industryGroup }} · {{ row.customerCategory }}</small>
                   <small v-if="row.formattedAddress" class="prospect-address">{{ row.formattedAddress }}</small>
                   <small v-if="row.phoneNumber" class="prospect-phone"><i class="pi pi-phone" /> {{ row.phoneNumber }}</small>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <span class="cell-primary">{{ row.customerCategory || '—' }}</span>
+                  <span class="cell-sub">{{ row.industryGroup || '—' }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <span class="cell-primary">{{ row.formattedAddress ? row.formattedAddress.split(',')[0] : '—' }}</span>
+                  <span class="cell-sub">{{ row.formattedAddress ? row.formattedAddress.split(',').slice(1).join(',').trim() : 'Location unavailable' }}</span>
                 </div>
               </td>
               <td>
@@ -416,12 +452,6 @@ onMounted(() => {
               <td>
                 <span class="visit-count-badge">{{ row.visitCount }}</span>
               </td>
-              <td class="td-action">
-                <div class="row-actions">
-                  <Button v-tooltip.top="'View Details'" icon="pi pi-info-circle" text rounded size="small" class="act-detail" @click="openDetail(row)" />
-                  <Button v-tooltip.top="'View Prospect'" icon="pi pi-eye" text rounded size="small" class="act-prospect" @click="goToProspect(row)" />
-                </div>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -429,6 +459,22 @@ onMounted(() => {
     </section>
 
     <VisitSelfieModal :item="selfieModalItem" @close="selfieModalItem = null" />
+
+    <Dialog v-model:visible="actionDialogVisible" modal :draggable="false" header="Visit Actions" :style="{ width: 'min(420px, calc(100vw - 2rem))' }" @hide="closeActions">
+      <p v-if="actionTarget" class="action-dialog-subtitle">Choose an action for <strong>{{ actionTarget.customerName }}</strong>.</p>
+      <div class="visit-action-list">
+        <button type="button" class="visit-action-card" @click="viewSelectedDetails">
+          <span class="visit-action-icon"><i class="pi pi-info-circle" /></span>
+          <span><strong>View Visit Details</strong><small>Review all visit records and evidence.</small></span>
+          <i class="pi pi-chevron-right" />
+        </button>
+        <button type="button" class="visit-action-card" @click="viewSelectedProspect">
+          <span class="visit-action-icon"><i class="pi pi-eye" /></span>
+          <span><strong>View Prospect</strong><small>Open the full prospect profile.</small></span>
+          <i class="pi pi-chevron-right" />
+        </button>
+      </div>
+    </Dialog>
 
     <Dialog v-model:visible="showDeleteModal" modal header="Delete Visit" :style="{ width: 'min(100%, 420px)' }" :closable="!deleteBusy">
       <p v-if="deleteModalItem" style="margin:0;font-size:0.85rem;line-height:1.5;">
@@ -475,7 +521,13 @@ onMounted(() => {
     </Dialog>
 
     <!-- Visit Detail Modal -->
-    <Dialog v-model:visible="showDetailModal" modal :header="'Visit Details - ' + detailProspectName" :style="{ width: 'min(100%, 700px)' }" :closable="true">
+    <Dialog v-model:visible="showDetailModal" modal :style="{ width: 'min(100%, 760px)' }" :closable="true" class="visit-detail-dialog">
+      <template #header>
+        <div class="visit-detail-header">
+          <span class="visit-detail-icon"><i class="pi pi-map-marker" /></span>
+          <div><span>VISIT ACTIVITY</span><strong>{{ detailProspectName }}</strong><small>{{ prospectVisits.length }} visit record{{ prospectVisits.length === 1 ? '' : 's' }} · Evidence timeline</small></div>
+        </div>
+      </template>
       <template v-if="prospectVisitsLoading">
         <div class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
@@ -1084,4 +1136,5 @@ onMounted(() => {
     grid-column: auto;
   }
 }
+.filter-panel{padding:.55rem .65rem}.filter-grid{grid-template-columns:repeat(5,minmax(115px,1fr)) auto;gap:.45rem}.filter-field :deep(.p-select),.date-input{height:35px}.filter-field label{margin-bottom:.18rem}.filter-action :deep(.p-button){height:35px;white-space:nowrap}.summary-strip{gap:.4rem}.summary-item{padding:.38rem .55rem}.table-panel{width:100%;overflow:hidden}.table-scroll{width:100%;overflow-x:auto}.data-table{width:100%;min-width:1120px;table-layout:fixed;border-collapse:collapse}.data-table thead th{height:42px;padding:.55rem .7rem;background:#f4f6f9;color:#475569;font-size:.58rem;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}.data-table tbody td{height:60px;padding:.55rem .7rem;border-bottom:1px solid #e5eaf0;border-right:1px solid #e5eaf0;vertical-align:middle}.data-table tbody tr:hover{background:#fffafa}.data-table tbody tr{cursor:pointer}.cell-stack{display:grid;min-width:0;gap:.08rem}.cell-primary,.cell-sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cell-primary{color:#0f172a;font-size:.72rem;font-weight:700}.cell-sub{color:#64748b;font-size:.62rem}.prospect-name{display:block;overflow:hidden;color:#e63946;font-size:.76rem;font-weight:750;text-overflow:ellipsis;white-space:nowrap}.prospect-meta,.prospect-address,.prospect-phone{display:block;overflow:hidden;color:#64748b;font-size:.62rem;text-overflow:ellipsis;white-space:nowrap}.action-dialog-subtitle{margin:0 0 1rem;color:#64748b;font-size:.78rem}.visit-action-list{display:grid;gap:.65rem}.visit-action-card{display:grid;grid-template-columns:38px 1fr 16px;align-items:center;gap:.65rem;width:100%;padding:.75rem;border:1px solid #dbe3ee;border-radius:12px;background:#fff;text-align:left;cursor:pointer}.visit-action-card:hover{border-color:#f3a4ad;background:#fff8f8}.visit-action-card>span:nth-child(2){display:grid;gap:.15rem}.visit-action-card strong{color:#0f172a;font-size:.78rem}.visit-action-card small{color:#64748b;font-size:.66rem}.visit-action-card>i{color:#94a3b8;font-size:.7rem}.visit-action-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:50%;background:#eff6ff;color:#2563eb}.visit-detail-header{display:flex;align-items:center;gap:.7rem}.visit-detail-icon{display:grid;width:40px;height:40px;place-items:center;border-radius:12px;background:#fff0f1;color:#e63946}.visit-detail-header div{display:grid;gap:.12rem}.visit-detail-header span{color:#e63946;font-size:.56rem;font-weight:800;letter-spacing:.08em}.visit-detail-header strong{color:#0f172a;font-size:.95rem}.visit-detail-header small{color:#64748b;font-size:.68rem}.visit-detail-dialog :deep(.p-dialog-content){padding-top:.35rem}.detail-visits-list{display:grid;gap:.7rem}.detail-visit-card{overflow:hidden;border:1px solid #e2e8f0;border-radius:13px;background:#fff;box-shadow:0 3px 10px rgba(15,23,42,.04)}.visit-card-header{display:flex;align-items:center;justify-content:space-between;padding:.65rem .8rem;border-bottom:1px solid #edf1f6;background:#f8fafc}.visit-card-num{color:#0f172a;font-size:.72rem;font-weight:800}.open-badge{padding:.18rem .48rem;border-radius:999px;background:#dcfce7;color:#15803d;font-size:.6rem;font-weight:800}.visit-card-body{display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:.75rem .8rem}.detail-row{display:grid;gap:.18rem;padding:.28rem 0;border-bottom:1px solid #f1f5f9}.detail-label{color:#94a3b8;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}.detail-row strong{color:#334155;font-size:.7rem;line-height:1.35}.visit-card-actions{display:flex;justify-content:flex-end;gap:.25rem;padding:.45rem .65rem;border-top:1px solid #edf1f6;background:#fbfdff}@media(max-width:1050px){.filter-grid{grid-template-columns:repeat(3,minmax(130px,1fr)) auto}}@media(max-width:700px){.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-action{grid-column:1/-1}.visit-card-body{grid-template-columns:1fr}}
 </style>

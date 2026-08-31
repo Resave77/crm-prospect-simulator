@@ -87,7 +87,6 @@ async function executeDelete() {
     </div>
 
     <template v-else-if="sites.length">
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <!-- PAGE HEADER -->
       <header class="page-heading">
         <div class="page-title-wrapper">

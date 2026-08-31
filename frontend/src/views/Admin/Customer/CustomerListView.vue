@@ -7,7 +7,7 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
 import { useCustomerListStore } from '../../../stores/customerList'
-import { deleteCustomer } from '../../../api/crm'
+import { deleteCustomer, listTrashedCustomers, restoreCustomer } from '../../../api/crm'
 import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
 import { fallbackCategories, fallbackSegments } from '../../../utils/masterDataFallback'
 import MasterDataPanel from '../../../components/admin/MasterDataPanel.vue'
@@ -26,6 +26,17 @@ const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const deleting = ref(false)
 const trashVisible = ref(false)
+const trashedCustomers = ref<CustomerSite[]>([])
+const trashLoading = ref(false)
+const restoringCustomerId = ref('')
+async function openTrash() {
+  trashVisible.value = true; trashLoading.value = true
+  try { trashedCustomers.value = await listTrashedCustomers() } finally { trashLoading.value = false }
+}
+async function restoreCustomerItem(customer: CustomerSite) {
+  restoringCustomerId.value = customer.id
+  try { await restoreCustomer(customer.id); trashedCustomers.value = trashedCustomers.value.filter(c => c.id !== customer.id); await store.fetchCustomers() } finally { restoringCustomerId.value = '' }
+}
 const bulkMoving = ref(false)
 const selectedCustomerId = ref('')
 const customerActionVisible = ref(false)
@@ -319,6 +330,7 @@ async function moveSelectedToTrash() {
   if (!ids.length) return
   bulkMoving.value = true
   try {
+    await Promise.all(ids.map((id) => deleteCustomer(id)))
     const removed = new Set(ids)
     store.allCustomers = store.allCustomers.filter((c) => !removed.has(c.id))
     store.items = store.items.filter((c) => !removed.has(c.id))
@@ -375,7 +387,7 @@ async function executeDeleteCompany() {
         <button type="button" class="summary-item" @click="selectTab('company')"><i class="pi pi-clock si-amber" /><span>ERP Pending</span><strong>{{ erpPendingCount }}</strong></button>
       </div>
       <div class="page-heading-actions">
-        <Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="trashVisible = true" />
+        <Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
         <Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
       </div>
@@ -637,11 +649,12 @@ async function executeDeleteCompany() {
     <!-- ======================== MASTER DATA TAB ======================== -->
     <MasterDataPanel v-if="activeTab === 'master'" />
   </section>
-  <Dialog v-model:visible="trashVisible" modal header="Trash" :style="{ width: '520px' }" :breakpoints="{ '640px': '92vw' }">
+  <Dialog v-model:visible="trashVisible" modal header="Trash Customer Existing" :style="{ width: '680px' }" :breakpoints="{ '640px': '92vw' }">
     <div class="trash-modal-body">
       <div class="trash-empty-icon"><i class="pi pi-trash" /></div>
-      <strong>Trash is empty</strong>
-      <span>Deleted customer sites and companies will appear here.</span>
+      <div v-if="trashLoading">Loading trash...</div>
+      <template v-else-if="!trashedCustomers.length"><strong>Trash is empty</strong><span>Deleted customer sites will appear here.</span></template>
+      <div v-else class="customer-trash-list"><div v-for="customer in trashedCustomers" :key="customer.id" class="customer-trash-row"><div><strong>{{ customer.name }}</strong><span>{{ customer.customerCode }} · {{ customer.parentCompanyName }}</span></div><Button label="Restore" icon="pi pi-undo" size="small" :loading="restoringCustomerId === customer.id" @click="restoreCustomerItem(customer)" /></div></div>
     </div>
   </Dialog>
   <Dialog v-model:visible="customerActionVisible" modal :header="selectedCustomer?.name || 'Customer Actions'" :style="{ width: '460px' }" :breakpoints="{ '640px': '92vw' }">
@@ -661,5 +674,6 @@ async function executeDeleteCompany() {
 .customer-action-modal{display:grid;gap:.35rem}.customer-action-modal strong{color:#172033;font-size:.95rem}.customer-action-modal>span{color:#94a3b8;font-family:monospace;font-size:.68rem}.customer-action-modal>div{display:grid;gap:.5rem;margin-top:.75rem}.customer-action-modal :deep(.p-button){justify-content:center;width:100%}
 .customer-action-modal>p{margin:0 0 .7rem;color:#64748b;font-size:.72rem;line-height:1.5}.customer-action-card{display:flex;align-items:center;gap:.75rem;width:100%;padding:.85rem .8rem;border:1px solid #dfe6ef;border-radius:13px;background:#fff;color:#172033;text-align:left;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s}.customer-action-card:hover{border-color:#b8c9df;background:#f8fbff;box-shadow:0 3px 10px rgba(15,23,42,.06)}.customer-action-card>i{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:.85rem}.customer-action-card>span{display:grid;gap:.2rem;min-width:0}.customer-action-card strong{font-size:.74rem}.customer-action-card small{color:#64748b;font-size:.64rem;line-height:1.35}.customer-action-card.danger{border-color:#fecaca;background:#fff7f7}.customer-action-card.danger:hover{background:#fff1f2;border-color:#fca5a5}.customer-action-card.danger>i{background:#fff;color:#dc2626}.customer-action-card.danger strong,.customer-action-card.danger small{color:#b91c1c}
 @media(min-width:901px){.panel-stack .filter-panel{display:flex;align-items:flex-end;gap:.5rem;padding:.5rem .6rem}.panel-stack .filter-panel .search-row{flex:0 1 280px}.panel-stack .filter-panel .filter-grid{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr)) auto;flex:1;gap:.4rem}.panel-stack .filter-field :deep(.p-select){height:36px}.panel-stack .filter-field label{font-size:.52rem}}
+.admin-page .data-table{width:100%;table-layout:fixed}.admin-page .data-table thead th{height:42px;padding:.55rem .7rem;background:#f4f6f9}.admin-page .data-table tbody td{height:60px;padding:.55rem .7rem;border-right:1px solid #e5eaf0}.admin-page .table-panel{width:100%}
 </style>
 

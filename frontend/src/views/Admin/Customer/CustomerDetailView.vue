@@ -140,7 +140,6 @@ async function executeDelete() {
     </div>
 
     <template v-if="detail">
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push('/admin/customers')" title="Back" />
       <!-- PAGE HEADER -->
       <header class="page-heading customer-admin-hero">
         <div class="page-title-wrapper">

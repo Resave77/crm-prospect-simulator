@@ -113,7 +113,6 @@ function runAction(
           </template>
         </div>
       </template>
-      <Column selectionMode="multiple" headerStyle="width: 3rem" />
       <Column field="salesRole.level" header="Role Level" sortable :style="{ width: '130px' }">
         <template #body="{ data }"><Tag :value="`Level ${data.salesRole.level}`" severity="info" /></template>
       </Column>

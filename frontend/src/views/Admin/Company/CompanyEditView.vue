@@ -88,7 +88,6 @@ onMounted(async () => {
 
     <!-- FORM -->
     <template v-else-if="!loading">
-      <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.push(`/admin/companies/${code}`)" title="Back" />
       <header class="page-heading">
         <div class="page-title-wrapper">
           <span class="eyebrow">Edit Company</span>
