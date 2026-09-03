@@ -58,6 +58,7 @@ const LEVEL_FALLBACK_DESCRIPTION: Record<SalesRoleLevel, string> = {
 const activeTab = ref<'assigned' | 'unassigned' | 'all'>('assigned')
 const viewMode = ref<ViewMode>('tree')
 const showBanner = ref(true)
+const showFilters = ref(false)
 const selectedRows = ref<SalesStructureItem[]>([])
 const selectedHierarchyRows = ref<HierarchyRow[]>([])
 const expandedNodeIds = ref<Set<string>>(new Set())
@@ -799,8 +800,8 @@ onMounted(async () => {
     <header class="page-heading compact-heading">
       <div class="page-title-wrapper">
         <span class="eyebrow">Sales Organization</span>
-        <h1>Sales Structure</h1>
-        <p class="muted">Manage monthly reporting lines and team assignments.</p>
+        <h1>Struktur Sales</h1>
+        <p class="muted">Kelola garis pelaporan dan penugasan tim setiap bulan.</p>
       </div>
 
       <div class="heading-stats">
@@ -833,6 +834,12 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error">{{ error }}</Message>
 
+    <nav class="sales-erp-toolbar" aria-label="Sales structure controls">
+      <label class="sales-search"><i class="pi pi-search" /><input v-model="searchInput" placeholder="Search employee, role, reports to..." /></label>
+      <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
+      <Button v-if="canAssignSales" label="Assign Sales" icon="pi pi-plus" size="small" @click="openAssign()" />
+    </nav>
+
     <div class="view-switcher" aria-label="Sales structure view mode">
       <button class="view-btn" :class="{ active: viewMode === 'tree' }" type="button" @click="viewMode = 'tree'">
         <i class="pi pi-sitemap" /> Hierarchy
@@ -848,7 +855,7 @@ onMounted(async () => {
       <button class="tab-btn" :class="{ active: activeTab === 'all' }" type="button" @click="activeTab = 'all'">All Sales Users <span class="tab-count">{{ totalActiveSales }}</span></button>
     </div>
 
-    <div v-if="viewMode === 'tree' || activeTab === 'assigned'" class="filter-panel">
+    <div v-if="showFilters && (viewMode === 'tree' || activeTab === 'assigned')" class="filter-panel">
       <div class="filter-field effective-month-field">
         <label>Effective Month</label>
         <input v-model="store.selectedEffectiveMonth" type="month" />
@@ -1496,4 +1503,21 @@ input[type='month'] {
   }
 }
 .toolbar-panel{display:none}.filter-panel{display:grid;grid-template-columns:1.1fr repeat(4,minmax(0,1fr)) auto;align-items:end;gap:.5rem;padding:.6rem .7rem;flex-wrap:nowrap}.filter-panel .filter-field{min-width:0}.filter-panel :deep(.p-select){height:34px;width:100%}.filter-panel input[type="month"]{box-sizing:border-box;width:100%;height:34px;padding:.35rem .5rem;border:1px solid #dbe3ee;border-radius:8px;color:#334155;font-size:.72rem}.filter-panel>.p-button{height:34px;white-space:nowrap}.view-switcher,.tab-bar{gap:.35rem}.view-btn,.tab-btn{padding:.45rem .7rem;font-size:.74rem}.tree-panel,.table-panel{overflow:hidden;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.tree-panel :deep(.p-datatable-thead > tr > th),.table-panel :deep(.p-datatable-thead > tr > th){background:#f4f6f9;border-color:#e5eaf0;color:#475569;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase}.tree-panel :deep(.p-datatable-tbody > tr > td),.table-panel :deep(.p-datatable-tbody > tr > td){border-color:#e5eaf0;padding:.6rem .7rem}.tree-panel :deep(.p-datatable-tbody > tr:hover > td),.table-panel :deep(.p-datatable-tbody > tr:hover > td){background:#fffafa}@media(max-width:850px){.filter-panel{grid-template-columns:repeat(2,minmax(0,1fr));flex-wrap:wrap}.filter-panel>.p-button{justify-self:start}}
+@media (max-width: 640px) {
+  .admin-page { padding:.5rem; gap:.55rem; background:#f8fafc; }
+  .admin-page .workspace-header { padding:.85rem; border-radius:14px; }
+  .admin-page .page-title-wrapper h1 { font-size:1.12rem; }
+  .admin-page .page-title-wrapper .muted { font-size:.64rem; line-height:1.35; white-space:normal; }
+  .admin-page .summary-strip { grid-template-columns:repeat(2,1fr); gap:.35rem; }
+  .admin-page .summary-card { padding:.65rem; border-radius:11px; }
+  .admin-page .summary-card strong { font-size:1.1rem; }
+  .admin-page .toolbar-panel { padding:.7rem; border-radius:12px; }
+  .admin-page .view-switcher { width:100%; }
+  .admin-page .view-btn { flex:1; min-height:38px; font-size:.65rem; }
+  .admin-page .filter-panel { padding:.7rem; border-radius:12px; }
+  .admin-page .filter-panel :deep(.p-inputtext), .admin-page .filter-panel :deep(.p-select) { width:100%; min-height:40px; }
+  .admin-page .tree-panel, .admin-page .table-panel { border-radius:12px; overflow:hidden; }
+  .admin-page .section-title { font-size:.8rem; }
+}
+.admin-page { min-width:0; padding:0; gap:0; background:#fff; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }.admin-page>.compact-heading{display:none}.sales-erp-toolbar{display:flex;min-height:58px;height:58px;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid #e2e8f0;background:#fff}.sales-search{display:flex;flex:0 1 360px;height:40px;align-items:center;gap:8px;padding:0 12px;border:1px solid #e2e8f0;border-radius:10px;color:#94a3b8}.sales-search i{font-size:13px}.sales-search input{width:100%;height:32px;border:0;outline:0;background:transparent;color:#0f172a;font-size:13px}.sales-search input::placeholder{color:#94a3b8}.sales-erp-toolbar>:deep(.p-button){height:40px;min-height:40px;padding:0 14px;border-radius:10px;font-size:12px;font-weight:600}.sales-erp-toolbar>:deep(.p-button:last-child){margin-left:auto;background:#dc2626;border-color:#dc2626}.admin-page>.view-switcher,.admin-page>.tab-bar{margin:10px 20px 0;border-color:#e2e8f0}.admin-page>.filter-panel{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr)) auto;gap:12px;align-items:end;margin-top:10px;padding:14px 20px 16px;border:0;border-bottom:1px solid #e2e8f0;border-radius:0;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.04)}.admin-page>.filter-panel .filter-field{gap:5px}.admin-page>.filter-panel .filter-field label{font-size:10px;letter-spacing:.04em}.admin-page>.filter-panel :deep(.p-select),.admin-page>.filter-panel input[type=month]{height:40px;border-radius:10px;font-size:12px}.admin-page>.filter-panel>.p-button{height:40px;border-radius:10px;font-size:12px}.admin-page>.tree-panel,.admin-page>.table-panel{margin-top:10px;border:0;border-radius:0;box-shadow:none}.admin-page :deep(.p-datatable-thead > tr > th){box-sizing:border-box;height:42px;padding:0 10px;border-right:1px solid #e2e2e2;background:#f4f4f4;color:#000;font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}.admin-page :deep(.p-datatable-tbody > tr > td){box-sizing:border-box;height:67px;padding:8px 10px;border-right:1px solid #e2e2e2;border-bottom:1px solid #e0e0e0;font-size:11px}.admin-page :deep(.p-datatable-tbody > tr:hover > td){background:#fff}.admin-page :deep(.p-tag){border-radius:999px;padding:4px 10px;font-size:10px;font-weight:500}@media(max-width:900px){.sales-erp-toolbar{height:auto;min-height:58px;flex-wrap:wrap}.sales-search{flex-basis:100%;max-width:none}.sales-erp-toolbar>:deep(.p-button){flex:1}.admin-page>.filter-panel{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px;padding:12px}.admin-page>.view-switcher,.admin-page>.tab-bar{margin-inline:12px}}@media(max-width:640px){.sales-erp-toolbar{padding:10px 12px}.admin-page>.filter-panel{grid-template-columns:1fr}.admin-page :deep(.p-datatable-table){min-width:900px}}
 </style>

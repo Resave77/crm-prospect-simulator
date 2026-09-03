@@ -169,16 +169,16 @@ button, input, select, textarea { font: inherit; }
 .table-card { overflow: hidden; }
 .responsive-table { overflow-x: auto; }
 
-table { width: 100%; border-collapse: collapse; }
+.admin-workspace table { width: 100%; border-collapse: collapse; }
 
-th, td {
+.admin-workspace th, .admin-workspace td {
   padding: 0.85rem 1.1rem;
   border-bottom: 1px solid #edf1f5;
   text-align: left;
   vertical-align: middle;
 }
 
-th {
+.admin-workspace th {
   color: var(--text-muted);
   background: var(--surface-subtle);
   font-size: 0.68rem;
@@ -187,41 +187,36 @@ th {
   text-transform: uppercase;
 }
 
-td {
+.admin-workspace td {
   color: #33413e;
   font-size: 0.88rem;
 }
 
-tr:last-child td { border-bottom: 0; }
+.admin-workspace tr:last-child td { border-bottom: 0; }
 
-td strong, td span { display: block; }
-td span {
+.admin-workspace td strong, .admin-workspace td span { display: block; }
+.admin-workspace td span {
   margin-top: 0.2rem;
   color: #788480;
   font-size: 0.78rem;
 }
 
-/* Compact admin filters: keep list controls on one clean row. */
-.admin-page .filter-panel,
-.pipeline-page .control-panel,
-.roles-page .toolbar-panel,
-.roles-page .filter-panel {
-  padding: 0.55rem 0.65rem;
-  gap: 0.5rem;
-}
-.admin-page .filter-field label,
-.pipeline-page .filter-field label,
-.roles-page .filter-field label {
-  margin-bottom: 0.18rem;
-  font-size: 0.56rem;
-}
-.admin-page .filter-field .p-select,
-.pipeline-page .filter-field .p-select,
-.roles-page .filter-field .p-select,
-.admin-page .date-input {
-  min-height: 35px;
-  height: 35px;
-}
+/* Admin reference alignment: scoped shadcn-style tokens and compact controls. */
+.admin-workspace { --admin-bg:#fff; --admin-subtle:#f8fafc; --admin-muted:#64748b; --admin-text:#0f172a; --admin-border:rgba(15,23,42,.1); --admin-focus:rgba(230,57,70,.18); background:var(--admin-bg); color:var(--admin-text); }
+.admin-workspace .admin-page { width:min(100%,1440px); margin-inline:auto; }
+.admin-workspace .page-heading { margin-bottom:1.25rem; }
+.admin-workspace .page-heading h1 { color:var(--admin-text); font-size:1.5rem; line-height:1.35; font-weight:600; letter-spacing:-.025em; }
+.admin-workspace .muted { color:var(--admin-muted); line-height:1.5; }
+.admin-workspace .table-card,.admin-workspace .section-card,.admin-workspace .form-section,.admin-workspace .filter-bar { border:1px solid var(--admin-border); border-radius:10px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.admin-workspace table th { height:40px; padding:.65rem .85rem; color:var(--admin-muted); background:var(--admin-subtle); border-bottom:1px solid var(--admin-border); font-size:.68rem; font-weight:600; letter-spacing:.02em; text-transform:none; }
+.admin-workspace table td { min-height:48px; padding:.7rem .85rem; color:var(--admin-text); border-bottom:1px solid rgba(15,23,42,.08); font-size:.78rem; }
+.admin-workspace table tbody tr:hover { background:#fffafa; }
+.admin-workspace :deep(.p-button),.admin-workspace button:not(.collapse-btn):not(.hamburger-btn) { min-height:36px; border-radius:8px; font-size:.75rem; font-weight:500; box-shadow:none; }
+.admin-workspace :deep(.p-inputtext),.admin-workspace :deep(.p-select),.admin-workspace input,.admin-workspace select,.admin-workspace textarea { min-height:36px; border:1px solid var(--admin-border); border-radius:8px; background:#fff; color:var(--admin-text); font-size:.78rem; }
+.admin-workspace :deep(.p-inputtext:focus),.admin-workspace :deep(.p-select:focus),.admin-workspace input:focus,.admin-workspace select:focus,.admin-workspace textarea:focus { border-color:var(--brand-red); box-shadow:0 0 0 3px var(--admin-focus); outline:none; }
+.admin-workspace .filter-bar { padding:.75rem; gap:.65rem; }
+@media (max-width:900px) { .admin-workspace .admin-content { padding:1rem; } .admin-workspace .page-heading { gap:.75rem; flex-wrap:wrap; } .admin-workspace .page-heading h1 { font-size:1.35rem; } }
+@media (max-width:560px) { .admin-workspace .admin-content { padding:.75rem; } .admin-workspace .filter-bar { grid-template-columns:1fr; } }
 
 .empty-state {
   min-height: 220px;

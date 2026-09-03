@@ -16,7 +16,13 @@ const debugMode = ref(false)
 const isOnline = ref(navigator.onLine)
 const cloudSyncing = ref(false)
 
-const shortcutItems = computed(() => {
+const userInitials = computed(() => {
+  const name = auth.user?.fullName ?? ''
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || 'U'
+})
+
+/* shortcut navigation removed */
+/* const shortcutItems = computed(() => {
   const path = route.path
   if (path === '/admin/prospect-finder' || path === '/admin/prospects/list' || path === '/admin/visit-monitoring') return []
   let items = []
@@ -106,7 +112,7 @@ const shortcutItems = computed(() => {
   }
 
   return items.filter((item) => auth.hasPermission(item.permission))
-})
+}) */
 
 const subPage = computed(() => {
   const path = route.path
@@ -132,12 +138,16 @@ const subPage = computed(() => {
   return null
 })
 
-function isShortcutActive(item: { to: string | { path: string; query?: Record<string, string | undefined> } }) {
+/* function isShortcutActive(item: { to: string | { path: string; query?: Record<string, string | undefined> } }) {
   if (typeof item.to === 'string') return route.path === item.to || route.path.startsWith(`${item.to}/`)
   return route.path === item.to.path && (route.query.tab || 'site') === item.to.query?.tab
 }
 
-const sidebarWidth = computed(() => sidebarCollapsed.value ? '64px' : '220px')
+function hasShortcutSeparator(label: string) {
+  return ['Credit Limit', 'Daily Collect.', 'Pay. Hist. Summary', 'BLR', 'Invoice List', 'BLR List'].includes(label)
+} */
+
+const sidebarWidth = computed(() => sidebarCollapsed.value ? '64px' : '168px')
 
 function runSearch() {
   const value = search.value.trim()
@@ -241,11 +251,11 @@ async function logout() {
       </nav>
       <details class="sidebar-profile">
         <summary>
-          <span class="sidebar-avatar">{{ auth.user?.fullName?.slice(0, 1) }}</span>
-          <span class="sidebar-profile-info"><strong>{{ auth.user?.fullName }}</strong><small>Administrator</small></span>
-          <i class="pi pi-ellipsis-v" />
+          <span class="sidebar-avatar"><span>{{ userInitials }}</span><i class="profile-online-dot" /></span>
+          <span class="sidebar-profile-info"><strong>{{ auth.user?.fullName }}</strong><small><i class="pi pi-shield" /> Administrator</small></span>
+          <i class="pi pi-chevron-up profile-chevron" />
         </summary>
-        <div class="sidebar-profile-menu"><button class="signout-btn" @click="logout"><i class="pi pi-sign-out" /><span>Sign out</span></button></div>
+        <div class="sidebar-profile-menu"><div class="profile-menu-heading"><span>ACCOUNT</span><strong>Siap bekerja hari ini?</strong></div><button class="signout-btn" @click="logout"><span class="logout-icon"><i class="pi pi-sign-out" /></span><span><strong>Keluar dari akun</strong><small>Amankan sesi Anda</small></span><i class="pi pi-arrow-right logout-arrow" /></button></div>
       </details>
     </aside>
     <div class="admin-workspace">
@@ -254,18 +264,13 @@ async function logout() {
         <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle navigation">
           <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
         </button>
-        <nav v-if="!subPage" class="shortcut-nav" aria-label="Page shortcuts">
-          <RouterLink v-for="item in shortcutItems" :key="`shortcut-${item.label}`" :to="item.to" :class="{ 'shortcut-active': isShortcutActive(item) }" active-class="" @click="closeSidebar">
-            {{ item.label }}
-          </RouterLink>
-        </nav>
         <form v-if="searchOpen" class="global-search is-open" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" autofocus aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="button" class="search-close" aria-label="Clear search" title="Clear search" @click="search = ''">×</button><button type="submit">Enter</button></form>
         <div class="topbar-actions">
           <button class="topbar-icon-btn navbar-collapse-btn" type="button" :title="navbarCollapsed ? 'Show shortcuts' : 'Minimize shortcuts'" :aria-label="navbarCollapsed ? 'Show shortcuts' : 'Minimize shortcuts'" @click="toggleNavbar"><i class="pi" :class="navbarCollapsed ? 'pi-chevron-left' : 'pi-chevron-right'" /></button>
           <button v-if="!navbarCollapsed" class="topbar-action-btn" type="button" title="Search" aria-label="Toggle search" @click="toggleSearch"><i class="pi pi-search" /> <span>Search</span></button>
           <button v-if="!navbarCollapsed" class="topbar-action-btn" :class="{ active: debugMode }" type="button" title="Toggle debug mode" aria-label="Toggle debug mode" @click="toggleDebug"><i class="pi pi-database" /> <span>Debug</span></button>
-          <button class="topbar-icon-btn" type="button" title="Fullscreen" aria-label="Toggle fullscreen" @click="toggleFullscreen"><i class="pi pi-expand" /></button>
-          <button class="topbar-icon-btn status-ok" :class="{ offline: !isOnline }" type="button" :title="isOnline ? 'System status: online' : 'System status: offline'" :aria-label="isOnline ? 'System status: online' : 'System status: offline'"><i class="pi" :class="isOnline ? 'pi-check' : 'pi-times'" /></button>
+          <button class="topbar-icon-btn" type="button" title="Fullscreen" aria-label="Toggle fullscreen" @click="toggleFullscreen"><svg class="erp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg></button>
+          <button class="topbar-icon-btn status-ok" :class="{ offline: !isOnline }" type="button" :title="isOnline ? 'System status: online' : 'System status: offline'" :aria-label="isOnline ? 'System status: online' : 'System status: offline'"><svg class="erp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path v-if="isOnline" d="m8 12 2.5 2.5L16 9" /><path v-else d="m9 9 6 6m0-6-6 6" /></svg></button>
           <button class="topbar-icon-btn cloud-btn" :class="{ syncing: cloudSyncing }" type="button" :title="cloudSyncing ? 'Syncing...' : 'Sync cloud data'" aria-label="Sync cloud data" @click="syncCloud"><i class="pi" :class="cloudSyncing ? 'pi-spin pi-spinner' : 'pi-cloud-upload'" /><small>{{ cloudSyncing ? '…' : '0' }}</small></button>
         </div>
         <div class="topbar-spacer" />
@@ -279,7 +284,7 @@ async function logout() {
           <footer><button type="button" @click="closeDebug">Close</button></footer>
         </section>
       </div>
-      <div v-if="subPage" class="subpage-bar">
+      <div v-if="subPage && !route.path.endsWith('/create') && !route.path.includes('/role-management/') && !route.path.includes('/accounts/') && !route.path.endsWith('/add')" class="subpage-bar">
         <RouterLink :to="subPage.backTo" class="subpage-back">← {{ subPage.back }}</RouterLink>
         <span class="subpage-divider" />
         <strong>{{ subPage.title }}</strong>
@@ -299,33 +304,33 @@ async function logout() {
 .admin-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  background: #f7f9fb;
+  grid-template-columns: 168px minmax(0, 1fr);
+  background: #f8fafc;
   transition: grid-template-columns 0.25s ease;
 }
 
 .admin-shell.sidebar-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .admin-sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
-  padding: 1.1rem 0.7rem;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0;
   color: #1e293b;
   background: #ffffff;
-  border-right: 1px solid #edf1f6;
+  border-right: 1px solid #e2e8f0;
   overflow-x: hidden;
   overflow-y: hidden;
   transition: width 0.25s ease;
 }
 
 .admin-sidebar.collapsed {
-  padding: 1.1rem 0.5rem;
+  padding: 0;
   align-items: center;
 }
 
@@ -378,27 +383,33 @@ async function logout() {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-bottom: 0.85rem;
-  border-bottom: 1px solid #f1f4f8;
-  margin-bottom: 0.15rem;
+  height: 56px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0;
+  position: relative;
 }
 
 .admin-sidebar.collapsed .sidebar-header {
-  flex-direction: column;
-  gap: 0.55rem;
+  justify-content: center;
+  padding: 0;
 }
 
 /* ── Collapse Toggle ────────────────────────────────────────── */
 .collapse-btn {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border: 1px solid #edf1f6;
-  border-radius: 7px;
-  background: #f8fafc;
+  border-radius: 999px;
+  background: #ffffff;
   color: #94a3b8;
   cursor: pointer;
+  position: absolute;
+  right: -15px;
+  top: 11px;
+  z-index: 2;
   font-size: 0.55rem;
   flex-shrink: 0;
   transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
@@ -436,7 +447,7 @@ async function logout() {
   align-content: start;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 2px;
+  padding: 14px 10px 0;
 }
 
 .admin-sidebar nav::-webkit-scrollbar { width: 4px; }
@@ -448,11 +459,12 @@ async function logout() {
   display: flex;
   gap: 0.65rem;
   align-items: center;
-  padding: 0.55rem 0.65rem;
-  border-radius: 9px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
   color: #64748b;
   text-decoration: none;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 550;
   white-space: nowrap;
   flex-shrink: 0;
@@ -461,8 +473,11 @@ async function logout() {
 
 .admin-sidebar.collapsed nav a {
   justify-content: center;
-  padding: 0.6rem 0;
-  border-radius: 9px;
+  flex-direction: column;
+  gap: 2px;
+  height: 42px;
+  padding: 4px;
+  border-radius: 8px;
 }
 
 .admin-sidebar nav a:hover {
@@ -475,8 +490,8 @@ async function logout() {
 }
 
 .admin-sidebar nav a.router-link-active {
-  color: #e63946;
-  background: linear-gradient(135deg, #fff0f1 0%, #fff5f5 100%);
+  color: #0f172a;
+  background: #fef2f2;
   font-weight: 700;
   box-shadow: inset 3px 0 0 #e63946;
 }
@@ -507,7 +522,7 @@ async function logout() {
   text-align: center;
   font-size: 0.78rem;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: #64748b;
   transition: color 150ms ease;
 }
 
@@ -832,12 +847,24 @@ async function logout() {
   .global-search { width: 100%; }
   .profile-menu { display: none; }
 }
+.erp-icon { width: 15px; height: 15px; display: block; }
 .sidebar-profile { position: relative; margin-top: auto; border-top: 1px solid #edf1f6; padding-top: .65rem; }
 .sidebar-profile summary { display:flex; align-items:center; gap:.55rem; padding:.45rem .4rem; border-radius:9px; list-style:none; cursor:pointer; }
 .sidebar-profile summary:hover { background:#f8fafc; }.sidebar-profile summary::-webkit-details-marker { display:none; }
 .sidebar-avatar { display:grid; place-items:center; width:30px; height:30px; flex:none; border-radius:50%; background:linear-gradient(135deg,#e63946,#c92332); color:#fff; font-size:.68rem; font-weight:800; }
 .sidebar-profile-info { display:grid; min-width:0; flex:1; gap:.1rem; }.sidebar-profile-info strong { overflow:hidden; color:#172033; font-size:.63rem; text-overflow:ellipsis; white-space:nowrap; }.sidebar-profile-info small { color:#94a3b8; font-size:.52rem; }.sidebar-profile summary > i { color:#94a3b8; font-size:.7rem; }
 .sidebar-profile-menu { position:absolute; right:.35rem; bottom:calc(100% + .35rem); width:170px; padding:.3rem; border:1px solid #e5eaf0; border-radius:10px; background:#fff; box-shadow:0 12px 25px rgba(15,23,42,.14); }
+.sidebar-profile { padding-top: .8rem; }
+.sidebar-profile summary { padding: .55rem .5rem; border: 1px solid transparent; transition: .2s ease; }
+.sidebar-profile summary:hover { background: linear-gradient(135deg, #fff7f7, #fff); border-color: #f4d5d8; }
+.sidebar-avatar { position: relative; width: 36px; height: 36px; background: linear-gradient(135deg, #e63946, #8f1d2a); box-shadow: 0 5px 12px rgba(230,57,70,.22); }
+.profile-online-dot { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; background: #22c55e; }
+.sidebar-profile-info small { display: flex; align-items: center; gap: .25rem; }
+.sidebar-profile-info small i { font-size: .5rem; color: #e63946; }
+.profile-chevron { transition: transform .2s ease; }.sidebar-profile[open] .profile-chevron { transform: rotate(180deg); }
+.sidebar-profile-menu { width: 218px; padding: .65rem; border-radius: 14px; }
+.profile-menu-heading { display: grid; gap: .2rem; padding: .25rem .45rem .6rem; }.profile-menu-heading span { color: #e63946; font-size: .48rem; font-weight: 800; letter-spacing: .12em; }.profile-menu-heading strong { color: #172033; font-size: .65rem; }
+.signout-btn { display: flex; align-items: center; gap: .55rem; width: 100%; padding: .55rem .45rem; border: 0; border-radius: 10px; background: #fff5f5; color: #b4232d; cursor: pointer; text-align: left; }.signout-btn:hover { background: #fee2e2; }.signout-btn > span:nth-child(2) { display: grid; gap: .12rem; flex: 1; }.signout-btn strong { font-size: .63rem; }.signout-btn small { color: #c26a72; font-size: .5rem; }.logout-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: #fff; }.logout-arrow { font-size: .62rem; }
 .topbar-actions { display: flex; align-items: center; gap: .45rem; margin-left: auto; }
 .topbar-action-btn {
   height: 32px; display: inline-flex; align-items: center; gap: .4rem; padding: 0 .78rem;
@@ -1104,7 +1131,89 @@ async function logout() {
 
 .shortcut-nav { display: none; }
 @media (min-width: 901px) {
-  .shortcut-nav { display: flex; }
+  .shortcut-nav {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 1px;
+    overflow-x: auto;
+  }
+  .shortcut-nav a {
+    display: inline-flex;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0 10px;
+    border-radius: 9px;
+    color: #475569;
+    text-decoration: none;
+    font-size: 0.625rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .shortcut-nav a:hover { background: #f8fafc; color: #0f172a; }
+  .shortcut-separator {
+    width: 1px;
+    height: 22px;
+    background: #cbd5e1;
+    margin: 0 5px;
+    flex: 0 0 auto;
+  }
+  .shortcut-nav a.shortcut-active {
+    color: #ffffff;
+    background: #dc2626;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12);
+  }
+  .admin-topbar { gap: 18px; padding: 0 24px; border-bottom-color: #e2e8f0; }
+  .admin-sidebar.collapsed { width: 64px !important; padding: 0 !important; }
+  .admin-sidebar.collapsed nav { padding: 14px 3px 0; align-items: center; }
+  .admin-sidebar.collapsed .sidebar-header { height: 56px; }
+  .admin-sidebar:not(.collapsed) nav { padding: 14px 10px 0; gap: 2px; }
+  .admin-sidebar:not(.collapsed) nav a { height: 28px; min-height: 28px; padding: 0 8px; gap: 8px; border-radius: 7px; font-size: 0.625rem; }
+  .admin-sidebar:not(.collapsed) nav a.router-link-active { background: #fef2f2; color: #0f172a; box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }
+  .admin-sidebar:not(.collapsed) nav a.router-link-active i { color: #475569; }
+  .admin-sidebar.collapsed nav a { width: 100%; height: 42px; min-height: 42px; padding: 4px; gap: 2px; border-radius: 8px; }
+  .admin-sidebar.collapsed nav a.router-link-active { background: #fef2f2; box-shadow: inset 0 2px 4px rgba(0,0,0,.04); }
+  .admin-sidebar.collapsed nav a.router-link-active::before { display: none; }
+  .admin-sidebar.collapsed nav a span { font-size: 0.5rem; line-height: 10px; font-weight: 500; text-align: center; }
+  .admin-sidebar.collapsed nav a i { width: auto; height: auto; font-size: 0.875rem; color: #475569; }
+  .admin-sidebar.collapsed .logo-mark { width: 52px; height: 40px; border: 0; box-shadow: none; }
+  .admin-sidebar:not(.collapsed) .logo-mark { width: 114px; height: 40px; border: 0; box-shadow: none; }
+  .admin-sidebar:not(.collapsed) .sidebar-header { height: 72px; justify-content: flex-start; padding: 0 10px; align-items: flex-start; padding-top: 8px; }
+  .admin-sidebar:not(.collapsed) .shell-logo { align-items: flex-start; gap: 8px; }
+  .admin-sidebar:not(.collapsed) .logo-mark { width: 78px; height: 38px; padding: 0; }
+  .admin-sidebar:not(.collapsed) .logo-text { display: grid; width: 42px; padding-top: 1px; font-size: 0.58rem; line-height: 1.05; }
+  .admin-sidebar:not(.collapsed) .logo-text small { display: block; margin-top: 2px; font-size: 0.46rem; line-height: 1.1; }
+  .admin-sidebar:not(.collapsed) .collapse-btn { top: 21px; right: -15px; }
+  .admin-sidebar .nav-caption { padding-left: 8px; font-size: 0.5rem; letter-spacing: 0.1em; color: #94a3b8; }
+  .admin-sidebar.collapsed .sidebar-profile-info,
+  .admin-sidebar.collapsed .sidebar-profile summary > i { display: none; }
+  .admin-sidebar.collapsed .sidebar-profile summary { justify-content: center; padding: 8px 0; }
+  .admin-sidebar nav { overflow: hidden; }
+  .admin-sidebar:not(.collapsed) nav .nav-caption { margin-top: 0; padding-top: 5px; padding-bottom: 3px; }
+  .admin-sidebar:not(.collapsed) nav a { min-height: 29px; }
+  .admin-sidebar.collapsed nav a { min-height: 40px; }
+  .admin-sidebar .sidebar-profile { flex: 0 0 auto; margin-top: auto; padding-top: 5px; }
+  .admin-sidebar:not(.collapsed) .sidebar-profile { padding-left: 6px; padding-right: 6px; }
+  .admin-sidebar:not(.collapsed) .sidebar-profile summary { padding: 5px 4px; gap: 6px; }
+  .admin-sidebar:not(.collapsed) .sidebar-avatar { width: 32px; height: 32px; font-size: 0.58rem; }
+  .admin-sidebar:not(.collapsed) .sidebar-profile-info strong { font-size: 0.56rem; }
+  .admin-sidebar:not(.collapsed) .sidebar-profile-info small { font-size: 0.44rem; }
+  .topbar-actions { gap: 10px; padding-left: 12px; border-left: 1px solid #eef2f7; }
+  .topbar-icon-btn { width: 34px; height: 34px; border-radius: 999px; border-color: #d9e3ef; background: #fff; }
+  .navbar-collapse-btn { width: 34px; height: 34px; }
+  .topbar-action-btn { height: 34px; border-color: #d9e3ef; background: #fff; padding: 0 12px; gap: 8px; }
+  .topbar-action-btn:nth-child(2) { min-width: 84px; }
+  .topbar-action-btn:nth-child(3) { min-width: 80px; }
+  .topbar-action-btn i { color: #475569; font-size: 0.75rem; }
+  .topbar-action-btn:hover, .topbar-action-btn.active { color: #334155; border-color: #d9e3ef; background: #f8fafc; }
+  .topbar-action-btn:hover i, .topbar-action-btn.active i { color: #475569; }
+  .topbar-icon-btn:hover { color: #334155; border-color: #d9e3ef; background: #f8fafc; }
+  .topbar-icon-btn.status-ok { width: 34px; height: 34px; border-color: #bbf7d0; background: #f0fdf4; color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.06); }
+  .topbar-icon-btn.cloud-btn { width: auto; min-width: 42px; height: 34px; padding: 0 8px; border-color: #d9e3ef; color: #0284c7; }
 }
 </style>
 

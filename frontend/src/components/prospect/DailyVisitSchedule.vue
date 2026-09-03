@@ -4,17 +4,17 @@ import { useRouter } from 'vue-router'
 import type { Prospect } from '../../types/crm'
 import { useVisitLocation } from '../../composables/sales/useVisitLocation'
 import { haversineKm, formatDistance } from '../../utils/maps'
-import { WORKING_DAYS, planWeeklyVisits, routeDay } from '../../utils/visitPlanning'
+import { DEFAULT_VISITS_PER_DAY, WORKING_DAYS, addCalendarDays, formatDateKey, formatWeekRange, getBusinessDatesForWeek, isValidDatePlan, planVisitsByDate, routeDay, sharedWeeklyPlan, startOfWorkWeek, moveToToday } from '../../utils/visitPlanning'
 
 const props = defineProps<{ loading?: boolean; prospects?: Prospect[] }>()
 const router = useRouter()
 const { state: gps, refreshOnce, distanceTo, distanceFormatted } = useVisitLocation()
 
 const open = ref(false)
-const days = [...WORKING_DAYS]
-const dayPlans = ref<Record<string, Prospect[]>>({})
-const ROUTE_STORAGE_KEY = 'crm-sales-weekly-route'
-const selectedDay = ref('Monday')
+const ROUTE_STORAGE_KEY = 'crm-sales-weekly-route-v3'
+const todayKey = computed(() => formatDateKey(new Date()))
+const displayedWeekStart = ref(startOfWorkWeek(new Date()))
+const selectedDate = ref(todayKey.value)
 const expandedItems = ref<Record<string, boolean>>({})
 const actionItem = ref<Prospect | null>(null)
 const overflow = ref<Prospect[]>([])
@@ -27,28 +27,33 @@ const hasValidCapacity = computed(() => maxVisitsPerDay.value == null || (Number
 
 onMounted(() => {
   refreshOnce().catch(() => {})
-  try {
-    const saved = localStorage.getItem(ROUTE_STORAGE_KEY)
-    dayPlans.value = saved ? JSON.parse(saved) : Object.fromEntries(days.map((day) => [day, []]))
-  } catch {
-    dayPlans.value = Object.fromEntries(days.map((day) => [day, []]))
-  }
+  try { const saved = JSON.parse(localStorage.getItem(ROUTE_STORAGE_KEY) || 'null'); if (saved?.version === 3 && isValidDatePlan(saved.days)) sharedWeeklyPlan.value = saved.days } catch { /* reset invalid persistence */ }
 })
 
-watch(dayPlans, (value) => {
-  try { localStorage.setItem(ROUTE_STORAGE_KEY, JSON.stringify(value)) } catch { /* storage may be unavailable */ }
+watch(sharedWeeklyPlan, (value) => {
+  try { localStorage.setItem(ROUTE_STORAGE_KEY, JSON.stringify({ version: 3, userId: 'sales', days: value })) } catch { /* storage may be unavailable */ }
 }, { deep: true })
 
 const activeProspects = computed(() =>
   (props.prospects ?? []).filter(p => p.status !== 'LOST' && p.status !== 'CONVERTED' && p.status !== 'WON')
 )
 
-const todayVisits = computed(() => {
-  const dow = new Date().getDay()
-  if (dow === 0 || dow === 6) return []
-  const dayName = days[dow - 1]
-  return dayPlans.value[dayName] ?? []
-})
+const weekDates = computed(() => getBusinessDatesForWeek(displayedWeekStart.value))
+const tabs = computed(() => weekDates.value.map((dateKey, index) => ({ dateKey, shortLabel: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'][index], count: sharedWeeklyPlan.value[dateKey]?.length ?? 0 })))
+const selectedDateVisits = computed(() => sharedWeeklyPlan.value[selectedDate.value] ?? [])
+const weekRange = computed(() => formatWeekRange(displayedWeekStart.value))
+const totalPreview = computed(() => Object.values(sharedWeeklyPlan.value).reduce((sum, items) => sum + items.length, 0))
+function navigateWeek(direction: -1 | 1) {
+  const next = startOfWorkWeek(addCalendarDays(displayedWeekStart.value, direction * 7))
+  const current = startOfWorkWeek(new Date())
+  const min = addCalendarDays(current, -28).getTime()
+  const plannedWeeks = Object.keys(sharedWeeklyPlan.value).map(key => { const date = new Date(`${key}T12:00:00`); return startOfWorkWeek(date).getTime() })
+  const max = Math.max(addCalendarDays(current, 56).getTime(), ...plannedWeeks)
+  if (next.getTime() < min || next.getTime() > max) return
+  displayedWeekStart.value = next
+  const dates = getBusinessDatesForWeek(next)
+  selectedDate.value = dates.includes(todayKey.value) ? todayKey.value : (dates.find(key => (sharedWeeklyPlan.value[key] ?? []).length) ?? dates[0])
+}
 
 const sortedActive = computed(() => {
   const list = [...activeProspects.value]
@@ -64,15 +69,17 @@ const sortedActive = computed(() => {
 })
 
 function buildWeeklyRoute(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
-  const result = planWeeklyVisits(activeProspects.value, start, maxVisitsPerDay.value ?? Number.POSITIVE_INFINITY)
-  dayPlans.value = result.plan
+  const result = planVisitsByDate(activeProspects.value, start, maxVisitsPerDay.value ?? DEFAULT_VISITS_PER_DAY, new Date())
+  sharedWeeklyPlan.value = result.plan
   overflow.value = result.overflow
 }
 
 function buildTodayRoute(start = gps.value.coords ? { latitude: gps.value.coords.latitude, longitude: gps.value.coords.longitude } : null) {
   const ordered = routeDay(activeProspects.value, start)
-  const capacity = maxVisitsPerDay.value ?? Math.max(1, ordered.length)
-  dayPlans.value = Object.fromEntries(days.map((day, index) => [day, ordered.slice(index * capacity, (index + 1) * capacity)]))
+  // Auto routing today routes the complete eligible set for today's field run.
+  // The daily capacity control applies to weekly planning, not this explicit
+  // route-all-today action.
+  sharedWeeklyPlan.value = moveToToday(sharedWeeklyPlan.value, todayKey.value, ordered)
   overflow.value = []
 }
 
@@ -90,7 +97,7 @@ async function autoRoute(mode: 'weekly' | 'today') {
     if (mode === 'weekly') buildWeeklyRoute(start)
     else buildTodayRoute(start)
     planningLoading.value = false
-    selectedDay.value = days.find((day) => (dayPlans.value[day] ?? []).length > 0) ?? 'Monday'
+    selectedDate.value = mode === 'today' ? todayKey.value : (Object.keys(sharedWeeklyPlan.value).find(key => (sharedWeeklyPlan.value[key] ?? []).length > 0) ?? todayKey.value)
   }
 }
 
@@ -121,23 +128,20 @@ function statusLabel(s: string) {
   return s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-const totalPreview = computed(() => Object.values(dayPlans.value).reduce((sum, items) => sum + items.length, 0))
-const selectedDayVisits = computed(() => dayPlans.value[selectedDay.value] ?? [])
 function removeFromRoute(item: Prospect) {
-  for (const day of days) dayPlans.value[day] = (dayPlans.value[day] ?? []).filter((candidate) => candidate.id !== item.id)
+  const next = Object.fromEntries(Object.entries(sharedWeeklyPlan.value).map(([key, items]) => [key, items.filter(candidate => candidate.id !== item.id)]))
+  sharedWeeklyPlan.value = next
 }
 function toggleItem(item: Prospect) { expandedItems.value[item.id] = !expandedItems.value[item.id] }
 function openActionModal(item: Prospect) { actionItem.value = item }
 function closeActionModal() { actionItem.value = null }
 function moveFromModal() {
   if (!actionItem.value || !actionMoveDay.value) return
-  const from = days.find((day) => dayPlans.value[day]?.some((candidate) => candidate.id === actionItem.value?.id))
-  if (from) {
-    const item = actionItem.value
-    dayPlans.value[from] = dayPlans.value[from].filter((candidate) => candidate.id !== item.id)
-    dayPlans.value[actionMoveDay.value] = [...(dayPlans.value[actionMoveDay.value] ?? []), item]
-  }
-  selectedDay.value = actionMoveDay.value
+  const target = actionMoveDay.value
+  const next = Object.fromEntries(Object.entries(sharedWeeklyPlan.value).map(([key, items]) => [key, items.filter(candidate => candidate.id !== actionItem.value?.id)]))
+  next[target] = [...(next[target] ?? []), actionItem.value]
+  sharedWeeklyPlan.value = next
+  selectedDate.value = target
   closeActionModal()
 }
 function confirmRemove(item: Prospect) {
@@ -198,16 +202,17 @@ function confirmRemove(item: Prospect) {
     <div v-if="!loading && sortedActive.length" class="inline-weekly-route">
       <div class="inline-route-heading"><div><span class="schedule-eyebrow">Route planning</span><strong>Visit plan by day</strong></div><div class="route-header-actions"><span>{{ totalPreview }} prospects</span><label class="capacity-control">Max customer / hari <input v-model.number="maxVisitsPerDay" type="number" min="1" max="99" placeholder="Opsional" aria-label="Maximum customer per day" /></label><button v-if="!gps.loading && !gps.coords" type="button" class="route-gps-btn" @click="refreshOnce().catch(() => {})"><i class="pi pi-map-marker" /> Enable GPS</button><button type="button" class="route-primary-btn" :disabled="planningLoading" @click="autoRoute('weekly')"><i class="pi pi-calendar" /> Auto routing week</button><button type="button" class="route-today-btn" :disabled="planningLoading" @click="autoRoute('today')"><i class="pi pi-calendar-plus" /> Auto routing today</button></div></div>
       <div v-if="planNotice" class="route-notice-inline"><i class="pi pi-info-circle" /> {{ planNotice }}</div>
+      <div class="week-nav"><button type="button" aria-label="Previous week" @click="navigateWeek(-1)"><i class="pi pi-chevron-left" /></button><strong>{{ weekRange }}</strong><button type="button" aria-label="Next week" @click="navigateWeek(1)"><i class="pi pi-chevron-right" /></button></div>
       <div class="day-actions" role="tablist" aria-label="Weekly visit days">
-        <button v-for="day in days" :key="day" type="button" class="day-action" :class="{ active: selectedDay === day }" @click="selectedDay = day"><strong>{{ day.slice(0, 3) }}</strong><span>{{ dayPlans[day]?.length ?? 0 }}</span></button>
+        <button v-for="tab in tabs" :key="tab.dateKey" type="button" class="day-action" :class="{ active: selectedDate === tab.dateKey }" @click="selectedDate = tab.dateKey"><strong>{{ tab.shortLabel }}<small v-if="tab.dateKey === todayKey"> · Hari ini</small></strong><span>{{ tab.count }}</span></button>
       </div>
       <div class="selected-day-list">
-        <div class="selected-day-title"><strong>{{ selectedDay }}</strong><span>{{ selectedDayVisits.length }} customers</span></div>
-        <div v-for="(item, index) in selectedDayVisits" :key="item.id" class="inline-route-item">
+        <div class="selected-day-title"><strong>{{ selectedDate }}</strong><span>{{ selectedDateVisits.length }} customers</span></div>
+        <div v-for="(item, index) in selectedDateVisits" :key="item.id" class="inline-route-item">
           <span class="route-number">{{ index + 1 }}</span><div class="route-prospect-info route-prospect-link" role="button" tabindex="0" @click="openActionModal(item)" @keydown.enter="openActionModal(item)"><strong>{{ item.placeName }}</strong><small>{{ item.formattedAddress || 'No address' }}</small></div><span v-if="prospectDistance(item)" class="route-dist"><i class="pi pi-map-marker" /> {{ prospectDistance(item) }}</span><i class="pi pi-ellipsis-v route-expand-icon" />
           <div v-if="expandedItems[item.id]" class="inline-item-actions"><button type="button" class="route-action route-action--detail" @click="openDetail(item)"><i class="pi pi-eye" /><span>View detail</span></button><button type="button" class="route-action route-action--checkin" @click="checkIn(item)"><i class="pi pi-sign-in" /><span>Check in</span></button><button type="button" class="route-action route-action--remove" @click="removeFromRoute(item)"><i class="pi pi-trash" /><span>Remove</span></button></div>
         </div>
-        <div v-if="!selectedDayVisits.length" class="inline-route-empty"><i class="pi pi-calendar-plus" /> No customers planned for {{ selectedDay }}.</div>
+        <div v-if="!selectedDateVisits.length" class="inline-route-empty"><i class="pi pi-calendar-plus" /> No customers planned for {{ selectedDate }}.</div>
         <div v-if="overflow.length" class="schedule-overflow"><i class="pi pi-exclamation-triangle" /><span>{{ overflow.length }} customer(s) need planning next week or manual scheduling.</span></div>
       </div>
     </div>
@@ -218,7 +223,7 @@ function confirmRemove(item: Prospect) {
       <section class="action-modal" role="dialog" aria-modal="true" aria-labelledby="action-title">
         <header class="action-modal-head"><h2 id="action-title">Customer Actions</h2><button type="button" class="route-close" aria-label="Close" @click="closeActionModal"><i class="pi pi-times" /></button></header>
         <div class="action-customer"><strong>{{ actionItem.placeName }}</strong><small>{{ actionItem.formattedAddress || 'No address' }}</small><span>{{ prospectDistance(actionItem) || 'Distance unavailable' }}</span></div>
-        <div class="action-options"><button type="button" class="action-option" @click="openDetail(actionItem)"><span><strong>View details</strong><small>Open prospect detail, visit history, and notes.</small></span><i class="pi pi-chevron-right" /></button><button type="button" class="action-option action-option--primary" @click="checkIn(actionItem)"><span><strong>Check in</strong><small>Start the visit at this prospect.</small></span><i class="pi pi-sign-in" /></button><div class="action-move-box"><div><strong>Move schedule</strong><small>Choose another weekday for this visit.</small></div><div class="action-move-controls"><select v-model="actionMoveDay" aria-label="Move schedule to"><option value="">Choose day...</option><option v-for="day in days" :key="day" :value="day">{{ day }}</option></select><button type="button" :disabled="!actionMoveDay" @click="moveFromModal">Move</button></div></div><button type="button" class="action-option action-option--danger" @click="confirmRemove(actionItem); closeActionModal()"><span><strong>Remove from route</strong><small>You will be asked to confirm this action.</small></span><i class="pi pi-trash" /></button></div>
+        <div class="action-options"><button type="button" class="action-option" @click="openDetail(actionItem)"><span><strong>View details</strong><small>Open prospect detail, visit history, and notes.</small></span><i class="pi pi-chevron-right" /></button><button type="button" class="action-option action-option--primary" @click="checkIn(actionItem)"><span><strong>Check in</strong><small>Start the visit at this prospect.</small></span><i class="pi pi-sign-in" /></button><div class="action-move-box"><div><strong>Move schedule</strong><small>Choose another date for this visit.</small></div><div class="action-move-controls"><select v-model="actionMoveDay" aria-label="Move schedule to"><option value="">Choose date...</option><option v-for="tab in tabs" :key="tab.dateKey" :value="tab.dateKey">{{ tab.dateKey }}</option></select><button type="button" :disabled="!actionMoveDay" @click="moveFromModal">Move</button></div></div><button type="button" class="action-option action-option--danger" @click="confirmRemove(actionItem); closeActionModal()"><span><strong>Remove from route</strong><small>You will be asked to confirm this action.</small></span><i class="pi pi-trash" /></button></div>
       </section>
     </div>
   </Teleport>
@@ -243,17 +248,17 @@ function confirmRemove(item: Prospect) {
 
         <div class="route-days">
           <article
-            v-for="day in days"
-            :key="day"
+            v-for="tab in tabs"
+            :key="tab.dateKey"
             class="route-day"
           >
             <header>
-              <strong>{{ day }}</strong>
-              <span>{{ dayPlans[day]?.length ?? 0 }} visits</span>
+              <strong>{{ tab.dateKey }}</strong>
+              <span>{{ tab.count }} visits</span>
             </header>
-            <div v-if="!dayPlans[day]?.length" class="route-empty">Drop prospect here</div>
+            <div v-if="!tab.count" class="route-empty">No visits planned</div>
             <div
-              v-for="(item, i) in dayPlans[day]"
+              v-for="(item, i) in sharedWeeklyPlan[tab.dateKey]"
               :key="item.id"
               class="route-prospect"
             >
@@ -738,6 +743,12 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
 .inline-weekly-route { margin-top:.8rem; padding-top:.75rem; border-top:1px solid #edf1f5; }
 .inline-route-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.7rem; }.inline-route-heading > div { display:grid; gap:.12rem; }.inline-route-heading strong { color:#334155; font-size:.72rem; }.route-header-actions { display:flex !important; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:.5rem; }.route-header-actions > span { padding:.25rem .55rem; border-radius:999px; background:#f1f5f9; color:#64748b; font-size:.58rem; font-weight:700; }.capacity-control { display:flex; align-items:center; gap:.35rem; min-height:30px; padding-left:.15rem; color:#64748b; font-size:.58rem; font-weight:700; white-space:nowrap; }.capacity-control input { width:76px; min-height:30px; padding:.25rem .45rem; border:1px solid #cbd5e1; border-radius:8px; color:#0f172a; font:600 .65rem inherit; outline:none; }.capacity-control input:focus { border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.12); }.route-primary-btn,.route-today-btn,.route-secondary-btn { display:inline-flex; align-items:center; justify-content:center; gap:.3rem; min-height:30px; border:1px solid #dbeafe; border-radius:8px; padding:.35rem .6rem; background:#eff6ff; color:#2563eb; cursor:pointer; font:inherit; font-size:.58rem; font-weight:800; white-space:nowrap; }.route-today-btn { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }.route-secondary-btn { border-color:#e2e8f0; background:#fff; color:#475569; }.route-primary-btn:hover,.route-today-btn:hover,.route-secondary-btn:hover { filter:brightness(.97); transform:translateY(-1px); }.route-primary-btn:disabled,.route-today-btn:disabled,.route-secondary-btn:disabled { cursor:wait; opacity:.6; transform:none; }.route-notice-inline { display:flex; align-items:center; gap:.4rem; margin:-.15rem 0 .55rem; padding:.45rem .6rem; border:1px solid #bfdbfe; border-radius:8px; background:#eff6ff; color:#1d4ed8; font-size:.62rem; line-height:1.35; }.schedule-overflow { display:flex; align-items:center; gap:.4rem; margin-top:.6rem; padding:.5rem .6rem; border:1px solid #fed7aa; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:.62rem; line-height:1.35; }
 .day-actions { display:grid; grid-template-columns:repeat(5,1fr); gap:.35rem; }.day-action { display:grid; gap:.12rem; min-height:42px; place-items:center; border:1px solid #e2e8f0; border-radius:9px; background:#fff; color:#64748b; cursor:pointer; }.day-action strong { font-size:.62rem; }.day-action span { min-width:18px; padding:.08rem .28rem; border-radius:999px; background:#f1f5f9; color:#94a3b8; font-size:.55rem; font-weight:800; }.day-action.active { border-color:#bfdbfe; background:#eff6ff; color:#2563eb; box-shadow:0 0 0 2px rgba(37,99,235,.08); }.day-action.active span { background:#2563eb; color:#fff; }
+.week-nav { display:flex; align-items:center; justify-content:center; gap:.65rem; margin:.15rem 0 .55rem; padding:.35rem; border:1px solid #e5eaf0; border-radius:11px; background:linear-gradient(180deg,#fff,#f8fafc); }
+.week-nav strong { min-width:145px; color:#334155; font-size:.72rem; font-weight:800; text-align:center; letter-spacing:.01em; }
+.week-nav button { display:grid; place-items:center; width:27px; height:27px; padding:0; border:1px solid #dbe5ef; border-radius:8px; background:#fff; color:#64748b; cursor:pointer; transition:all .12s ease; }
+.week-nav button:hover { border-color:#93c5fd; background:#eff6ff; color:#2563eb; transform:translateY(-1px); }
+.week-nav button:active { transform:translateY(0); }
+.week-nav button i { font-size:.65rem; }
 .add-route-control { display:grid; grid-template-columns:minmax(0,1fr) 112px auto; gap:.5rem; margin-top:.65rem; padding:.45rem; border:1px solid #edf1f5; border-radius:10px; background:#fbfdff; }.add-route-control select,.add-route-control button { min-width:0; min-height:30px; padding:.28rem .45rem; border:1px solid #dbe3ee; border-radius:7px; background:#fff; color:#475569; font:600 .6rem inherit; }.add-route-control button { border-color:#2563eb; background:#2563eb; color:#fff; cursor:pointer; white-space:nowrap; }.add-route-control button:disabled { opacity:.45; cursor:not-allowed; }
 .selected-day-list { margin-top:.65rem; padding:.7rem; border:1px solid #e5eaf0; border-radius:12px; background:#f8fafc; }.selected-day-title { display:flex; align-items:center; justify-content:space-between; min-height:28px; margin:0 .25rem .45rem; color:#334155; font-size:.7rem; }.selected-day-title span { color:#94a3b8; font-size:.6rem; }.inline-route-item { display:grid; grid-template-columns:28px minmax(0,1fr) auto 18px; align-items:center; gap:.55rem; min-height:64px; padding:.65rem .6rem; margin:.45rem 0; border:1px solid #e2e8f0; border-radius:10px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.025); }.inline-route-item .route-prospect-info { flex:1; min-width:0; }.inline-route-item .route-action { flex:0 0 auto; width:auto; padding:.35rem .45rem; }.inline-route-item .route-prospect-info strong { font-size:.68rem; line-height:1.3; }.inline-route-item .route-prospect-info small { display:block; margin-top:.18rem; line-height:1.35; }.inline-route-empty { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:76px; color:#94a3b8; font-size:.62rem; }
 @media (max-width:480px) { .inline-route-item { flex-wrap:wrap; }.inline-route-item .route-prospect-info { min-width:calc(100% - 34px); }.inline-route-item .route-dist { margin-left:1.65rem; }.inline-route-item .route-action { flex:1; min-height:34px; }.day-action { min-height:40px; } }
@@ -754,6 +765,7 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
   .day-actions { gap:.3rem; overflow-x:auto; padding:.1rem 0 .2rem; scrollbar-width:none; }
   .day-actions::-webkit-scrollbar { display:none; }
   .day-action { min-width:52px; min-height:42px; }
+  .week-nav { margin-top:.1rem; }
   .add-route-control { grid-template-columns:minmax(0,1fr) auto; gap:.4rem; padding:.4rem; }
   .add-route-control select { min-width:0; }
   .add-route-control button { padding-inline:.55rem; }
@@ -787,6 +799,10 @@ h2 { margin: .15rem 0 0; color: #0f172a; font-size: 1rem; }
 }
 
 @media (min-width:769px) {
+  .inline-route-heading { display:block; }
+  .inline-route-heading > div:first-child { margin-bottom:.5rem; }
+  .route-header-actions { display:grid !important; grid-template-columns:auto minmax(120px,1fr) auto auto auto; align-items:center; justify-content:initial; gap:.45rem; }
+  .route-header-actions .route-primary-btn,.route-header-actions .route-today-btn { min-width:max-content; }
   .inline-route-heading { padding-bottom:.2rem; border-bottom:1px solid #f1f5f9; }
   .route-header-actions { max-width:760px; }
   .route-header-actions > span { margin-right:.15rem; }

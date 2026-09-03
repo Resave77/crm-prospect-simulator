@@ -11,12 +11,14 @@ import { deleteCustomer, listTrashedCustomers, restoreCustomer } from '../../../
 import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
 import { fallbackCategories, fallbackSegments } from '../../../utils/masterDataFallback'
 import MasterDataPanel from '../../../components/admin/MasterDataPanel.vue'
+import type { CustomerSite } from '../../../types/crm'
 
 const store = useCustomerListStore()
 const router = useRouter()
 const route = useRoute()
 const error = ref('')
 const activeTab = ref('site')
+const showFilters = ref(false)
 
 watch(() => route.query.tab, (tab) => {
   if (tab === 'site' || tab === 'company' || tab === 'master') activeTab.value = tab
@@ -44,6 +46,8 @@ const hoveredCustomerId = ref('')
 const hoveredCell = ref('')
 const selectedCustomer = computed(() => store.items.find((c) => c.id === selectedCustomerId.value))
 const companyDeleteDialogVisible = ref(false)
+const companyActionVisible = ref(false)
+const selectedCompany = ref<typeof companies.value[number] | null>(null)
 const companyDeleteTarget = ref<{ id: string; name: string; sites: number } | null>(null)
 const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
 const masterSegments = ref<MasterDataSegment[]>(fallbackSegments)
@@ -372,21 +376,21 @@ async function executeDeleteCompany() {
 
 <template>
   <section class="admin-page">
-    <header class="workspace-header">
+    <header v-if="activeTab !== 'site'" class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
           <span class="eyebrow">Customer Management</span>
-          <h1>Customers & Companies</h1>
-          <p class="muted">Manage customer sites, corporate accounts, ownership, and reference data.</p>
+          <h1>Customer & Perusahaan</h1>
+          <p class="muted">Kelola site customer, akun perusahaan, kepemilikan, dan data referensi.</p>
         </div>
       </div>
       <div class="workspace-summary">
-        <button type="button" class="summary-item" @click="selectTab('company')"><i class="pi pi-building si-blue" /><span>Companies</span><strong>{{ companyCount }}</strong></button>
+        <button type="button" class="summary-item" @click="selectTab('company')"><i class="pi pi-building si-blue" /><span>Perusahaan</span><strong>{{ companyCount }}</strong></button>
         <button type="button" class="summary-item" @click="selectTab('site')"><i class="pi pi-map-marker si-violet" /><span>Sites</span><strong>{{ store.allCustomers.length }}</strong></button>
         <button type="button" class="summary-item" @click="selectTab('site')"><i class="pi pi-user-check si-emerald" /><span>Assigned</span><strong>{{ assignedCount }}</strong></button>
         <button type="button" class="summary-item" @click="selectTab('company')"><i class="pi pi-clock si-amber" /><span>ERP Pending</span><strong>{{ erpPendingCount }}</strong></button>
       </div>
-      <div class="page-heading-actions">
+      <div class="page-heading-actions legacy-page-actions">
         <Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
         <Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
@@ -397,6 +401,9 @@ async function executeDeleteCompany() {
       <button v-for="tab in tabs" :key="tab.key" type="button" :class="['tab-item', { active: activeTab === tab.key }]" @click="selectTab(tab.key)">
         <i :class="tab.icon" /><span>{{ tab.label }}</span><strong v-if="tab.key === 'site'">{{ store.allCustomers.length }}</strong><strong v-else-if="tab.key === 'company'">{{ companyCount }}</strong>
       </button>
+      <label v-if="activeTab === 'site'" class="site-search"><i class="pi pi-search" /><input v-model="store.params.keyword" placeholder="Search customer site code, name, company" @keyup.enter="store.fetchCustomers()" /></label>
+      <label v-if="activeTab === 'company'" class="site-search company-search"><i class="pi pi-search" /><input v-model="companyKeyword" placeholder="Search company name, code, location" /></label>
+      <div class="erp-customer-actions"><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" /><Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Create Company' : 'Create Customer Site'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" /></div>
     </nav>
 
     <!-- ======================== CUSTOMER SITE TAB ======================== -->
@@ -404,7 +411,7 @@ async function executeDeleteCompany() {
       <div v-if="store.selectedIds.size" class="selection-toolbar"><strong>{{ store.selectedIds.size }} selected</strong><Button label="Cancel" text size="small" :disabled="bulkMoving" @click="store.selectedIds = new Set()" /><Button label="Move Selected to Trash" icon="pi pi-trash" severity="danger" size="small" :loading="bulkMoving" @click="moveSelectedToTrash" /></div>
       <div class="panel-stack">
         <!-- FILTERS -->
-        <div class="filter-panel">
+        <div v-if="showFilters" class="filter-panel">
           <div class="filter-grid">
             <div class="filter-field">
               <label>Region</label>
@@ -451,7 +458,7 @@ async function executeDeleteCompany() {
 
           <!-- Table -->
           <div v-else class="table-scroll">
-            <table class="data-table">
+            <table class="data-table customer-site-table">
               <thead>
                 <tr>
                   <th class="th-check">
@@ -461,7 +468,6 @@ async function executeDeleteCompany() {
                   <th>Customer Site + Company</th>
                   <th>Region</th>
                   <th>Site Location</th>
-                  <th>Segment</th>
                   <th>Sales Executive</th>
                 </tr>
               </thead>
@@ -471,7 +477,7 @@ async function executeDeleteCompany() {
                     <input type="checkbox" :checked="store.selectedIds.has(c.id)" @change="store.toggleSelect(c.id)" />
                   </td>
                   <td>
-                    <div class="cell-stack"><code class="code-tag code-blue">{{ c.customerCode }}</code><Tag value="Regular Account" severity="success" /></div>
+                    <div class="cell-stack"><code class="code-tag code-blue">{{ c.customerCode }}</code><Tag :value="c.segment || '—'" :severity="segmentSeverity(c.segment)" /></div>
                   </td>
                   <td class="customer-name-cell" @mouseenter="hoveredCustomerId = c.id" @mouseleave="hoveredCustomerId = ''">
                     <div class="cell-stack">
@@ -482,9 +488,7 @@ async function executeDeleteCompany() {
                   </td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-region`" @mouseleave="hoveredCell = ''"><span class="cell-text">{{ c.region || '—' }}</span><div v-if="hoveredCell === `${c.id}-region`" class="cell-preview">Region: {{ c.region || 'Unavailable' }}</div></td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-location`" @mouseleave="hoveredCell = ''"><div class="cell-stack"><span class="cell-primary">{{ c.address?.district || c.address?.subDistrict || '—' }}</span><span class="cell-sub">{{ c.address?.province || '' }}</span></div><div v-if="hoveredCell === `${c.id}-location`" class="cell-preview">{{ c.address?.district || c.address?.subDistrict || 'Location unavailable' }}<br>{{ c.address?.province || '' }}</div></td>
-                  <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-segment`" @mouseleave="hoveredCell = ''">
-                    <Tag :value="c.segment" :severity="segmentSeverity(c.segment)" /><div v-if="hoveredCell === `${c.id}-segment`" class="cell-preview">Segment: {{ c.segment || 'Unavailable' }}</div>
-                  </td>
+                  <td><Tag :value="c.segment || '—'" :severity="segmentSeverity(c.segment)" /></td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-sales`" @mouseleave="hoveredCell = ''">
                     <span class="cell-text">{{ c.salesExecutiveName || 'Unassigned' }}</span><div v-if="hoveredCell === `${c.id}-sales`" class="cell-preview">Sales Executive: {{ c.salesExecutiveName || 'Unassigned' }}</div>
                   </td>
@@ -494,7 +498,7 @@ async function executeDeleteCompany() {
           </div>
 
           <!-- PAGINATION -->
-          <div v-if="store.pages > 1" class="pagination-bar">
+          <div class="pagination-bar">
             <span class="pagination-info">
               Page {{ store.page }} of {{ store.pages }} / {{ store.total }} records
             </span>
@@ -526,6 +530,10 @@ async function executeDeleteCompany() {
       </template>
     </Dialog>
 
+    <Dialog v-model:visible="companyActionVisible" modal :header="selectedCompany?.name || 'Company Actions'" :style="{ width: '460px' }" :breakpoints="{ '640px': '92vw' }">
+      <div v-if="selectedCompany" class="customer-action-modal"><p>Choose what you want to do with this company record.</p><div><button class="customer-action-card" @click="companyActionVisible = false; goToCompany(selectedCompany!.id)"><i class="pi pi-eye" /><span><strong>View Detail Company</strong><small>Open the full company profile and review details.</small></span></button><button class="customer-action-card" @click="companyActionVisible = false; router.push(`/admin/companies/${selectedCompany!.id}/edit`)"><i class="pi pi-pencil" /><span><strong>Edit Company</strong><small>Open the company form and update the current information.</small></span></button><button class="customer-action-card danger" @click="companyActionVisible = false; confirmDeleteCompany(selectedCompany!)"><i class="pi pi-exclamation-triangle" /><span><strong>Move Company to Trash</strong><small>Move this company to Trash. All of its child customer sites will be moved too.</small></span></button></div></div>
+    </Dialog>
+
     <!-- DELETE COMPANY CONFIRMATION DIALOG -->
     <Dialog v-model:visible="companyDeleteDialogVisible" header="Delete Company" modal :style="{ width: '420px' }">
       <p>Are you sure you want to delete <strong>{{ companyDeleteTarget?.name }}</strong> and all <strong>{{ companyDeleteTarget?.sites }}</strong> of its site(s)? This action cannot be undone.</p>
@@ -538,7 +546,7 @@ async function executeDeleteCompany() {
     <!-- ======================== COMPANY TAB ======================== -->
     <div v-if="activeTab === 'company'" class="panel-stack">
       <!-- FILTERS -->
-      <div class="filter-panel">
+      <div v-if="showFilters" class="filter-panel">
         <div class="search-row">
           <div class="search-field">
             <i class="pi pi-search" />
@@ -587,41 +595,36 @@ async function executeDeleteCompany() {
           <span class="muted">Try modifying your filters to find company accounts.</span>
         </div>
         <div v-else class="table-scroll">
-          <table class="data-table">
+          <table class="data-table company-table">
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Company Name</th>
-                <th>Legal</th>
-                <th>Tier</th>
-                <th>Region</th>
-                <th>NPWP</th>
-                <th>KAM</th>
-                <th>Sites</th>
-                <th class="th-action">Actions</th>
+                <th class="th-check"><input type="checkbox" /></th><th>Company Code</th><th>Company Name</th><th>Total Site</th><th>Company Tier</th><th>3M Avg Invoice</th><th>KAM</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="company in companies" :key="company.id" class="clickable-row" @dblclick="goToCompany(company.id)">
-                <td>
+              <tr v-for="company in companies" :key="company.id" class="clickable-row" @click="selectedCompany = company; companyActionVisible = true">
+                <td class="td-check"><input type="checkbox" /></td><td>
                   <code class="code-tag">{{ company.companyCode }}</code>
                 </td>
                 <td>
-                  <button class="link-btn" @click="goToCompany(company.id)">
-                    {{ company.name }}
-                  </button>
+                  <div class="cell-stack company-name-stack">
+                    <button class="link-btn" @click="goToCompany(company.id)">{{ company.name }}</button>
+                    <span class="cell-sub">{{ company.registeredLocation }}</span>
+                  </div>
                 </td>
                 <td>
-                  <span class="cell-badge">{{ company.legal }}</span>
+                  <div class="cell-stack">
+                    <span class="cell-primary">{{ company.sites }} Customer Site{{ company.sites === 1 ? '' : 's' }}</span>
+                  </div>
                 </td>
                 <td>
-                  <Tag :value="company.tier" severity="info" />
+                  <Tag :value="company.tier" severity="info" class="company-tier-tag" />
                 </td>
                 <td>
-                  <span class="cell-text">{{ company.registeredLocation }}</span>
+                  <span class="cell-text">Rp 0</span>
                 </td>
                 <td>
-                  <code class="code-tag">{{ company.npwp }}</code>
+                  <span class="cell-text">{{ company.kam }}</span>
                 </td>
                 <td>
                   <span class="cell-text">{{ company.kam }}</span>
@@ -674,6 +677,81 @@ async function executeDeleteCompany() {
 .customer-action-modal{display:grid;gap:.35rem}.customer-action-modal strong{color:#172033;font-size:.95rem}.customer-action-modal>span{color:#94a3b8;font-family:monospace;font-size:.68rem}.customer-action-modal>div{display:grid;gap:.5rem;margin-top:.75rem}.customer-action-modal :deep(.p-button){justify-content:center;width:100%}
 .customer-action-modal>p{margin:0 0 .7rem;color:#64748b;font-size:.72rem;line-height:1.5}.customer-action-card{display:flex;align-items:center;gap:.75rem;width:100%;padding:.85rem .8rem;border:1px solid #dfe6ef;border-radius:13px;background:#fff;color:#172033;text-align:left;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s}.customer-action-card:hover{border-color:#b8c9df;background:#f8fbff;box-shadow:0 3px 10px rgba(15,23,42,.06)}.customer-action-card>i{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:.85rem}.customer-action-card>span{display:grid;gap:.2rem;min-width:0}.customer-action-card strong{font-size:.74rem}.customer-action-card small{color:#64748b;font-size:.64rem;line-height:1.35}.customer-action-card.danger{border-color:#fecaca;background:#fff7f7}.customer-action-card.danger:hover{background:#fff1f2;border-color:#fca5a5}.customer-action-card.danger>i{background:#fff;color:#dc2626}.customer-action-card.danger strong,.customer-action-card.danger small{color:#b91c1c}
 @media(min-width:901px){.panel-stack .filter-panel{display:flex;align-items:flex-end;gap:.5rem;padding:.5rem .6rem}.panel-stack .filter-panel .search-row{flex:0 1 280px}.panel-stack .filter-panel .filter-grid{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr)) auto;flex:1;gap:.4rem}.panel-stack .filter-field :deep(.p-select){height:36px}.panel-stack .filter-field label{font-size:.52rem}}
-.admin-page .data-table{width:100%;table-layout:fixed}.admin-page .data-table thead th{height:42px;padding:.55rem .7rem;background:#f4f6f9}.admin-page .data-table tbody td{height:60px;padding:.55rem .7rem;border-right:1px solid #e5eaf0}.admin-page .table-panel{width:100%}
+.admin-page .data-table{width:100%;table-layout:fixed}.admin-page .data-table thead th{height:42px;padding:0 10px;background:#f4f4f4}.admin-page .data-table tbody td{height:67px;padding:8px 10px;border-bottom:1px solid #e2e8f0}.admin-page .table-panel{width:100%}
+@media (max-width: 640px) {
+  .admin-page { background:#f8fafc; padding:.5rem; gap:.5rem; }
+  .workspace-header { padding:.85rem; border-radius:14px; gap:.7rem; }
+  .page-title-wrapper h1 { font-size:1.12rem; }
+  .page-title-wrapper .muted { font-size:.64rem; line-height:1.35; white-space:normal; }
+  .workspace-summary { border-radius:10px; }
+  .summary-item { min-width:0; padding:.5rem .4rem; grid-template-columns:16px auto; column-gap:.2rem; }
+  .summary-item span { font-size:.48rem; }
+  .page-heading-actions { grid-template-columns:repeat(2,1fr); gap:.4rem; }
+  .page-heading-actions :deep(.p-button) { min-height:38px; font-size:.68rem; }
+  .page-heading-actions :deep(.p-button:last-child) { grid-column:1/-1; background:#e63946; border-color:#e63946; }
+  .tab-item { flex:1; justify-content:center; min-height:38px; padding:.4rem .35rem; font-size:.64rem; }
+  .filter-panel { padding:.7rem; border-radius:12px; }
+  .filter-field :deep(.p-select) { height:40px; border-radius:9px; }
+  .filter-action :deep(.p-button) { width:100%; min-height:36px; }
+  .table-panel { border-radius:12px; }
+  .table-scroll { overflow:hidden; }
+  .data-table { min-width:0; table-layout:fixed; font-size:.65rem; border-collapse:separate; border-spacing:0; }\n  .data-table thead th { height:34px; padding:.45rem .35rem; font-size:.54rem; background:#fff8f8; color:#8b4b55; }\n  .data-table tbody tr { background:#fff; }\n  .data-table tbody tr + tr td { border-top:1px solid #f4e6e8; }\n  .data-table tbody td { height:54px; padding:.45rem .35rem; vertical-align:middle; }
+  .data-table th, .data-table td { padding:.55rem .4rem; }
+  .data-table thead th:nth-child(4), .data-table tbody td:nth-child(4),
+  .data-table thead th:nth-child(5), .data-table tbody td:nth-child(5),
+  .data-table thead th:nth-child(6), .data-table tbody td:nth-child(6) { display:none; }
+  .th-check, .td-check { width:30px; }
+  .data-table thead th:nth-child(2), .data-table thead th:nth-child(3), .data-table thead th:nth-child(7) { font-size:0; }
+  .data-table thead th:nth-child(2)::after { content:'Kode'; font-size:.56rem; }
+  .data-table thead th:nth-child(3)::after { content:'Customer'; font-size:.56rem; }
+  .data-table thead th:nth-child(7)::after { content:'Sales'; font-size:.56rem; }
+  .cell-primary { font-size:.69rem; }
+  .cell-sub { font-size:.55rem; }
+  .link-btn { font-size:.68rem; }
+  .data-table .code-tag, .data-table .p-tag { font-size:.55rem; padding:.12rem .3rem; }
+  .pagination-bar { padding:.65rem .7rem; gap:.4rem; }
+  .pagination-info { font-size:.6rem; text-align:center; }
+  .state-box { min-height:180px; padding:1.2rem; font-size:.68rem; }
+}
+/* ERP visual clone — scoped to Customer Existing/Company content only. */
+.legacy-page-actions,.workspace-heading,.workspace-summary,.workspace-header { display:none; }
+.admin-page { padding:0; gap:0; background:#fff; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+.tabs-bar { display:flex; align-items:center; min-height:58px; height:58px; padding:10px 20px; gap:10px; border:0; border-bottom:1px solid #e2e8f0; border-radius:0; background:#fff; overflow:hidden; }
+.tab-item { height:34px; min-height:34px; padding:0 12px; border-radius:10px; color:#40516a; font-size:12px; font-weight:500; }
+.tab-item.active { color:#fff; background:#dc2626; border-color:#dc2626; box-shadow:0 2px 6px rgba(220,38,38,.12); }
+.tab-item i,.tab-item strong { display:none; }
+.erp-customer-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.erp-customer-actions :deep(.p-button) { height:40px; min-height:40px; padding:0 12px; border-radius:10px; font-size:12px; font-weight:600; }
+.erp-customer-actions :deep(.p-button:first-child) { min-width:108px; }
+.erp-customer-actions :deep(.p-button:nth-child(2)) { min-width:72px; }
+.erp-customer-actions :deep(.p-button:nth-child(3)) { min-width:158px; }
+.erp-customer-actions :deep(.p-button:last-child) { background:#dc2626; border-color:#dc2626; }
+.panel-stack { gap:0; padding:0; }
+.filter-panel { display:flex; align-items:flex-end; gap:10px; padding:16px; border:0; border-bottom:1px solid #e2e8f0; border-radius:0; box-shadow:none; }
+.filter-grid { gap:8px; }
+.filter-field label { font-size:10px; }
+.filter-field :deep(.p-select),.search-field { height:40px; border-radius:10px; }
+.table-panel { display:flex; flex-direction:column; border:0; border-radius:0; box-shadow:none; }
+.table-panel > .pagination-bar { order:-1; height:42px; min-height:42px; padding:0 20px; border:0; border-bottom:1px solid #e2e8f0; background:#fff; }
+.pagination-bar { justify-content:flex-start; }
+.pagination-info { order:2; margin-left:14px; font-size:10px; }
+.pagination-controls { order:1; }
+.pagination-controls :deep(.p-button),.pagination-num { width:28px; min-width:28px; height:28px; border-radius:50%; font-size:10px; }
+.data-table { min-width:0; width:100%; table-layout:fixed; font-size:11px; }
+.data-table thead th { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e2e2e0; background:#f4f4f4; color:#000; font-size:10px; font-weight:600; line-height:12px; letter-spacing:.07em; text-transform:uppercase; }
+.data-table tbody td { box-sizing:border-box; height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; color:#0f172a; font-size:11px; line-height:13px; }
+.data-table tbody tr:hover { background:#fff; }
+.data-table .cell-primary { color:#0f172a; font-size:11px; font-weight:600; line-height:13px; }
+.data-table .cell-text,.data-table .cell-sub { color:#64748b; font-size:10px; font-weight:400; line-height:12px; }
+.data-table .code-tag { font-family:Inter,sans-serif; font-size:10px; font-weight:600; }
+.data-table :deep(.p-tag) { border-radius:999px; padding:3px 9px; font-size:10px; font-weight:500; }
+.data-table input[type="checkbox"] { width:16px; height:16px; accent-color:#e63946; }
+.customer-site-table th:nth-child(1),.customer-site-table td:nth-child(1){width:4%}.customer-site-table th:nth-child(2),.customer-site-table td:nth-child(2){width:18%}.customer-site-table th:nth-child(3),.customer-site-table td:nth-child(3){width:31%}.customer-site-table th:nth-child(4),.customer-site-table td:nth-child(4){width:18%}.customer-site-table th:nth-child(5),.customer-site-table td:nth-child(5){width:14%}.customer-site-table th:nth-child(6),.customer-site-table td:nth-child(6){width:15%}.customer-site-table th:nth-child(7),.customer-site-table td:nth-child(7){width:15%}.customer-site-table th:nth-child(6),.customer-site-table td:nth-child(6){display:none}
+.customer-site-table td:nth-child(2) .cell-stack { gap:4px; }.customer-site-table td:nth-child(2) .code-tag { display:block; width:max-content; max-width:100%; padding:3px 8px; border-radius:6px; background:#fff0f1; color:#e63946; }.customer-site-table td:nth-child(2) :deep(.p-tag) { display:inline-flex; width:max-content; max-width:100%; align-items:center; border:1px solid transparent; padding:4px 10px; border-radius:999px; font-size:10px; font-weight:500; line-height:11px; text-align:center; }.customer-site-table td:nth-child(2) :deep(.p-tag-info) { border-color:#bfdbfe; background:#dbeafe; color:#1d4ed8; }.customer-site-table td:nth-child(2) :deep(.p-tag-success) { border-color:#bbf7d0; background:#dcfce7; color:#166534; }.customer-site-table td:nth-child(2) :deep(.p-tag-warn) { border-color:#fed7aa; background:#fff7ed; color:#c2410c; }.customer-site-table td:nth-child(2) :deep(.p-tag-secondary) { border-color:#ddd6fe; background:#ede9fe; color:#6d28d9; }.customer-site-table .link-btn { color:#e63946; font-size:12px; font-weight:600; }
+.company-tier-tag { display:inline-flex; min-width:94px; align-items:center; justify-content:center; border:1px solid #bfdbfe; border-radius:999px; background:#dbeafe; color:#1d4ed8; padding:4px 10px; font-size:10px; font-weight:500; line-height:11px; }
+.company-table th:nth-child(1),.company-table td:nth-child(1){width:4%}.company-table th:nth-child(2),.company-table td:nth-child(2){width:14%}.company-table th:nth-child(3),.company-table td:nth-child(3){width:29%}.company-table th:nth-child(4),.company-table td:nth-child(4){width:18%}.company-table th:nth-child(5),.company-table td:nth-child(5){width:14%}.company-table th:nth-child(6),.company-table td:nth-child(6){width:11%}.company-table th:nth-child(7),.company-table td:nth-child(7){width:10%}.company-table th:nth-child(n+8),.company-table td:nth-child(n+8){display:none}
+.site-search,.company-search { display:flex; flex:0 0 270px; height:40px; min-width:270px; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#94a3b8; }.site-search i,.company-search i{font-size:12px}.site-search input,.company-search input{width:100%;height:32px;min-height:32px;padding:0;border:0;outline:0;background:transparent;color:#0f172a;font-size:13px}.site-search input::placeholder,.company-search input::placeholder{color:#94a3b8}
+@media(max-width:900px){.tabs-bar{height:auto;min-height:58px;flex-wrap:wrap;overflow:visible}.site-search,.company-search{flex-basis:220px}.erp-customer-actions{width:100%;margin-left:0}.filter-panel{display:grid;grid-template-columns:1fr;padding:12px}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:640px){.tabs-bar{padding:10px 12px}.erp-customer-actions :deep(.p-button){flex:1}.data-table{min-width:860px}.table-scroll{overflow-x:auto}.filter-grid{grid-template-columns:1fr}}
 </style>
 

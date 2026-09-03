@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, provide, ref } from 'vue'
 import Message from 'primevue/message'
-import { getTeamDashboard } from '../../../api/crm'
+import { getMyVisits, getTeamDashboard } from '../../../api/crm'
 import { useAuthStore } from '../../../stores/auth'
 import YummySocialLinks from '../../../components/layout/YummySocialLinks.vue'
 import { useCrmStore } from '../../../stores/crm'
-import type { Prospect, TeamDashboard } from '../../../types/crm'
+import type { Prospect, TeamDashboard, VisitMonitoringItem } from '../../../types/crm'
 import { isActiveProspectStatus } from '../../../utils/prospectPipeline'
+import DailyVisitSchedule from '../../../components/prospect/DailyVisitSchedule.vue'
+import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
 
 const auth = useAuthStore()
 const crm = useCrmStore()
 const error = ref('')
 const teamDashboard = ref<TeamDashboard | null>(null)
+const recentVisits = ref<VisitMonitoringItem[]>([])
+provide('salesRecentVisits', recentVisits)
+const activityLoading = ref(false)
 
 const currentTime = ref(new Date())
 let clockTimer: ReturnType<typeof setInterval> | undefined
@@ -23,9 +28,9 @@ onBeforeUnmount(() => { if (clockTimer) clearInterval(clockTimer) })
 
 const greeting = computed(() => {
   const hour = currentTime.value.getHours()
-  if (hour >= 5 && hour < 12) return 'Good morning'
-  if (hour >= 12 && hour < 18) return 'Good afternoon'
-  return 'Good evening'
+  if (hour >= 5 && hour < 12) return 'Selamat pagi'
+  if (hour >= 12 && hour < 18) return 'Selamat siang'
+  return 'Selamat malam'
 })
 
 const firstName = computed(() => {
@@ -84,6 +89,12 @@ const pendingCount = computed(() =>
   ).length,
 )
 
+const recentActivities = computed(() => [...recentVisits.value].sort((a, b) => {
+  const aTime = new Date(a.checkOutAt || a.checkInAt).getTime()
+  const bTime = new Date(b.checkOutAt || b.checkInAt).getTime()
+  return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0)
+}))
+
 const teamPipelineEntries = computed(() => {
   const counts = teamDashboard.value?.pipelineCounts ?? {}
   return Object.entries(counts)
@@ -120,8 +131,16 @@ onMounted(async () => {
       if (teamDashboard.value.hasTeam) return
     }
     await Promise.all([crm.loadMyProspects(), crm.loadMyCustomers()])
+    activityLoading.value = true
+    const now = new Date(currentTime.value)
+    const from = new Date(now); const weekday = from.getDay() || 7
+    from.setDate(now.getDate() - weekday + 1); from.setHours(0, 0, 0, 0)
+    const to = new Date(from); to.setDate(from.getDate() + 5); to.setHours(23, 59, 59, 999)
+    recentVisits.value = await getMyVisits({ dateFrom: from.toISOString(), dateTo: to.toISOString() })
+    activityLoading.value = false
   } catch (e: unknown) {
     error.value = crm.errorMessage(e)
+    activityLoading.value = false
   }
 })
 </script>
@@ -158,7 +177,7 @@ onMounted(async () => {
           <p>{{ teamDashboard.totalDescendantCount }} team member{{ teamDashboard.totalDescendantCount !== 1 ? 's' : '' }} in your reporting line.</p>
         </div>
         <div class="team-hero-actions">
-          <RouterLink v-if="canViewSalesHistory" to="/sales/history"><i class="pi pi-clock" /> History</RouterLink>
+          <RouterLink v-if="canViewSalesHistory" to="/sales/history"><i class="pi pi-clock" /> Riwayat</RouterLink>
           <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline"><i class="pi pi-chart-line" /> Pipeline</RouterLink>
         </div>
       </section>
@@ -282,115 +301,19 @@ onMounted(async () => {
     </template>
 
     <template v-else>
-    <div class="dashboard-overview">
-      <!-- Your day is ready -->
-      <RouterLink class="ready-card" to="/sales/pipeline">
-        <div class="ready-content">
-          <span class="ready-eyebrow"><i class="pi pi-calendar" /> Today's overview</span>
-          <strong>{{ activeProspects.length > 0 ? 'Your day is ready' : 'Your schedule is clear' }}</strong>
-          <span class="ready-summary">{{ daySummaryText }}</span>
-          <div class="ready-meta">
-            <span><b>{{ todayVisits.length }}</b> today</span>
-            <span><b>{{ pendingCount }}</b> pending</span>
-          </div>
-        </div>
-        <span class="ready-open"><i class="pi pi-arrow-up-right" /></span>
-      </RouterLink>
-
-      <!-- Quick statistics -->
-      <section class="stats-panel">
-        <div class="stats-panel-header">
-          <div>
-            <small>Performance</small>
-            <strong>Quick statistics</strong>
-          </div>
-          <RouterLink v-if="canViewSalesHistory" to="/sales/history">View report <i class="pi pi-angle-right" /></RouterLink>
-        </div>
-
-        <div class="quick-stats">
-          <RouterLink v-if="canViewMyCustomers" to="/sales/my-customers">
-            <span class="stat-icon blue-dot"><i class="pi pi-users" /></span>
-            <div class="quick-stats-info"><small>Total customers</small><strong>{{ crm.myCustomers.length }}</strong></div>
-          </RouterLink>
-
-          <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
-            <span class="stat-icon amber-dot"><i class="pi pi-briefcase" /></span>
-            <div class="quick-stats-info"><small>Today's prospects</small><strong>{{ todayVisits.length }}</strong></div>
-          </RouterLink>
-
-          <RouterLink v-if="canViewSalesHistory" to="/sales/history">
-            <span class="stat-icon green-dot"><i class="pi pi-check" /></span>
-            <div class="quick-stats-info"><small>Completed visits</small><strong>{{ completed }}</strong></div>
-          </RouterLink>
-
-          <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
-            <span class="stat-icon red-dot"><i class="pi pi-clock" /></span>
-            <div class="quick-stats-info"><small>Pending visits</small><strong>{{ pendingCount }}</strong></div>
-          </RouterLink>
-        </div>
+      <section class="sales-command-header">
+        <div><span class="sales-eyebrow">Sales working dashboard</span><h1>{{ greeting }}, {{ firstName }} <span aria-hidden="true">👋</span></h1><p>Berikut aktivitas dan prioritas Anda hari ini.</p></div>
+        <time>{{ formattedDate }}</time>
       </section>
-    </div>
 
-    <!-- Quick actions -->
-    <div class="section-title">
-      <strong>Quick actions</strong>
-      <RouterLink v-if="canViewSalesPipeline" :to="{ name: 'SalesPipeline' }" class="pipeline-link">
-        <i class="pi pi-chart-bar" />
-        Prospect Pipeline
-      </RouterLink>
-    </div>
+      <section class="sales-kpi-grid" aria-label="Ringkasan hari ini">
+        <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="sales-kpi kpi-attention"><span><i class="pi pi-exclamation-circle" /> Needs attention</span><strong>{{ crm.myProspects.filter(p => p.status === 'NEW_LEAD').length }}</strong><small>Prospek perlu ditindaklanjuti</small></RouterLink>
+        <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="sales-kpi kpi-today"><span><i class="pi pi-calendar" /> Visit today</span><strong>{{ todayVisits.length }}</strong><small>Kunjungan terjadwal hari ini</small></RouterLink>
+        <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="sales-kpi kpi-progress"><span><i class="pi pi-chart-line" /> In progress</span><strong>{{ activeProspects.length }}</strong><small>Prospek aktif</small></RouterLink>
+        <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="sales-kpi kpi-won"><span><i class="pi pi-check-circle" /> Won / converted</span><strong>{{ crm.myProspects.filter(p => ['WON', 'CONVERTED'].includes(p.status)).length }}</strong><small>Berhasil dikonversi</small></RouterLink>
+      </section>
 
-    <div class="quick-actions">
-      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline" class="action-primary">
-        <span class="action-icon action-icon-primary"><i class="pi pi-play" /></span>
-        <span>Start visit</span>
-      </RouterLink>
-
-      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
-        <span class="action-icon action-icon-mint"><i class="pi pi-map-marker" /></span>
-        <span>Open maps</span>
-      </RouterLink>
-
-      <RouterLink v-if="canViewMyCustomers" to="/sales/my-customers">
-        <span class="action-icon action-icon-indigo"><i class="pi pi-users" /></span>
-        <span>Customer</span>
-      </RouterLink>
-
-      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">
-        <span class="action-icon action-icon-amber"><i class="pi pi-briefcase" /></span>
-        <span>Prospect</span>
-      </RouterLink>
-    </div>
-
-    <!-- Today's visits -->
-    <div class="section-title">
-      <strong>Today's visits</strong>
-      <RouterLink v-if="canViewSalesPipeline" to="/sales/pipeline">See route</RouterLink>
-    </div>
-
-    <div class="today-list">
-      <RouterLink
-        v-for="(item, index) in todayVisits.slice(0, 3)"
-        :key="item.id"
-        :to="`/sales/my-prospects/${item.id}`"
-      >
-        <time>
-          {{ formatVisitTime(item) }}
-          <small>Today</small>
-        </time>
-        <i class="visit-dot" :class="index % 2 === 0 ? 'dot-amber' : 'dot-blue'" />
-        <div>
-          <strong>{{ item.placeName }}</strong>
-          <small>{{ item.placeCategory || item.industryGroup || 'Uncategorized' }}</small>
-        </div>
-        <span class="visit-badge">Pending</span>
-      </RouterLink>
-
-      <div v-if="!todayVisits.length" class="empty-state">
-        <strong>No visits today</strong>
-        <span>No prospects updated today yet.</span>
-      </div>
-    </div>
+      <div class="sales-dashboard-columns"><div class="sales-dashboard-left"><DailyVisitSchedule :loading="crm.loading" :prospects="activeProspects" /></div><div class="sales-dashboard-right"><ProspectHealthSummary :prospects="crm.myProspects" /><section class="sales-mini-card activity-card"><header><h2>Aktivitas Terakhir</h2><RouterLink v-if="canViewSalesHistory" to="/sales/history">Lihat semua <i class="pi pi-arrow-right" /></RouterLink></header><div v-if="activityLoading" class="activity-empty">Memuat aktivitas...</div><div v-else-if="!recentActivities.length" class="activity-empty">Belum ada aktivitas terbaru.</div><RouterLink v-for="visit in recentActivities.slice(0, 3)" v-else :key="visit.id" class="activity-row" :to="visit.prospectId ? `/sales/my-prospects/${visit.prospectId}` : '/sales/history'"><i :class="visit.checkOutAt ? 'pi pi-check-circle activity-done' : 'pi pi-circle-fill activity-open'" /><span><b>{{ visit.checkOutAt ? 'Check-out' : 'Check-in' }} · {{ visit.customerName }}</b><small>{{ new Date(visit.checkOutAt || visit.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</small></span></RouterLink></section></div></div>
     </template>
   </section>
 </template>
@@ -1086,4 +1009,123 @@ onMounted(async () => {
   .quick-actions { gap: 0.55rem; }
   .quick-actions > a { min-height: 84px; font-size: 0.64rem; }
 }
+/* Final sales-dashboard polish: keep the visual language focused on the red brand. */
+.sales-home { gap: 1.1rem; }
+.sales-home { width:100%; max-width:1400px; padding-inline:clamp(1rem,2vw,1.75rem); box-sizing:border-box; }
+.sales-dash-header {
+  border-color: #f4d5d8;
+  background: linear-gradient(135deg, #fff 0%, #fff8f8 100%);
+  box-shadow: 0 8px 24px rgba(166, 28, 45, .07);
+}
+.ready-card { box-shadow: 0 14px 30px -16px rgba(166, 28, 45, .7); }
+.ready-card { min-height: 148px; padding: 1.5rem 1.65rem; }
+.ready-card > .ready-content { min-width: 0; flex: 1; }
+.ready-card > .ready-open { flex: 0 0 auto; margin-left: 1rem; }
+.ready-content { position: relative; z-index: 1; }
+.ready-eyebrow { display: inline-flex; align-items: center; gap: .4rem; font-size: .68rem !important; letter-spacing: .07em; text-transform: uppercase; }
+.ready-eyebrow i { font-size: .72rem; }
+.ready-summary { font-size: .78rem !important; font-weight: 550 !important; }
+.ready-open { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: .55rem; padding: .65rem .8rem; border: 1px solid rgba(255,255,255,.45); border-radius: 10px; background: rgba(255,255,255,.14); color: #fff; font-size: .68rem; transition: background .2s ease, transform .2s ease; }
+.ready-open i { font-size: .7rem; }
+.ready-card:hover .ready-open { background: rgba(255,255,255,.24); transform: translateX(2px); }
+.ready-card > i { width: auto; height: auto; background: transparent; box-shadow: none; }
+.ready-card > i { color: inherit; }
+.stats-panel, .quick-actions, .today-list, .team-card, .team-kpi-card, .team-overview-header {
+  border-color: #f0dfe1;
+  box-shadow: 0 6px 20px rgba(73, 34, 41, .05);
+}
+.stats-panel { overflow: hidden; }
+.quick-actions > a { min-height: 94px; justify-content: center; align-items: center; gap: .7rem; }
+.quick-actions > a > span:last-child { display: grid; gap: .2rem; text-align: center; }
+.quick-actions > a > span:last-child b { font-size: .76rem; color: inherit; }
+.quick-actions > a > span:last-child small { color: var(--text-muted); font-size: .61rem; line-height: 1.35; }
+.quick-actions > a.action-primary > span:last-child small { color: #ffd9dc; }
+.stat-icon.blue-dot, .stat-icon.amber-dot, .stat-icon.green-dot, .stat-icon.red-dot,
+.action-icon-primary, .action-icon-mint, .action-icon-indigo, .action-icon-amber {
+  color: #b4232d;
+  background: #fff0f1;
+}
+.team-overview-header { border-left: 4px solid #e63946; }
+.team-hero-actions a { color: #b4232d; border-color: #f4b3ba; background: #fff0f1; }
+.team-kpi-card { border-top: 3px solid #e63946; }
+.team-kpi-icon, .team-kpi-icon-green { color: #b4232d; background: #fff0f1; }
+.pipeline-row i { background: linear-gradient(90deg, #e63946, #b4232d) !important; }
+.visit-badge { color: #a51e2d; background: #fff0f1; border-color: #f4d5d8; }
+@media (max-width: 640px) {
+  .sales-home { gap: .75rem; }
+  .sales-dash-header { padding: .7rem; }
+  .ready-card { min-height: 116px; padding: 1rem; }
+  .ready-card { min-height: 132px; }
+  .ready-open { padding: .55rem .6rem; }
+  .ready-open b { font-size: .58rem; }
+  .ready-card > .ready-open { margin-left: .5rem; }
+  .sales-identity { gap: .55rem; }
+  .sales-avatar { width: 48px; height: 38px; }
+  .sales-identity-text strong { font-size: .86rem; }
+  .sales-identity-text small { font-size: .66rem; }
+  .sales-dashboard-actions :deep(.yummy-social-links) { gap: .25rem; }
+  .section-title { margin-top: .15rem; }
+  .section-title strong { font-size: .84rem; }
+  .section-title a { font-size: .68rem; }
+  .quick-actions > a,
+  .stats-panel .quick-stats > a,
+  .today-list > a { min-height: 44px; }
+  .quick-actions > a { padding: .7rem .55rem; }
+  .action-icon { width: 36px; height: 36px; border-radius: 12px; }
+  .quick-actions > a { min-height: 92px; gap: .45rem; }
+  .quick-actions > a > span:last-child b { font-size: .65rem; }
+  .quick-actions > a > span:last-child small { font-size: .52rem; }
+  .today-list > a { grid-template-columns: 48px 8px minmax(0, 1fr) auto; gap: .55rem; padding: .75rem .7rem; }
+  .today-list strong { font-size: .76rem; }
+  .today-list span, .today-list small { font-size: .66rem; }
+  .visit-badge { padding: .22rem .38rem; font-size: .58rem; }
+}
+
+/* Premium red visual system */
+.sales-home { color: #321c21; }
+.sales-dash-header { border-color: #ead1d5; background: #fff; }
+.sales-avatar { background: #fff1f2; border-color: #f5c7cc; }
+.sales-identity-text strong, .section-title strong { color: #321c21; }
+.ready-card { background: linear-gradient(120deg, #a51e2d 0%, #c12334 52%, #e63946 100%); border-color: #a51e2d; }
+.dashboard-overview { gap: 1rem; }
+.stats-panel, .quick-actions, .today-list { border-color: #ead1d5; background: #fff; }
+.stats-panel-header { padding-bottom: .8rem; border-bottom: 1px solid #f3e3e5; }
+.stats-panel .quick-stats > a { background: linear-gradient(135deg, #fff 0%, #fffafa 100%); }
+.stats-panel .quick-stats > a:hover { background: #fff1f2; }
+.stat-icon { border: 1px solid #f3d4d8; }
+.quick-actions > a { border-color: #ead1d5; background: #fff; box-shadow: 0 4px 12px rgba(110, 28, 42, .04); }
+.quick-actions > a:hover { border-color: #e8aeb4; background: #fff7f8; box-shadow: 0 8px 18px rgba(110, 28, 42, .09); }
+.quick-actions > a.action-primary { border-color: #a51e2d; background: linear-gradient(135deg, #a51e2d, #d62839); color: #fff; box-shadow: 0 9px 18px rgba(165, 30, 45, .2); }
+.quick-actions > a.action-primary:hover { background: linear-gradient(135deg, #8f1d2a, #c12334); }
+.action-icon-mint, .action-icon-indigo, .action-icon-amber { color: #a51e2d; background: #fff0f1; }
+.today-list > a { border-bottom-color: #f3e3e5; }
+.today-list > a:hover { background: #fff7f8; }
+.visit-dot.dot-amber, .visit-dot.dot-blue { background: #e63946; box-shadow: 0 0 0 4px #fff0f1; }
+.visit-badge { color: #a51e2d; background: #fff0f1; border-color: #f3cbd0; }
+.team-card-header, .team-overview-header { border-color: #f0d9dc; }
+.team-card-header > span { color: #a51e2d; background: #fff0f1; border-color: #f3cbd0; }
+
+/* Compact sales command center */
+.sales-command-header { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; padding:.35rem 0 .2rem; }
+.sales-command-header h1 { margin:.2rem 0 .25rem; color:#172033; font-size:clamp(1.45rem,2.4vw,2rem); letter-spacing:-.035em; }
+.sales-command-header p { margin:0; color:#64748b; font-size:.86rem; }
+.sales-command-header time { color:#64748b; font-size:.78rem; font-weight:700; white-space:nowrap; }
+.sales-eyebrow { color:#e63946; font-size:.62rem; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
+.sales-kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; }
+.sales-kpi { min-width:0; padding:1rem 1.05rem; border:1px solid #e5eaf0; border-radius:14px; background:#fff; color:#172033; text-decoration:none; box-shadow:0 4px 14px rgba(15,23,42,.04); transition:.2s ease; }
+.sales-kpi:hover { transform:translateY(-2px); border-color:#f2b5bb; box-shadow:0 8px 20px rgba(15,23,42,.08); }
+.sales-kpi span { display:flex; align-items:center; gap:.4rem; color:#64748b; font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.sales-kpi span i { color:var(--accent,#e63946); }.sales-kpi strong { display:block; margin:.35rem 0 .15rem; font-size:1.8rem; letter-spacing:-.04em; }.sales-kpi small { color:#64748b; font-size:.72rem; }.kpi-today { --accent:#f59e0b; }.kpi-progress { --accent:#3b82f6; }.kpi-won { --accent:#16a34a; }
+.sales-dashboard-grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr); gap:1rem; align-items:start; }.sales-dashboard-grid > .schedule-card { display:contents; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-state), .sales-dashboard-grid :deep(.schedule-list) { grid-column:1; grid-row:1; }.sales-dashboard-grid :deep(.inline-weekly-route) { grid-column:1 / -1; grid-row:2; }.sales-dashboard-grid > .health-card { grid-column:2; grid-row:1; }.activity-card { grid-column:1 / -1; grid-row:3; }
+.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route), .sales-dashboard-grid > .health-card, .activity-card { border:1px solid #e5eaf0; border-radius:14px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); }
+.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list) { padding:1rem 1.1rem; }
+.sales-dashboard-grid :deep(.inline-weekly-route) { padding:1.1rem; }
+.sales-dashboard-grid :deep(.inline-weekly-route) { width:100%; }
+.sales-dashboard-grid :deep(.inline-route-heading .route-header-actions) { width:auto; }
+.sales-dashboard-columns { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); gap:1rem; align-items:start; }.sales-dashboard-left,.sales-dashboard-right { display:flex; min-width:0; flex-direction:column; gap:1rem; }
+.sales-dashboard-grid > .activity-card { grid-column:1 / -1; }
+.sales-dashboard-main > .schedule-card { min-width:0; }.sales-quick-links { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1rem 1.1rem; border:1px solid #e5eaf0; border-radius:14px; background:#fff; }.sales-quick-links h2 { margin:.2rem 0 0; font-size:1.05rem; }.sales-quick-links nav { display:flex; flex-wrap:wrap; gap:.5rem; }.sales-quick-links a { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem .7rem; border:1px solid #e5eaf0; border-radius:9px; color:#334155; font-size:.76rem; font-weight:700; text-decoration:none; }.sales-quick-links a:hover { color:#e63946; border-color:#f2b5bb; background:#fff7f7; }
+.sales-secondary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }.sales-mini-card { padding:1rem 1.1rem; border:1px solid #e5eaf0; border-radius:14px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); }.sales-mini-card header { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }.sales-mini-card h2 { margin:0; color:#172033; font-size:1rem; }.sales-mini-card header a { color:#e63946; font-size:.7rem; font-weight:700; text-decoration:none; }.summary-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }.summary-metrics span { display:grid; gap:.15rem; color:#64748b; font-size:.63rem; }.summary-metrics b { color:#172033; font-size:1.25rem; }.completion-row { display:flex; justify-content:space-between; color:#64748b; font-size:.68rem; }.completion-row strong { color:#172033; }.completion-track { height:7px; margin-top:.4rem; overflow:hidden; border-radius:99px; background:#eef2f7; }.completion-track i { display:block; height:100%; border-radius:inherit; background:#e63946; }.activity-row { display:flex; align-items:center; gap:.65rem; padding:.6rem 0; border-bottom:1px solid #f1f5f9; color:#172033; text-decoration:none; }.activity-row:last-child { border-bottom:0; }.activity-row span { display:grid; min-width:0; gap:.15rem; }.activity-row b { overflow:hidden; font-size:.74rem; text-overflow:ellipsis; white-space:nowrap; }.activity-row small { color:#64748b; font-size:.65rem; }.activity-done { color:#16a34a; }.activity-open { color:#f59e0b; font-size:.55rem; }.activity-empty { padding:1rem 0; color:#64748b; font-size:.72rem; }
+@media (max-width: 900px) { .sales-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.sales-dashboard-columns { grid-template-columns:1fr; }.sales-dashboard-grid { grid-template-columns:1fr; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-state), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route), .sales-dashboard-grid > .health-card,.activity-card { grid-column:1; grid-row:auto; } }
+@media (max-width: 560px) { .sales-home { padding-inline:.75rem; }.sales-command-header { align-items:flex-start; flex-direction:column; gap:.3rem; }.sales-kpi { padding:.8rem .75rem; }.sales-kpi strong { font-size:1.5rem; }.sales-kpi small { font-size:.65rem; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route), .sales-dashboard-grid > .health-card, .activity-card { border-radius:12px; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route) { padding:.85rem; } }
 </style>

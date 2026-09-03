@@ -225,7 +225,7 @@ onMounted(load)
     <header class="roles-toolbar">
       <div class="toolbar-title">
         <span class="eyebrow">Sales Organization</span>
-        <h1>Role Management</h1>
+        <h1>Manajemen Role</h1>
         <p>{{ filteredRoles.length }} visible · {{ activeRoles }} active</p>
       </div>
 
@@ -268,11 +268,11 @@ onMounted(load)
 
     <div class="summary-strip">
       <div class="summary-item">
-        <span>Total Roles</span>
+        <span>Total Role</span>
         <strong>{{ totalRoles }}</strong>
       </div>
       <div class="summary-item">
-        <span>Active Roles</span>
+        <span>Role Aktif</span>
         <strong>{{ activeRoles }}</strong>
       </div>
       <div
@@ -301,7 +301,7 @@ onMounted(load)
       </span>
       <Button
         v-if="!hasFilters"
-        label="Add Role"
+          label="Tambah Role"
         icon="pi pi-plus"
         size="small"
         @click="goCreate"
@@ -1284,4 +1284,31 @@ onMounted(load)
   }
 }
 .roles-toolbar{min-height:58px;padding:.55rem .75rem;flex-wrap:nowrap}.roles-toolbar .toolbar-controls{display:flex;align-items:center;justify-content:flex-end;gap:.45rem;flex-wrap:nowrap}.roles-toolbar .toolbar-select{min-width:150px;height:34px}.roles-toolbar .create-button,.roles-toolbar .reset-button{height:34px;white-space:nowrap}.summary-strip{padding:.55rem .7rem;gap:.45rem}.summary-item{padding:.35rem .6rem}
+@media (max-width: 640px) {
+  .roles-page { padding:.5rem; gap:.55rem; background:#f8fafc; }
+  .roles-toolbar { padding:.85rem; border-radius:14px; min-height:0; gap:.7rem; }
+  .roles-toolbar h1 { font-size:1.15rem; }
+  .roles-toolbar p { font-size:.64rem; }
+  .roles-toolbar .toolbar-controls { display:grid; grid-template-columns:1fr 1fr; width:100%; gap:.4rem; }
+  .roles-toolbar .toolbar-select { grid-column:1/-1; width:100%; height:40px; }
+  .roles-toolbar .create-button { grid-column:1/-1; width:100%; min-height:38px; background:#e63946; border-color:#e63946; }
+  .summary-strip { grid-template-columns:repeat(2,1fr); border-radius:10px; }
+  .summary-item { min-width:0; padding:.5rem .4rem; }
+  .summary-item span { font-size:.48rem; }
+  .level-sections { padding:.55rem; border-radius:12px; }
+  .level-section { border-radius:10px; }
+  .role-list-header { display:none; }
+  .role-row { display:grid; grid-template-columns:1fr auto; gap:.55rem; padding:.75rem; border-radius:10px; background:#fff; border:1px solid #f1e5e7; }
+  .system-role-cell { grid-column:1/-1; }
+  .role-primary { grid-column:1/-1; }
+  .role-copy strong { font-size:.72rem; }
+  .role-description { font-size:.6rem; line-height:1.35; }
+  .role-menu { display:none; }
+  .permission-cell { align-self:center; font-size:.6rem; }
+  .permission-cell strong { font-size:.85rem; }
+  .role-status { align-self:center; }
+  .role-actions { grid-column:1/-1; justify-content:flex-start; padding-top:.35rem; border-top:1px solid #f4e6e8; }
+  .mobile-label { font-size:.52rem; }
+  .role-row .p-tag { font-size:.53rem; padding:.18rem .35rem; }
+}
 </style>

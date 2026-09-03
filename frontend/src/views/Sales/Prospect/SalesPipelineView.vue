@@ -12,7 +12,6 @@ import type { Prospect, ProspectStatus } from '../../../types/crm'
 import PipelineProspectCard from '../../../components/sales/pipeline/PipelineProspectCard.vue'
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
 import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
-import DailyVisitSchedule from '../../../components/prospect/DailyVisitSchedule.vue'
 import { requestProspectDeletion, cancelProspectDeletion } from '../../../api/crm'
 
 type PipelineGroup = 'ALL' | 'NEW_LEAD' | 'IN_PROGRESS' | 'WON' | 'LOST'
@@ -439,7 +438,6 @@ onBeforeUnmount(() => {
 
     <div class="pipeline-overview">
       <ProspectHealthSummary :prospects="prospects" />
-      <DailyVisitSchedule :loading="crm.loading" :prospects="prospects" />
     </div>
 
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>

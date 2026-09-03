@@ -113,6 +113,7 @@ onMounted(async () => {
       <!-- PAGE HEADER -->
       <header class="page-heading">
         <div class="page-title-wrapper">
+          <Button label="Back to Customer" icon="pi pi-arrow-left" text class="back-add-button" @click="router.push('/admin/customers')" />
           <span class="eyebrow">New Customer</span>
           <h1>Add Customer Site</h1>
           <p class="muted">Register a new customer site into the CRM system.</p>
@@ -610,4 +611,5 @@ onMounted(async () => {
   .form-field.full { grid-column: 1; }
   .success-actions { flex-direction: column; width: 100%; }
 }
+.back-add-button{display:inline-flex;margin:0 12px 8px 0;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;background:#fff0f1;color:#64748b;font-size:12px}.back-add-button .p-button-icon{font-size:13px}.page-heading{align-items:center;min-height:48px;padding:0 32px;border-bottom:1px solid #e2e8f0}.page-title-wrapper{display:flex;align-items:center;gap:8px}.page-title-wrapper .eyebrow{display:none}.page-title-wrapper h1{font-size:17px;font-weight:700}.page-title-wrapper .muted{font-size:11px;color:#94a3b8}.page-heading-actions :deep(.p-button){height:32px;border-radius:8px;font-size:12px}
 </style>

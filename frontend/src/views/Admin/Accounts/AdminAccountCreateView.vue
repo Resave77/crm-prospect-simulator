@@ -18,6 +18,7 @@ const store = useAdminStore()
 const toast = useToast()
 const error = ref('')
 const saving = ref(false)
+const jobInformationOpen = ref(false)
 const timezoneOptions = [
   { label: 'WIB — Asia/Jakarta (UTC+7)', value: 'Asia/Jakarta' },
   { label: 'WITA — Asia/Makassar (UTC+8)', value: 'Asia/Makassar' },
@@ -230,32 +231,8 @@ onMounted(async () => {
     <Toast position="top-right" />
 
     <header class="topbar">
-      <div class="topbar-left">
-
-        <div>
-          <span class="eyebrow">Account Management</span>
-          <h1>Create Account</h1>
-          <p>Create a CRM account and assign access from Role Management.</p>
-        </div>
-      </div>
-
-      <div class="topbar-actions">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          size="small"
-          @click="router.push('/admin/accounts')"
-        />
-        <Button
-          label="Create Account"
-          icon="pi pi-check"
-          size="small"
-          :loading="saving"
-          :disabled="!isFormValid || saving"
-          @click="handleSubmit"
-        />
-      </div>
+      <div class="topbar-left"><Button label="Back to Employee" icon="pi pi-arrow-left" text class="back-employee-button" @click="router.push('/admin/accounts')" /><div><h1>Create Employee</h1><p>Employee Management &gt; Employee &gt; Create</p></div></div>
+      <div class="topbar-actions"><Button label="Cancel" severity="secondary" outlined size="small" @click="router.push('/admin/accounts')" /><Button label="Submit" icon="pi pi-send" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" /></div>
     </header>
 
     <Message v-if="error" severity="error" class="page-message">
@@ -265,8 +242,8 @@ onMounted(async () => {
     <div class="content-layout">
       <main class="form-column">
         <section class="form-section job-section">
-          <header class="section-header"><div><h2>Job Information</h2><p>Optional employee and organization details.</p></div><span class="section-status">Optional</span></header>
-          <div class="form-grid">
+          <header class="section-header"><div><h2>Job Information</h2><p>Optional employee and organization details.</p></div><button type="button" class="section-toggle" :aria-expanded="jobInformationOpen" @click="jobInformationOpen = !jobInformationOpen"><i class="pi" :class="jobInformationOpen ? 'pi-chevron-up' : 'pi-chevron-down'" /></button></header>
+          <div v-if="jobInformationOpen" class="form-grid">
             <div class="form-field"><label>Timezone <span class="required">*</span></label><Select v-model="form.timezone" :options="timezoneOptions" optionLabel="label" optionValue="value" /></div>
             <div class="form-field"><label>City <span class="optional-badge">Optional</span></label><InputText v-model="form.city" /></div>
             <div class="form-field"><label>Province <span class="optional-badge">Optional</span></label><InputText v-model="form.province" /></div>
@@ -287,7 +264,7 @@ onMounted(async () => {
               <h2>User Information</h2>
               <p>Primary sign-in and account identity information.</p>
             </div>
-            <span class="section-status required-status">Required</span>
+            <button type="button" class="section-toggle" aria-label="User information is expanded"><i class="pi pi-chevron-up" /></button>
           </header>
 
           <div class="form-grid">
@@ -1094,4 +1071,6 @@ onMounted(async () => {
     grid-column: auto;
   }
 }
+.create-account-page{min-height:100%;background:#f8fafc;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.topbar{min-height:48px;height:48px;padding:0 32px;border-bottom:1px solid #e2e8f0;background:#fff;backdrop-filter:none}.topbar-left{gap:12px}.back-employee-button{height:32px;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;color:#64748b;font-size:16px}.back-employee-button .p-button-icon{font-size:13px}.topbar-left>div:last-child{display:flex;align-items:center;gap:8px}.topbar h1{font-size:17px;font-weight:700;white-space:nowrap}.topbar p{color:#94a3b8;font-size:11px}.topbar-actions{gap:8px}.topbar-actions :deep(.p-button){height:32px;min-height:32px;border-radius:8px;padding:0 14px;font-size:12px}.topbar-actions :deep(.p-button:last-child){background:#94a3b8;border-color:#94a3b8}.content-layout{grid-template-columns:minmax(0,792px) 320px;gap:24px;width:min(1136px,calc(100% - 64px));margin:32px auto}.form-column{gap:16px}.form-section,.preview-card,.required-card,.help-card{border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 6px 18px rgba(15,23,42,.035)}.section-header{padding:20px 24px;border-bottom:1px solid #e8edf3}.section-header h2{font-size:16px;font-weight:700}.section-header p{font-size:12px;color:#64748b}.form-grid{gap:18px 20px;padding:24px}.form-field{gap:6px}.form-field label{font-size:12px;font-weight:500;color:#334155}.form-field small{font-size:11px;color:#64748b}.form-field :deep(.p-inputtext),.form-field :deep(.p-select),.form-field :deep(.p-password-input),.form-field :deep(.p-datepicker-input){height:48px;border:1px solid #d6e0ec;border-radius:14px;padding:0 14px;font-size:13px}.form-field :deep(.p-select-label){padding:0 14px;line-height:46px}.preview-card{padding:28px 24px}.avatar-preview{width:84px;height:84px;margin:0 auto 16px;border-radius:50%;background:#e6f0ff;color:#64748b;font-size:28px}.preview-card h3{text-align:center;font-size:18px;font-weight:700}.preview-card>p{text-align:center;font-size:12px;color:#64748b}.preview-card :deep(.p-tag){display:flex;width:max-content;margin:12px auto;padding:5px 12px;border-radius:999px;font-size:11px}.preview-divider{margin:20px 0;border-color:#e2e8f0}.preview-card dl{gap:12px}.preview-card dt{font-size:12px;color:#64748b}.preview-card dd{font-size:12px;font-weight:500}.required-card,.help-card{padding:20px 24px}.page-message{margin:16px 32px 0}@media(max-width:1000px){.content-layout{grid-template-columns:1fr;width:min(792px,calc(100% - 32px));margin:20px auto}.sidebar-column{display:none}}@media(max-width:640px){.topbar{height:auto;min-height:56px;padding:10px 16px}.topbar-left{align-items:flex-start}.topbar-left>div:last-child{display:grid;gap:2px}.topbar h1{font-size:15px}.topbar p{font-size:10px}.content-layout{width:calc(100% - 24px);margin:12px auto}.form-grid{grid-template-columns:1fr;padding:16px}.section-header{padding:16px}.preview-card{padding:20px}}
+.section-toggle{display:grid;width:34px;height:34px;place-items:center;flex:0 0 auto;border:1px solid #d6e0ec;border-radius:50%;background:#f8fafc;color:#64748b;cursor:pointer}.section-toggle:hover{background:#eef5ff;border-color:#bfd3ed;color:#334155}
 </style>

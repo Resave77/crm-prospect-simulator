@@ -20,6 +20,7 @@ const prospects = ref<Prospect[]>([])
 const sales = ref<SalesExecutiveOption[]>([])
 const error = ref('')
 const loading = ref(true)
+const showFilters = ref(false)
 
 const searchQuery = ref('')
 const salesFilter = ref('')
@@ -209,9 +210,9 @@ onMounted(async () => {
     <header class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
-          <span class="eyebrow">Prospect Management</span>
-          <h1>Prospect List</h1>
-          <p class="muted">Manage, review, and track every prospect across the sales lifecycle.</p>
+          <span class="eyebrow">Manajemen Prospek</span>
+          <h1>Daftar Prospek</h1>
+          <p class="muted">Kelola, tinjau, dan pantau seluruh prospek dalam proses penjualan.</p>
         </div>
       </div>
 
@@ -242,8 +243,13 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
+    <nav class="prospect-erp-toolbar" aria-label="Prospect management sections">
+      <label class="prospect-search"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label>
+      <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
+    </nav>
+
     <div class="panel-stack">
-      <div class="filter-panel">
+      <div v-if="showFilters" class="filter-panel">
         <div class="filter-grid">
           <div class="filter-field">
             <label>Sales Executive</label>
@@ -1202,4 +1208,45 @@ onMounted(async () => {
 .prospect-name-cell{position:relative;overflow:visible!important}.prospect-preview{position:absolute;z-index:50;left:.25rem;top:calc(100% - .1rem);display:grid;min-width:220px;gap:.16rem;padding:.55rem .65rem;border:1px solid #dce5f0;border-radius:8px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.57rem;line-height:1.25}.prospect-preview strong{color:#075de3;font-size:.62rem}.prospect-preview span{white-space:nowrap}@media(min-width:901px){.table-panel:has(.prospect-name-cell),.table-panel:has(.prospect-name-cell) .table-scroll{overflow:visible}}
 .preview-cell{position:relative;overflow:visible!important}.cell-preview{position:absolute;z-index:60;left:.25rem;top:calc(100% - .05rem);min-width:145px;padding:.5rem .6rem;border:1px solid #dce5f0;border-radius:7px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.14);color:#52627a;font-size:.6rem;line-height:1.35;white-space:nowrap}.prospect-page .table-panel{overflow:visible}.prospect-page .table-scroll{overflow:visible}
 .prospect-page .data-table{width:100%;min-width:0;table-layout:fixed}.prospect-page .data-table thead th{height:42px;padding:.55rem .7rem;background:#f4f6f9}.prospect-page .data-table tbody td{height:60px;padding:.55rem .7rem;border-right:1px solid #e5eaf0}.prospect-page .table-panel{width:100%;overflow:visible}
+@media (max-width: 640px) {
+  .prospect-page { padding:.5rem; gap:.5rem; background:#f8fafc; }
+  .prospect-page .workspace-header { padding:.85rem; border-radius:14px; }
+  .prospect-page .page-title-wrapper h1 { font-size:1.12rem; }
+  .prospect-page .page-title-wrapper .muted { font-size:.64rem; line-height:1.35; white-space:normal; }
+  .prospect-page .summary-strip { grid-template-columns:repeat(2,1fr); border-radius:10px; }
+  .prospect-page .page-heading-actions { display:grid; grid-template-columns:repeat(2,1fr); gap:.4rem; }
+  .prospect-page .page-heading-actions :deep(.p-button) { min-height:38px; font-size:.68rem; }
+  .prospect-page .filter-panel { padding:.7rem; border-radius:12px; }
+  .prospect-page .filter-grid { grid-template-columns:1fr; gap:.55rem; }
+  .prospect-page .filter-field :deep(.p-select) { height:40px; border-radius:9px; }
+  .prospect-page .table-panel { border-radius:12px; overflow:hidden; }
+  .prospect-page .table-scroll { overflow:hidden; }
+  .prospect-page .data-table { min-width:0; table-layout:fixed; font-size:.65rem; border-collapse:separate; border-spacing:0; }\n  .prospect-page .data-table thead th { height:34px; padding:.45rem .35rem; font-size:.54rem; background:#fff8f8; color:#8b4b55; }\n  .prospect-page .data-table tbody tr { background:#fff; }\n  .prospect-page .data-table tbody tr + tr td { border-top:1px solid #f4e6e8; }\n  .prospect-page .data-table tbody td { height:54px; padding:.45rem .35rem; vertical-align:middle; }
+  .prospect-page .data-table th, .prospect-page .data-table td { padding:.6rem .45rem; }
+  .prospect-page .data-table thead th:nth-child(2), .prospect-page .data-table tbody td:nth-child(2),
+  .prospect-page .data-table thead th:nth-child(5), .prospect-page .data-table tbody td:nth-child(5) { display:none; }
+  .prospect-page .data-table thead th { font-size:0; }
+  .prospect-page .data-table thead th:nth-child(1)::after { content:'Prospek'; font-size:.56rem; }
+  .prospect-page .data-table thead th:nth-child(3)::after { content:'Sales'; font-size:.56rem; }
+  .prospect-page .data-table thead th:nth-child(4)::after { content:'Status'; font-size:.56rem; }
+  .prospect-page .prospect-name { font-size:.7rem; }
+  .prospect-page .cell-sub { display:block; max-width:150px; font-size:.55rem; }
+  .prospect-page .cell-text { font-size:.62rem; }
+  .prospect-page .p-tag, .prospect-page .won-badge { font-size:.54rem; padding:.18rem .3rem; white-space:normal; }
+  .prospect-page .pagination-bar { flex-direction:column; gap:.4rem; padding:.65rem .7rem; }
+  .prospect-page .pagination-info { font-size:.6rem; text-align:center; }
+  .prospect-page .state-box { min-height:180px; padding:1.2rem; font-size:.68rem; }
+}
+.prospect-page { min-width:0; padding:0; gap:0; background:#fff; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+.prospect-page .workspace-header,.prospect-page .table-heading { display:none; }
+.prospect-erp-toolbar { display:flex; min-height:58px; height:58px; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid #e2e8f0; background:#fff; }
+.prospect-tabs { display:flex; align-items:center; gap:2px; padding:4px; border-radius:10px; background:#f1f5f9; }
+.prospect-tab { display:inline-flex; height:34px; align-items:center; padding:0 14px; border-radius:10px; color:#40516a; font-size:12px; font-weight:500; white-space:nowrap; }
+.prospect-tab.active { background:#dc2626; color:#fff; box-shadow:0 2px 6px rgba(220,38,38,.12); }
+.prospect-search { display:flex; flex:0 0 270px; height:40px; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; color:#94a3b8; }
+.prospect-search i { font-size:12px; }.prospect-search input { width:100%; height:32px; border:0; outline:0; background:transparent; color:#0f172a; font-size:13px; }.prospect-search input::placeholder { color:#94a3b8; }
+.prospect-erp-toolbar > :deep(.p-button) { height:40px; min-height:40px; padding:0 14px; border-radius:10px; font-size:12px; font-weight:600; }
+.prospect-page .panel-stack { gap:0; padding:0; }.prospect-page .filter-panel { display:flex; align-items:flex-end; gap:14px; padding:14px 20px 16px; border:0; border-bottom:1px solid #e2e8f0; border-radius:0; background:#fff; box-shadow:0 3px 12px rgba(15,23,42,.04); }.prospect-page .filter-grid { display:grid; grid-template-columns:repeat(3,minmax(160px,210px)) auto; flex:1; gap:12px; }.prospect-page .filter-field { gap:5px; }.prospect-page .filter-field label { color:#64748b; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }.prospect-page .filter-field :deep(.p-select) { height:40px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; font-size:12px; }.prospect-page .filter-field :deep(.p-select-label) { padding:0 12px; }.prospect-page .filter-action { align-self:end; }.prospect-page .filter-action :deep(.p-button) { height:40px; min-height:40px; border-radius:10px; font-size:12px; }
+.prospect-page .table-panel { border:0; border-radius:0; box-shadow:none; }.prospect-page .data-table { min-width:0; width:100%; table-layout:fixed; font-size:11px; }.prospect-page .data-table thead th { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; background:#f4f4f4; color:#000; font-size:10px; font-weight:600; line-height:12px; letter-spacing:.07em; }.prospect-page .data-table tbody td { box-sizing:border-box; height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; font-size:11px; line-height:13px; }.prospect-page .data-table tbody tr:hover { background:#fff; }.prospect-page .data-table .prospect-name { color:#0f172a; font-size:11px; font-weight:600; }.prospect-page .data-table .cell-sub,.prospect-page .data-table .cell-text,.prospect-page .data-table .cell-date { color:#64748b; font-size:10px; line-height:12px; }.prospect-page .data-table :deep(.p-tag) { border-radius:999px; padding:4px 10px; font-size:10px; font-weight:500; }.prospect-page .pagination-bar { min-height:42px; padding:0 20px; border-top:0; border-bottom:1px solid #e2e8f0; background:#fff; }
+@media(max-width:900px){.prospect-erp-toolbar{height:auto;min-height:58px;flex-wrap:wrap;overflow:visible}.prospect-search{flex-basis:220px}.prospect-erp-toolbar>:deep(.p-button){width:100%}.prospect-page .filter-panel{display:grid;grid-template-columns:1fr;padding:12px}.prospect-page .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.prospect-erp-toolbar{padding:10px 12px}.prospect-tabs{width:100%}.prospect-tab{flex:1;justify-content:center;padding:0 8px}.prospect-page .data-table{min-width:760px}.prospect-page .table-scroll{overflow-x:auto}}
 </style>

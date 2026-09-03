@@ -23,6 +23,7 @@ const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const error = ref('')
+const showFilters = ref(false)
 const updating = ref(false)
 const first = ref(0)
 const goToPage = ref(1)
@@ -59,6 +60,13 @@ const statusOptions = [
   { label: 'All Status', value: '' },
   { label: 'Active', value: 'ACTIVE' },
   { label: 'Inactive', value: 'INACTIVE' },
+]
+const roleOptions = [
+  { label: 'All CRM Roles', value: '' },
+  { label: 'Super Admin', value: 'SUPER_ADMIN' },
+  { label: 'Administrator', value: 'ADMINISTRATOR' },
+  { label: 'Sales Manager', value: 'SALES_MANAGER' },
+  { label: 'Sales Executive', value: 'SALES_EXECUTIVE' },
 ]
 
 const selectedStatus = computed({
@@ -143,6 +151,10 @@ const selectedPageSize = computed({
     goToPage.value = 1
     load()
   },
+})
+const selectedRole = computed({
+  get: () => store.params.role,
+  set: (val) => { store.setParam('role', val); store.setParam('page', 1); first.value = 0; load() },
 })
 
 function goToSelectedPage() {
@@ -305,31 +317,10 @@ onMounted(() => { load() })
     </Message>
 
     <header class="accounts-toolbar">
-      <div class="toolbar-title">
-        <span class="eyebrow">Account Management</span>
-        <h1>Account List</h1>
-        <p>{{ store.total }} account{{ store.total === 1 ? '' : 's' }}</p>
-      </div>
+      <label class="employee-search"><i class="pi pi-search" /><input v-model="store.params.search" placeholder="Search by employee ID, name, email, phone..." @keyup.enter="load" /></label>
 
       <div class="toolbar-controls">
-        <Select
-          v-model="selectedStatus"
-          :options="statusOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="All Status"
-          class="status-filter"
-        />
-
-        <Button
-          label="Reset"
-          icon="pi pi-refresh"
-          severity="secondary"
-          outlined
-          size="small"
-          class="reset-button"
-          @click="resetAll"
-        />
+        <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
 
         <Button
           label="Trash"
@@ -342,7 +333,7 @@ onMounted(() => { load() })
         />
 
         <Button
-          label="Create Account"
+          label="Create Employee"
           icon="pi pi-plus"
           size="small"
           class="create-button"
@@ -350,6 +341,12 @@ onMounted(() => { load() })
         />
       </div>
     </header>
+
+    <div v-if="showFilters" class="employee-filter-panel">
+      <div class="employee-filter-field"><label>Status</label><Select v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All statuses" /></div>
+      <div class="employee-filter-field"><label>CRM Role</label><Select v-model="selectedRole" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="All CRM roles" /></div>
+      <Button label="Reset" icon="pi pi-refresh" severity="secondary" text size="small" @click="resetAll" />
+    </div>
 
     <div v-if="selectedIds.length" class="bulk-action-bar">
       <strong>{{ selectedIds.length }} selected</strong>
@@ -399,8 +396,8 @@ onMounted(() => { load() })
         <template #empty>
           <div class="empty-state">
             <span class="empty-icon"><i class="pi pi-users" /></span>
-            <strong>No accounts found</strong>
-            <span>Try another keyword or change the status filter.</span>
+            <strong>Employee tidak ditemukan</strong>
+            <span>Coba kata kunci lain atau ubah filter status.</span>
           </div>
         </template>
 
@@ -421,7 +418,6 @@ onMounted(() => { load() })
               </div>
               <div class="employee-copy">
                 <strong>{{ data.fullName }}</strong>
-                <span>{{ data.email }}</span>
                 <small>
                   {{ data.employeeId || 'No employee ID' }}
                   <template v-if="data.mustChangePassword">
@@ -433,7 +429,11 @@ onMounted(() => { load() })
           </template>
         </Column>
 
-        <Column header="Role" class="role-column">
+        <Column header="Contact" class="contact-column">
+          <template #body="{ data }"><div class="role-cell"><span>{{ data.email }}</span><span>{{ data.phone || '-' }}</span></div></template>
+        </Column>
+
+        <Column header="Department" class="role-column">
           <template #body="{ data }">
             <div class="role-cell">
               <strong>{{ organizationalRoleLabel(data) }}</strong>
@@ -445,12 +445,16 @@ onMounted(() => { load() })
           </template>
         </Column>
 
-        <Column header="Reports To" class="reports-column">
+        <Column header="Job Title" class="reports-column">
           <template #body="{ data }">
             <span class="single-line" :title="reportsToLabel(data)">
               {{ reportsToLabel(data) }}
             </span>
           </template>
+        </Column>
+
+        <Column header="Role" class="role-column">
+          <template #body="{ data }"><div class="role-cell"><strong>{{ data.role.replaceAll('_', ' ') }}</strong><span>CRM access role</span></div></template>
         </Column>
 
         <Column header="Status" class="status-column">
@@ -464,7 +468,7 @@ onMounted(() => { load() })
           </template>
         </Column>
 
-        <Column header="Updated" class="updated-column">
+        <Column header="Location" class="updated-column">
           <template #body="{ data }">
             <span class="single-line">{{ updatedLabel(data.updatedAt) }}</span>
           </template>
@@ -1371,4 +1375,47 @@ onMounted(() => { load() })
 }
 .accounts-pagination-top{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.55rem .7rem;border:1px solid #e5eaf0;border-radius:10px 10px 0 0;background:#fff}.accounts-page-links,.accounts-page-settings{display:flex;align-items:center;gap:.35rem}.accounts-page-link{min-width:28px;height:28px;padding:0;color:#475569}.accounts-page-link.active{border-radius:50%;background:#fff0f1;color:#d62839;font-weight:800}.accounts-page-report{margin-left:.45rem;color:#64748b;font-size:.68rem;white-space:nowrap}.accounts-page-settings{gap:.55rem}.accounts-page-settings label{display:flex;align-items:center;gap:.35rem;color:#64748b;font-size:.62rem;white-space:nowrap}.accounts-page-settings :deep(.p-select),.accounts-page-settings :deep(.p-inputnumber-input){height:32px;border:1px solid #dbe3ee;border-radius:7px;font-size:.68rem}.accounts-page-settings :deep(.p-select){width:72px}.accounts-page-settings :deep(.p-inputnumber){width:58px}.accounts-page-settings :deep(.p-inputnumber-input){width:58px;padding:.35rem}.accounts-page-settings :deep(.p-button){height:32px;padding:0 .7rem;font-size:.68rem}.table-shell>.accounts-table{border-top:0;border-radius:0 0 10px 10px}@media(max-width:700px){.accounts-pagination-top{align-items:flex-start;flex-direction:column}.accounts-page-settings{width:100%;justify-content:flex-end}.accounts-page-report{margin-left:.2rem}}
 .select-column{width:46px;text-align:center}.bulk-action-bar{display:flex;align-items:center;justify-content:space-between;padding:.65rem .8rem;border:1px solid #fecdd3;background:#fff1f2;color:#9f1239}.bulk-action-bar strong{font-size:.72rem}.bulk-action-bar>div{display:flex;align-items:center;gap:.5rem}.soft-delete-button{border:0!important;background:#e11d2e!important;color:#fff!important}.bulk-delete-copy{margin:0;color:#475569;font-size:.85rem}.accounts-toolbar{flex-wrap:nowrap;min-height:56px;padding:.5rem .7rem}.toolbar-controls{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;gap:.4rem}.toolbar-controls :deep(.p-select),.toolbar-controls :deep(.p-button){height:34px}.toolbar-controls :deep(.p-select){min-width:130px}.accounts-pagination-top{flex-wrap:nowrap;min-height:48px;white-space:nowrap}.accounts-page-links,.accounts-page-settings{flex-wrap:nowrap;white-space:nowrap}.accounts-page-settings label{flex-shrink:0}.accounts-page-report{overflow:hidden;text-overflow:ellipsis}.table-shell{overflow:hidden;border:1px solid #e5eaf0;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.03)}.accounts-pagination-top{border:0;border-bottom:1px solid #e5eaf0;border-radius:0;background:#fff}.accounts-table{border:0!important;border-radius:0!important}.accounts-table :deep(.p-datatable-thead > tr > th){padding:.6rem .7rem;background:#f4f6f9;color:#475569;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;border-right:1px solid #e5eaf0}.accounts-table :deep(.p-datatable-tbody > tr > td){padding:.65rem .7rem;border-color:#e5eaf0;border-right:1px solid #e5eaf0}.accounts-table :deep(.p-datatable-tbody > tr:hover > td){background:#fffafa}@media(max-width:700px){.accounts-toolbar{align-items:flex-start;flex-direction:column}.toolbar-controls{width:100%;justify-content:flex-start;flex-wrap:wrap}}
+@media (max-width: 620px) {
+  .accounts-page { padding:.5rem; gap:.55rem; background:#f8fafc; }
+  .accounts-toolbar { padding:.85rem; border-radius:14px; gap:.7rem; }
+  .toolbar-title .eyebrow { color:#e63946; font-size:.55rem; }
+  .toolbar-title h1 { font-size:1.15rem; }
+  .toolbar-title p { font-size:.64rem; }
+  .toolbar-controls { grid-template-columns:1fr 1fr; gap:.4rem; }
+  .toolbar-controls :deep(.p-select), .toolbar-controls :deep(.p-button) { width:100%; min-height:38px; font-size:.67rem; }
+  .toolbar-controls .status-filter { grid-column:1/-1; }
+  .toolbar-controls .create-button { grid-column:1/-1; background:#e63946; border-color:#e63946; }
+  .table-shell { border-radius:12px; }
+  .accounts-pagination-top { padding:.6rem; gap:.45rem; }
+  .accounts-page-links { width:100%; justify-content:center; flex-wrap:wrap; }
+  .accounts-page-report { width:100%; margin:0; text-align:center; font-size:.58rem; }
+  .accounts-page-settings { display:none; }
+  .accounts-table :deep(.p-datatable-tbody > tr) { margin:0; padding:.8rem; background:#fff; border-bottom:1px solid #f4e6e8; }
+  .accounts-table :deep(.p-datatable-tbody > tr > td) { padding:.18rem 0; }
+  .accounts-table :deep(.select-column) { position:absolute; top:.7rem; left:.55rem; width:auto; }
+  .accounts-table :deep(.employee-column) { padding-left:2rem!important; padding-right:4.5rem!important; }
+  .employee-cell { min-height:42px; gap:.55rem; }
+  .employee-avatar { width:34px; height:34px; font-size:.78rem; }
+  .employee-copy strong { font-size:.74rem; }
+  .employee-copy span, .employee-copy small { font-size:.58rem; }
+  .accounts-table :deep(.role-column), .accounts-table :deep(.actions-column) { font-size:.62rem; }
+  .accounts-table :deep(.status-column) { top:.7rem; right:.7rem; }
+  .accounts-table :deep(.p-tag) { font-size:.55rem; padding:.18rem .35rem; }
+}
+.accounts-page { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th) { height:40px; padding:0 .5rem; background:#f8fafc; color:#0f172a; font-size:.875rem; font-weight:500; line-height:1.25; letter-spacing:0; text-transform:none; }
+.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td) { height:48px; padding:.5rem; color:#0f172a; border-bottom:1px solid rgba(15,23,42,.1); font-size:.875rem; line-height:1.4; }
+.accounts-page button:not(.collapse-btn):not(.hamburger-btn), .accounts-page :deep(.p-button) { min-height:36px; height:36px; padding:0 1rem; border-radius:6px; font-size:.875rem; font-weight:500; }
+.accounts-page input, .accounts-page select, .accounts-page :deep(.p-inputtext), .accounts-page :deep(.p-select) { height:36px; min-height:36px; border-radius:6px; font-size:.875rem; }
+.accounts-page :deep(.p-tag) { border-radius:6px; padding:2px 8px; font-size:.75rem; font-weight:500; }
+.accounts-page { min-width:0; padding:0; gap:0; background:#fff; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+.accounts-toolbar { display:flex; min-height:70px; height:70px; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid #e2e8f0; background:#fff; }
+.employee-search { display:flex; flex:0 1 360px; height:40px; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; color:#94a3b8; }.employee-search i{font-size:13px}.employee-search input{width:100%;height:32px;border:0;outline:0;background:transparent;color:#0f172a;font-size:13px}.employee-search input::placeholder{color:#94a3b8}
+.toolbar-title { display:none; }.toolbar-controls { display:flex; align-items:center; gap:10px; margin-left:auto; }.toolbar-controls :deep(.p-button){height:40px;min-height:40px;padding:0 14px;border-radius:10px;font-size:12px;font-weight:600}.toolbar-controls :deep(.create-button){background:#dc2626;border-color:#dc2626}.toolbar-controls :deep(.trash-button){min-width:72px}.employee-filter-panel{display:flex;align-items:flex-end;gap:14px;padding:14px 20px 16px;border-bottom:1px solid #e2e8f0;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.04)}.employee-filter-field{display:grid;gap:5px;width:210px}.employee-filter-field label{color:#64748b;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.employee-filter-field :deep(.p-select){height:40px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px}.employee-filter-panel>:deep(.p-button){height:40px;min-height:40px;border-radius:10px;font-size:12px}
+.accounts-page .table-shell{border:0;border-radius:0;box-shadow:none}.accounts-page .accounts-pagination-top{height:42px;min-height:42px;padding:0 20px;border-bottom:1px solid #e2e8f0}.accounts-page .accounts-page-link{width:28px;min-width:28px;height:28px;border-radius:50%;font-size:10px}.accounts-page .accounts-page-report{font-size:10px}.accounts-page .accounts-page-settings :deep(.p-select),.accounts-page .accounts-page-settings :deep(.p-inputnumber-input),.accounts-page .accounts-page-settings :deep(.p-button){height:34px;border-radius:8px;font-size:11px}.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th){box-sizing:border-box;height:49px;padding:0 12px;border-right:1px solid #e2e2e2;border-bottom:1px solid #e0e0e0;background:#f4f4f4;color:#000;font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td){box-sizing:border-box;height:84px;padding:10px 12px;border-right:1px solid #e2e2e0;border-bottom:1px solid #e0e0e0;color:#0f172a;font-size:12px}.accounts-page .accounts-table :deep(.p-datatable-tbody > tr:hover > td){background:#fff}.accounts-page .employee-avatar{display:none}.accounts-page .employee-cell,.accounts-page .employee-copy,.accounts-page .role-cell{display:grid;gap:3px}.accounts-page .employee-copy strong,.accounts-page .role-cell strong{font-size:12px;font-weight:600}.accounts-page .employee-copy span,.accounts-page .role-cell span,.accounts-page .single-line{color:#64748b;font-size:11px;line-height:15px}.accounts-page .employee-copy small{color:#64748b;font-size:10px}.accounts-page :deep(.status-tag){border-radius:6px;padding:4px 9px;font-size:10px;font-weight:500}.accounts-page .select-column{width:54px}.accounts-page .skeleton-area{padding:16px}
+@media(max-width:900px){.accounts-toolbar{height:auto;min-height:70px;flex-wrap:wrap}.employee-search{flex-basis:100%;max-width:none}.toolbar-controls{width:100%;margin-left:0;flex-wrap:wrap}.toolbar-controls :deep(.p-button){flex:1}.employee-filter-panel{flex-wrap:wrap}.accounts-page .accounts-table{min-width:900px}.accounts-page .table-shell{overflow-x:auto}}
+.accounts-page .accounts-page-settings{gap:8px}.accounts-page .accounts-page-settings label{gap:5px;font-size:10px}.accounts-page .accounts-page-settings :deep(.p-select){width:76px;height:36px;border-radius:9px;font-size:11px}.accounts-page .accounts-page-settings :deep(.p-select-label){overflow:hidden;padding:0 10px;white-space:nowrap}.accounts-page .accounts-page-settings :deep(.p-inputnumber){width:64px}.accounts-page .accounts-page-settings :deep(.p-inputnumber-input){width:64px;height:36px;padding:0 10px;border-radius:9px;font-size:11px}.accounts-page .accounts-page-settings :deep(.p-button){height:36px;min-width:48px;border-radius:9px;font-size:11px}
+.accounts-page .toolbar-status-filter,.accounts-page .toolbar-role-filter{width:180px;height:40px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px}.accounts-page .toolbar-status-filter :deep(.p-select-label),.accounts-page .toolbar-role-filter :deep(.p-select-label){padding:0 12px}.accounts-page .filter-panel{box-shadow:0 3px 12px rgba(15,23,42,.04)}
+.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th){font-weight:600;-webkit-font-smoothing:antialiased}.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td){font-weight:400;-webkit-font-smoothing:antialiased}.accounts-page .employee-copy strong,.accounts-page .role-cell strong{font-weight:600}.accounts-page .employee-copy span,.accounts-page .employee-copy small,.accounts-page .role-cell span,.accounts-page .single-line{font-weight:400}.accounts-page :deep(.status-tag){font-weight:500}
+.accounts-page .employee-copy strong,.accounts-page .role-cell strong{font-size:12px;font-weight:700;line-height:16px}.accounts-page .employee-copy span,.accounts-page .employee-copy small,.accounts-page .role-cell span,.accounts-page .single-line{font-size:11px;font-weight:400;line-height:15px}.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th){font-size:10px;font-weight:600}.accounts-page :deep(.status-tag){font-size:10px;font-weight:500}
 </style>

@@ -26,6 +26,7 @@ const statusDialogVisible = ref(false)
 const statusTarget = ref<{ status: AdminUserStatus; label: string } | null>(null)
 const deleteDialogVisible = ref(false)
 const resetPasswordDialogVisible = ref(false)
+const passwordVisible = ref(false)
 const usageSummary = ref<any[]>([])
 const usageHistory = ref<any[]>([])
 const activityHistory = ref<any[]>([])
@@ -340,9 +341,10 @@ onMounted(() => { load() })
         <!-- PAGE HEADER -->
         <header class="page-heading">
           <div class="compact-heading-main">
+          <Button label="Back to Employee" icon="pi pi-arrow-left" text class="back-detail-button" @click="router.push('/admin/accounts')" />
           <div class="page-title-wrapper">
-            <span class="eyebrow">Account Detail</span>
-            <h1>{{ user.fullName }}</h1>
+            <span class="eyebrow">Employee Detail</span>
+            <h1>Employee Detail</h1>
             <div class="subtitle-row">
               <code class="code-tag code-blue">{{ user.employeeId || '—' }}</code>
               <span class="muted">&mdash;</span>
@@ -352,7 +354,7 @@ onMounted(() => { load() })
           </div>
           <div class="page-heading-actions">
             <Button label="Reset Password" icon="pi pi-key" severity="warning" outlined size="small" @click="resetPasswordDialogVisible = true" />
-            <Button label="Edit Account" icon="pi pi-pencil" size="small" @click="router.push(`/admin/accounts/${id}/edit`)" />
+            <Button label="Edit Employee" icon="pi pi-pencil" size="small" @click="router.push(`/admin/accounts/${id}/edit`)" />
             <Button label="Delete" icon="pi pi-trash" severity="danger" outlined size="small" :disabled="isSelf || isProtectedSuperAdmin || updating" @click="deleteDialogVisible = true" />
           </div>
         </header>
@@ -365,37 +367,55 @@ onMounted(() => { load() })
               <div class="detail-card-header">
                 <div class="detail-card-icon si-blue"><i class="pi pi-id-card" /></div>
                 <div>
-                  <h3>Account Identity</h3>
-                  <p>Core identification for this user.</p>
+                  <h3>User Information</h3>
+                  <p>Primary ERP login and access information.</p>
                 </div>
               </div>
-              <div class="detail-rows">
+              <div class="detail-rows corrected-user-fields">
+                <div class="detail-row"><span class="detail-label">Employee Name</span><span class="detail-value">{{ user.fullName || '' }}</span></div>
+                <div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">{{ user.email || '' }}</span></div>
+                <div class="detail-row"><span class="detail-label">Password <button type="button" class="password-show-button" @click="passwordVisible = !passwordVisible"><i :class="passwordVisible ? 'pi pi-eye-slash' : 'pi pi-eye'" /> {{ passwordVisible ? 'Hide' : 'Show' }}</button></span><span class="detail-value password-mask">{{ passwordVisible ? 'Password protected' : '••••••••••••••••' }}</span></div>
+                <div class="detail-row"><span class="detail-label">Role</span><span class="detail-value">{{ organizationalRole?.name || '' }}</span></div>
+                <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">{{ user.status === 'ACTIVE' ? 'Active' : user.status }}</span></div>
+                <div class="detail-row"><span class="detail-label">Timezone</span><span class="detail-value">{{ user.timezone || '' }}</span></div>
+                <div class="detail-row"><span class="detail-label">City</span><span class="detail-value">{{ user.city || '' }}</span></div>
+              </div>
+              <div class="detail-rows legacy-user-fields">
                 <div class="detail-row">
-                  <span class="detail-label">Employee ID</span>
+                  <span class="detail-label">Employee Name</span>
                   <span class="detail-value"><code class="code-tag code-blue">{{ user.employeeId || '—' }}</code></span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Full Name</span>
+                  <span class="detail-label">Email</span>
                   <span class="detail-value">{{ user.fullName || '—' }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Email</span>
+                  <span class="detail-label">Password <button type="button" class="password-show-button" @click="passwordVisible = !passwordVisible"><i :class="passwordVisible ? 'pi pi-eye-slash' : 'pi pi-eye'" /> {{ passwordVisible ? 'Hide' : 'Show' }}</button></span>
                   <span class="detail-value">{{ user.email || '—' }}</span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Phone</span>
+                  <span class="detail-label">Role</span>
                   <span class="detail-value">{{ user.phone || '—' }}</span>
                 </div>
               </div>
             </div>
 
-            <div class="detail-card"><div class="detail-card-header"><div class="detail-card-icon si-blue"><i class="pi pi-map-marker" /></div><div><h3>User Information</h3><p>Identity, location, timezone, and contact information.</p></div></div><div class="detail-rows">
+            <div class="detail-card"><div class="detail-card-header"><div class="detail-card-icon si-blue"><i class="pi pi-briefcase" /></div><div><h3>Job Information</h3><p>Employee organizational and job-related data.</p></div></div><div class="detail-rows">
               <div class="detail-row"><span class="detail-label">Timezone</span><span class="detail-value">{{ user.timezone || '—' }}</span></div>
               <div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">{{ [user.city, user.province, user.district].filter(Boolean).join(', ') || '—' }}</span></div>
               <div class="detail-row"><span class="detail-label">Job</span><span class="detail-value">{{ [user.jobTitle, user.positionGrade, user.subDepartment].filter(Boolean).join(' · ') || '—' }}</span></div>
               <div class="detail-row"><span class="detail-label">Join Date</span><span class="detail-value">{{ user.joinDate?.slice(0, 10) || '—' }}</span></div>
               <div class="detail-row"><span class="detail-label">Gender / Birth Date</span><span class="detail-value">{{ [user.gender, user.dateOfBirth?.slice(0, 10)].filter(Boolean).join(' · ') || '—' }}</span></div>
               <div class="detail-row"><span class="detail-label">Phone Numbers</span><span class="detail-value">{{ user.phones?.map((phone) => phone.phoneNumber).join(', ') || user.phone || '—' }}</span></div>
+            </div></div>
+
+            <div class="detail-card erp-job-card"><div class="detail-card-header"><div><h3>Job Information</h3><p>Employee organizational and job-related data.</p></div></div><div class="detail-rows">
+              <div class="detail-row"><span class="detail-label">Job Title</span><span class="detail-value">{{ user.jobTitle || '' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Position Grade</span><span class="detail-value">{{ user.positionGrade || '' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Department</span><span class="detail-value">{{ user.subDepartment || '' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Sub Department</span><span class="detail-value">{{ user.subDepartment || '' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Join Date</span><span class="detail-value">{{ user.joinDate?.slice(0, 10) || '' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Employee ID</span><span class="detail-value">{{ user.employeeId || '' }}</span></div>
             </div></div>
 
             <!-- ROLE -->
@@ -435,6 +455,17 @@ onMounted(() => { load() })
 
           </div>
           <div class="account-info-stack right-stack">
+            <div class="detail-card employee-preview-card">
+              <div class="preview-avatar"><i class="pi pi-user" /></div>
+              <h3>{{ user.fullName || 'Employee Name' }}</h3>
+              <p>{{ user.email || 'Email address' }}</p>
+              <div class="preview-summary">
+                <div class="preview-line"><span>Role</span><strong>{{ organizationalRole?.name || 'Not set' }}</strong></div>
+                <div class="preview-role-access"><span>ROLE ACCESS</span><strong>{{ organizationalRole?.name || 'Not set' }}</strong><p>{{ organizationalRole?.description || 'Access permissions are managed through Role Management.' }}</p></div>
+                <div class="preview-line"><span>Status</span><strong>{{ user.status === 'ACTIVE' ? 'Active' : user.status }}</strong></div>
+                <div class="preview-line"><span>Location</span><strong>{{ [user.city, user.province, user.district].filter(Boolean).join(', ') || 'Not set' }}</strong></div>
+              </div>
+            </div>
             <!-- REPORTING STRUCTURE -->
             <div class="detail-card">
               <div class="detail-card-header">
@@ -979,4 +1010,219 @@ onMounted(() => { load() })
 @media (max-width: 900px) { .usage-filters label { min-width: 130px; } .usage-detail-group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .usage-section-heading > div:first-child { grid-template-columns: minmax(0, 1fr) 320px; } }
 @media (max-width: 600px) { .usage-filters { align-items: stretch; } .usage-filters label, .usage-clear { width: 100%; } .usage-detail-group { grid-template-columns: 1fr; } .usage-history-table, .activity-table { min-width: 660px; } .usage-table-wrap, .activity-table-wrap { overflow-x: auto; } .usage-section-heading > div:first-child { display: block; } .usage-section-heading > div:first-child > .history-controls { width: 100%; min-height: 0; margin-top: .65rem; } .history-controls p { min-height: 0; } }
+.employee-preview-card { text-align: center; padding: 24px !important; }
+.compact-admin-page,
+.compact-admin-page :deep(.p-component) { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.left-stack .detail-card:first-child { overflow: hidden; }
+.left-stack .detail-card:first-child .detail-card-header { min-height: 82px; box-sizing: border-box; padding: 22px 20px 18px; }
+.left-stack .detail-card:first-child .detail-rows { padding: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.left-stack .detail-card:first-child .detail-row { min-height: 72px; box-sizing: border-box; padding: 14px 16px; border: 1px solid #dce5f0; border-radius: 14px; box-shadow: 0 2px 4px rgba(30, 48, 75, .025); }
+.left-stack .detail-card:first-child .detail-role-row { min-height: 140px; align-content: start; }
+.left-stack .detail-card:first-child .detail-password-row { min-height: 140px; align-content: start; }
+.left-stack .detail-card:first-child .detail-label { line-height: 1.2; }
+.left-stack .detail-card:first-child .detail-value { line-height: 1.45; }
+.password-mask { letter-spacing: 2px; }
+.password-show-button { float: right; padding: 2px 8px; border: 1px solid #dce5f0; border-radius: 8px; background: #fff; color: #526783; font: inherit; font-size: 11px; cursor: pointer; }
+.legacy-user-fields { display: none !important; }
+.left-stack > .detail-card:nth-child(2) { display: none; }
+.left-stack > .detail-card:nth-child(4) { display: none; }
+.right-stack > .detail-card:nth-child(4) { display: none; }
+.account-info-stack { gap: 18px; }
+.detail-rows { gap: 12px 14px; }
+.detail-row { box-sizing: border-box; min-width: 0; }
+.detail-value { overflow-wrap: anywhere; }
+.left-stack .detail-card:first-child .corrected-user-fields { display: grid; }
+.role-access-name { display: block; margin-top: 5px; color: #dc2626; font-size: 12px; font-weight: 500; }
+.role-access-description { display: block; max-width: 330px; margin-top: 7px; color: #64748b; font-size: 12px; font-weight: 400; line-height: 1.45; }
+.employee-preview-card .preview-avatar { width: 72px; height: 72px; background: #fff0f1; color: #e11d2e; }
+.employee-preview-card > h3 { font-size: 20px; font-weight: 700; }
+.employee-preview-card .preview-summary { margin-top: 20px; background: #f8fafc; }
+.employee-preview-card .preview-line span { color: #526783; }
+.employee-preview-card .preview-line strong { color: #172033; font-weight: 600; }
+.left-stack .detail-card:first-child,
+.erp-job-card { border-radius: 20px; box-shadow: 0 14px 34px rgba(15,23,42,.06); }
+.left-stack .detail-card:first-child .detail-card-header,
+.erp-job-card .detail-card-header { min-height: 0; padding: 18px 20px; border-bottom-color: #eef2f7; }
+.left-stack .detail-card:first-child .detail-rows,
+.erp-job-card .detail-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 20px; gap: 14px; }
+.left-stack .detail-card:first-child .detail-row,
+.erp-job-card .detail-row { min-height: 0; padding: 14px 16px; border-color: #e2e8f0; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.left-stack .detail-card:first-child .detail-row { min-height: 72px; }
+.left-stack .detail-card:first-child .detail-role-row,
+.left-stack .detail-card:first-child .detail-password-row { min-height: 140px; }
+.detail-label { font-size: 11px; letter-spacing: .08em; }
+.detail-value { font-size: 14px; font-weight: 600; }
+.erp-job-card .detail-row { min-height: 72px; }
+.erp-job-card .detail-value { font-size: 14px; }
+.left-stack .detail-card:first-child .detail-label,
+.erp-job-card .detail-label { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; line-height: 16px; letter-spacing: .08em; }
+.left-stack .detail-card:first-child .detail-value,
+.erp-job-card .detail-value { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 600; line-height: 20px; }
+.left-stack .detail-card:first-child .role-access-name { font-size: 12px; font-weight: 600; }
+.left-stack .detail-card:first-child .role-access-description { font-size: 12px; font-weight: 400; line-height: 18px; }
+@media (max-width: 700px) {
+  .left-stack .detail-card:first-child .detail-rows,
+  .erp-job-card .detail-rows { grid-template-columns: 1fr; }
+}
+.compact-admin-page > .usage-card {
+  width: min(1136px, calc(100% - 64px));
+  margin: 24px auto 34px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #dfe7f1;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(30, 48, 75, .035);
+}
+.compact-admin-page > .page-heading .back-detail-button {
+  width: 130px;
+  height: 32px;
+  min-height: 32px;
+  margin-right: 12px;
+  padding: 0 12px 0 0;
+  justify-content: flex-start;
+  border-right: 1px solid #e2e8f0;
+  border-radius: 0;
+  color: #526783;
+  font-size: 12px;
+  font-weight: 400;
+  flex: 0 0 130px;
+  white-space: nowrap;
+}
+.compact-admin-page > .page-heading .back-detail-button .p-button-label { white-space: nowrap; }
+.compact-admin-page > .page-heading .back-detail-button .p-button-icon {
+  margin-right: 8px;
+  color: #526783;
+  font-size: 15px;
+}
+.compact-admin-page > .page-heading .compact-heading-main { gap: 0; }
+.compact-admin-page > .usage-card > .detail-card-header {
+  padding: 24px 32px 20px;
+  margin: 0;
+  border-bottom: 1px solid #e7edf4;
+}
+.compact-admin-page > .usage-card > .usage-filters,
+.compact-admin-page > .usage-card > .usage-inline-error,
+.compact-admin-page > .usage-card > .usage-empty,
+.compact-admin-page > .usage-card > .usage-subsection {
+  margin-left: 32px;
+  margin-right: 32px;
+}
+.compact-admin-page > .usage-card > .usage-filters { padding-top: 22px; }
+.compact-admin-page > .usage-card .usage-filters select,
+.compact-admin-page > .usage-card .usage-filters input,
+.compact-admin-page > .usage-card .usage-clear {
+  height: 38px;
+  min-height: 38px;
+  border-color: #d8e2ee;
+  border-radius: 9px;
+  color: #172033;
+  font-size: 12px;
+}
+.compact-admin-page > .usage-card .usage-filters label { font-size: 11px; font-weight: 600; }
+.compact-admin-page > .usage-card .usage-empty {
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid #edf1f6;
+  border-radius: 10px;
+  color: #7184a0;
+  background: #f8fafc;
+}
+.compact-admin-page > .usage-card .usage-subsection { margin-top: 22px; }
+.compact-admin-page > .usage-card .usage-subsection h4 { font-size: 14px; font-weight: 700; }
+.compact-admin-page > .usage-card .usage-history { padding-bottom: 24px; }
+.compact-admin-page > .usage-card .history-controls select { height: 38px; min-height: 38px; border-radius: 9px; border-color: #d8e2ee; }
+@media (max-width: 1000px) {
+  .compact-admin-page > .usage-card { width: calc(100% - 32px); margin: 20px 16px 34px; }
+}
+.employee-preview-card > h3 { margin: 10px 0 4px; color: #172033; font-size: 20px; }
+.employee-preview-card > p { margin: 0; color: #7184a0; font-size: 12px; }
+.preview-avatar { width: 72px; height: 72px; margin: 0 auto; display: grid; place-items: center; border-radius: 50%; background: #fff0f1; color: #e11d2e; font-size: 28px; }
+.preview-summary { margin-top: 20px; padding: 16px; text-align: left; border-radius: 16px; background: #f8fafc; }
+.preview-line { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; color: #526783; font-size: 12px; }
+.preview-line strong { color: #172033; text-align: right; font-weight: 600; }
+.preview-role-access { margin: 7px 0 8px; padding: 14px; border: 1px solid #dce5f0; border-radius: 14px; background: #fff; }
+.preview-role-access span { display: block; color: #7184a0; font-size: 10px; letter-spacing: .12em; }
+.preview-role-access strong { display: block; margin-top: 8px; color: #dc2626; font-size: 12px; }
+.preview-role-access p { margin: 7px 0 0; color: #64748b; font-size: 12px; line-height: 1.45; }
+.compact-admin-page{padding:0;gap:0;background:#f8fafc;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.compact-admin-page>.page-heading{min-height:48px;height:48px;box-sizing:border-box;align-items:center;padding:0 32px;border-bottom:1px solid #e2e8f0;background:#fff}.back-detail-button{height:32px;margin-right:12px;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;color:#64748b;font-size:12px}.back-detail-button .p-button-icon{font-size:13px}.compact-admin-page .compact-heading-main{display:flex;align-items:center}.compact-admin-page .page-title-wrapper .eyebrow{display:none}.compact-admin-page .page-title-wrapper h1{font-size:17px;font-weight:700}.compact-admin-page .subtitle-row{font-size:11px;color:#94a3b8}.compact-admin-page .page-heading-actions{gap:8px}.compact-admin-page .page-heading-actions :deep(.p-button){height:32px;min-height:32px;border-radius:8px;padding:0 14px;font-size:12px}.compact-admin-page .page-heading-actions :deep(.p-button:nth-child(2)){background:#dc2626;border-color:#dc2626}.account-info-columns{grid-template-columns:minmax(0,792px) 320px;gap:24px;width:min(1136px,calc(100% - 64px));margin:32px auto}.detail-card{border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 6px 18px rgba(15,23,42,.035);background:#fff}.detail-card-header{padding:20px 24px;border-bottom:1px solid #e8edf3}.detail-card-header h3{font-size:16px;font-weight:700}.detail-card-header p{font-size:12px;color:#64748b}.detail-rows{padding:20px 24px}.detail-row{padding:12px 16px;border:1px solid #dce5f0;border-radius:14px;background:#fff}.detail-label{font-size:10px;letter-spacing:.1em}.detail-value{font-size:13px;font-weight:600}.right-stack .detail-card:first-child{padding:24px}.right-stack .detail-card:first-child .detail-card-header{padding:0 0 20px;border:0}.detail-card-icon{display:none}.account-info-stack{gap:16px}@media(max-width:1000px){.account-info-columns{grid-template-columns:1fr;width:min(792px,calc(100% - 32px));margin:20px auto}.right-stack{display:grid;grid-template-columns:1fr 1fr}}@media(max-width:640px){.compact-admin-page>.page-heading{height:auto;min-height:56px;padding:10px 16px}.account-info-columns{width:calc(100% - 24px);margin:12px auto}.right-stack{display:flex}.compact-admin-page .page-heading-actions{flex-wrap:wrap}}
+.left-stack .detail-card:first-child .detail-rows{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}.left-stack .detail-card:first-child .detail-row{min-height:72px;display:grid;align-content:center;gap:6px}.left-stack .detail-card:nth-child(2) .detail-rows{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}.left-stack .detail-card:nth-child(2) .detail-row{min-height:56px;display:grid;align-content:center;gap:5px}.right-stack .detail-card{border-radius:20px}.right-stack .detail-value{font-weight:500}.right-stack .detail-card:first-child .detail-rows{padding:0}.right-stack .detail-card:first-child .detail-row{border:0;border-radius:0;background:#f8fafc}.compact-admin-page .code-tag{font-size:12px}
+
+/* Final ERP detail layout: intentionally scoped to this view only. */
+.compact-admin-page {
+  min-height: 100%;
+  background: #f7f9fc;
+}
+.compact-admin-page > .page-heading {
+  height: 56px;
+  min-height: 56px;
+  padding: 0 32px;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.compact-admin-page .page-title-wrapper h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.compact-admin-page .subtitle-row {
+  margin-top: 3px;
+  color: #8a9ab3;
+  font-size: 0;
+}
+.compact-admin-page .subtitle-row::after { content: 'Employee Management > Employee > Detail'; font-size: 11px; }
+.compact-admin-page .subtitle-row > * { display: none; }
+.compact-admin-page .page-heading-actions :deep(.p-button) {
+  height: 40px;
+  min-height: 40px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.account-info-columns {
+  width: calc(100% - 64px);
+  max-width: 1136px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  margin: 26px auto 34px;
+}
+.detail-card {
+  border: 1px solid #dfe7f1;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(30, 48, 75, .035);
+}
+.detail-card-header {
+  padding: 24px 20px 20px;
+  margin: 0;
+  border-bottom: 1px solid #e7edf4;
+}
+.detail-card-header h3 { font-size: 16px; }
+.detail-card-header p { margin-top: 5px; font-size: 12px; }
+.left-stack .detail-card:first-child .detail-rows,
+.left-stack .detail-card:nth-child(2) .detail-rows {
+  padding: 20px;
+  gap: 12px 14px;
+}
+.left-stack .detail-card:first-child .detail-row {
+  min-height: 72px;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+.detail-label {
+  color: #7184a0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.detail-value { color: #172033; font-size: 13px; font-weight: 600; }
+.right-stack .detail-card { padding: 24px; }
+.right-stack .detail-card-header { padding: 0 0 20px; }
+@media (max-width: 1000px) {
+  .account-info-columns { width: calc(100% - 32px); grid-template-columns: 1fr; }
+}
 </style>
