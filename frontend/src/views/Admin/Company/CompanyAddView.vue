@@ -136,14 +136,15 @@ function resetForm() {
             <div class="form-card-header">
               <div class="form-card-icon si-emerald"><i class="pi pi-map" /></div>
               <div>
-                <h3>Company Address</h3>
-                <p>Primary office or headquarters address.</p>
+                <div class="section-title-line"><h3>Company Address</h3><span class="address-scope-badge">Company</span></div>
+                <p>Legal and billing address used for company and tax records.</p>
               </div>
             </div>
             <div class="form-grid">
               <div class="form-field full">
-                <label>Street Address</label>
-                <Textarea v-model="form.address" :autoResize="true" rows="2" placeholder="Full street address" />
+                <div class="address-mode-label"><label>Search by Gmaps / Manual <span class="required">*</span></label><span>Manual</span></div>
+                <Textarea v-model="form.address" :autoResize="true" rows="2" placeholder="Search or type company address" />
+                <small class="address-helper">Manual entry is available. Add a Google Maps API key to enable autocomplete.</small>
               </div>
             </div>
           </div>
@@ -450,4 +451,5 @@ function resetForm() {
   .success-actions { flex-direction: column; width: 100%; }
 }
 .back-add-button{display:inline-flex;margin:0 12px 8px 0;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;background:#fff0f1;color:#64748b;font-size:12px}.back-add-button .p-button-icon{font-size:13px}.page-heading{align-items:center;min-height:48px;padding:0 32px;border-bottom:1px solid #e2e8f0}.page-title-wrapper{display:flex;align-items:center;gap:8px}.page-title-wrapper .eyebrow{display:none}.page-title-wrapper h1{font-size:17px;font-weight:700}.page-title-wrapper .muted{font-size:11px;color:#94a3b8}.page-heading-actions :deep(.p-button){height:32px;border-radius:8px;font-size:12px}
+.address-scope-badge{display:inline-flex;align-items:center;height:22px;margin:3px 0 0;padding:0 8px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700}.form-card-header:has(.address-scope-badge){align-items:flex-start}.form-card-header:has(.address-scope-badge) p{margin-top:4px}.address-mode-label{display:flex;align-items:center;justify-content:space-between;gap:10px}.address-mode-label>span{display:inline-flex;align-items:center;height:26px;padding:0 9px;border:1px solid #dbe3ee;border-radius:999px;background:#f8fafc;color:#64748b;font-size:10px;font-weight:600}.address-helper{display:block;color:#64748b;font-size:11px;line-height:1.4}@media(max-width:560px){.address-mode-label{align-items:flex-start;flex-direction:column;gap:6px}.address-mode-label>span{align-self:flex-end}}
 </style>

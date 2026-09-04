@@ -393,7 +393,7 @@ async function executeDeleteCompany() {
       <div class="page-heading-actions legacy-page-actions">
         <Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" />
         <Button label="Export" icon="pi pi-download" severity="secondary" outlined size="small" />
-        <Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Add Company' : 'Add Customer'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" />
+        <Button v-if="activeTab !== 'master'" label="Add Customer" icon="pi pi-plus" size="small" @click="router.push('/admin/customers/add')" />
       </div>
     </header>
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
@@ -403,7 +403,7 @@ async function executeDeleteCompany() {
       </button>
       <label v-if="activeTab === 'site'" class="site-search"><i class="pi pi-search" /><input v-model="store.params.keyword" placeholder="Search customer site code, name, company" @keyup.enter="store.fetchCustomers()" /></label>
       <label v-if="activeTab === 'company'" class="site-search company-search"><i class="pi pi-search" /><input v-model="companyKeyword" placeholder="Search company name, code, location" /></label>
-      <div class="erp-customer-actions"><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" /><Button v-if="activeTab !== 'master'" :label="activeTab === 'company' ? 'Create Company' : 'Create Customer Site'" icon="pi pi-plus" size="small" @click="activeTab === 'company' ? router.push('/admin/companies/add') : router.push('/admin/customers/add')" /></div>
+      <div class="erp-customer-actions"><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" /><Button v-if="activeTab !== 'master'" label="Create Customer" icon="pi pi-plus" size="small" @click="router.push('/admin/customers/add')" /></div>
     </nav>
 
     <!-- ======================== CUSTOMER SITE TAB ======================== -->

@@ -9,6 +9,8 @@ import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
 import Toast from 'primevue/toast'
+import AdminPageHeader from '../../../components/admin/AdminPageHeader.vue'
+import AdminTableShell from '../../../components/admin/AdminTableShell.vue'
 import { useToast } from 'primevue/usetoast'
 import Skeleton from 'primevue/skeleton'
 import DataTable from 'primevue/datatable'
@@ -197,9 +199,8 @@ function reportsToLabel(user: AdminUserListItem & Record<string, unknown>) {
   return fallback(String(user.reportsToName || user.parentName || user.managerName || ''))
 }
 
-function updatedLabel(value: string) {
-  if (!value) return '-'
-  return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+function jobTitleLabel(user: AdminUserListItem & Record<string, unknown>) {
+  return fallback(String(user.jobTitle || user.position || user.reportsToName || user.managerName || ''))
 }
 
 function openActions(user: AdminUserListItem) {
@@ -312,6 +313,12 @@ onMounted(() => { load() })
   <section class="accounts-page">
     <Toast position="top-right" />
 
+    <AdminPageHeader title="Employee Management" subtitle="Manage employee accounts, roles, and access status.">
+      <template #actions>
+        <Button label="Create Employee" icon="pi pi-plus" size="small" class="create-button" @click="router.push('/admin/accounts/create')" />
+      </template>
+    </AdminPageHeader>
+
     <Message v-if="error" severity="error" class="page-message">
       {{ error }}
     </Message>
@@ -320,6 +327,8 @@ onMounted(() => { load() })
       <label class="employee-search"><i class="pi pi-search" /><input v-model="store.params.search" placeholder="Search by employee ID, name, email, phone..." @keyup.enter="load" /></label>
 
       <div class="toolbar-controls">
+        <Select v-model="selectedRole" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="All departments" class="toolbar-inline-filter" />
+        <Select v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All statuses" class="toolbar-inline-filter" />
         <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
 
         <Button
@@ -339,6 +348,7 @@ onMounted(() => { load() })
           class="create-button"
           @click="router.push('/admin/accounts/create')"
         />
+
       </div>
     </header>
 
@@ -356,7 +366,7 @@ onMounted(() => { load() })
       </div>
     </div>
 
-    <div class="table-shell">
+    <AdminTableShell class="table-shell">
       <div class="accounts-pagination-top">
         <div class="accounts-page-links">
           <Button
@@ -436,10 +446,9 @@ onMounted(() => { load() })
         <Column header="Department" class="role-column">
           <template #body="{ data }">
             <div class="role-cell">
-              <strong>{{ organizationalRoleLabel(data) }}</strong>
+              <strong>{{ data.role.replaceAll('_', ' ') }}</strong>
               <span>
-                Level {{ data.organizationalRole?.level ?? '-' }}
-                · {{ organizationalRoleMeta(data) }}
+                {{ data.accountType ? data.accountType.replaceAll('_', ' ') : 'CRM department' }}
               </span>
             </div>
           </template>
@@ -447,14 +456,14 @@ onMounted(() => { load() })
 
         <Column header="Job Title" class="reports-column">
           <template #body="{ data }">
-            <span class="single-line" :title="reportsToLabel(data)">
-              {{ reportsToLabel(data) }}
+            <span class="single-line" :title="jobTitleLabel(data)">
+              {{ jobTitleLabel(data) }}
             </span>
           </template>
         </Column>
 
         <Column header="Role" class="role-column">
-          <template #body="{ data }"><div class="role-cell"><strong>{{ data.role.replaceAll('_', ' ') }}</strong><span>CRM access role</span></div></template>
+          <template #body="{ data }"><div class="role-cell"><strong>{{ organizationalRoleLabel(data) }}</strong><span>Level {{ data.organizationalRole?.level ?? '-' }} · {{ organizationalRoleMeta(data) }}</span></div></template>
         </Column>
 
         <Column header="Status" class="status-column">
@@ -470,12 +479,12 @@ onMounted(() => { load() })
 
         <Column header="Location" class="updated-column">
           <template #body="{ data }">
-            <span class="single-line">{{ updatedLabel(data.updatedAt) }}</span>
+            <span class="single-line">{{ fallback(String(data.location || data.city || data.province || '')) }}</span>
           </template>
         </Column>
 
       </DataTable>
-    </div>
+    </AdminTableShell>
 
     <Dialog
   v-model:visible="actionDialogVisible"
@@ -1418,4 +1427,8 @@ onMounted(() => { load() })
 .accounts-page .toolbar-status-filter,.accounts-page .toolbar-role-filter{width:180px;height:40px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px}.accounts-page .toolbar-status-filter :deep(.p-select-label),.accounts-page .toolbar-role-filter :deep(.p-select-label){padding:0 12px}.accounts-page .filter-panel{box-shadow:0 3px 12px rgba(15,23,42,.04)}
 .accounts-page .accounts-table :deep(.p-datatable-thead > tr > th){font-weight:600;-webkit-font-smoothing:antialiased}.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td){font-weight:400;-webkit-font-smoothing:antialiased}.accounts-page .employee-copy strong,.accounts-page .role-cell strong{font-weight:600}.accounts-page .employee-copy span,.accounts-page .employee-copy small,.accounts-page .role-cell span,.accounts-page .single-line{font-weight:400}.accounts-page :deep(.status-tag){font-weight:500}
 .accounts-page .employee-copy strong,.accounts-page .role-cell strong{font-size:12px;font-weight:700;line-height:16px}.accounts-page .employee-copy span,.accounts-page .employee-copy small,.accounts-page .role-cell span,.accounts-page .single-line{font-size:11px;font-weight:400;line-height:15px}.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th){font-size:10px;font-weight:600}.accounts-page :deep(.status-tag){font-size:10px;font-weight:500}
+.accounts-page>.admin-page-header{display:none}.accounts-page .accounts-toolbar{gap:10px;padding:14px 24px}.accounts-page .employee-search{flex:0 1 360px;max-width:360px}.accounts-page .toolbar-controls{flex:1;gap:10px}.accounts-page .toolbar-inline-filter{width:190px}.accounts-page .toolbar-inline-filter :deep(.p-select-label){padding:0 12px;color:#64748b}.accounts-page .toolbar-controls .trash-button{margin-left:auto}.accounts-page .toolbar-controls .create-button{min-width:160px;background:#dc2626;border-color:#dc2626}@media(max-width:900px){.accounts-page .toolbar-inline-filter{flex:1;min-width:150px}}@media(max-width:640px){.accounts-page .accounts-toolbar{padding:10px 12px}.accounts-page .employee-search{max-width:none}.accounts-page .toolbar-inline-filter{width:100%;flex-basis:100%}.accounts-page .toolbar-controls .trash-button{margin-left:0}}
+.accounts-page .accounts-toolbar{padding-left:24px;padding-right:24px;overflow:visible}.accounts-page .employee-search{width:auto;min-width:220px;flex:1 1 360px}.accounts-page .toolbar-controls{min-width:0;flex:1 1 auto;flex-wrap:nowrap}.accounts-page .toolbar-inline-filter{flex:1 1 150px;min-width:130px}.accounts-page .toolbar-controls :deep(.p-button){white-space:nowrap;flex-shrink:0}.accounts-page .toolbar-controls .create-button{width:160px;min-width:160px}
+@media(max-width:1100px){.accounts-page .employee-search{width:300px;min-width:260px;flex-basis:300px}.accounts-page .toolbar-inline-filter{flex-basis:160px}}
+@media(max-width:800px){.accounts-page .accounts-toolbar{flex-wrap:wrap}.accounts-page .employee-search{width:100%;min-width:0;flex-basis:100%;max-width:none}.accounts-page .toolbar-controls{width:100%;flex-wrap:wrap}.accounts-page .toolbar-inline-filter{flex:1 1 150px}.accounts-page .toolbar-controls .trash-button{margin-left:auto}}
 </style>

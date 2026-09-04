@@ -1,0 +1,4 @@
+<template><section class="admin-table-shell"><div class="admin-table-shell__scroll"><slot /></div><div v-if="$slots.footer" class="admin-table-shell__footer"><slot name="footer" /></div></section></template>
+<style scoped>
+.admin-table-shell{overflow:hidden;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:var(--surface-card);box-shadow:var(--shadow-xs)}.admin-table-shell__scroll{overflow-x:auto}.admin-table-shell :deep(table){width:100%;border-collapse:collapse}.admin-table-shell :deep(th){height:2.75rem;background:var(--surface-subtle);color:var(--text-secondary);font-size:.72rem;font-weight:700;text-align:left}.admin-table-shell :deep(th),.admin-table-shell :deep(td){padding:.75rem 1rem;border-bottom:1px solid var(--border-light);white-space:nowrap}.admin-table-shell :deep(tbody tr:hover){background:var(--surface-hover)}.admin-table-shell__footer{padding:.65rem 1rem;border-top:1px solid var(--border-light)}
+</style>

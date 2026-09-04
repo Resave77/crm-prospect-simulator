@@ -59,8 +59,7 @@ const userInitials = computed(() => {
       { label: 'Add Segment', to: { path: '/admin/customers', query: { tab: 'master', action: 'add-segment' } }, permission: 'view_customers' },
       { label: 'Add Category', to: { path: '/admin/customers', query: { tab: 'master', action: 'add-category' } }, permission: 'view_customers' },
       { label: 'Master Data Trash', to: { path: '/admin/customers', query: { tab: 'master', action: 'trash' } }, permission: 'view_customers' },
-      { label: 'Add Customer', to: '/admin/customers/add', permission: 'view_customers' },
-      { label: 'Add Company', to: '/admin/companies/add', permission: 'view_customers' },
+      { label: 'Create Customer', to: '/admin/customers/add', permission: 'view_customers' },
     ]
   } else if (path.includes('/accounts')) {
     items = [

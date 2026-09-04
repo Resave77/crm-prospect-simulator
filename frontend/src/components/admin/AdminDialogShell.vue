@@ -1,0 +1,5 @@
+<script setup lang="ts">defineProps<{ title: string; description?: string }>()</script>
+<template><section class="admin-dialog-shell"><header><div><h2>{{ title }}</h2><p v-if="description">{{ description }}</p></div><slot name="close" /></header><div class="admin-dialog-shell__body"><slot /></div><footer v-if="$slots.footer"><slot name="footer" /></footer></section></template>
+<style scoped>
+.admin-dialog-shell{width:min(100%,34rem);border:1px solid var(--border-light);border-radius:var(--radius-lg);background:var(--surface-card);box-shadow:var(--shadow-lg);overflow:hidden}.admin-dialog-shell header,.admin-dialog-shell footer{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem}.admin-dialog-shell header{border-bottom:1px solid var(--border-light)}.admin-dialog-shell footer{justify-content:flex-end;border-top:1px solid var(--border-light)}h2{margin:0;font-size:1rem}.admin-dialog-shell p{margin:.25rem 0 0;color:var(--text-muted);font-size:.78rem}.admin-dialog-shell__body{padding:1.25rem}
+</style>

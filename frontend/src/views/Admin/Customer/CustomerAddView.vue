@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import { useCustomerListStore } from '../../../stores/customerList'
 import type { Contact } from '../../../types/crm'
+import { useCustomerListStore } from '../../../stores/customerList'
+import { getSalesExecutives } from '../../../api/crm'
+import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
 
 const router = useRouter()
 const store = useCustomerListStore()
@@ -15,27 +17,23 @@ const error = ref('')
 const saved = ref(false)
 const saving = ref(false)
 
-const segmentOptions = [
-  { label: 'Select segment', value: '' },
-  { label: 'Key Account', value: 'Key Account' },
-  { label: 'Modern Trade', value: 'Modern Trade' },
-  { label: 'Food Service', value: 'Food Service' },
-  { label: 'General Trade', value: 'General Trade' },
-]
-const categoryOptions = [
-  { label: 'Select category', value: '' },
-  { label: 'HORECA', value: 'HORECA' },
-  { label: 'Retail', value: 'Retail' },
-  { label: 'Institution', value: 'Institution' },
-  { label: 'Distributor', value: 'Distributor' },
-]
+const segments = ref<MasterDataSegment[]>([])
+const categories = ref<MasterDataCategory[]>([])
+const salesExecutives = ref<{ id: string; fullName: string }[]>([])
+const optionsLoading = ref(false)
+const optionsError = ref('')
+const segmentOptions = computed(() => [{ label: 'Select segment', value: '' }, ...segments.value.map((s) => ({ label: s.name, value: s.name }))])
+const categoryOptions = computed(() => {
+  const segment = segments.value.find((item) => item.name === form.customerSegment)
+  const available = segment ? categories.value.filter((item) => item.segmentId === segment.id) : categories.value
+  return [{ label: 'Select category', value: '' }, ...available.map((c) => ({ label: c.name, value: c.name }))]
+})
 const regionOptions = computed(() => {
   const regs = store.filterOptions?.regions ?? []
   return [{ label: 'Select region', value: '' }, ...regs.map((r) => ({ label: r, value: r }))]
 })
 const salesOptions = computed(() => {
-  const sales = store.filterOptions?.salesExecutives ?? []
-  return [{ label: 'Select sales executive', value: '' }, ...sales.map((s) => ({ label: s.fullName, value: s.id }))]
+  return [{ label: 'Select sales executive', value: '' }, ...salesExecutives.value.map((s) => ({ label: s.fullName, value: s.id }))]
 })
 
 const blankContact = (): Contact => ({ name: '', position: '', phone: '', email: '' })
@@ -85,9 +83,29 @@ async function handleSubmit() {
 }
 
 onMounted(async () => {
+  optionsLoading.value = true
   try {
-    await store.fetchFilterOptions()
-  } catch { /* optional */ }
+    const [segmentData, categoryData, salesData] = await Promise.all([
+      listSegments({ status: 'ACTIVE' }),
+      listCategories({ status: 'ACTIVE' }),
+      getSalesExecutives(),
+      store.fetchFilterOptions(),
+    ])
+    segments.value = segmentData
+    categories.value = categoryData
+    salesExecutives.value = salesData
+  } catch {
+    optionsError.value = 'Unable to load master data and sales executives. Please try again.'
+  } finally {
+    optionsLoading.value = false
+  }
+})
+
+watch(() => form.customerSegment, (segmentName) => {
+  const segment = segments.value.find((item) => item.name === segmentName)
+  if (segment && form.customerCategory && !categories.value.some((item) => item.segmentId === segment.id && item.name === form.customerCategory)) {
+    form.customerCategory = ''
+  }
 })
 </script>
 
@@ -113,14 +131,13 @@ onMounted(async () => {
       <!-- PAGE HEADER -->
       <header class="page-heading">
         <div class="page-title-wrapper">
-          <Button label="Back to Customer" icon="pi pi-arrow-left" text class="back-add-button" @click="router.push('/admin/customers')" />
-          <span class="eyebrow">New Customer</span>
-          <h1>Add Customer Site</h1>
-          <p class="muted">Register a new customer site into the CRM system.</p>
+          <Button label="Back to Customer Site" icon="pi pi-arrow-left" text class="back-add-button" @click="router.push('/admin/customers')" />
+          <h1>Create New Customer</h1>
+          <p class="muted">Customer Management &gt; Customer Site &gt; Create</p>
         </div>
         <div class="page-heading-actions">
-          <Button label="Cancel" severity="secondary" text size="small" @click="router.push('/admin/customers')" />
-          <Button label="Save Customer" icon="pi pi-check" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
+          <Button label="Cancel" severity="secondary" outlined size="small" @click="router.push('/admin/customers')" />
+          <Button label="Create Customer" icon="pi pi-send" severity="danger" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
         </div>
       </header>
 
@@ -129,12 +146,21 @@ onMounted(async () => {
       <div class="form-layout">
         <!-- LEFT COLUMN: FORM -->
         <div class="form-stack">
+          <section class="customer-information-shell">
+            <div class="customer-information-heading">
+              <div>
+                <h2>Customer Information</h2>
+                <p>Define the customer site and its parent-company reference.</p>
+              </div>
+              <span class="information-scope-badge">Site + Company</span>
+            </div>
+            <div class="customer-information-grid">
           <!-- CUSTOMER SITE INFO -->
           <div class="form-card">
             <div class="form-card-header">
               <div class="form-card-icon si-blue"><i class="pi pi-map-marker" /></div>
               <div>
-                <h3>Customer Site Information</h3>
+                <h3>Site Identity</h3>
                 <p>Basic details about the customer site location.</p>
               </div>
             </div>
@@ -173,30 +199,39 @@ onMounted(async () => {
             </div>
             <div class="form-grid">
               <div class="form-field full">
-                <label>Company Name</label>
+                <label>Company Name <span class="field-note">(reference)</span></label>
                 <InputText v-model="form.parentCompanyName" placeholder="e.g. PT Yummy Food Indonesia" />
               </div>
               <div class="form-field">
-                <label>Company Code</label>
+                <label>Company Code <span class="field-note">(reference)</span></label>
                 <InputText v-model="form.parentCode" placeholder="Auto-generated if empty" />
+              </div>
+              <div class="company-link-note">
+                <i class="pi pi-info-circle" />
+                <span>Select or create a Parent Company separately. Company records are not created when saving this site.</span>
+                <Button label="Create Parent Company" severity="secondary" outlined size="small" @click="router.push('/admin/customers/add/company')" />
               </div>
             </div>
           </div>
+            </div>
+          </section>
 
           <!-- ADDRESS -->
           <div class="form-card">
             <div class="form-card-header">
               <div class="form-card-icon si-emerald"><i class="pi pi-map" /></div>
               <div>
-                <h3>Site Address</h3>
-                <p>Physical location of the customer site.</p>
+                <div class="section-title-line"><h3>Site Address</h3><span class="address-scope-badge site-address-badge">Site</span></div>
+                <p>Address for customer transactions and site-level documents.</p>
               </div>
             </div>
             <div class="form-grid">
               <div class="form-field full">
-                <label>Street Address</label>
-                <Textarea v-model="form.address" :autoResize="true" rows="2" placeholder="Full street address" />
+                <div class="address-mode-label"><label>Search by Gmaps / Manual <span class="required">*</span></label><span>Manual</span></div>
+                <Textarea v-model="form.address" :autoResize="true" rows="2" placeholder="Search or type customer address" />
+                <small class="address-helper">Manual entry is available. Add a Google Maps API key to enable autocomplete.</small>
               </div>
+              <div class="location-detail-label">Location Detail</div>
               <div class="form-field">
                 <label>Province</label>
                 <InputText v-model="form.province" placeholder="Province" />
@@ -221,10 +256,12 @@ onMounted(async () => {
             <div class="form-card-header">
               <div class="form-card-icon si-amber"><i class="pi pi-users" /></div>
               <div>
-                <h3>Site Contacts</h3>
-                <p>People to contact at this customer site.</p>
+                <div class="section-title-line"><h3>Contact Information</h3><span class="shared-scope-badge">Site + Company</span><span class="optional-badge">Optional</span></div>
+                <p>Keep site contacts and company contacts separate so operational and billing communication does not get mixed.</p>
               </div>
             </div>
+            <div class="contact-scope-heading"><strong>Customer Site Contacts</strong><span class="site-scope-badge">Site</span></div>
+            <p class="contact-scope-copy">Use this list for outlet, branch, or site-level contacts.</p>
             <div class="contacts-list">
               <div v-for="(contact, idx) in form.contacts" :key="idx" class="contact-row">
                 <div class="contact-row-header">
@@ -252,6 +289,11 @@ onMounted(async () => {
               </div>
             </div>
             <Button label="Add Contact" icon="pi pi-plus" severity="secondary" text size="small" class="add-contact-btn" @click="addContact" />
+            <div class="company-contacts-note">
+              <div class="company-contact-heading"><strong>Company Contacts</strong><span class="company-scope-badge">Company</span></div>
+              <p>Use a dedicated Parent Company record for billing, tax, or general company contacts.</p>
+              <Button label="Open Parent Company Flow" severity="secondary" outlined size="small" @click="router.push('/admin/customers/add/company')" />
+            </div>
           </div>
 
           <!-- NOTES -->
@@ -274,7 +316,7 @@ onMounted(async () => {
 
         <!-- RIGHT COLUMN: SIDEBAR -->
         <aside class="form-sidebar">
-          <div class="sidebar-card">
+          <div class="sidebar-card scope-card">
             <h4>Submission Summary</h4>
             <div class="summary-list">
               <div class="summary-row">
@@ -307,8 +349,30 @@ onMounted(async () => {
             <i class="pi pi-info-circle" />
             <p>Customer codes will be automatically generated upon save in the format <code>PC-XXXXXX-SXXX</code>.</p>
           </div>
+          <div class="sidebar-card field-scope-card">
+            <h4>Field Scope &amp; Requirements</h4>
+            <p class="scope-description">Scope badges show where each field belongs. The check icon only shows completion.</p>
+            <div class="scope-legend">
+              <span class="scope-badge site">Site</span>
+              <span class="scope-badge company">Company</span>
+              <span class="scope-badge shared">Shared / Preview</span>
+            </div>
+            <div class="scope-list">
+              <div class="scope-group">
+                <div class="scope-group-heading"><span>SITE</span><span class="scope-badge site">Site</span></div>
+                <div class="scope-checklist">
+                  <div class="scope-check-row"><span class="scope-check" :class="{ complete: form.name.trim() }"><i v-if="form.name.trim()" class="pi pi-check" /></span><span>Customer Name / Outlet / Branch / Store</span></div>
+                  <div class="scope-check-row"><span class="scope-check" :class="{ complete: form.parentCompanyName.trim() }"><i v-if="form.parentCompanyName.trim()" class="pi pi-check" /></span><span>Customer Company / Parent</span></div>
+                  <div class="scope-check-row"><span class="scope-check" :class="{ complete: form.customerSegment }"><i v-if="form.customerSegment" class="pi pi-check" /></span><span>Customer Segment</span></div>
+                  <div class="scope-check-row"><span class="scope-check" :class="{ complete: form.customerCategory }"><i v-if="form.customerCategory" class="pi pi-check" /></span><span>Customer Category</span></div>
+                  <div class="scope-check-row"><span class="scope-check" :class="{ complete: form.address }"><i v-if="form.address" class="pi pi-check" /></span><span>Customer / Outlet / Branch Address</span></div>
+                </div>
+              </div>
+              <div class="scope-row"><span class="scope-badge company">Reference</span><span>Parent company name and code are reference fields; create companies separately.</span></div>
+            </div>
+          </div>
           <div class="sidebar-actions">
-            <Button label="Save Customer" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
+            <Button label="Create Customer" icon="pi pi-check" class="full-width" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
             <Button label="Cancel" severity="secondary" text class="full-width" @click="router.push('/admin/customers')" />
           </div>
         </aside>
@@ -611,5 +675,11 @@ onMounted(async () => {
   .form-field.full { grid-column: 1; }
   .success-actions { flex-direction: column; width: 100%; }
 }
-.back-add-button{display:inline-flex;margin:0 12px 8px 0;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;background:#fff0f1;color:#64748b;font-size:12px}.back-add-button .p-button-icon{font-size:13px}.page-heading{align-items:center;min-height:48px;padding:0 32px;border-bottom:1px solid #e2e8f0}.page-title-wrapper{display:flex;align-items:center;gap:8px}.page-title-wrapper .eyebrow{display:none}.page-title-wrapper h1{font-size:17px;font-weight:700}.page-title-wrapper .muted{font-size:11px;color:#94a3b8}.page-heading-actions :deep(.p-button){height:32px;border-radius:8px;font-size:12px}
+.back-add-button{display:inline-flex;margin:0 12px 0 0;padding:0 10px 0 0;border-right:1px solid #e2e8f0;border-radius:0;background:transparent;color:#64748b;font-size:12px}.back-add-button .p-button-icon{font-size:13px}.page-heading{position:sticky;top:0;z-index:20;align-items:center;min-height:56px;padding:8px 24px;border-bottom:1px solid #e2e8f0;background:rgba(255,255,255,.96);box-shadow:0 2px 8px rgba(15,23,42,.04);backdrop-filter:blur(10px)}.page-title-wrapper{display:flex;align-items:center;gap:10px}.page-title-wrapper .eyebrow{display:none}.page-title-wrapper h1{font-size:17px;font-weight:700;line-height:22px}.page-title-wrapper .muted{font-size:11px;color:#94a3b8}.page-heading-actions :deep(.p-button){height:32px;border-radius:8px;font-size:12px}.form-layout{width:min(100%,1200px);margin:0 auto;grid-template-columns:minmax(0,1fr) 320px;gap:24px;padding:32px 24px}.form-stack{gap:16px}.form-card,.sidebar-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04)}.form-card{padding:20px}.form-card-header{gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom-color:#eef2f7}.form-card-icon{width:36px;height:36px;border-radius:10px;font-size:14px}.form-card-header h3{font-size:15px}.form-card-header p{font-size:12px;color:#64748b}.form-grid{gap:16px 20px}.form-field{gap:6px}.form-field label{text-transform:none;letter-spacing:0;color:#334155;font-size:12px;font-weight:600}.form-field :deep(.p-inputtext),.form-field :deep(.p-select),.form-field :deep(.p-textarea){min-height:40px;border:1px solid #d9e2ec;border-radius:10px;background:#fff;font-size:12px;box-shadow:0 1px 2px rgba(15,23,42,.03)}.form-field :deep(.p-inputtext),.form-field :deep(.p-textarea){padding:0 12px}.form-field :deep(.p-textarea){padding-top:10px}.form-field :deep(.p-select-label){padding:0 12px;font-size:12px}.form-field :deep(.p-inputtext:focus),.form-field :deep(.p-select:focus),.form-field :deep(.p-textarea:focus){border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.12)}.form-sidebar{top:72px;gap:16px}.sidebar-card{padding:16px}.sidebar-card h4{margin-bottom:12px;font-size:12px}.summary-list{gap:10px}.summary-row span,.summary-row strong{font-size:12px}.summary-row span{color:#64748b}.summary-row strong{color:#0f172a}.tip-card{border-color:#bfdbfe;background:#eff6ff}.tip-card i{color:#2563eb;font-size:14px}.tip-card p{color:#1d4ed8;font-size:12px}.tip-card code{background:#dbeafe;font-size:11px}.sidebar-actions :deep(.p-button){min-height:40px;border-radius:10px;font-size:12px}.contact-row{border-color:#eef2f7;border-radius:12px;padding:12px;background:#f8fafc}.scope-card{padding:16px}.scope-list{display:grid;gap:10px}.scope-row{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:8px;color:#64748b;font-size:11px;line-height:1.45}.scope-badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700}.scope-badge.company{border-color:#fecdd3;background:#fff1f2;color:#be123c}.scope-badge.required-scope{border-color:#fde68a;background:#fffbeb;color:#a16207}@media(max-width:1024px){.form-layout{grid-template-columns:1fr;padding:24px 20px}.form-sidebar{position:static;order:-1}}@media(max-width:768px){.admin-page{padding:0}.page-heading{padding:10px 16px}.page-title-wrapper .muted{display:none}.form-layout{padding:20px 16px}.form-sidebar{order:0}}@media(max-width:560px){.page-heading{align-items:flex-start;padding:10px 12px}.page-heading-actions{width:100%}.page-heading-actions :deep(.p-button){flex:1}.form-layout{padding:16px 12px}.form-card{padding:16px;border-radius:14px}.form-grid{grid-template-columns:1fr;gap:14px}.form-field.full{grid-column:1}}
+.field-note{color:#94a3b8;font-size:10px;font-weight:500;text-transform:none;letter-spacing:0}.company-link-note{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:10px 12px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;color:#1d4ed8;font-size:11px;line-height:1.4}.company-link-note>i{font-size:13px}.company-link-note :deep(.p-button){height:32px;border-radius:8px;font-size:11px;white-space:nowrap}@media(max-width:560px){.company-link-note{grid-template-columns:auto 1fr}.company-link-note :deep(.p-button){grid-column:1/-1;width:100%}}
+.customer-information-shell{border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);overflow:hidden}.customer-information-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid #eef2f7}.customer-information-heading h2{margin:0;color:#0f172a;font-size:16px;line-height:22px}.customer-information-heading p{margin:3px 0 0;color:#64748b;font-size:12px}.information-scope-badge{display:inline-flex;align-items:center;height:24px;padding:0 9px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700;white-space:nowrap}.customer-information-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}.customer-information-grid>.form-card{box-shadow:none;border-color:#eef2f7;padding:16px}.customer-information-grid>.form-card .form-card-header{margin-bottom:14px;padding-bottom:12px}.form-sidebar .field-scope-card{order:-3}.form-sidebar .tip-card{order:-2}.form-sidebar .scope-card{order:-1}@media(max-width:1024px){.customer-information-grid{grid-template-columns:1fr}}@media(max-width:560px){.customer-information-heading{padding:14px 16px;flex-direction:column}.customer-information-grid{padding:12px;gap:12px}}
+.scope-description{margin:-4px 0 10px;color:#64748b;font-size:12px;line-height:1.5}.scope-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.scope-badge.shared{border-color:#ddd6fe;background:#f5f3ff;color:#6d28d9}.scope-group{padding:14px 12px;border:1px solid #dbe3ee;border-radius:16px;background:#f8fafc}.scope-group-heading{display:flex;align-items:center;justify-content:space-between;margin:0 2px 10px;color:#64748b;font-size:11px;letter-spacing:.08em}.scope-checklist{display:grid;gap:8px}.scope-check-row{display:flex;align-items:center;gap:10px;min-height:42px;padding:10px 12px;border:1px solid #dce5f0;border-radius:14px;background:#fff;color:#334155;font-size:12px;line-height:1.35}.scope-check{display:grid;place-items:center;width:20px;height:20px;flex:none;border:1px solid #cbd5e1;border-radius:50%;color:#fff;font-size:10px}.scope-check.complete{border-color:#22c55e;background:#22c55e}.scope-row{margin-top:12px}
+.site-address-badge{border-color:#bbf7d0;background:#f0fdf4;color:#15803d}.location-detail-label{grid-column:1/-1;margin-top:2px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.site-address-badge + p{margin-top:4px}
+.section-title-line{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.section-title-line h3{margin:0}.shared-scope-badge,.optional-badge,.site-scope-badge,.company-scope-badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border:1px solid #ddd6fe;border-radius:999px;background:#f5f3ff;color:#6d28d9;font-size:10px;font-weight:700;white-space:nowrap}.optional-badge{border-color:#dbe3ee;background:#f8fafc;color:#64748b;font-weight:600}.site-scope-badge{border-color:#bbf7d0;background:#f0fdf4;color:#15803d}.company-scope-badge{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}.contact-scope-heading,.company-contact-heading{display:flex;align-items:center;gap:8px;margin:0 0 4px}.contact-scope-heading strong,.company-contact-heading strong{color:#0f172a;font-size:13px}.contact-scope-copy,.company-contacts-note p{margin:0;color:#64748b;font-size:11px;line-height:1.45}.company-contacts-note{display:grid;gap:8px;margin-top:16px;padding:14px;border:1px solid #dbeafe;border-radius:14px;background:#eff6ff}.company-contacts-note :deep(.p-button){width:max-content;min-height:32px;border-radius:8px;font-size:11px}@media(max-width:560px){.company-contacts-note :deep(.p-button){width:100%}}
+.address-mode-label{display:flex;align-items:center;justify-content:space-between;gap:10px}.address-mode-label>span{display:inline-flex;align-items:center;height:26px;padding:0 9px;border:1px solid #dbe3ee;border-radius:999px;background:#f8fafc;color:#64748b;font-size:10px;font-weight:600}.address-helper{display:block;color:#64748b;font-size:11px;line-height:1.4}@media(max-width:560px){.address-mode-label{align-items:flex-start;flex-direction:column;gap:6px}.address-mode-label>span{align-self:flex-end}}
 </style>

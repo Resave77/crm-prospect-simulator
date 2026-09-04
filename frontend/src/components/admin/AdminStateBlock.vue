@@ -1,0 +1,3 @@
+<script setup lang="ts">withDefaults(defineProps<{ type?: 'loading'|'empty'|'error'; message: string }>(), { type: 'empty' })</script>
+<template><div class="admin-state-block" :class="`admin-state-block--${type}`"><i v-if="type === 'loading'" class="pi pi-spin pi-spinner" aria-hidden="true" /><i v-else-if="type === 'error'" class="pi pi-exclamation-circle" aria-hidden="true" /><i v-else class="pi pi-inbox" aria-hidden="true" /><span>{{ message }}</span><slot /></div></template>
+<style scoped>.admin-state-block{display:flex;align-items:center;justify-content:center;gap:.6rem;min-height:8rem;padding:1.5rem;color:var(--text-muted);font-size:.82rem;text-align:center}.admin-state-block--error{color:var(--brand-red-700)}</style>

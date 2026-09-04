@@ -1221,7 +1221,11 @@ onMounted(async () => {
   .prospect-page .filter-field :deep(.p-select) { height:40px; border-radius:9px; }
   .prospect-page .table-panel { border-radius:12px; overflow:hidden; }
   .prospect-page .table-scroll { overflow:hidden; }
-  .prospect-page .data-table { min-width:0; table-layout:fixed; font-size:.65rem; border-collapse:separate; border-spacing:0; }\n  .prospect-page .data-table thead th { height:34px; padding:.45rem .35rem; font-size:.54rem; background:#fff8f8; color:#8b4b55; }\n  .prospect-page .data-table tbody tr { background:#fff; }\n  .prospect-page .data-table tbody tr + tr td { border-top:1px solid #f4e6e8; }\n  .prospect-page .data-table tbody td { height:54px; padding:.45rem .35rem; vertical-align:middle; }
+  .prospect-page .data-table { min-width:0; table-layout:fixed; font-size:.65rem; border-collapse:separate; border-spacing:0; }
+  .prospect-page .data-table thead th { height:34px; padding:.45rem .35rem; font-size:.54rem; background:#fff8f8; color:#8b4b55; }
+  .prospect-page .data-table tbody tr { background:#fff; }
+  .prospect-page .data-table tbody tr + tr td { border-top:1px solid #f4e6e8; }
+  .prospect-page .data-table tbody td { height:54px; padding:.45rem .35rem; vertical-align:middle; }
   .prospect-page .data-table th, .prospect-page .data-table td { padding:.6rem .45rem; }
   .prospect-page .data-table thead th:nth-child(2), .prospect-page .data-table tbody td:nth-child(2),
   .prospect-page .data-table thead th:nth-child(5), .prospect-page .data-table tbody td:nth-child(5) { display:none; }
@@ -1238,7 +1242,8 @@ onMounted(async () => {
   .prospect-page .state-box { min-height:180px; padding:1.2rem; font-size:.68rem; }
 }
 .prospect-page { min-width:0; padding:0; gap:0; background:#fff; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
-.prospect-page .workspace-header,.prospect-page .table-heading { display:none; }
+.prospect-page .workspace-header { display:grid; }
+.prospect-page .table-heading { display:none; }
 .prospect-erp-toolbar { display:flex; min-height:58px; height:58px; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid #e2e8f0; background:#fff; }
 .prospect-tabs { display:flex; align-items:center; gap:2px; padding:4px; border-radius:10px; background:#f1f5f9; }
 .prospect-tab { display:inline-flex; height:34px; align-items:center; padding:0 14px; border-radius:10px; color:#40516a; font-size:12px; font-weight:500; white-space:nowrap; }
@@ -1249,4 +1254,28 @@ onMounted(async () => {
 .prospect-page .panel-stack { gap:0; padding:0; }.prospect-page .filter-panel { display:flex; align-items:flex-end; gap:14px; padding:14px 20px 16px; border:0; border-bottom:1px solid #e2e8f0; border-radius:0; background:#fff; box-shadow:0 3px 12px rgba(15,23,42,.04); }.prospect-page .filter-grid { display:grid; grid-template-columns:repeat(3,minmax(160px,210px)) auto; flex:1; gap:12px; }.prospect-page .filter-field { gap:5px; }.prospect-page .filter-field label { color:#64748b; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }.prospect-page .filter-field :deep(.p-select) { height:40px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; font-size:12px; }.prospect-page .filter-field :deep(.p-select-label) { padding:0 12px; }.prospect-page .filter-action { align-self:end; }.prospect-page .filter-action :deep(.p-button) { height:40px; min-height:40px; border-radius:10px; font-size:12px; }
 .prospect-page .table-panel { border:0; border-radius:0; box-shadow:none; }.prospect-page .data-table { min-width:0; width:100%; table-layout:fixed; font-size:11px; }.prospect-page .data-table thead th { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; background:#f4f4f4; color:#000; font-size:10px; font-weight:600; line-height:12px; letter-spacing:.07em; }.prospect-page .data-table tbody td { box-sizing:border-box; height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; font-size:11px; line-height:13px; }.prospect-page .data-table tbody tr:hover { background:#fff; }.prospect-page .data-table .prospect-name { color:#0f172a; font-size:11px; font-weight:600; }.prospect-page .data-table .cell-sub,.prospect-page .data-table .cell-text,.prospect-page .data-table .cell-date { color:#64748b; font-size:10px; line-height:12px; }.prospect-page .data-table :deep(.p-tag) { border-radius:999px; padding:4px 10px; font-size:10px; font-weight:500; }.prospect-page .pagination-bar { min-height:42px; padding:0 20px; border-top:0; border-bottom:1px solid #e2e8f0; background:#fff; }
 @media(max-width:900px){.prospect-erp-toolbar{height:auto;min-height:58px;flex-wrap:wrap;overflow:visible}.prospect-search{flex-basis:220px}.prospect-erp-toolbar>:deep(.p-button){width:100%}.prospect-page .filter-panel{display:grid;grid-template-columns:1fr;padding:12px}.prospect-page .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.prospect-erp-toolbar{padding:10px 12px}.prospect-tabs{width:100%}.prospect-tab{flex:1;justify-content:center;padding:0 8px}.prospect-page .data-table{min-width:760px}.prospect-page .table-scroll{overflow-x:auto}}
+
+/* Page-level ERP list alignment: keep the hierarchy visible and the data surface contained. */
+.prospect-page .workspace-header { display: none; }
+.prospect-page .prospect-erp-toolbar { margin-top: 0; }
+.prospect-page .table-panel {
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.prospect-page .data-table thead th { background: #f4f4f4; color: #000; }
+.prospect-page .data-table tbody tr:hover { background: #fff; }
+.prospect-page .data-table th:nth-child(1), .prospect-page .data-table td:nth-child(1) { width: 44%; }
+.prospect-page .data-table th:nth-child(2), .prospect-page .data-table td:nth-child(2) { width: 18%; }
+.prospect-page .data-table th:nth-child(3), .prospect-page .data-table td:nth-child(3) { width: 18%; }
+.prospect-page .data-table th:nth-child(4), .prospect-page .data-table td:nth-child(4) { width: 12%; }
+.prospect-page .data-table th:nth-child(5), .prospect-page .data-table td:nth-child(5) { width: 8%; }
+@media(max-width:900px) {
+  .prospect-page .prospect-erp-toolbar { margin-top: 10px; }
+}
+@media(max-width:640px) {
+  .prospect-page .table-panel { border-radius: 0; }
+}
 </style>
