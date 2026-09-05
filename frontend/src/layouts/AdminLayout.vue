@@ -146,7 +146,7 @@ function hasShortcutSeparator(label: string) {
   return ['Credit Limit', 'Daily Collect.', 'Pay. Hist. Summary', 'BLR', 'Invoice List', 'BLR List'].includes(label)
 } */
 
-const sidebarWidth = computed(() => sidebarCollapsed.value ? '64px' : '168px')
+const sidebarWidth = computed(() => sidebarCollapsed.value ? '80px' : '220px')
 
 function runSearch() {
   const value = search.value.trim()
@@ -192,7 +192,7 @@ async function logout() {
 </script>
 
 <template>
-  <div class="admin-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+  <div class="admin-shell bg-surface" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <div v-if="sidebarOpen" class="mobile-backdrop" @click="closeSidebar" />
     <aside class="admin-sidebar" :class="{ 'sidebar-open': sidebarOpen, collapsed: sidebarCollapsed }" :style="{ width: sidebarWidth }">
       <div class="sidebar-header">
@@ -207,46 +207,158 @@ async function logout() {
         </button>
       </div>
       <small v-show="!sidebarCollapsed" class="nav-caption">MAIN</small>
-      <nav aria-label="Administrator navigation">
-        <RouterLink v-if="auth.hasPermission('view_admin_dashboard')" to="/admin/dashboard" @click="closeSidebar" :title="sidebarCollapsed ? 'Dashboard' : ''">
-          <i class="pi pi-home" /> <span>Dashboard</span>
-        </RouterLink>
+      <nav class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain py-4 px-1" aria-label="Administrator navigation">
+        <div class="space-y-4 pb-2">
+          <div>
+            <p v-show="!sidebarCollapsed" class="sidebar-subheader px-3 font-semibold uppercase tracking-wide text-slate-400">
+              Pages
+            </p>
+            <ul class="mt-1 space-y-1">
+              <li v-if="auth.hasPermission('view_admin_dashboard')" class="relative">
+                <RouterLink
+                  to="/admin/dashboard"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-home"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Dashboard</span>
+                </RouterLink>
+              </li>
 
-        <small v-show="!sidebarCollapsed" class="nav-caption">CUSTOMERS &amp; PROSPECTS</small>
-        <RouterLink v-if="auth.hasPermission('view_customers')" to="/admin/customers" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Existing' : ''">
-          <i class="pi pi-users" /> <span>Customer Existing</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_prospect_finder')" to="/admin/prospect-finder" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Finder' : ''">
-          <i class="pi pi-compass" /> <span>Prospect Finder</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_prospect_list')" to="/admin/prospects/list" @click="closeSidebar" :title="sidebarCollapsed ? 'Customer Prospect' : ''">
-          <i class="pi pi-list" /> <span>Customer Prospect</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_prospect_pipeline')" to="/admin/prospects/pipeline" @click="closeSidebar" :title="sidebarCollapsed ? 'Prospect Pipeline' : ''">
-          <i class="pi pi-th-large" /> <span>Prospect Pipeline</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_visit_monitoring')" to="/admin/visit-monitoring" @click="closeSidebar" :title="sidebarCollapsed ? 'Visit Monitoring' : ''">
-          <i class="pi pi-map-marker" /> <span>Visit Monitoring</span>
-        </RouterLink>
+              <li v-if="auth.hasPermission('view_customers')" class="relative">
+                <RouterLink
+                  to="/admin/customers"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-users"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Customer List</span>
+                </RouterLink>
+              </li>
 
-        <small v-show="!sidebarCollapsed" class="nav-caption">MANAGEMENT</small>
-        <RouterLink v-if="auth.hasPermission('view_accounts')" to="/admin/accounts" @click="closeSidebar" :title="sidebarCollapsed ? 'Accounts' : ''">
-          <i class="pi pi-user-edit" /> <span>Employee Management</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_roles')" to="/admin/role-management" @click="closeSidebar" :title="sidebarCollapsed ? 'Role Management' : ''">
-          <i class="pi pi-id-card" /> <span>Role Management</span>
-        </RouterLink>
-        <RouterLink v-if="auth.hasPermission('view_sales_structure')" to="/admin/sales-structure" @click="closeSidebar" :title="sidebarCollapsed ? 'Sales Structure' : ''">
-          <i class="pi pi-sitemap" /> <span>Sales Structure</span>
-        </RouterLink>
+              <li v-if="auth.hasPermission('view_prospect_finder')" class="relative">
+                <RouterLink
+                  to="/admin/prospect-finder"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-compass"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Prospect Finder</span>
+                </RouterLink>
+              </li>
 
-        <small v-show="!sidebarCollapsed" class="nav-caption">REPORTS</small>
-        <RouterLink v-if="auth.hasPermission('view_reports')" to="/admin/reports" @click="closeSidebar" :title="sidebarCollapsed ? 'Reports' : ''">
-          <i class="pi pi-chart-bar" /> <span>Reports</span>
-        </RouterLink>
-        <RouterLink to="/admin/api-usage" @click="closeSidebar" :title="sidebarCollapsed ? 'Monitoring API' : ''">
-          <i class="pi pi-chart-line" /> <span>Monitoring API</span>
-        </RouterLink>
+              <li v-if="auth.hasPermission('view_prospect_list')" class="relative">
+                <RouterLink
+                  to="/admin/prospects/list"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-list"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Customer Prospect</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_prospect_pipeline')" class="relative">
+                <RouterLink
+                  to="/admin/prospects/pipeline"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-th-large"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Prospect Pipeline</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_visit_monitoring')" class="relative">
+                <RouterLink
+                  to="/admin/visit-monitoring"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-map-marker"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Visit Monitoring</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_accounts')" class="relative">
+                <RouterLink
+                  to="/admin/accounts"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-user-edit"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Employee Management</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_roles')" class="relative">
+                <RouterLink
+                  to="/admin/role-management"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-shield"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Role Management</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_sales_structure')" class="relative">
+                <RouterLink
+                  to="/admin/sales-structure"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-sitemap"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Sales Structure</span>
+                </RouterLink>
+              </li>
+
+              <li v-if="auth.hasPermission('view_reports')" class="relative">
+                <RouterLink
+                  to="/admin/reports"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-chart-bar"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Reports</span>
+                </RouterLink>
+              </li>
+
+              <li class="relative">
+                <RouterLink
+                  to="/admin/api-usage"
+                  class="flex rounded-lg px-2.5 font-semibold transition hover:bg-primary-50 hover:text-primary-700 text-slate-600"
+                  :class="sidebarCollapsed ? 'flex-col items-center justify-center gap-[2px] text-center px-0 py-[3px] sidebar-compact' : 'flex-row items-center gap-1.5 px-2 py-1 sidebar-regular'"
+                  active-class="bg-primary-50 text-primary-700 shadow-inner"
+                  @click="closeSidebar"
+                >
+                  <span class="text-[15px] pi pi-chart-line"></span>
+                  <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Monitoring API</span>
+                </RouterLink>
+              </li>
+            </ul>
+          </div>
+        </div>
       </nav>
       <details class="sidebar-profile">
         <summary>
@@ -259,20 +371,117 @@ async function logout() {
     </aside>
     <div class="admin-workspace">
       <Toast position="top-right" />
-      <header class="admin-topbar">
-        <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle navigation">
-          <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
-        </button>
-        <form v-if="searchOpen" class="global-search is-open" @submit.prevent="runSearch"><i class="pi pi-search" /><input v-model="search" autofocus aria-label="Search prospects" placeholder="Search prospects, customers..." /><button type="button" class="search-close" aria-label="Clear search" title="Clear search" @click="search = ''">×</button><button type="submit">Enter</button></form>
-        <div class="topbar-actions">
-          <button class="topbar-icon-btn navbar-collapse-btn" type="button" :title="navbarCollapsed ? 'Show shortcuts' : 'Minimize shortcuts'" :aria-label="navbarCollapsed ? 'Show shortcuts' : 'Minimize shortcuts'" @click="toggleNavbar"><i class="pi" :class="navbarCollapsed ? 'pi-chevron-left' : 'pi-chevron-right'" /></button>
-          <button v-if="!navbarCollapsed" class="topbar-action-btn" type="button" title="Search" aria-label="Toggle search" @click="toggleSearch"><i class="pi pi-search" /> <span>Search</span></button>
-          <button v-if="!navbarCollapsed" class="topbar-action-btn" :class="{ active: debugMode }" type="button" title="Toggle debug mode" aria-label="Toggle debug mode" @click="toggleDebug"><i class="pi pi-database" /> <span>Debug</span></button>
-          <button class="topbar-icon-btn" type="button" title="Fullscreen" aria-label="Toggle fullscreen" @click="toggleFullscreen"><svg class="erp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg></button>
-          <button class="topbar-icon-btn status-ok" :class="{ offline: !isOnline }" type="button" :title="isOnline ? 'System status: online' : 'System status: offline'" :aria-label="isOnline ? 'System status: online' : 'System status: offline'"><svg class="erp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path v-if="isOnline" d="m8 12 2.5 2.5L16 9" /><path v-else d="m9 9 6 6m0-6-6 6" /></svg></button>
-          <button class="topbar-icon-btn cloud-btn" :class="{ syncing: cloudSyncing }" type="button" :title="cloudSyncing ? 'Syncing...' : 'Sync cloud data'" aria-label="Sync cloud data" @click="syncCloud"><i class="pi" :class="cloudSyncing ? 'pi-spin pi-spinner' : 'pi-cloud-upload'" /><small>{{ cloudSyncing ? '…' : '0' }}</small></button>
+      <header class="app-navbar flex h-[60px] shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-3 py-2 text-navbar shadow-sm backdrop-blur sm:px-4">
+        <!-- Left Side: Mobile Menu Button, Mobile Title, Desktop Quick Search Button -->
+        <div class="ms-1 flex items-center gap-2">
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-[13px] text-slate-700 transition hover:bg-slate-50 lg:hidden"
+            aria-label="Open menu"
+            @click="sidebarOpen = !sidebarOpen"
+          >
+            <span class="pi pi-th-large"></span>
+          </button>
+
+          <div class="lg:hidden">
+            <p class="font-semibold uppercase tracking-wide text-slate-400 leading-none" style="font-size: calc(var(--font-navbar, 14px) * 0.65);">
+              ERP
+            </p>
+            <h1 class="text-slate-800 leading-tight font-semibold" style="font-size: clamp(11px, 2.6vw, calc(var(--font-heading, 16px) * 0.86));">
+              {{ String(route.meta.title || route.name || 'Dashboard') }}
+            </h1>
+          </div>
+
+          <button
+            class="hidden h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 text-[12px] font-semibold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            type="button"
+            @click="toggleSearch"
+          >
+            <span class="pi pi-search text-[12px] text-primary-600"></span>
+            <span>Quick navigation</span>
+            <span class="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <span class="hidden sm:inline">Ctrl</span>
+              <span class="hidden sm:inline text-slate-400">/</span>
+              <span>⌘</span>
+              <span>+</span>
+              <span>K</span>
+            </span>
+          </button>
+
+          <!-- Embedded Global Search Input when toggled -->
+          <form v-if="searchOpen" class="global-search is-open" @submit.prevent="runSearch">
+            <i class="pi pi-search" />
+            <input v-model="search" autofocus aria-label="Search prospects" placeholder="Search prospects, customers..." />
+            <button type="button" class="search-close" aria-label="Clear search" title="Clear search" @click="search = ''">×</button>
+            <button type="submit">Enter</button>
+          </form>
         </div>
-        <div class="topbar-spacer" />
+
+        <!-- Middle Spacer -->
+        <div class="flex items-center"></div>
+
+        <!-- Right Side Action Buttons -->
+        <div class="flex items-center gap-1.5">
+          <button
+            class="flex h-8 items-center justify-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition border-slate-200 bg-white/80 text-slate-600 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 hidden lg:flex"
+            :class="{ '!border-primary-400 !bg-primary-50 !text-primary-700': debugMode }"
+            type="button"
+            title="Debug Log"
+            @click="toggleDebug"
+          >
+            <span class="pi pi-server text-[12px]"></span>
+            <span class="hidden lg:inline">Debug Log</span>
+          </button>
+
+          <button
+            class="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            type="button"
+            :title="sidebarCollapsed ? 'Expand sidebar' : 'Compact mode'"
+            @click="toggleCollapse"
+          >
+            <span class="pi text-[12px]" :class="sidebarCollapsed ? 'pi-angle-right' : 'pi-angle-left'"></span>
+          </button>
+
+          <button
+            class="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            type="button"
+            title="Fullscreen"
+            @click="toggleFullscreen"
+          >
+            <span class="pi pi-window-maximize"></span>
+          </button>
+
+          <RouterLink
+            to="/admin/reports"
+            class="relative flex h-8 w-8 items-center justify-center rounded-full border text-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition border-slate-200 bg-white/80 text-slate-600 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700"
+            title="Chat"
+            aria-label="Open chat"
+          >
+            <span class="pi pi-comments text-[12px]"></span>
+          </RouterLink>
+
+          <!-- System Online Status Button -->
+          <div class="relative">
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 animate-fade"
+              :class="isOnline ? '!text-green-500 !border-green-200 !bg-green-50/80' : '!text-red-500 !border-red-200 !bg-red-50/80'"
+              :title="isOnline ? 'Connected' : 'Disconnected'"
+            >
+              <i class="pi text-[12px]" :class="isOnline ? 'pi-check-circle' : 'pi-exclamation-circle'"></i>
+            </button>
+          </div>
+
+          <!-- Cloud Sync Button -->
+          <button
+            type="button"
+            class="relative flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow"
+            :title="cloudSyncing ? 'Syncing...' : 'Sync Cloud'"
+            @click="syncCloud"
+          >
+            <span class="pi text-[12px] text-sky-600" :class="cloudSyncing ? 'pi-spin pi-spinner' : 'pi-cloud-upload'"></span>
+          </button>
+        </div>
       </header>
       <div v-if="debugMode" class="debug-overlay" @click.self="closeDebug">
         <section class="debug-modal" role="dialog" aria-modal="true" aria-labelledby="debug-title">
@@ -303,13 +512,13 @@ async function logout() {
 .admin-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  background: #f8fafc;
+  grid-template-columns: 220px minmax(0, 1fr);
+  /*background: #ffffff;*/
   transition: grid-template-columns 0.25s ease;
 }
 
 .admin-shell.sidebar-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 80px minmax(0, 1fr);
 }
 
 .admin-sidebar {
@@ -899,12 +1108,11 @@ async function logout() {
 @media (min-width: 901px) {
   .admin-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-    background: #f5f7fa;
     transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .admin-shell.sidebar-collapsed {
-    grid-template-columns: 120px minmax(0, 1fr);
+    grid-template-columns: 80px minmax(0, 1fr);
   }
 
   .admin-sidebar {
@@ -914,8 +1122,12 @@ async function logout() {
     border-right: 1px solid #dfe5ed;
     overflow: visible;
     position: sticky;
-    z-index: 20;
+    z-index: 50;
     transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1), padding 320ms ease;
+  }
+
+  .admin-sidebar.collapsed {
+    width: 80px !important;
   }
 
   .sidebar-header {
@@ -948,7 +1160,7 @@ async function logout() {
     color: #64748b;
     border-color: #d9e1ec;
     margin-right: 0;
-    z-index: 3;
+    z-index: 60;
     box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
     transition: right 320ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, color 160ms ease;
   }
@@ -1014,7 +1226,7 @@ async function logout() {
   .admin-sidebar.collapsed nav a i { width: auto; height: auto; font-size: 0.72rem; }
   .admin-sidebar.collapsed .nav-caption { display: none !important; }
   .admin-sidebar.collapsed {
-    width: 120px !important;
+    width: 80px !important;
     padding-left: 0.35rem;
     padding-right: 0.35rem;
     align-items: stretch;
@@ -1167,6 +1379,7 @@ async function logout() {
     box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12);
   }
   .admin-topbar { gap: 18px; padding: 0 24px; border-bottom-color: #e2e8f0; }
+  .admin-shell.sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
   .admin-sidebar.collapsed { width: 64px !important; padding: 0 !important; }
   .admin-sidebar.collapsed nav { padding: 14px 3px 0; align-items: center; }
   .admin-sidebar.collapsed .sidebar-header { height: 56px; }
@@ -1215,5 +1428,3 @@ async function logout() {
   .topbar-icon-btn.cloud-btn { width: auto; min-width: 42px; height: 34px; padding: 0 8px; border-color: #d9e3ef; color: #0284c7; }
 }
 </style>
-
-

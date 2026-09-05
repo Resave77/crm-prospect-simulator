@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import Button from 'primevue/button'
+import AppButton from '../../../components/base/AppButton.vue'
 import Checkbox from 'primevue/checkbox'
 import Dialog from 'primevue/dialog'
 import InputNumber from 'primevue/inputnumber'
@@ -1033,7 +1034,17 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="filter-actions">
-            <Button :label="!geoResolved ? 'Detecting location...' : 'PROSES CARI PROSPEK'" icon="pi pi-search" fluid :loading="loading || !geoResolved" :disabled="loading || !categories.length || !geoResolved" @click="search" />
+            <AppButton
+              variant="primary"
+              size="medium"
+              class="w-full"
+              icon="pi-search"
+              :loading="loading || !geoResolved"
+              :disabled="loading || !categories.length || !geoResolved"
+              @click="search"
+            >
+              {{ !geoResolved ? 'Detecting location...' : 'PROSES CARI PROSPEK' }}
+            </AppButton>
           </div>
 
           <div v-if="queried" class="query-results-footer">
