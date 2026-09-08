@@ -1,10 +1,14 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 
 const apiProxyTarget = loadEnv('development', process.cwd()).VITE_API_PROXY_TARGET || 'http://localhost:8099'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    tailwindcss(),
+  ],
   server: {
     host: '0.0.0.0',
     port: 5173,

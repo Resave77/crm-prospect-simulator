@@ -110,7 +110,7 @@ watch(() => form.customerSegment, (segmentName) => {
 </script>
 
 <template>
-  <section class="admin-page">
+  <section class="admin-page bg-surface min-h-full">
     <!-- SUCCESS STATE -->
     <template v-if="saved">
       <div class="success-panel">
@@ -129,15 +129,39 @@ watch(() => form.customerSegment, (segmentName) => {
     <!-- FORM -->
     <template v-else>
       <!-- PAGE HEADER -->
-      <header class="page-heading">
-        <div class="page-title-wrapper">
-          <Button label="Back to Customer Site" icon="pi pi-arrow-left" text class="back-add-button" @click="router.push('/admin/customers')" />
-          <h1>Create New Customer</h1>
-          <p class="muted">Customer Management &gt; Customer Site &gt; Create</p>
-        </div>
-        <div class="page-heading-actions">
-          <Button label="Cancel" severity="secondary" outlined size="small" @click="router.push('/admin/customers')" />
-          <Button label="Create Customer" icon="pi pi-send" severity="danger" size="small" :loading="saving" :disabled="!isFormValid || saving" @click="handleSubmit" />
+      <header class="sticky top-0 z-40 border-b border-[#e2e8f0] bg-white/95 px-[16px] py-[8px] shadow-[0px_2px_8px_0px_rgba(15,23,42,0.04)] backdrop-blur sm:px-[24px] lg:px-[24px] mb-4 -mx-6 -mt-6">
+        <div class="mx-auto flex flex-wrap items-center justify-between gap-[12px] max-w-[1200px]">
+          <div class="min-w-0 flex items-center gap-[12px]">
+            <button
+              type="button"
+              class="flex shrink-0 items-center gap-[6px] font-semibold text-[#64748b] transition-colors hover:text-[#dc2626]"
+              @click="router.push('/admin/customers')"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[14px]"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg> Back to Customer
+            </button>
+            <div class="hidden h-[28px] w-px bg-[#e2e8f0] sm:block"></div>
+            <div class="min-w-0 flex items-center gap-[8px]">
+              <h5 class="truncate font-['Inter'] text-[15px] font-bold leading-[20px] text-[#1e293b]">Create New Customer</h5>
+              <span class="hidden truncate text-[11px] leading-[15px] text-[#94a3b8] sm:block">Customer List &gt; Customer Site &gt; Create</span>
+            </div>
+          </div>
+          <section class="flex items-center gap-[8px]">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center border font-semibold tracking-normal shadow-[0_1px_2px_rgba(15,23,42,0.08)] transition-all duration-150 ease-out [-webkit-tap-highlight-color:transparent] hover:-translate-y-px active:translate-y-0 active:scale-[0.99] active:shadow-[0_1px_1px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-1 focus:ring-offset-0 disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none border-slate-200 bg-white text-slate-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 hover:shadow-[0_2px_6px_rgba(15,23,42,0.08)] focus:ring-slate-100 gap-1.5 rounded-md px-2.5 py-1.5 text-[11.5px]"
+              @click="router.push('/admin/customers')"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center border font-semibold tracking-normal shadow-[0_1px_2px_rgba(15,23,42,0.08)] transition-all duration-150 ease-out [-webkit-tap-highlight-color:transparent] hover:-translate-y-px active:translate-y-0 active:scale-[0.99] active:shadow-[0_1px_1px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-1 focus:ring-offset-0 disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none border-primary-600 bg-primary-600 text-white shadow-[0_3px_8px_rgba(220,38,38,0.14)] hover:border-primary-700 hover:bg-primary-700 hover:shadow-[0_4px_10px_rgba(220,38,38,0.16)] focus:ring-primary-100 gap-1.5 rounded-md px-2.5 py-1.5 text-[11.5px]"
+              :disabled="!isFormValid || saving"
+              @click="handleSubmit"
+            >
+              <i class="pi text-xs shrink-0" :class="saving ? 'pi-spin pi-spinner' : 'pi-send'"></i> Create Customer
+            </button>
+          </section>
         </div>
       </header>
 
