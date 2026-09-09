@@ -13,6 +13,7 @@ const sidebarCollapsed = ref(false)
 const navbarCollapsed = ref(false)
 const searchOpen = ref(false)
 const debugMode = ref(false)
+const toolbarActionsOpen = ref(true)
 const isOnline = ref(navigator.onLine)
 const cloudSyncing = ref(false)
 
@@ -146,7 +147,7 @@ function hasShortcutSeparator(label: string) {
   return ['Credit Limit', 'Daily Collect.', 'Pay. Hist. Summary', 'BLR', 'Invoice List', 'BLR List'].includes(label)
 } */
 
-const sidebarWidth = computed(() => sidebarCollapsed.value ? '80px' : '220px')
+const sidebarWidth = computed(() => sidebarCollapsed.value ? '64px' : '184px')
 
 function runSearch() {
   const value = search.value.trim()
@@ -183,6 +184,7 @@ async function toggleFullscreen() {
 }
 function closeSidebar() { sidebarOpen.value = false }
 function toggleCollapse() { sidebarCollapsed.value = !sidebarCollapsed.value }
+function toggleToolbarActions() { toolbarActionsOpen.value = !toolbarActionsOpen.value }
 
 async function logout() {
   closeSidebar()
@@ -206,11 +208,11 @@ async function logout() {
           <i class="pi" :class="sidebarCollapsed ? 'pi-chevron-right' : 'pi-chevron-left'" />
         </button>
       </div>
-      <small v-show="!sidebarCollapsed" class="nav-caption">MAIN</small>
-      <nav class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain py-4 px-1" aria-label="Administrator navigation">
-        <div class="space-y-4 pb-2">
+      <p v-show="!sidebarCollapsed" class="nav-caption px-[8px] pb-[6px] font-['Inter'] text-[9px] font-bold uppercase tracking-[0.12em] text-[#94a3b8]">Overview</p>
+      <nav class="min-h-0 flex flex-1 w-full flex-col gap-[2px] overflow-x-hidden overflow-y-auto overscroll-y-contain px-[10px] pt-[14px]" aria-label="Administrator navigation">
+        <div class="w-full space-y-4 pb-2">
           <div>
-            <p v-show="!sidebarCollapsed" class="sidebar-subheader px-3 font-semibold uppercase tracking-wide text-slate-400">
+            <p v-show="!sidebarCollapsed" class="px-[8px] pb-[6px] pt-[6px] font-['Inter'] text-[9px] font-bold uppercase tracking-[0.12em] text-[#94a3b8]">
               Pages
             </p>
             <ul class="mt-1 space-y-1">
@@ -222,7 +224,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-home"></span>
+                  <span class="pi pi-home shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Dashboard</span>
                 </RouterLink>
               </li>
@@ -235,7 +237,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-users"></span>
+                  <span class="pi pi-users shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Customer List</span>
                 </RouterLink>
               </li>
@@ -248,7 +250,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-compass"></span>
+                  <span class="pi pi-compass shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Prospect Finder</span>
                 </RouterLink>
               </li>
@@ -261,7 +263,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-list"></span>
+                  <span class="pi pi-list shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Customer Prospect</span>
                 </RouterLink>
               </li>
@@ -274,7 +276,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-th-large"></span>
+                  <span class="pi pi-th-large shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Prospect Pipeline</span>
                 </RouterLink>
               </li>
@@ -287,7 +289,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-map-marker"></span>
+                  <span class="pi pi-map-marker shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Visit Monitoring</span>
                 </RouterLink>
               </li>
@@ -300,7 +302,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-user-edit"></span>
+                  <span class="pi pi-user-edit shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Employee Management</span>
                 </RouterLink>
               </li>
@@ -313,7 +315,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-shield"></span>
+                  <span class="pi pi-shield shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Role Management</span>
                 </RouterLink>
               </li>
@@ -326,7 +328,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-sitemap"></span>
+                  <span class="pi pi-sitemap shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Sales Structure</span>
                 </RouterLink>
               </li>
@@ -339,7 +341,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-chart-bar"></span>
+                  <span class="pi pi-chart-bar shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Reports</span>
                 </RouterLink>
               </li>
@@ -352,7 +354,7 @@ async function logout() {
                   active-class="bg-primary-50 text-primary-700 shadow-inner"
                   @click="closeSidebar"
                 >
-                  <span class="text-[15px] pi pi-chart-line"></span>
+                  <span class="pi pi-chart-line shrink-0 text-[18px] text-[#475569]"></span>
                   <span class="sidebar-label" :class="{ 'sidebar-label-compact text-center': sidebarCollapsed }">Monitoring API</span>
                 </RouterLink>
               </li>
@@ -371,9 +373,20 @@ async function logout() {
     </aside>
     <div class="admin-workspace">
       <Toast position="top-right" />
-      <header class="app-navbar flex h-[60px] shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-3 py-2 text-navbar shadow-sm backdrop-blur sm:px-4">
+      <header class="app-navbar flex h-[56px] shrink-0 items-center justify-between gap-[18px] border-b border-[#e2e8f0] bg-white px-[24px] text-navbar shadow-sm backdrop-blur">
         <!-- Left Side: Mobile Menu Button, Mobile Title, Desktop Quick Search Button -->
         <div class="ms-1 flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Collapse toolbar actions"
+            :aria-expanded="toolbarActionsOpen"
+            class="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:hidden"
+            :title="toolbarActionsOpen ? 'Hide toolbar actions' : 'Show toolbar actions'"
+            @click="toggleToolbarActions"
+          >
+            <span class="pi text-[12px]" :class="toolbarActionsOpen ? 'pi-angle-right' : 'pi-angle-left'"></span>
+          </button>
+
           <button
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-[13px] text-slate-700 transition hover:bg-slate-50 lg:hidden"
@@ -393,13 +406,16 @@ async function logout() {
           </div>
 
           <button
-            class="hidden h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 text-[12px] font-semibold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            aria-label="Search"
+            aria-keyshortcuts="Meta+K Control+K"
+            title="Shortcut: Ctrl/Cmd + K"
+            class="hidden"
             type="button"
             @click="toggleSearch"
           >
-            <span class="pi pi-search text-[12px] text-primary-600"></span>
-            <span>Quick navigation</span>
-            <span class="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <span class="pi pi-search text-[15px] text-[#ef4444]"></span>
+            <span>Search</span>
+            <span class="hidden">
               <span class="hidden sm:inline">Ctrl</span>
               <span class="hidden sm:inline text-slate-400">/</span>
               <span>⌘</span>
@@ -421,20 +437,45 @@ async function logout() {
         <div class="flex items-center"></div>
 
         <!-- Right Side Action Buttons -->
-        <div class="flex items-center gap-1.5">
+        <div class="flex shrink-0 items-center gap-[10px] border-l border-[#eef2f7] pl-[12px]">
           <button
-            class="flex h-8 items-center justify-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition border-slate-200 bg-white/80 text-slate-600 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 hidden lg:flex"
+            type="button"
+            aria-label="Collapse toolbar actions"
+            :aria-expanded="toolbarActionsOpen"
+            class="hidden h-[34px] w-[34px] items-center justify-center rounded-full border border-[#d9e3ef] bg-white transition-colors hover:bg-[#f8fafc] lg:flex"
+            :title="toolbarActionsOpen ? 'Hide toolbar actions' : 'Show toolbar actions'"
+            @click="toggleToolbarActions"
+          >
+            <span class="pi text-[15px] text-[#475569]" :class="toolbarActionsOpen ? 'pi-angle-right' : 'pi-angle-left'"></span>
+          </button>
+
+          <button
+            v-if="toolbarActionsOpen"
+            type="button"
+            aria-label="Search"
+            aria-keyshortcuts="Meta+K Control+K"
+            title="Shortcut: Ctrl/Cmd + K"
+            class="hidden h-[34px] items-center gap-[8px] rounded-full border border-[#d9e3ef] bg-[#f8fafc] pl-[12px] pr-[12px] font-['Inter'] !text-[12px] font-semibold text-[#334155] transition-colors hover:bg-white lg:flex"
+            @click="toggleSearch"
+          >
+            <span class="pi pi-search text-[15px] text-[#ef4444]"></span>
+            <span class="whitespace-nowrap">Search</span>
+          </button>
+
+          <button
+            v-if="toolbarActionsOpen"
+            class="hidden h-[34px] items-center justify-center gap-[7px] rounded-full border border-[#d9e3ef] bg-white px-[12px] font-['Inter'] !text-[12px] font-semibold text-[#475569] transition-colors hover:bg-[#f8fafc] lg:flex"
             :class="{ '!border-primary-400 !bg-primary-50 !text-primary-700': debugMode }"
             type="button"
             title="Debug Log"
             @click="toggleDebug"
           >
-            <span class="pi pi-server text-[12px]"></span>
-            <span class="hidden lg:inline">Debug Log</span>
+            <span class="pi pi-database text-[14px]"></span>
+            <span class="whitespace-nowrap">Debug</span>
           </button>
 
           <button
-            class="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            class="hidden"
             type="button"
             :title="sidebarCollapsed ? 'Expand sidebar' : 'Compact mode'"
             @click="toggleCollapse"
@@ -443,17 +484,19 @@ async function logout() {
           </button>
 
           <button
-            class="hidden h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 lg:flex"
+            v-if="toolbarActionsOpen"
+            class="hidden h-[34px] w-[34px] items-center justify-center rounded-full border border-[#d9e3ef] bg-white transition-colors hover:bg-[#f8fafc] lg:flex"
             type="button"
+            aria-label="Fullscreen"
             title="Fullscreen"
             @click="toggleFullscreen"
           >
-            <span class="pi pi-window-maximize"></span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[14px] text-[#475569]"><path d="m15 15 6 6"></path><path d="m15 9 6-6"></path><path d="M21 16.2V21h-4.8"></path><path d="M21 7.8V3h-4.8"></path><path d="M3 16.2V21h4.8"></path><path d="m3 21 6-6"></path><path d="M3 7.8V3h4.8"></path><path d="M9 9 3 3"></path></svg>
           </button>
 
           <RouterLink
             to="/admin/reports"
-            class="relative flex h-8 w-8 items-center justify-center rounded-full border text-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition border-slate-200 bg-white/80 text-slate-600 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700"
+            class="!hidden relative h-8 w-8 items-center justify-center rounded-full border text-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition border-slate-200 bg-white/80 text-slate-600 hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700"
             title="Chat"
             aria-label="Open chat"
           >
@@ -464,22 +507,24 @@ async function logout() {
           <div class="relative">
             <button
               type="button"
-              class="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 animate-fade"
-              :class="isOnline ? '!text-green-500 !border-green-200 !bg-green-50/80' : '!text-red-500 !border-red-200 !bg-red-50/80'"
+              class="flex size-[34px] items-center justify-center rounded-full border border-[#bbf7d0] bg-[#f0fdf4] transition-colors animate-fade"
               :title="isOnline ? 'Connected' : 'Disconnected'"
             >
-              <i class="pi text-[12px]" :class="isOnline ? 'pi-check-circle' : 'pi-exclamation-circle'"></i>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[15px] text-[#22c55e]"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
             </button>
           </div>
 
           <!-- Cloud Sync Button -->
           <button
             type="button"
-            class="relative flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow"
+            class="flex h-[34px] items-center gap-[6px] rounded-full border border-[#d9e3ef] bg-white pl-[9px] pr-[8px] transition-colors hover:bg-[#f8fafc]"
             :title="cloudSyncing ? 'Syncing...' : 'Sync Cloud'"
             @click="syncCloud"
           >
-            <span class="pi text-[12px] text-sky-600" :class="cloudSyncing ? 'pi-spin pi-spinner' : 'pi-cloud-upload'"></span>
+            <span class="pi text-[14px] text-[#0284c7]" :class="cloudSyncing ? 'pi-spin pi-spinner' : 'pi-cloud-upload'"></span>
+            <div class="flex h-[18px] min-w-[20px] items-center justify-center rounded-full bg-[#f1f5f9] px-[6px]">
+              <span class="font-['Inter'] text-[10px] font-semibold leading-[14px] text-[#475569]">0</span>
+            </div>
           </button>
         </div>
       </header>
@@ -546,7 +591,7 @@ async function logout() {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.15rem 0.35rem;
+  padding: 0;
   font-weight: 800;
   letter-spacing: -0.02em;
   font-size: 0.85rem;
@@ -559,8 +604,8 @@ async function logout() {
 }
 
 .logo-mark {
-  width: 3.1rem;
-  height: 2rem;
+  width: 48px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
   padding: 0.2rem;
@@ -630,7 +675,8 @@ async function logout() {
 }
 
 .nav-caption {
-  padding: 0.35rem 0.5rem 0.15rem;
+  margin: 0;
+  padding: 14px 8px 6px;
   color: #a3adba;
   font-size: 0.6rem;
   font-weight: 750;
@@ -640,6 +686,17 @@ async function logout() {
   overflow: hidden;
 }
 
+.admin-sidebar > nav > div > div > p.sidebar-subheader {
+  margin: 0;
+  padding: 6px 8px;
+  font-family: Inter, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
 .admin-sidebar nav .nav-caption {
   margin-top: 0.6rem;
   padding-top: 0.75rem;
@@ -647,7 +704,8 @@ async function logout() {
 }
 
 .admin-sidebar nav {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   flex: 1;
   min-height: 0;
@@ -657,6 +715,15 @@ async function logout() {
   overflow-x: hidden;
   padding: 14px 10px 0;
 }
+
+.admin-sidebar nav > div { display: flex; flex-direction: column; width: 100%; gap: 2px; }
+.admin-sidebar nav a { width: 100%; height: 32px; gap: 10px; padding: 0 10px; font-family: Inter, sans-serif; font-size: 11px; line-height: 14px; }
+.admin-sidebar nav a > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-sidebar nav ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; }
+.admin-sidebar nav ul.mt-1 { margin-top: 0; }
+.admin-sidebar nav li { width: 100%; height: 32px; }
+.admin-sidebar nav a.router-link-active { background: #fef2f2; color: #0f172a; box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }
+.admin-sidebar nav a.router-link-active i { color: #475569; }
 
 .admin-sidebar nav::-webkit-scrollbar { width: 4px; }
 .admin-sidebar nav::-webkit-scrollbar-track { background: transparent; }

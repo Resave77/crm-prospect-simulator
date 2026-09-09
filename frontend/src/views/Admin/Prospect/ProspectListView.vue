@@ -29,7 +29,8 @@ const statusFilter = ref('')
 const hoveredProspectId = ref('')
 const hoveredProspectCell = ref('')
 const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
-
+const prospectPageSize = ref(10)
+const prospectTotalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / prospectPageSize.value)))
 watch(() => route.query.search, (value) => {
   searchQuery.value = typeof value === 'string' ? value : ''
 }, { immediate: true })
@@ -98,6 +99,24 @@ function resetFilters() {
   salesFilter.value = ''
   categoryFilter.value = ''
   statusFilter.value = ''
+}
+
+function statusBadgeClass(status: ProspectStatus) {
+  switch (status) {
+    case 'LOST': return 'border-[#fecaca] bg-[#fff1f2] text-[#b91c1c]'
+    case 'WON':
+    case 'CONVERTED': return 'border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]'
+    case 'INTERESTED':
+    case 'QUALIFIED': return 'border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]'
+    case 'PROPOSAL_SENT':
+    case 'NEGOTIATION': return 'border-[#fed7aa] bg-[#fff7ed] text-[#c2410c]'
+    default: return 'border-[#bfdbfe] bg-[#dbeafe] text-[#1d4ed8]'
+  }
+}
+
+function segmentForProspect(prospect: Prospect) {
+  const categoryName = (prospect.industryGroup || prospect.placeCategory || '').trim().toLowerCase()
+  return masterCategories.value.find((category) => category.name.trim().toLowerCase() === categoryName)?.segmentName || ''
 }
 
 function viewProspect(id: string) {
@@ -243,11 +262,7 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
-    <nav class="prospect-erp-toolbar" aria-label="Prospect management sections">
-      <label class="prospect-search"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label>
-      <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
-    </nav>
-
+    <nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
     <div class="panel-stack">
       <div v-if="showFilters" class="filter-panel">
         <div class="filter-grid">
@@ -270,12 +285,7 @@ onMounted(async () => {
       </div>
 
       <section class="table-panel">
-        <div class="table-heading">
-          <div>
-            <strong>Prospect Overview</strong>
-            <span>{{ filtered.length }} records matching current filters</span>
-          </div>
-        </div>
+    <div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" class="flex size-[30px] cursor-pointer items-center justify-center rounded-full font-['Inter'] text-[12px] transition-all bg-[#fff1f2] font-bold text-[#991b1b]">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap font-['Inter'] text-[12px] text-[#64748b]">Page 1 of {{ prospectTotalPages }} / {{ filtered.length }} records</span></div><div class="flex items-center gap-[10px]"><div class="relative flex h-[34px] w-[80px] items-center rounded-[8px] border border-[#e2e8f0] px-[10px]"><span class="absolute left-[8px] top-[-7px] bg-white px-[4px] font-['Inter'] text-[10px] font-semibold leading-tight text-[#475569]">Page size</span><span class="font-['Inter'] text-[13px] text-[#334155]">10</span></div><div class="relative flex h-[34px] w-[65px] items-center rounded-[8px] border border-[#e2e8f0] px-[10px]"><span class="absolute left-[8px] top-[-7px] bg-white px-[4px] font-['Inter'] text-[10px] font-semibold leading-tight text-[#475569]">Go to</span><input type="text" class="w-full bg-transparent font-['Inter'] text-[13px] text-[#334155] focus:outline-none" value="1" /></div><button type="button" class="h-[34px] rounded-[8px] border border-[#e2e8f0] bg-white px-[12px] font-['Inter'] text-[13px] font-semibold text-[#475569] transition-colors hover:bg-[#f8fafc]">Set</button><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
 
         <div v-if="loading" class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
@@ -290,11 +300,12 @@ onMounted(async () => {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Place Name</th>
-                <th>Category</th>
-                <th>Sales Executive</th>
-                <th>Status</th>
-                <th>Created</th>
+                <th class="w-[56px] border-r border-[#e0e0e0] bg-[#f4f4f4] px-[12px] text-center"><button type="button" class="prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm" aria-label="Select all visible prospects"></button></th>
+                <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Place Name</span></th>
+                <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Category</span></th>
+                <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Sales Executive</span></th>
+                <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Status</span></th>
+                <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Created</span></th>
               </tr>
             </thead>
             <tbody>
@@ -306,31 +317,48 @@ onMounted(async () => {
                   tabindex="0"
                   @click="openActions(p)"
                   @keydown.enter="openActions(p)"
-                >
+              >
+                <td class="border-r border-[#e0e0e0] px-[12px] text-center"><button type="button" class="prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm" :aria-label="`Select prospect ${p.placeName}`" @click.stop></button></td>
                 <td class="prospect-name-cell" @mouseenter="hoveredProspectId = p.id" @mouseleave="hoveredProspectId = ''">
-                  <div class="cell-stack">
-                    <strong class="prospect-name">{{ p.placeName }}</strong>
-                    <span class="cell-sub">{{ p.formattedAddress }}</span>
+                  <div class="min-w-0">
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.placeName }}</p>
+                    <p class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ p.formattedAddress || 'Address unavailable' }}</p>
                   </div>
                   <div v-if="hoveredProspectId === p.id" class="prospect-preview"><strong>{{ p.placeName }}</strong><span>Category: {{ p.placeCategory }}</span><span>Address: {{ p.formattedAddress || 'Address unavailable' }}</span><span>Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</span></div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-category`" @mouseleave="hoveredProspectCell = ''"><span class="cell-text">{{ p.placeCategory }}</span><div v-if="hoveredProspectCell === `${p.id}-category`" class="cell-preview">Category: {{ p.placeCategory || 'Unavailable' }}</div></td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-sales`" @mouseleave="hoveredProspectCell = ''"><span class="cell-text">{{ p.assignedSalesExecutive || 'Unassigned' }}</span><div v-if="hoveredProspectCell === `${p.id}-sales`" class="cell-preview">Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</div></td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-category`" @mouseleave="hoveredProspectCell = ''">
+                  <div class="min-w-0">
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.placeCategory || 'Not provided' }}</p>
+                    <p v-if="segmentForProspect(p)" class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ segmentForProspect(p) }}</p>
+                  </div>
+                  <div v-if="hoveredProspectCell === `${p.id}-category`" class="cell-preview">Category: {{ p.placeCategory || 'Unavailable' }}</div>
+                </td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-sales`" @mouseleave="hoveredProspectCell = ''">
+                  <div class="min-w-0">
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.assignedSalesExecutive || 'Unassigned' }}</p>
+                  </div>
+                  <div v-if="hoveredProspectCell === `${p.id}-sales`" class="cell-preview">Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</div>
+                </td>
                 <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-status`" @mouseleave="hoveredProspectCell = ''">
                   <div class="status-cell">
                     <span v-if="p.status === 'WON'" class="won-badge">
                       <i class="pi pi-trophy" />
                       Ready to Convert
                     </span>
-                    <Tag
+                    <span
                       v-else
-                      :value="p.status.replaceAll('_', ' ')"
-                      :severity="statusSeverity(p.status)"
-                    />
+                      class="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full border px-[10px] py-[4px] font-['Inter'] text-[11px] font-semibold leading-[16px]"
+                      :class="statusBadgeClass(p.status)"
+                    >{{ p.status.replaceAll('_', ' ') }}</span>
                     <span v-if="p.deletionRequested" class="deletion-badge">Deletion Requested</span>
                   </div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-created`" @mouseleave="hoveredProspectCell = ''"><span class="cell-date">{{ formatDate(p.createdAt) }}</span><div v-if="hoveredProspectCell === `${p.id}-created`" class="cell-preview">Created: {{ formatDate(p.createdAt) }}</div></td>
+                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-created`" @mouseleave="hoveredProspectCell = ''">
+                  <div class="min-w-0">
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ formatDate(p.createdAt) }}</p>
+                  </div>
+                  <div v-if="hoveredProspectCell === `${p.id}-created`" class="cell-preview">Created: {{ formatDate(p.createdAt) }}</div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -1277,5 +1305,78 @@ onMounted(async () => {
 }
 @media(max-width:640px) {
   .prospect-page .table-panel { border-radius: 0; }
+}
+.prospect-page .pagination-bar {
+  min-height: 44px !important;
+  height: 44px !important;
+  box-sizing: border-box !important;
+  padding: 5px 16px !important;
+  gap: 12px !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+}
+.prospect-page .pagination-bar > div:first-child { gap: 12px !important; }
+.prospect-page .pagination-bar > div:first-child > div { gap: 4px !important; }
+.prospect-page .pagination-bar button { box-sizing: border-box !important; }
+.prospect-page .pagination-bar > div:first-child > div > button {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  line-height: 30px !important;
+}
+.prospect-page .pagination-bar .pagination-settings { gap: 10px !important; }
+.prospect-page .pagination-bar .pagination-settings > div { height: 34px !important; }
+.prospect-page .data-table th:nth-child(1), .prospect-page .data-table td:nth-child(1) { width: 56px !important; }
+.prospect-page .data-table th:nth-child(2), .prospect-page .data-table td:nth-child(2) { width: 38% !important; }
+.prospect-page .data-table th:nth-child(3), .prospect-page .data-table td:nth-child(3) { width: 17% !important; }
+.prospect-page .data-table th:nth-child(4), .prospect-page .data-table td:nth-child(4) { width: 17% !important; }
+.prospect-page .data-table th:nth-child(5), .prospect-page .data-table td:nth-child(5) { width: 12% !important; }
+.prospect-page .data-table th:nth-child(6), .prospect-page .data-table td:nth-child(6) { width: 10% !important; }
+.prospect-page { padding-left: 0 !important; }
+.prospect-page .prospect-erp-toolbar { padding-left: 0 !important; }
+.prospect-page .table-panel { margin-left: 0 !important; }
+.prospect-page .data-table thead th:not(:first-child) {
+  border-right: 1px solid #e0e0e0 !important;
+  background: #f4f4f4 !important;
+  padding: 12px !important;
+  text-align: left !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  color: #000 !important;
+}
+.prospect-page .status-cell > span:not(.won-badge):not(.deletion-badge) {
+  display: inline-flex !important;
+  width: fit-content !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  padding: 4px 10px !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 16px !important;
+}
+.prospect-page .prospect-checkbox {
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: transparent !important;
+}
+.prospect-page .prospect-trash-button,
+.prospect-page .prospect-trash-button span {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 16px !important;
+  letter-spacing: normal !important;
 }
 </style>

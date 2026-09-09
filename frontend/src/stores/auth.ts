@@ -24,6 +24,8 @@ export const useAuthStore = defineStore('auth', () => {
   const authenticated = computed(() => user.value !== null)
   const role = computed<UserRole | null>(() => user.value?.role ?? null)
   const permissionKeys = computed(() => user.value ? permissionKeysFor(user.value) : [])
+  // Alias used by the reusable component library merged from PR #1.
+  const permissions = permissionKeys
 
   function hasPermission(key: string) {
     return user.value ? userHasPermission(user.value, key) : false
@@ -107,6 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
     authenticated,
     role,
     permissionKeys,
+    permissions,
     hasPermission,
     bootstrap,
     login,

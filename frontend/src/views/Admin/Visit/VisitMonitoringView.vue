@@ -47,6 +47,9 @@ const visitResultItem = ref<VisitMonitoringItem | null>(null)
 const actionDialogVisible = ref(false)
 const actionTarget = ref<GroupedVisitRow | null>(null)
 const showFilters = ref(false)
+const selectedVisitIds = ref<Set<string>>(new Set())
+const showBulkDeleteModal = ref(false)
+const bulkDeleteBusy = ref(false)
 
 const filters = ref<VisitMonitoringFilters>({
   dateFrom: '',
@@ -68,12 +71,17 @@ const salesOptions = computed(() => {
 
 const selectedSales = ref('')
 const selectedRadius = ref('ALL')
+const visitPage = ref(1)
+const visitPageSize = ref(10)
+const visitGoToPage = ref(1)
 
 const totalVisits = computed(() => visits.value.length)
 const insideCount = computed(() => visits.value.filter((v) => v.radiusStatus === 'INSIDE').length)
 const outsideCount = computed(() => visits.value.filter((v) => v.radiusStatus === 'OUTSIDE').length)
 const openVisits = computed(() => visits.value.filter((v) => !v.checkOutAt).length)
 const totalProspects = computed(() => groupedVisits.value.length)
+const selectableVisitIds = computed(() => filteredGroupedVisits.value.map((row) => row.latestVisit.id))
+const allVisitsSelected = computed(() => selectableVisitIds.value.length > 0 && selectableVisitIds.value.every((id) => selectedVisitIds.value.has(id)))
 
 const customerSearch = ref('')
 watch(() => route.query.search, (value) => { customerSearch.value = typeof value === 'string' ? value : '' }, { immediate: true })
@@ -114,6 +122,31 @@ const filteredGroupedVisits = computed(() => {
   return result
 })
 
+const visitTotalPages = computed(() => Math.max(1, Math.ceil(filteredGroupedVisits.value.length / visitPageSize.value)))
+const paginatedVisits = computed(() => {
+  const start = (visitPage.value - 1) * visitPageSize.value
+  return filteredGroupedVisits.value.slice(start, start + visitPageSize.value)
+})
+
+watch([customerSearch, selectedSales, selectedRadius], () => {
+  visitPage.value = 1
+  visitGoToPage.value = 1
+})
+watch(visitTotalPages, (total) => {
+  if (visitPage.value > total) visitPage.value = total
+  visitGoToPage.value = visitPage.value
+})
+
+function goToVisitPage(page: number) {
+  const nextPage = Math.max(1, Math.min(page, visitTotalPages.value))
+  visitPage.value = nextPage
+  visitGoToPage.value = nextPage
+}
+
+function applyVisitPagination() {
+  goToVisitPage(Number(visitGoToPage.value) || 1)
+}
+
 function formatDuration(seconds: number | undefined): string {
   if (seconds == null) return '—'
   const h = Math.floor(seconds / 3600)
@@ -139,6 +172,14 @@ function formatDateShort(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function siteLocationParts(address: string) {
+  const parts = address.split(',').map((part) => part.trim()).filter(Boolean)
+  if (parts.length < 2) return { city: address || '—', province: '' }
+  const hasCountry = ['indonesia', 'indonésie'].includes((parts.at(-1) || '').toLowerCase())
+  const provinceIndex = hasCountry ? -2 : -1
+  return { city: parts.at(provinceIndex - 1) || parts[0], province: parts.at(provinceIndex) || '' }
+}
+
 function statusSeverity(status: string): string {
   switch (status) {
     case 'WON': case 'CONVERTED': return 'success'
@@ -151,6 +192,19 @@ function statusSeverity(status: string): string {
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
+}
+
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case 'LOST': return 'status-badge-lost'
+    case 'WON':
+    case 'CONVERTED':
+    case 'INTERESTED':
+    case 'QUALIFIED': return 'status-badge-success'
+    case 'PROPOSAL_SENT':
+    case 'NEGOTIATION': return 'status-badge-warning'
+    default: return 'status-badge-info'
+  }
 }
 
 function applyFilters() {
@@ -238,6 +292,32 @@ function openVisitResult(item: VisitMonitoringItem) {
 
 function goToProspect(item: GroupedVisitRow | VisitMonitoringItem) {
   router.push({ name: 'AdminProspectReview', params: { id: item.prospectId } })
+}
+
+function toggleVisitSelection(id: string) {
+  const next = new Set(selectedVisitIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedVisitIds.value = next
+}
+
+function toggleAllVisitSelection() {
+  selectedVisitIds.value = allVisitsSelected.value ? new Set() : new Set(selectableVisitIds.value)
+}
+
+async function executeBulkDelete() {
+  if (!selectedVisitIds.value.size) return
+  bulkDeleteBusy.value = true
+  try {
+    await Promise.all([...selectedVisitIds.value].map((id) => apiDeleteVisit(id)))
+    selectedVisitIds.value = new Set()
+    showBulkDeleteModal.value = false
+    await fetchData()
+  } catch (e: any) {
+    error.value = e?.response?.data?.error?.message || 'Failed to delete selected visits.'
+  } finally {
+    bulkDeleteBusy.value = false
+  }
 }
 
 function openActions(item: GroupedVisitRow) {
@@ -359,9 +439,9 @@ onMounted(() => {
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
     <nav class="visit-erp-toolbar" aria-label="Visit monitoring controls">
-      <span class="visit-section-title">Visit Monitoring</span>
       <label class="visit-search"><i class="pi pi-search" /><input v-model="customerSearch" placeholder="Search customer or industry group" /></label>
       <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
+      <button type="button" class="visit-trash-button" :disabled="!selectedVisitIds.size" :class="{ 'visit-trash-disabled': !selectedVisitIds.size }" @click="showBulkDeleteModal = true"><i class="pi pi-trash" /><span>Trash{{ selectedVisitIds.size ? ` (${selectedVisitIds.size})` : '' }}</span></button>
     </nav>
 
     <div v-if="showFilters" class="filter-panel">
@@ -389,6 +469,7 @@ onMounted(() => {
     </div>
 
     <section class="table-panel">
+      <div class="visit-pagination-bar"><div class="visit-pagination-info"><button type="button" class="visit-page-number" :disabled="visitPage <= 1" @click="goToVisitPage(visitPage - 1)">{{ visitPage }}</button><span>Page {{ visitPage }} of {{ visitTotalPages }} / {{ filteredGroupedVisits.length }} records</span></div><div class="visit-pagination-settings"><label><span>Page size</span><select v-model.number="visitPageSize"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label><label><span>Go to</span><input v-model.number="visitGoToPage" type="number" min="1" :max="visitTotalPages" /></label><button type="button" @click="applyVisitPagination">Set</button><button type="button" title="Refresh visit data" @click="fetchData"><i class="pi pi-refresh" /></button></div></div>
       <div class="table-heading">
         <div>
           <strong>Prospect Visit Overview</strong>
@@ -413,6 +494,7 @@ onMounted(() => {
         <table class="data-table">
           <thead>
             <tr>
+              <th class="th-check"><button type="button" class="visit-checkbox" :class="{ 'visit-checkbox-selected': allVisitsSelected }" aria-label="Select all visits" @click.stop="toggleAllVisitSelection"><i v-if="allVisitsSelected" class="pi pi-check" /></button></th>
               <th>Prospect</th>
               <th>Category</th>
               <th>Site Location</th>
@@ -423,7 +505,8 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in filteredGroupedVisits" :key="row.prospectId" class="visit-row" @click="openActions(row)">
+            <tr v-for="row in paginatedVisits" :key="row.prospectId" class="visit-row" @click="openActions(row)">
+              <td class="td-check"><button type="button" class="visit-checkbox" :class="{ 'visit-checkbox-selected': selectedVisitIds.has(row.latestVisit.id) }" :aria-label="`Select visit ${row.customerName}`" @click.stop="toggleVisitSelection(row.latestVisit.id)"><i v-if="selectedVisitIds.has(row.latestVisit.id)" class="pi pi-check" /></button></td>
               <td>
                 <div class="prospect-cell">
                   <strong class="prospect-name">{{ row.customerName }}</strong>
@@ -440,8 +523,8 @@ onMounted(() => {
               </td>
               <td>
                 <div class="cell-stack">
-                  <span class="cell-primary">{{ row.formattedAddress ? row.formattedAddress.split(',')[0] : '—' }}</span>
-                  <span class="cell-sub">{{ row.formattedAddress ? row.formattedAddress.split(',').slice(1).join(',').trim() : 'Location unavailable' }}</span>
+                  <span class="cell-primary">{{ siteLocationParts(row.formattedAddress).city }}</span>
+                  <span class="cell-sub">{{ siteLocationParts(row.formattedAddress).province }}</span>
                 </div>
               </td>
               <td>
@@ -454,7 +537,7 @@ onMounted(() => {
                 </div>
               </td>
               <td>
-                <Tag :value="statusLabel(row.prospectStatus)" :severity="statusSeverity(row.prospectStatus)" size="small" />
+                <span class="status-badge" :class="statusBadgeClass(row.prospectStatus)">{{ statusLabel(row.prospectStatus) }}</span>
               </td>
               <td>
                 <span class="visit-count-badge">{{ row.visitCount }}</span>
@@ -481,6 +564,11 @@ onMounted(() => {
           <i class="pi pi-chevron-right" />
         </button>
       </div>
+    </Dialog>
+
+    <Dialog v-model:visible="showBulkDeleteModal" modal header="Delete Selected Visits" class="bulk-delete-dialog" :style="{ width: 'min(100%, 420px)' }" :closable="!bulkDeleteBusy">
+      <div class="bulk-delete-warning"><i class="pi pi-exclamation-triangle" /><div><strong>Delete selected visits?</strong><p>This action will permanently remove {{ selectedVisitIds.size }} selected visit{{ selectedVisitIds.size === 1 ? '' : 's' }} and cannot be undone.</p></div></div>
+      <template #footer><Button label="Cancel" severity="secondary" outlined :disabled="bulkDeleteBusy" @click="showBulkDeleteModal = false" /><Button label="Delete" icon="pi pi-trash" severity="danger" :loading="bulkDeleteBusy" @click="executeBulkDelete" /></template>
     </Dialog>
 
     <Dialog v-model:visible="showDeleteModal" modal header="Delete Visit" :style="{ width: 'min(100%, 420px)' }" :closable="!deleteBusy">
@@ -1187,7 +1275,14 @@ onMounted(() => {
 .visit-section-title { display:inline-flex; height:34px; align-items:center; padding:0 14px; border-radius:10px; background:#dc2626; color:#fff; font-size:12px; font-weight:500; white-space:nowrap; }
 .visit-search { display:flex; flex:0 0 270px; height:40px; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; color:#94a3b8; }.visit-search i{font-size:12px}.visit-search input{width:100%;height:32px;border:0;outline:0;background:transparent;color:#0f172a;font-size:13px}.visit-search input::placeholder{color:#94a3b8}
 .visit-erp-toolbar>:deep(.p-button){height:40px;min-height:40px;padding:0 14px;border-radius:10px;font-size:12px;font-weight:600}
+.visit-trash-button{display:flex;min-width:82px;height:36px;margin-left:auto;align-items:center;justify-content:center;gap:7px;padding:0 12px;border:1px solid #fecaca;border-radius:10px;background:#fff5f5;color:#b91c1b;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;font-weight:600;line-height:16px;cursor:pointer}.visit-trash-button:hover{background:#fff1f2}.visit-trash-button i{font-size:15px}
 .visit-page .panel-stack{gap:0;padding:0}.visit-page .filter-panel{display:flex;align-items:flex-end;gap:14px;padding:14px 20px 16px;border:0;border-bottom:1px solid #e2e8f0;border-radius:0;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.04)}.visit-page .filter-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,210px)) auto;flex:1;gap:12px}.visit-page .filter-field{gap:5px}.visit-page .filter-field label{color:#64748b;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.visit-page .filter-field :deep(.p-select),.visit-page .date-input{height:40px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px}.visit-page .filter-field :deep(.p-select-label){padding:0 12px}.visit-page .filter-action :deep(.p-button){height:40px;min-height:40px;border-radius:10px;font-size:12px}
 .visit-page .table-panel{border:0;border-radius:0;box-shadow:none}.visit-page .data-table{min-width:0;width:100%;table-layout:fixed;font-size:11px}.visit-page .data-table thead th{box-sizing:border-box;height:42px;padding:0 10px;border-right:1px solid #e2e2e2;background:#f4f4f4;color:#000;font-size:10px;font-weight:600;line-height:12px;letter-spacing:.07em}.visit-page .data-table tbody td{box-sizing:border-box;height:67px;padding:8px 10px;border-right:1px solid #e2e2e2;border-bottom:1px solid #e0e0e0;font-size:11px;line-height:13px}.visit-page .data-table tbody tr:hover{background:#fff}.visit-page .data-table :deep(.p-tag){border-radius:999px;padding:4px 10px;font-size:10px;font-weight:500}.visit-page .pagination-bar{min-height:42px;padding:0 20px;border-top:0;border-bottom:1px solid #e2e8f0;background:#fff}
 @media(max-width:900px){.visit-erp-toolbar{height:auto;min-height:58px;flex-wrap:wrap;overflow:visible}.visit-search{flex-basis:220px}.visit-erp-toolbar>:deep(.p-button){width:100%}.visit-page .filter-panel{display:grid;grid-template-columns:1fr;padding:12px}.visit-page .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.visit-erp-toolbar{padding:10px 12px}.visit-section-title{width:100%;justify-content:center}.visit-page .data-table{min-width:900px}.visit-page .table-scroll{overflow-x:auto}.visit-page .filter-grid{grid-template-columns:1fr}}
+.visit-page .visit-checkbox{display:flex;width:18px;height:18px;margin:0 auto;align-items:center;justify-content:center;padding:0;border:1px solid #cbd5e1;border-radius:4px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.08);cursor:pointer}
+.visit-page .status-badge{display:inline-flex;width:fit-content;align-items:center;justify-content:center;padding:4px 10px;border:1px solid;border-radius:999px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap}.visit-page .status-badge-info{border-color:#bfdbfe;background:#dbeafe;color:#1d4ed8}.visit-page .status-badge-success{border-color:#bbf7d0;background:#dcfce7;color:#166534}.visit-page .status-badge-warning{border-color:#fed7aa;background:#fff7ed;color:#c2410c}.visit-page .status-badge-lost{border-color:#fecaca;background:#fff1f2;color:#b91c1c}
+.visit-page .visit-checkbox-selected{border-color:#ef4444;background:#ef4444;color:#fff}.visit-trash-button:disabled{cursor:not-allowed;opacity:.55}.visit-trash-disabled{pointer-events:none}
+.visit-page .data-table th:first-child,.visit-page .data-table td:first-child{width:54px !important;min-width:54px !important;padding:0 !important;text-align:center !important}
+.visit-pagination-bar{display:flex;min-height:44px;align-items:center;justify-content:space-between;padding:5px 16px;border-bottom:1px solid #e2e8f0;background:#fff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#64748b}.visit-pagination-info{display:flex;align-items:center;gap:12px}.visit-page-number{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:999px;background:#fff1f2;color:#991b1b;font-weight:600}.visit-pagination-settings{display:flex;align-items:center;gap:10px}.visit-pagination-settings label{position:relative;display:flex;width:80px;height:34px;align-items:center;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;color:#334155}.visit-pagination-settings label span{position:absolute;top:-7px;left:8px;padding:0 4px;background:#fff;font-size:10px;font-weight:600;color:#475569}.visit-pagination-settings label strong{font-weight:400}.visit-pagination-settings button{height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569}.visit-pagination-settings button:last-child{width:30px;padding:0;border:0;border-radius:999px}
+.bulk-delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.bulk-delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.bulk-delete-warning strong{display:block;font-size:13px;font-weight:700;color:#0f172a}.bulk-delete-warning p{margin:4px 0 0;font-size:12px;line-height:18px;color:#64748b}.bulk-delete-dialog :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px;padding-top:4px}.bulk-delete-dialog :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
 </style>

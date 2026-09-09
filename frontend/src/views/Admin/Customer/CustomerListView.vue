@@ -17,6 +17,8 @@ const store = useCustomerListStore()
 const router = useRouter()
 const route = useRoute()
 const error = ref('')
+const pageSizeDraft = ref(10)
+const goToPageDraft = ref(1)
 const activeTab = ref('site')
 const showFilters = ref(false)
 
@@ -46,7 +48,9 @@ const hoveredCustomerId = ref('')
 const hoveredCell = ref('')
 const selectedCustomer = computed(() => store.items.find((c) => c.id === selectedCustomerId.value))
 const companyDeleteDialogVisible = ref(false)
+const bulkCompanyDeleteDialogVisible = ref(false)
 const companyActionVisible = ref(false)
+const selectedCompanyIds = ref<Set<string>>(new Set())
 const selectedCompany = ref<typeof companies.value[number] | null>(null)
 const companyDeleteTarget = ref<{ id: string; name: string; sites: number } | null>(null)
 const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
@@ -127,9 +131,10 @@ const companyRegionOptions = computed(() => {
 
 const companyTierOptions = [
   { label: 'All Tiers', value: '' },
-  { label: 'Tier 1', value: 'Tier 1' },
-  { label: 'Tier 2', value: 'Tier 2' },
-  { label: 'Tier 3', value: 'Tier 3' }
+  { label: 'Key Account', value: 'Key Account' },
+  { label: 'Regular Account', value: 'Regular Account' },
+  { label: 'Strategic Account', value: 'Strategic Account' },
+  { label: 'Small Account', value: 'Small Account' }
 ]
 
 const companyStatusOptions = [
@@ -172,7 +177,7 @@ const companies = computed(() => {
         id: code,
         companyCode: code,
         name,
-        tier: 'Tier 1',
+        tier: 'Key Account',
         registeredLocation: location,
         npwp: '00.000.000.0-000.000',
         kam,
@@ -239,6 +244,7 @@ function goToCompany(id: string) {
 }
 
 const companyCount = computed(() => new Set(store.allCustomers.map((c) => c.parentCode || 'UNKNOWN')).size)
+const allCompaniesSelected = computed(() => companies.value.length > 0 && companies.value.every((company) => selectedCompanyIds.value.has(company.id)))
 const assignedCount = computed(() => store.allCustomers.filter((c) => c.salesExecutiveName).length)
 const erpPendingCount = computed(() => companies.value.filter((c) => c.status !== 'Active').length)
 
@@ -277,6 +283,46 @@ function segmentSeverity(seg: string) {
     case 'Modern Trade': return 'info'
     case 'Food Service': return 'success'
     default: return 'secondary'
+  }
+}
+
+function toggleCompanySelection(id: string) {
+  const next = new Set(selectedCompanyIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedCompanyIds.value = next
+}
+
+function toggleAllCompanySelection() {
+  selectedCompanyIds.value = allCompaniesSelected.value ? new Set() : new Set(companies.value.map((company) => company.id))
+}
+
+async function executeBulkDeleteCompany() {
+  const ids = [...selectedCompanyIds.value]
+  if (!ids.length) return
+  deleting.value = true
+  try {
+    const sites = store.allCustomers.filter((customer) => ids.includes(customer.parentCode || ''))
+    await Promise.all(sites.map((site) => deleteCustomer(site.id)))
+    const removed = new Set(ids)
+    store.allCustomers = store.allCustomers.filter((customer) => !removed.has(customer.parentCode || ''))
+    store.items = store.items.filter((customer) => !removed.has(customer.parentCode || ''))
+    store.total = store.allCustomers.length
+    selectedCompanyIds.value = new Set()
+    bulkCompanyDeleteDialogVisible.value = false
+  } catch (e) {
+    error.value = store.errorMessage(e)
+  } finally {
+    deleting.value = false
+  }
+}
+
+function tierBadgeClass(tier: string) {
+  switch (tier) {
+    case 'Regular Account': return 'tier-regular'
+    case 'Strategic Account': return 'tier-strategic'
+    case 'Small Account': return 'tier-small'
+    default: return 'tier-key'
   }
 }
 
@@ -327,6 +373,16 @@ async function executeDelete() {
   } finally {
     deleting.value = false
   }
+}
+
+function segmentLabel(segment: string) {
+  const value = String(segment || '').toUpperCase()
+  return value.includes('B2C') || value.includes('RETAIL') ? 'B2C' : 'B2B'
+}
+
+function applyPaginationSettings() {
+  store.limit = pageSizeDraft.value
+  goToPage(Math.max(1, Math.min(goToPageDraft.value, store.pages)))
 }
 
 async function moveSelectedToTrash() {
@@ -397,13 +453,14 @@ async function executeDeleteCompany() {
       </div>
     </header>
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
-    <nav class="tabs-bar" aria-label="Customer management sections">
-      <button v-for="tab in tabs" :key="tab.key" type="button" :class="['tab-item', { active: activeTab === tab.key }]" @click="selectTab(tab.key)">
-        <i :class="tab.icon" /><span>{{ tab.label }}</span><strong v-if="tab.key === 'site'">{{ store.allCustomers.length }}</strong><strong v-else-if="tab.key === 'company'">{{ companyCount }}</strong>
-      </button>
-      <label v-if="activeTab === 'site'" class="site-search"><i class="pi pi-search" /><input v-model="store.params.keyword" placeholder="Search customer site code, name, company" @keyup.enter="store.fetchCustomers()" /></label>
-      <label v-if="activeTab === 'company'" class="site-search company-search"><i class="pi pi-search" /><input v-model="companyKeyword" placeholder="Search company name, code, location" /></label>
-      <div class="erp-customer-actions"><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><Button label="Trash" icon="pi pi-trash" severity="secondary" outlined size="small" @click="openTrash" /><Button v-if="activeTab !== 'master'" label="Create Customer" icon="pi pi-plus" size="small" @click="router.push('/admin/customers/add')" /></div>
+    <nav class="flex min-w-0 flex-1 items-center gap-[10px] overflow-x-auto border-b border-[#e2e8f0] px-[24px] py-[10px] pb-[11px]" aria-label="Customer management sections">
+      <div class="inline-flex shrink-0 max-w-full flex-nowrap gap-[4px] rounded-[16px] bg-[#f1f5f9] p-[3px]">
+        <button v-for="tab in tabs" :key="tab.key" type="button" class="flex h-[36px] items-center shrink-0 rounded-[12px] px-[14px] font-['Inter'] text-[13px] font-semibold transition-all" :class="activeTab === tab.key ? 'bg-[#dc2626] text-white shadow-[0px_4px_16px_0px_rgba(220,38,38,0.18)]' : 'text-[#64748b] hover:text-[#0f172a]'" @click="selectTab(tab.key)">{{ tab.label }}</button>
+      </div>
+      <label v-if="activeTab === 'site'" class="relative w-[260px] shrink-0 lg:w-[300px]"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none absolute left-[12px] top-1/2 size-[16px] -translate-y-1/2 text-[#94a3b8]"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input v-model="store.params.keyword" class="h-[36px] w-full rounded-[10px] border border-[#e2e8f0] bg-white pl-[36px] pr-[12px] font-['Inter'] text-[13px] text-[#0f172a] placeholder:text-[#94a3b8] focus:border-[#dc2626] focus:outline-none focus:ring-1 focus:ring-[#dc2626]" placeholder="Search customer site code, name, company, city..." @keyup.enter="store.fetchCustomers()" /></label>
+      <label v-if="activeTab === 'company'" class="relative w-[260px] shrink-0 lg:w-[300px]"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none absolute left-[12px] top-1/2 size-[16px] -translate-y-1/2 text-[#94a3b8]"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input type="text" v-model="companyKeyword" placeholder="Search company code, company name, KAM..." class="h-[36px] w-full rounded-[10px] border border-[#e2e8f0] bg-white pl-[36px] pr-[12px] font-['Inter'] text-[13px] text-[#0f172a] placeholder:text-[#94a3b8] focus:border-[#dc2626] focus:outline-none focus:ring-1 focus:ring-[#dc2626]" /></label>
+      <button type="button" class="flex h-[36px] shrink-0 items-center gap-[8px] rounded-[10px] border border-[#e2e8f0] bg-white px-[12px] font-['Inter'] text-[12px] font-semibold text-[#475569] transition-all hover:border-[#cbd5e1] hover:bg-[#f8fafc]" @click="showFilters = !showFilters"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[15px]"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg><span>More Filters</span></button>
+      <div class="erp-customer-actions flex shrink-0 items-center gap-[8px]"><button type="button" class="flex h-[36px] shrink-0 items-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" :disabled="activeTab === 'company' && !selectedCompanyIds.size" @click="activeTab === 'company' ? (bulkCompanyDeleteDialogVisible = true) : openTrash()"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button><button v-if="activeTab !== 'master'" type="button" class="flex h-[36px] shrink-0 items-center gap-[8px] rounded-[10px] bg-[#dc2626] px-[12px] font-['Inter'] text-[12px] font-semibold text-white transition-all hover:bg-[#b91c1c]" @click="router.push('/admin/customers/add')"><i class="pi pi-plus text-[15px]" /><span>Create Customer Site</span></button></div>
     </nav>
 
     <!-- ======================== CUSTOMER SITE TAB ======================== -->
@@ -462,22 +519,23 @@ async function executeDeleteCompany() {
               <thead>
                 <tr>
                   <th class="th-check">
-                    <input type="checkbox" :checked="store.isAllSelected()" @change="store.toggleSelectAll()" />
+                    <button type="button" class="customer-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm transition-colors" :class="{ 'customer-checkbox-selected': store.isAllSelected() }" aria-label="Select all customer sites" @click.stop="store.toggleSelectAll()"><i v-if="store.isAllSelected()" class="pi pi-check text-[11px]" /></button>
                   </th>
-                  <th>Site Code + Company Tier</th>
+                  <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Site Code + Company Tier</span></th>
                   <th>Customer Site + Company</th>
                   <th>Region</th>
                   <th>Site Location</th>
-                  <th>Sales Executive</th>
+                  <th>Segment</th>
+                  <th>Sales Assignment</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="c in store.items" :key="c.id" :class="['clickable-row', { 'row-selected': selectedCustomerId === c.id }]" @click="selectedCustomerId = c.id; customerActionVisible = true">
                   <td class="td-check">
-                    <input type="checkbox" :checked="store.selectedIds.has(c.id)" @change="store.toggleSelect(c.id)" />
+                    <button type="button" class="customer-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm transition-colors" :class="{ 'customer-checkbox-selected': store.selectedIds.has(c.id) }" :aria-label="`Select customer site ${c.name}`" @click.stop="store.toggleSelect(c.id)"><i v-if="store.selectedIds.has(c.id)" class="pi pi-check text-[11px]" /></button>
                   </td>
                   <td>
-                    <div class="cell-stack"><code class="code-tag code-blue">{{ c.customerCode }}</code><Tag :value="c.segment || '—'" :severity="segmentSeverity(c.segment)" /></div>
+                    <div class="cell-stack"><code class="code-tag code-blue">{{ c.customerCode }}</code><Tag :value="segmentLabel(c.segment)" :severity="segmentSeverity(c.segment)" /></div>
                   </td>
                   <td class="customer-name-cell" @mouseenter="hoveredCustomerId = c.id" @mouseleave="hoveredCustomerId = ''">
                     <div class="cell-stack">
@@ -488,9 +546,9 @@ async function executeDeleteCompany() {
                   </td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-region`" @mouseleave="hoveredCell = ''"><span class="cell-text">{{ c.region || '—' }}</span><div v-if="hoveredCell === `${c.id}-region`" class="cell-preview">Region: {{ c.region || 'Unavailable' }}</div></td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-location`" @mouseleave="hoveredCell = ''"><div class="cell-stack"><span class="cell-primary">{{ c.address?.district || c.address?.subDistrict || '—' }}</span><span class="cell-sub">{{ c.address?.province || '' }}</span></div><div v-if="hoveredCell === `${c.id}-location`" class="cell-preview">{{ c.address?.district || c.address?.subDistrict || 'Location unavailable' }}<br>{{ c.address?.province || '' }}</div></td>
-                  <td><Tag :value="c.segment || '—'" :severity="segmentSeverity(c.segment)" /></td>
+                  <td><Tag :value="segmentLabel(c.segment)" :severity="segmentSeverity(c.segment)" /></td>
                   <td class="preview-cell" @mouseenter="hoveredCell = `${c.id}-sales`" @mouseleave="hoveredCell = ''">
-                    <span class="cell-text">{{ c.salesExecutiveName || 'Unassigned' }}</span><div v-if="hoveredCell === `${c.id}-sales`" class="cell-preview">Sales Executive: {{ c.salesExecutiveName || 'Unassigned' }}</div>
+                    <div class="min-w-0"><p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ c.salesExecutiveName || 'Unassigned' }}</p><p class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">KAM: {{ c.assignedSales?.fullName || c.salesExecutiveName || 'Unassigned' }}</p></div><div v-if="hoveredCell === `${c.id}-sales`" class="cell-preview">Sales Executive: {{ c.salesExecutiveName || 'Unassigned' }}</div>
                   </td>
                 </tr>
               </tbody>
@@ -499,10 +557,8 @@ async function executeDeleteCompany() {
 
           <!-- PAGINATION -->
           <div class="pagination-bar">
-            <span class="pagination-info">
-              Page {{ store.page }} of {{ store.pages }} / {{ store.total }} records
-            </span>
-            <div class="pagination-controls">
+            <div class="flex items-center gap-[12px]">
+              <div class="pagination-controls flex items-center gap-[4px]">
               <Button icon="pi pi-angle-left" text rounded size="small" :disabled="store.page <= 1" @click="goToPage(store.page - 1)" />
               <template v-for="(p, idx) in getPageNumbers()" :key="idx">
                 <span v-if="p === '...'" class="pagination-dots">…</span>
@@ -515,6 +571,16 @@ async function executeDeleteCompany() {
                 />
               </template>
               <Button icon="pi pi-angle-right" text rounded size="small" :disabled="store.page >= store.pages" @click="goToPage(store.page + 1)" />
+              </div>
+              <span class="pagination-info ml-[8px]">
+                Page {{ store.page }} of {{ store.pages }} / {{ store.total }} records
+              </span>
+            </div>
+            <div class="pagination-settings">
+              <label class="page-size-control"><span>Page size</span><select v-model.number="pageSizeDraft" aria-label="Page size"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label>
+              <label><span>Go to</span><input v-model.number="goToPageDraft" type="number" min="1" :max="store.pages" aria-label="Go to page" /></label>
+              <button type="button" @click="applyPaginationSettings">Set</button>
+              <button type="button" class="pagination-refresh" title="Refresh site data" @click="load"><i class="pi pi-refresh" /></button>
             </div>
           </div>
         </div>
@@ -523,7 +589,7 @@ async function executeDeleteCompany() {
 
     <!-- DELETE CONFIRMATION DIALOG -->
     <Dialog v-model:visible="deleteDialogVisible" header="Delete Customer" modal :style="{ width: '400px' }">
-      <p>Are you sure you want to delete <strong>{{ deleteTargetName }}</strong>? This action cannot be undone.</p>
+      <div class="delete-warning"><i class="pi pi-exclamation-triangle" /><div><strong>Move customer site to Trash?</strong><p>{{ deleteTargetName }} will be moved to Trash and can be restored later.</p></div></div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
@@ -535,8 +601,13 @@ async function executeDeleteCompany() {
     </Dialog>
 
     <!-- DELETE COMPANY CONFIRMATION DIALOG -->
-    <Dialog v-model:visible="companyDeleteDialogVisible" header="Delete Company" modal :style="{ width: '420px' }">
-      <p>Are you sure you want to delete <strong>{{ companyDeleteTarget?.name }}</strong> and all <strong>{{ companyDeleteTarget?.sites }}</strong> of its site(s)? This action cannot be undone.</p>
+  <Dialog v-model:visible="bulkCompanyDeleteDialogVisible" header="Delete Selected Companies" modal :style="{ width: '420px' }" :closable="!deleting">
+    <div class="delete-warning"><i class="pi pi-exclamation-triangle" /><div><strong>Move selected companies to Trash?</strong><p>{{ selectedCompanyIds.size }} compan{{ selectedCompanyIds.size === 1 ? 'y' : 'ies' }} and all associated customer sites will be moved to Trash.</p></div></div>
+    <template #footer><Button label="Cancel" severity="secondary" text :disabled="deleting" @click="bulkCompanyDeleteDialogVisible = false" /><Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeBulkDeleteCompany" /></template>
+  </Dialog>
+
+  <Dialog v-model:visible="companyDeleteDialogVisible" header="Delete Company" modal :style="{ width: '420px' }">
+      <div class="delete-warning"><i class="pi pi-exclamation-triangle" /><div><strong>Move company to Trash?</strong><p>{{ companyDeleteTarget?.name }} and {{ companyDeleteTarget?.sites }} associated site(s) will be moved to Trash and can be restored later.</p></div></div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="companyDeleteDialogVisible = false" :disabled="deleting" />
         <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDeleteCompany" />
@@ -581,6 +652,22 @@ async function executeDeleteCompany() {
         </div>
       </div>
 
+      <!-- PAGINATION -->
+      <div v-if="activeTab === 'company'" class="pagination-bar company-pagination">
+        <div class="pagination-controls">
+          <Button icon="pi pi-angle-left" text rounded size="small" disabled />
+          <Button label="1" text rounded size="small" class="pagination-num is-active" />
+          <Button icon="pi pi-angle-right" text rounded size="small" disabled />
+        </div>
+        <span class="pagination-info">Page 1 of 1 / {{ companies.length }} records</span>
+        <div class="pagination-settings">
+          <label><span>Page size</span><select aria-label="Page size"><option>10</option><option>20</option><option>50</option></select></label>
+          <label><span>Go to</span><input type="number" min="1" max="1" aria-label="Go to page" /></label>
+          <button type="button">Set</button>
+          <button type="button" class="pagination-refresh" title="Refresh site data" @click="load"><i class="pi pi-refresh" /></button>
+        </div>
+      </div>
+
       <!-- TABLE -->
       <div class="table-panel">
         <div v-if="store.loading" class="state-box">
@@ -598,56 +685,41 @@ async function executeDeleteCompany() {
           <table class="data-table company-table">
             <thead>
               <tr>
-                <th class="th-check"><input type="checkbox" /></th><th>Company Code</th><th>Company Name</th><th>Total Site</th><th>Company Tier</th><th>3M Avg Invoice</th><th>KAM</th>
+                <th class="th-check"><button type="button" class="customer-checkbox mx-auto" :class="{ 'customer-checkbox-selected': allCompaniesSelected }" aria-label="Select all companies" @click.stop="toggleAllCompanySelection"><i v-if="allCompaniesSelected" class="pi pi-check" /></button></th><th>Company Code</th><th>Company Name</th><th>Total Site</th><th>Company Tier</th><th>3M Avg Invoice</th><th>KAM</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="company in companies" :key="company.id" class="clickable-row" @click="selectedCompany = company; companyActionVisible = true">
-                <td class="td-check"><input type="checkbox" /></td><td>
-                  <code class="code-tag">{{ company.companyCode }}</code>
+                <td class="td-check"><button type="button" class="customer-checkbox mx-auto" :class="{ 'customer-checkbox-selected': selectedCompanyIds.has(company.id) }" :aria-label="`Select company ${company.name}`" @click.stop="toggleCompanySelection(company.id)"><i v-if="selectedCompanyIds.has(company.id)" class="pi pi-check" /></button></td><td class="border-r border-[#e0e0e0] p-[12px]">
+                  <div class="min-w-0"><p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ company.companyCode }}</p></div>
                 </td>
                 <td>
                   <div class="cell-stack company-name-stack">
-                    <button class="link-btn" @click="goToCompany(company.id)">{{ company.name }}</button>
-                    <span class="cell-sub">{{ company.registeredLocation }}</span>
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ company.name }}</p>
+                    <p class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ company.registeredLocation }}</p>
                   </div>
                 </td>
                 <td>
                   <div class="cell-stack">
-                    <span class="cell-primary">{{ company.sites }} Customer Site{{ company.sites === 1 ? '' : 's' }}</span>
+                    <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ company.sites }} Customer Site{{ company.sites === 1 ? '' : 's' }}</p>
+                    <p class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ company.registeredLocation }}</p>
                   </div>
                 </td>
-                <td>
-                  <Tag :value="company.tier" severity="info" class="company-tier-tag" />
+                <td class="border-r border-[#e0e0e0] p-[12px]">
+                  <Tag :value="company.tier" severity="secondary" :class="['company-tier-tag', tierBadgeClass(company.tier)]" />
                 </td>
-                <td>
-                  <span class="cell-text">Rp 0</span>
+                <td class="border-r border-[#e0e0e0] p-[12px]">
+                  <div class="min-w-0"><p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">Rp&nbsp;0</p></div>
                 </td>
-                <td>
-                  <span class="cell-text">{{ company.kam }}</span>
-                </td>
-                <td>
-                  <span class="cell-text">{{ company.kam }}</span>
-                </td>
-                <td>
-                  <div class="site-status-cell">
-                    <span class="cell-badge">{{ company.badge }}</span>
-                    <Tag :value="company.status" :severity="company.status === 'Active' ? 'success' : 'warn'" size="small" />
-                  </div>
-                </td>
-                <td class="td-action">
-                  <div class="row-actions">
-                    <Button icon="pi pi-eye" text rounded size="small" class="act-view" title="View" @click="goToCompany(company.id)" />
-                    <Button icon="pi pi-pencil" text rounded size="small" class="act-edit" title="Edit" @click="router.push(`/admin/companies/${company.id}/edit`)" />
-                    <Button icon="pi pi-trash" text rounded size="small" class="act-delete" title="Delete" @click="confirmDeleteCompany(company)" />
-                  </div>
+                <td class="border-r border-[#e0e0e0] p-[12px]">
+                  <div class="min-w-0"><p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ company.kam }}</p></div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-    </div>
+      </div>
 
     <!-- ======================== MASTER DATA TAB ======================== -->
     <MasterDataPanel v-if="activeTab === 'master'" />
@@ -746,12 +818,530 @@ async function executeDeleteCompany() {
 .data-table .code-tag { font-family:Inter,sans-serif; font-size:10px; font-weight:600; }
 .data-table :deep(.p-tag) { border-radius:999px; padding:3px 9px; font-size:10px; font-weight:500; }
 .data-table input[type="checkbox"] { width:16px; height:16px; accent-color:#e63946; }
+.customer-site-table .customer-checkbox {
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: transparent !important;
+}
+.customer-site-table .customer-checkbox.customer-checkbox-selected {
+  border-color: #ef4444 !important;
+  background: #ef4444 !important;
+  color: #fff !important;
+}
+.company-table .customer-checkbox{display:flex;width:18px!important;height:18px!important;margin:0 auto;align-items:center;justify-content:center;padding:0;border:1px solid #cbd5e1!important;border-radius:4px;background:#fff!important;color:transparent}.company-table .customer-checkbox-selected{border-color:#ef4444!important;background:#ef4444!important;color:#fff!important}
 .customer-site-table th:nth-child(1),.customer-site-table td:nth-child(1){width:4%}.customer-site-table th:nth-child(2),.customer-site-table td:nth-child(2){width:18%}.customer-site-table th:nth-child(3),.customer-site-table td:nth-child(3){width:31%}.customer-site-table th:nth-child(4),.customer-site-table td:nth-child(4){width:18%}.customer-site-table th:nth-child(5),.customer-site-table td:nth-child(5){width:14%}.customer-site-table th:nth-child(6),.customer-site-table td:nth-child(6){width:15%}.customer-site-table th:nth-child(7),.customer-site-table td:nth-child(7){width:15%}.customer-site-table th:nth-child(6),.customer-site-table td:nth-child(6){display:none}
 .customer-site-table td:nth-child(2) .cell-stack { gap:4px; }.customer-site-table td:nth-child(2) .code-tag { display:block; width:max-content; max-width:100%; padding:3px 8px; border-radius:6px; background:#fff0f1; color:#e63946; }.customer-site-table td:nth-child(2) :deep(.p-tag) { display:inline-flex; width:max-content; max-width:100%; align-items:center; border:1px solid transparent; padding:4px 10px; border-radius:999px; font-size:10px; font-weight:500; line-height:11px; text-align:center; }.customer-site-table td:nth-child(2) :deep(.p-tag-info) { border-color:#bfdbfe; background:#dbeafe; color:#1d4ed8; }.customer-site-table td:nth-child(2) :deep(.p-tag-success) { border-color:#bbf7d0; background:#dcfce7; color:#166534; }.customer-site-table td:nth-child(2) :deep(.p-tag-warn) { border-color:#fed7aa; background:#fff7ed; color:#c2410c; }.customer-site-table td:nth-child(2) :deep(.p-tag-secondary) { border-color:#ddd6fe; background:#ede9fe; color:#6d28d9; }.customer-site-table .link-btn { color:#e63946; font-size:12px; font-weight:600; }
-.company-tier-tag { display:inline-flex; min-width:94px; align-items:center; justify-content:center; border:1px solid #bfdbfe; border-radius:999px; background:#dbeafe; color:#1d4ed8; padding:4px 10px; font-size:10px; font-weight:500; line-height:11px; }
-.company-table th:nth-child(1),.company-table td:nth-child(1){width:4%}.company-table th:nth-child(2),.company-table td:nth-child(2){width:14%}.company-table th:nth-child(3),.company-table td:nth-child(3){width:29%}.company-table th:nth-child(4),.company-table td:nth-child(4){width:18%}.company-table th:nth-child(5),.company-table td:nth-child(5){width:14%}.company-table th:nth-child(6),.company-table td:nth-child(6){width:11%}.company-table th:nth-child(7),.company-table td:nth-child(7){width:10%}.company-table th:nth-child(n+8),.company-table td:nth-child(n+8){display:none}
+.company-tier-tag { display:inline-flex; width:max-content; align-items:center; justify-content:center; border:1px solid #ddd6fe; border-radius:999px; background:#ede9fe; color:#7c3aed; padding:4px 10px; font-size:11px; font-weight:600; line-height:normal; white-space:nowrap; }
+.company-tier-tag.tier-key { border-color:#ddd6fe; background:#ede9fe; color:#7c3aed; }
+.company-tier-tag.tier-regular { border-color:#bbf7d0; background:#dcfce7; color:#166534; }
+.company-tier-tag.tier-strategic { border-color:#bfdbfe; background:#dbeafe; color:#1d4ed8; }
+.company-tier-tag.tier-small { border-color:#fed7aa; background:#fff7ed; color:#c2410c; }
+.company-table :deep(.company-tier-tag.tier-key) { border-color:#ddd6fe !important; background:#ede9fe !important; color:#7c3aed !important; }
+.company-table :deep(.company-tier-tag.tier-regular) { border-color:#bbf7d0 !important; background:#dcfce7 !important; color:#166534 !important; }
+.company-table :deep(.company-tier-tag.tier-strategic) { border-color:#bfdbfe !important; background:#dbeafe !important; color:#1d4ed8 !important; }
+.company-table :deep(.company-tier-tag.tier-small) { border-color:#fed7aa !important; background:#fff7ed !important; color:#c2410c !important; }
+.company-table :deep(.company-tier-tag .p-tag-label) { font-size:11px !important; font-weight:600 !important; }
+.company-table :deep(.company-tier-tag.tier-key .p-tag-label) { color:#7c3aed !important; }
+.company-table :deep(.company-tier-tag.tier-regular .p-tag-label) { color:#166534 !important; }
+.company-table :deep(.company-tier-tag.tier-strategic .p-tag-label) { color:#1d4ed8 !important; }
+.company-table :deep(.company-tier-tag.tier-small .p-tag-label) { color:#c2410c !important; }
+.company-table th:nth-child(1),.company-table td:nth-child(1){width:4%}.company-table th:nth-child(2),.company-table td:nth-child(2){width:13%}.company-table th:nth-child(3),.company-table td:nth-child(3){width:25%}.company-table th:nth-child(4),.company-table td:nth-child(4){width:16%}.company-table th:nth-child(5),.company-table td:nth-child(5){width:14%}.company-table th:nth-child(6),.company-table td:nth-child(6){width:12%}.company-table th:nth-child(7),.company-table td:nth-child(7){width:16%}.company-table th:nth-child(n+8),.company-table td:nth-child(n+8){display:none}
+.company-table { border-top: 1px solid #e0e0e0; }
+.company-table thead th { border-right: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0; background: #f4f4f4; color: #000; }
+.company-table thead th:last-child { border-right: 0; }
+.company-table tbody td { border-right: 1px solid #e0e0e0; }
+.company-table tbody td:last-child { border-right: 0; }
 .site-search,.company-search { display:flex; flex:0 0 270px; height:40px; min-width:270px; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#94a3b8; }.site-search i,.company-search i{font-size:12px}.site-search input,.company-search input{width:100%;height:32px;min-height:32px;padding:0;border:0;outline:0;background:transparent;color:#0f172a;font-size:13px}.site-search input::placeholder,.company-search input::placeholder{color:#94a3b8}
 @media(max-width:900px){.tabs-bar{height:auto;min-height:58px;flex-wrap:wrap;overflow:visible}.site-search,.company-search{flex-basis:220px}.erp-customer-actions{width:100%;margin-left:0}.filter-panel{display:grid;grid-template-columns:1fr;padding:12px}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:640px){.tabs-bar{padding:10px 12px}.erp-customer-actions :deep(.p-button){flex:1}.data-table{min-width:860px}.table-scroll{overflow-x:auto}.filter-grid{grid-template-columns:1fr}}
+
+/* Keep the customer workspace content-flow compact; the table must follow the toolbar. */
+.admin-page {
+  min-height: 0 !important;
+  height: auto !important;
+  justify-content: flex-start !important;
+}
+.admin-page > .tabs-bar {
+  flex: 0 0 auto;
+}
+.admin-page .panel-stack,
+.admin-page .table-panel {
+  flex: 0 0 auto;
+}
+.admin-page > nav[aria-label="Customer management sections"] {
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: flex-start;
+}
+.admin-page > nav[aria-label="Customer management sections"] > .erp-customer-actions {
+  margin-left: auto;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button {
+  white-space: nowrap;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:first-child {
+  min-width: 132px;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:nth-child(2) {
+  min-width: 82px;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:last-child {
+  width: 170px;
+  min-width: 170px;
+  justify-content: center;
+  height: 36px;
+  gap: 7px;
+  border-radius: 10px;
+  background: #dc2626;
+  padding: 0 12px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, .22);
+  transition: all 150ms ease;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:last-child:hover {
+  filter: brightness(1.1);
+}
+.admin-page .pagination-controls {
+  gap: 4px;
+}
+.admin-page .pagination-controls .pagination-num,
+.admin-page .pagination-controls :deep(.p-button) {
+  display: inline-flex;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  transition: all 150ms ease;
+}
+.admin-page .pagination-controls .pagination-num {
+  color: #64748b;
+}
+.admin-page .pagination-controls .pagination-num:hover {
+  background: #f8fafc;
+  color: #1e293b;
+}
+.admin-page .pagination-controls .pagination-num.is-active {
+  background: #fff1f2 !important;
+  color: #991b1b !important;
+  font-weight: 700;
+}
+.admin-page .table-panel > .pagination-bar {
+  justify-content: flex-start;
+  gap: 14px;
+}
+.admin-page .pagination-bar .pagination-info {
+  order: 2;
+  margin-left: 0;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: #64748b;
+}
+.admin-page .pagination-controls {
+  order: 1;
+}
+.admin-page .pagination-controls > .p-button:first-child,
+.admin-page .pagination-controls > .p-button:last-child {
+  display: none;
+}
+.admin-page .data-table thead th {
+  border-right: 1px solid #e0e0e0;
+  background: #f4f4f4;
+  padding: 12px;
+  text-align: left;
+  color: #000;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  user-select: none;
+}
+.admin-page .data-table thead th:last-child {
+  border-right: 0;
+}
+.admin-page .customer-site-table thead th:nth-child(6),
+.admin-page .customer-site-table tbody td:nth-child(6) {
+  display: table-cell;
+}
+.admin-page .customer-site-table tbody td:nth-child(6) {
+  display: table-cell;
+}
+.admin-page .customer-site-table thead th:nth-child(6) {
+  font-size: 11px;
+}
+.admin-page .customer-site-table thead th:nth-child(6)::before {
+  content: none;
+}
+.admin-page .customer-site-table tbody td:nth-child(6) :deep(.p-tag) {
+  display: inline-flex;
+}
+.admin-page .customer-site-table tbody td:nth-child(7) .cell-text {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.admin-page .customer-site-table td:nth-child(2) .cell-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+.admin-page .customer-site-table td:nth-child(2) .code-tag {
+  padding: 0;
+  background: transparent;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-page .customer-site-table td:nth-child(2) :deep(.p-tag) {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  gap: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  transition: color 150ms ease, box-shadow 150ms ease;
+}
+.admin-page .customer-site-table td:nth-child(2) :deep(.p-tag-warn) {
+  border-color: #ddd6fe;
+  background: #ede9fe;
+  color: #7c3aed;
+}
+.admin-page .customer-site-table td:nth-child(2) :deep(.p-tag-info) {
+  border-color: #bfdbfe !important;
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+.admin-page .customer-site-table td:nth-child(2) :deep(.p-tag.p-tag-info),
+.admin-page .customer-site-table td:nth-child(2) :deep(.p-tag-info) {
+  background: #dbeafe !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+  -webkit-text-fill-color: #1d4ed8 !important;
+}
+.admin-page .customer-site-table tbody td:nth-child(n+3) {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.admin-page .customer-site-table tbody td:nth-child(3) .link-btn,
+.admin-page .customer-site-table tbody td:nth-child(3) .cell-primary {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-page .customer-site-table tbody td:nth-child(n+3) .cell-sub,
+.admin-page .customer-site-table tbody td:nth-child(n+3) .cell-text {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.admin-page .customer-site-table tbody td:nth-child(3) .link-btn:hover {
+  color: #0f172a;
+  text-decoration: underline;
+}
+.admin-page .customer-site-table tbody td:nth-child(4) .cell-text {
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.admin-page .customer-site-table tbody td:nth-child(5) .cell-primary {
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.admin-page .customer-site-table tbody td:nth-child(5) .cell-sub {
+  margin-top: 2px;
+  color: #64748b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.admin-page .customer-site-table th:nth-child(1), .admin-page .customer-site-table td:nth-child(1) { width: 3.5%; }
+.admin-page .customer-site-table th:nth-child(2), .admin-page .customer-site-table td:nth-child(2) { width: 16%; }
+.admin-page .customer-site-table th:nth-child(3), .admin-page .customer-site-table td:nth-child(3) { width: 27%; }
+.admin-page .customer-site-table th:nth-child(4), .admin-page .customer-site-table td:nth-child(4) { width: 16%; }
+.admin-page .customer-site-table th:nth-child(5), .admin-page .customer-site-table td:nth-child(5) { width: 13%; }
+.admin-page .customer-site-table th:nth-child(6), .admin-page .customer-site-table td:nth-child(6) { width: 13%; }
+.admin-page .customer-site-table th:nth-child(7), .admin-page .customer-site-table td:nth-child(7) { width: 14%; }
+.admin-page .customer-site-table tbody td:nth-child(6) :deep(.p-tag) {
+  margin: 0;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0;
+  color: #0f172a !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.admin-page .customer-site-table thead th:nth-child(6)::before {
+  content: 'SEGMENT';
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+.admin-page .customer-site-table thead th:nth-child(6) {
+  font-size: 0;
+}
+.pagination-settings {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.pagination-settings > label:first-child { width: 80px; min-width: 80px; }
+.pagination-settings > label:nth-child(2) { width: 65px; min-width: 65px; }
+.pagination-settings label {
+  position: relative;
+  display: flex;
+  cursor: pointer;
+  width: 80px;
+  height: 34px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+}
+.pagination-settings label:hover { border-color: #cbd5e1; }
+.pagination-settings label:nth-child(2) { width: 65px; }
+.pagination-settings label span {
+  position: absolute;
+  top: -7px;
+  left: 8px;
+  padding: 0 4px;
+  background: #fff;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.pagination-settings label span,
+.pagination-settings label > span {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 10px;
+}
+.pagination-settings select,
+.pagination-settings input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #334155;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 16px;
+}
+.pagination-settings select { cursor: pointer; }
+.pagination-settings .page-size-control {
+  position: relative;
+  display: flex;
+  width: 80px;
+  height: 34px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+}
+.pagination-settings .page-size-control select {
+  height: 32px;
+  padding: 0;
+  appearance: none;
+}
+.pagination-settings > button:not(.pagination-refresh) {
+  box-sizing: border-box;
+  height: 34px;
+  width: 48px;
+  min-width: 48px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fff;
+  color: #475569;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.pagination-refresh {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  font-size: 18px;
+}
+.pagination-refresh:hover { background: #f1f5f9; color: #1e293b; }
+.company-pagination {
+  width: 100%;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 20px;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+.company-pagination .pagination-controls {
+  order: 1;
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 4px;
+}
+.company-pagination .pagination-info {
+  order: 2;
+  margin-left: 0;
+  color: #64748b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+}
+.company-pagination .pagination-settings {
+  order: 3;
+  height: 34px;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.company-pagination .pagination-controls > :deep(.p-button:first-child),
+.company-pagination .pagination-controls > :deep(.p-button:last-child) {
+  display: none;
+}
+.company-pagination .pagination-num.is-active {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px;
+  background: #fff1f2 !important;
+  color: #991b1b !important;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: none !important;
+}
+.company-pagination .pagination-settings label {
+  height: 34px;
+}
+.company-pagination .pagination-settings > button:not(.pagination-refresh) {
+  height: 34px;
+}
+@media (max-width: 900px) {
+  .pagination-settings { margin-left: 0; flex-wrap: wrap; }
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:first-child {
+  width: 82px;
+  min-width: 82px;
+  justify-content: center;
+  gap: 7px;
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #b91c1b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 150ms ease;
+}
+.admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions button:first-child:hover {
+  background: #fff1f2;
+}
+.admin-page > nav[aria-label="Customer management sections"] > label input {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+.admin-page > nav[aria-label="Customer management sections"] > button {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.admin-page > nav[aria-label="Customer management sections"] > div:first-child {
+  display: inline-flex;
+  flex-shrink: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  gap: 4px;
+  border-radius: 16px;
+  background: #f1f5f9;
+  padding: 3px;
+}
+.admin-page > nav[aria-label="Customer management sections"] > div:first-child > button {
+  display: flex;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  transition: all 150ms ease;
+}
+.admin-page > nav[aria-label="Customer management sections"] > div:first-child > button:not(.bg-\[\#dc2626\]) {
+  color: #64748b;
+}
+@media (max-width: 900px) {
+  .admin-page > nav[aria-label="Customer management sections"] {
+    flex-wrap: wrap;
+  }
+  .admin-page > nav[aria-label="Customer management sections"] .erp-customer-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+.delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.delete-warning strong{display:block;color:#0f172a;font-size:13px;font-weight:700}.delete-warning p{margin:4px 0 0;color:#64748b;font-size:12px;line-height:18px}.admin-page :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px}.admin-page :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
 </style>
 
