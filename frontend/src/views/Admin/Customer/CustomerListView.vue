@@ -431,7 +431,7 @@ async function executeDeleteCompany() {
 </script>
 
 <template>
-  <section class="admin-page">
+  <section :class="['admin-page', { 'master-mode': activeTab === 'master' }]">
     <header v-if="activeTab !== 'site'" class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
@@ -1343,5 +1343,18 @@ async function executeDeleteCompany() {
   }
 }
 .delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.delete-warning strong{display:block;color:#0f172a;font-size:13px;font-weight:700}.delete-warning p{margin:4px 0 0;color:#64748b;font-size:12px;line-height:18px}.admin-page :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px}.admin-page :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
+/* ── Master Data mode: full-width stretch layout ─────────────── */
+.admin-page.master-mode {
+  padding: 0.4rem 0.6rem 0.6rem;
+  gap: 0.4rem;
+}
+.admin-page.master-mode .workspace-header { display: none; }
+.admin-page.master-mode .tabs-bar { flex-shrink: 0; }
+.admin-page.master-mode > .md-root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 </style>
 

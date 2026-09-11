@@ -198,4 +198,63 @@ onMounted(load)
 @media (max-width: 720px){
   .trash-header{flex-direction:column;align-items:stretch}
 }
+
+/* White Trash surface: keep the section clean and neutral, with red reserved
+   for the trash icon/status accent. */
+.panel-stack{
+  padding:1rem;
+  border:1px solid #e5eaf0;
+  border-radius:16px;
+  background:#fff;
+}
+.trash-header,
+.trash-card,
+.trash-card .data-table{background:#fff}
+.trash-card .data-table th{background:#fff}
+.trash-card .card-head :deep(.p-tag){
+  border:1px solid #fecaca;
+  background:#fff;
+  color:#dc2626;
+}
+.trash-card .count-badge{border:1px solid #e2e8f0;background:#fff;color:#64748b}
+
+/* Reference Trash layout: equal cards, inset table shell, and quiet neutral surface. */
+.panel-stack{gap:.875rem;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.trash-header{min-height:76px;padding:.875rem 1rem;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.trash-header h2{font-size:1rem}
+.trash-header p{max-width:860px;margin-top:.35rem;color:#64748b;font-size:.72rem;line-height:1.5}
+.trash-header :deep(.p-button){min-width:8.9rem;justify-content:center;border-color:#d9e2ec;color:#475569}
+.trash-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:1.1rem;align-items:stretch}
+.trash-card{min-width:0;min-height:368px;gap:0;padding:0;overflow:hidden;border:1px solid #e2e8f0;border-radius:20px;background:#fff;box-shadow:0 14px 34px rgba(15,23,42,.06)}
+.trash-card .card-head{min-height:2.4rem;align-items:center;gap:.5rem;padding:1rem 1.1rem 0}
+.trash-card .card-head{min-width:0;flex-wrap:wrap}
+.trash-card .card-head h3{min-width:0;flex:1 1 auto;font-size:1rem;font-weight:700;letter-spacing:-.02em;line-height:1.3;overflow-wrap:break-word;word-break:normal}
+.trash-card .count-badge{min-height:1.5rem;padding:.2rem .6rem;border-color:#e2e8f0;background:#f8fafc;font-size:.62rem;font-weight:600}
+.trash-card .card-head .p-tag{margin-left:auto;flex:none}
+.trash-card .card-desc{min-height:2.8rem;margin:0;padding:.35rem 1.1rem 1rem;border-bottom:1px solid #eef2f7;color:#64748b;font-size:.72rem;line-height:1.5;overflow-wrap:break-word;word-break:normal}
+.trash-card .data-table{width:calc(100% - 2.2rem);min-width:0;margin:.85rem 1.1rem 1.1rem;border:0;border-collapse:separate;border-spacing:0 .38rem;table-layout:fixed;background:transparent}
+.trash-card .data-table th{height:38px;padding:.5rem .75rem;border-top:1px solid #d9e2ec;border-bottom:1px solid #d9e2ec;background:#f8fafc;font-size:.58rem;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
+.trash-card .data-table th:first-child{border-left:1px solid #d9e2ec;border-radius:12px 0 0 12px}
+.trash-card .data-table th:last-child{border-right:1px solid #d9e2ec;border-radius:0 12px 12px 0}
+.trash-card .data-table td{height:54px;min-width:0;padding:.62rem .75rem;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:#fff;vertical-align:middle;overflow-wrap:break-word;word-break:normal;line-height:1.4;transition:background .15s ease,border-color .15s ease}
+.trash-card .data-table td:first-child{border-left:1px solid #e2e8f0;border-radius:12px 0 0 12px}
+.trash-card .data-table td:last-child{border-right:1px solid #e2e8f0;border-radius:0 12px 12px 0}
+.trash-card .data-table tbody tr:hover td{border-color:#d7e8dd;background:#fbfefc}
+.trash-card .data-table td:first-child .cell-primary{font-weight:700}
+.trash-card .data-table th:nth-child(1),.trash-card .data-table td:nth-child(1){width:29%}
+.trash-card .data-table th:nth-child(2),.trash-card .data-table td:nth-child(2){width:46%}
+.trash-card .data-table th:nth-child(3),.trash-card .data-table td:nth-child(3){width:25%}
+.trash-card .data-table .cell-primary,.trash-card .data-table .cell-text{display:block;min-width:0;max-width:100%;line-height:1.4;overflow-wrap:break-word;word-break:normal;white-space:normal}
+.trash-card .data-table .td-action{white-space:nowrap;text-align:right}
+.trash-card .data-table .td-action :deep(.p-button){min-width:5.4rem;height:2rem;justify-content:center;padding:.4rem .7rem;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:#166534;font-size:.7rem;font-weight:600;box-shadow:none}
+.trash-card .data-table .td-action :deep(.p-button:hover){background:#ecfdf5;color:#166534}
+.trash-card .empty-box{min-height:260px;margin:.75rem 1rem 1rem;padding:2rem 1rem;border:1px dashed #d9e2ec;border-radius:20px;background:#f8fafc}
+.trash-card .empty-box .state-icon-wrap{background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.08)}
+.trash-card .empty-box span{max-width:420px;line-height:1.5}
+
+@media (max-width: 760px){
+  .trash-grid{grid-template-columns:minmax(0,1fr)}
+  .trash-card .data-table{width:calc(100% - 1.5rem);margin-right:.75rem;margin-left:.75rem}
+  .trash-card .data-table td,.trash-card .data-table th{padding-right:.55rem;padding-left:.55rem}
+}
 </style>
