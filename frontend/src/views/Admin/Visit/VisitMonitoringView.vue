@@ -402,7 +402,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="visit-page">
+  <section class="visit-page admin-page">
     <header class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
@@ -1285,4 +1285,24 @@ onMounted(() => {
 .visit-page .data-table th:first-child,.visit-page .data-table td:first-child{width:54px !important;min-width:54px !important;padding:0 !important;text-align:center !important}
 .visit-pagination-bar{display:flex;min-height:44px;align-items:center;justify-content:space-between;padding:5px 16px;border-bottom:1px solid #e2e8f0;background:#fff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#64748b}.visit-pagination-info{display:flex;align-items:center;gap:12px}.visit-page-number{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:999px;background:#fff1f2;color:#991b1b;font-weight:600}.visit-pagination-settings{display:flex;align-items:center;gap:10px}.visit-pagination-settings label{position:relative;display:flex;width:80px;height:34px;align-items:center;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;color:#334155}.visit-pagination-settings label span{position:absolute;top:-7px;left:8px;padding:0 4px;background:#fff;font-size:10px;font-weight:600;color:#475569}.visit-pagination-settings label strong{font-weight:400}.visit-pagination-settings button{height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569}.visit-pagination-settings button:last-child{width:30px;padding:0;border:0;border-radius:999px}
 .bulk-delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.bulk-delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.bulk-delete-warning strong{display:block;font-size:13px;font-weight:700;color:#0f172a}.bulk-delete-warning p{margin:4px 0 0;font-size:12px;line-height:18px;color:#64748b}.bulk-delete-dialog :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px;padding-top:4px}.bulk-delete-dialog :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
+.visit-page .data-table { border-collapse: collapse; }
+.visit-page .data-table thead th { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e2e2e0; background:#f4f4f4; color:#000; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:11px; font-weight:600; line-height:12px; letter-spacing:.07em; text-align:left; text-transform:uppercase; vertical-align:middle; }
+.visit-page .data-table tbody td { box-sizing:border-box; height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; color:#0f172a; font-size:11px; line-height:13px; }
+
+/* Keep the page chrome fixed and limit scrolling to the visit data area. */
+.visit-page { display:flex; height:100%; min-height:0; flex-direction:column; gap:0; padding:0!important; overflow:hidden; }
+.visit-page > .workspace-header,
+.visit-page > .visit-erp-toolbar,
+.visit-page > .filter-panel { flex:none; }
+.visit-page > .visit-erp-toolbar { position:sticky; top:0; z-index:20; background:#fff; }
+.visit-page > .table-panel { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; border-radius:0; }
+.visit-page > .table-panel > .visit-pagination-bar,
+.visit-page > .table-panel > .table-heading { flex:none; }
+.visit-page > .table-panel > .table-scroll { min-height:0; flex:1; overflow:auto; }
+.visit-page > .table-panel > .state-box { flex:1; min-height:0; overflow:auto; }
+@media(max-width:900px){
+  .visit-page { height:auto; min-height:100%; overflow:visible; }
+  .visit-page > .table-panel { overflow:visible; }
+  .visit-page > .table-panel > .table-scroll { max-height:calc(100dvh - 220px); overflow:auto; }
+}
 </style>

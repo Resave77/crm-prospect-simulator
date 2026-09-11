@@ -431,7 +431,7 @@ async function executeDeleteCompany() {
 </script>
 
 <template>
-  <section class="admin-page">
+  <section class="admin-page customer-list-page">
     <header v-if="activeTab !== 'site'" class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
@@ -1343,5 +1343,23 @@ async function executeDeleteCompany() {
   }
 }
 .delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.delete-warning strong{display:block;color:#0f172a;font-size:13px;font-weight:700}.delete-warning p{margin:4px 0 0;color:#64748b;font-size:12px;line-height:18px}.admin-page :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px}.admin-page :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
+.customer-list-page { display:flex; height:100%; min-height:0; flex-direction:column; gap:0; padding:0!important; overflow:hidden; }
+.customer-list-page > nav[aria-label="Customer management sections"] { position:sticky; top:0; z-index:20; flex:none; background:#fff; }
+.customer-list-page .panel-stack { display:flex; min-height:0; flex:1; flex-direction:column; gap:0; }
+.customer-list-page .panel-stack .table-panel { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; border-radius:0; }
+.customer-list-page .panel-stack .table-scroll { min-height:0; flex:1; overflow:auto; }
+.customer-list-page .panel-stack .pagination-bar { flex:none; position:relative; z-index:10; background:#fff; }
+.customer-list-page > .company-pagination { flex:none; position:relative; z-index:10; background:#fff; }
+.customer-list-page > .table-panel { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; border-radius:0; }
+.customer-list-page > .table-panel .table-scroll { min-height:0; flex:1; overflow:auto; }
+.customer-list-page .customer-preview,
+.customer-list-page .cell-preview { left:0; top:calc(100% + 8px); transform:none; max-width:360px; white-space:normal; }
+.customer-list-page .customer-preview { min-width:260px; }
+.customer-list-page .cell-preview { min-width:190px; }
+.customer-list-page .table-panel,
+.customer-list-page .table-panel .table-scroll { overflow:visible; }
+.customer-list-page .customer-preview,
+.customer-list-page .cell-preview { display:none!important; }
+@media(max-width:900px){.customer-list-page{height:auto;min-height:100%;overflow:visible}.customer-list-page .panel-stack .table-panel,.customer-list-page > .table-panel{overflow:visible}.customer-list-page .panel-stack .table-scroll,.customer-list-page > .table-panel .table-scroll{overflow:auto;max-height:calc(100dvh - 220px)}}
 </style>
 

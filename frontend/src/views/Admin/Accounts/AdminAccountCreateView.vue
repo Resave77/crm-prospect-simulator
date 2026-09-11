@@ -259,23 +259,23 @@ onMounted(async () => {
         </section>
 
         <section class="form-section user-section">
-          <header class="section-header">
+          <button type="button" class="section-header user-information-header" aria-expanded="true" aria-label="User information is expanded">
             <div>
               <h2>User Information</h2>
-              <p>Primary sign-in and account identity information.</p>
+              <p>Primary CRM login and access information.</p>
             </div>
-            <button type="button" class="section-toggle" aria-label="User information is expanded"><i class="pi pi-chevron-up" /></button>
-          </header>
+            <span class="section-toggle"><i class="pi pi-chevron-up" /></span>
+          </button>
 
           <div class="form-grid">
             <div class="form-field">
               <label>
-                Full Name
+                Employee Name
                 <span class="required">*</span>
               </label>
               <InputText
                 v-model="form.name"
-                placeholder="e.g. Budi Santoso"
+                placeholder="e.g. Michael Carter"
                 autocomplete="name"
               />
               <small>Use the employee's complete name.</small>
@@ -288,7 +288,7 @@ onMounted(async () => {
               </label>
               <InputText
                 v-model="form.email"
-                placeholder="e.g. budi@yummy.test"
+                placeholder="e.g. michael.carter@yummydairy.com"
                 autocomplete="email"
               />
               <small>This email will be used to sign in.</small>
@@ -315,7 +315,7 @@ onMounted(async () => {
 
             <div class="form-field">
               <label>
-                Temporary Password
+                Password
                 <span class="required">*</span>
               </label>
               <Password
@@ -743,6 +743,35 @@ onMounted(async () => {
   width: 100%;
 }
 
+/* Match the shared CRM input treatment for the required identity fields. */
+.user-section .form-field :deep(.p-inputtext) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: #fff;
+  padding: 0 14px;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 48px;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.user-section .form-field :deep(.p-inputtext::placeholder) {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.user-section .form-field :deep(.p-inputtext:focus) {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
 .generated-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 40px;
@@ -1073,4 +1102,108 @@ onMounted(async () => {
 }
 .create-account-page{min-height:100%;background:#f8fafc;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.topbar{min-height:48px;height:48px;padding:0 32px;border-bottom:1px solid #e2e8f0;background:#fff;backdrop-filter:none}.topbar-left{gap:12px}.back-employee-button{height:32px;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;color:#64748b;font-size:16px}.back-employee-button .p-button-icon{font-size:13px}.topbar-left>div:last-child{display:flex;align-items:center;gap:8px}.topbar h1{font-size:17px;font-weight:700;white-space:nowrap}.topbar p{color:#94a3b8;font-size:11px}.topbar-actions{gap:8px}.topbar-actions :deep(.p-button){height:32px;min-height:32px;border-radius:8px;padding:0 14px;font-size:12px}.topbar-actions :deep(.p-button:last-child){background:#94a3b8;border-color:#94a3b8}.content-layout{grid-template-columns:minmax(0,792px) 320px;gap:24px;width:min(1136px,calc(100% - 64px));margin:32px auto}.form-column{gap:16px}.form-section,.preview-card,.required-card,.help-card{border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 6px 18px rgba(15,23,42,.035)}.section-header{padding:20px 24px;border-bottom:1px solid #e8edf3}.section-header h2{font-size:16px;font-weight:700}.section-header p{font-size:12px;color:#64748b}.form-grid{gap:18px 20px;padding:24px}.form-field{gap:6px}.form-field label{font-size:12px;font-weight:500;color:#334155}.form-field small{font-size:11px;color:#64748b}.form-field :deep(.p-inputtext),.form-field :deep(.p-select),.form-field :deep(.p-password-input),.form-field :deep(.p-datepicker-input){height:48px;border:1px solid #d6e0ec;border-radius:14px;padding:0 14px;font-size:13px}.form-field :deep(.p-select-label){padding:0 14px;line-height:46px}.preview-card{padding:28px 24px}.avatar-preview{width:84px;height:84px;margin:0 auto 16px;border-radius:50%;background:#e6f0ff;color:#64748b;font-size:28px}.preview-card h3{text-align:center;font-size:18px;font-weight:700}.preview-card>p{text-align:center;font-size:12px;color:#64748b}.preview-card :deep(.p-tag){display:flex;width:max-content;margin:12px auto;padding:5px 12px;border-radius:999px;font-size:11px}.preview-divider{margin:20px 0;border-color:#e2e8f0}.preview-card dl{gap:12px}.preview-card dt{font-size:12px;color:#64748b}.preview-card dd{font-size:12px;font-weight:500}.required-card,.help-card{padding:20px 24px}.page-message{margin:16px 32px 0}@media(max-width:1000px){.content-layout{grid-template-columns:1fr;width:min(792px,calc(100% - 32px));margin:20px auto}.sidebar-column{display:none}}@media(max-width:640px){.topbar{height:auto;min-height:56px;padding:10px 16px}.topbar-left{align-items:flex-start}.topbar-left>div:last-child{display:grid;gap:2px}.topbar h1{font-size:15px}.topbar p{font-size:10px}.content-layout{width:calc(100% - 24px);margin:12px auto}.form-grid{grid-template-columns:1fr;padding:16px}.section-header{padding:16px}.preview-card{padding:20px}}
 .section-toggle{display:grid;width:34px;height:34px;place-items:center;flex:0 0 auto;border:1px solid #d6e0ec;border-radius:50%;background:#f8fafc;color:#64748b;cursor:pointer}.section-toggle:hover{background:#eef5ff;border-color:#bfd3ed;color:#334155}
+.user-information-header { display:flex; width:100%; align-items:flex-start; justify-content:space-between; gap:16px; padding:16px 20px; border:0; border-bottom:1px solid #eef2f7; background:#fff; text-align:left; cursor:pointer; }
+.user-information-header:hover { background:#fff; }
+.user-information-header h2 { font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:17px; font-weight:700; color:#0f172a; }
+.user-information-header p { margin-top:4px; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px; color:#64748b; }
+.user-information-header .section-toggle { margin-top:2px; width:32px; height:32px; }
+@media(min-width:640px){.user-information-header{padding:18px 20px}.user-information-header .section-toggle{margin-top:0}}
+
+/* Dropdown fields in User Information match the shared CRM form control. */
+.user-section .form-field :deep(.p-select) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.user-section .form-field :deep(.p-select-label) {
+  display: flex;
+  height: 46px;
+  align-items: center;
+  padding: 0 14px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 46px;
+}
+
+.user-section .form-field :deep(.p-select-label.p-placeholder) {
+  color: #94a3b8;
+}
+
+.user-section .form-field :deep(.p-select-dropdown) {
+  width: 42px;
+  color: #64748b;
+}
+
+.user-section .form-field :deep(.p-select:not(.p-disabled):hover) {
+  border-color: #cbd5e1;
+}
+
+.user-section .form-field :deep(.p-select.p-focus) {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
+/* Job Information uses the same controls and spacing as User Information. */
+.job-section .form-field :deep(.p-inputtext),
+.job-section .form-field :deep(.p-select),
+.job-section .form-field :deep(.p-password-input),
+.job-section .form-field :deep(.p-datepicker-input) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: #fff;
+  padding: 0 14px;
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.job-section .form-field :deep(.p-select-label) {
+  display: flex;
+  height: 46px;
+  align-items: center;
+  padding: 0 14px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 46px;
+}
+
+.job-section .form-field :deep(.p-select-label.p-placeholder),
+.job-section .form-field :deep(.p-inputtext::placeholder) {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.job-section .form-field :deep(.p-select-dropdown) {
+  width: 42px;
+  color: #64748b;
+}
+
+.job-section .form-field :deep(.p-select:not(.p-disabled):hover),
+.job-section .form-field :deep(.p-inputtext:focus) {
+  border-color: #94a3b8;
+}
+
+.job-section .form-field :deep(.p-select.p-focus),
+.job-section .form-field :deep(.p-inputtext:focus) {
+  box-shadow: 0 0 0 2px #dbeafe;
+}
 </style>

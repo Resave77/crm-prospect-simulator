@@ -99,7 +99,9 @@ onMounted(async () => {
       crm.loadAdminCustomer(customerId),
       getAdminCustomerPlaceDetails(customerId).catch(() => null),
     ])
-    detail.value = cust
+    const edits = JSON.parse(localStorage.getItem('crm_customer_edits') || '{}') as Record<string, Partial<CustomerDetail['customer']>>
+    const edit = edits[cust.customer.id] || edits[cust.customer.customerCode]
+    detail.value = edit ? { ...cust, customer: { ...cust.customer, ...edit } } : cust
     placeDetails.value = place
     if (cust.customer.sourceProspectId && (auth.hasPermission('view_ai_summary') || auth.hasPermission('view_ai_menu_profiling'))) {
       initialAnalysis.value = await getProspectInitialAnalysis(cust.customer.sourceProspectId).catch(() => null)
@@ -141,7 +143,20 @@ async function executeDelete() {
 
     <template v-if="detail">
       <!-- PAGE HEADER -->
-      <header class="page-heading customer-admin-hero">
+      <header class="customer-detail-topbar">
+        <div class="customer-detail-topbar-inner">
+          <div class="customer-detail-heading">
+            <button type="button" class="customer-detail-back flex h-[36px] shrink-0 items-center gap-[6px] font-['Inter'] text-[12px] font-semibold text-[#64748b] transition-colors hover:text-[#dc2626]" @click="router.push('/admin/customers')"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[14px]"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg><span>Back to Customer Site List</span></button>
+            <div class="customer-detail-divider" />
+            <div class="customer-detail-title-row"><h1>Customer Site Detail</h1><p>Customer List &gt; Customer Site &gt; Detail</p></div>
+          </div>
+          <div class="page-heading-actions">
+            <button type="button" class="inline-flex h-[36px] items-center gap-[7px] rounded-[10px] bg-[#dc2626] px-[14px] font-['Inter'] text-[12px] font-semibold text-white shadow-[0px_4px_16px_0px_rgba(220,38,38,0.22)] transition-all hover:brightness-110" @click="router.push(`/admin/customers/${route.params.id}/edit`)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-[14px]"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path><path d="m15 5 3 3"></path></svg>Edit Customer Site</button>
+          </div>
+        </div>
+      </header>
+      <!-- Legacy detail heading retained for dynamic customer context -->
+      <div class="hidden">
         <div class="page-title-wrapper">
           <span class="eyebrow">Customer Detail</span>
           <div class="title-row">
@@ -158,10 +173,133 @@ async function executeDelete() {
           <Button label="Edit" icon="pi pi-pencil" size="small" @click="router.push(`/admin/customers/${route.params.id}/edit`)" />
           <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" @click="confirmDelete" />
         </div>
-      </header>
+      </div>
 
-      <!-- SUMMARY STRIP -->
-      <div class="summary-strip customer-detail-card">
+      <!-- CUSTOMER INFORMATION + AI SUMMARY -->
+      <div class="detail-top-grid">
+      <div class="detail-left-column">
+      <section class="detail-reference-card customer-information-card">
+        <div class="detail-reference-card-header"><h2>Customer Information</h2><p>Site identity for this outlet, branch, or store.</p></div>
+        <div class="detail-reference-card-body"><div class="detail-reference-list">
+          <div class="detail-reference-row"><span>Customer Name / Outlet / Branch / Store</span><strong>{{ detail.customer.name || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Site Code</span><strong>{{ detail.customer.customerCode || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Region</span><strong>{{ detail.customer.region || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Head Sales</span><strong>{{ detail.customer.salesExecutiveName || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Customer Segment</span><strong>{{ detail.customer.segment || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Customer Category</span><strong>{{ detail.customer.category || '—' }}</strong></div>
+        </div></div>
+      </section>
+      <CustomerProductOpportunityCard v-if="sourceProspectId && auth.hasPermission('view_ai_menu_profiling')" class="customer-admin-opportunity detail-reference-card" :discovery="storedDiscovery" :profiling="storedProfiling" />
+      <section class="detail-reference-card customer-address-card">
+        <div class="detail-reference-card-header"><h2>Address Information</h2><p>Address for customer transactions and site-level documents.</p></div>
+        <div class="detail-reference-card-body"><div class="detail-reference-list">
+          <div class="detail-reference-row"><span>Site Address</span><strong>{{ detail.customer.address?.previewAddress || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>City, Province</span><strong>{{ [detail.customer.address?.city, detail.customer.address?.province].filter(Boolean).join(', ') || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Postal Code, District</span><strong>{{ [detail.customer.address?.postalCode, detail.customer.address?.district].filter(Boolean).join(' - ') || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Latitude</span><strong>{{ detail.customer.address?.latitude ?? '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Longitude</span><strong>{{ detail.customer.address?.longitude ?? '—' }}</strong></div>
+        </div></div>
+      </section>
+      <section class="detail-reference-card customer-contact-information-card">
+        <div class="detail-reference-card-header"><h2>Contact Information</h2><p>General contacts for this customer site.</p></div>
+        <div class="detail-reference-card-body">
+          <div v-if="!detail.customer.contacts?.length" class="detail-reference-empty">No contacts registered.</div>
+          <div v-else class="detail-reference-list">
+            <div v-for="(contact, idx) in detail.customer.contacts" :key="idx" class="detail-contact-item">
+              <div class="detail-contact-heading"><div><p>Contact {{ idx + 1 }}</p><strong>{{ contact.name || 'Unnamed Contact' }}</strong></div><span>{{ contact.position || '—' }}</span></div>
+              <div class="detail-contact-fields"><div><p>Phone Number</p><strong>{{ contact.phone || '—' }}</strong></div><div><p>Email Address</p><strong>{{ contact.email || '—' }}</strong></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <CustomerSnapshotCard class="customer-admin-snapshot" :customer="detail.customer" :operating-status="placeDetails?.businessStatus" />
+      <section class="detail-reference-card customer-company-data-card">
+        <div class="customer-company-data-header">
+          <div class="min-w-0"><p class="customer-company-eyebrow">Company Data</p><p class="customer-company-description">Data parent company untuk customer site ini.</p><div class="customer-company-data-summary"><div class="min-w-0"><h2>{{ detail.parentCompany.name || '—' }}</h2><p>{{ detail.parentCompany.parentCode || '—' }}</p></div></div></div>
+          <div class="customer-company-actions">
+            <button type="button" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}`)">Open Company Detail<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></button>
+            <button type="button" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}/edit`)">Edit Company Detail<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="m16.4 3.6 3 3L7.4 18.6l-3 .8.8-2.9z"></path><path d="m15 5 3 3"></path></svg></button>
+            <span class="customer-company-tier-badge">{{ detail.parentCompany.companyTier || detail.parentCompany.tier || '—' }}</span>
+          </div>
+        </div>
+        <div class="customer-company-data-summary"><div class="min-w-0"><h2>{{ detail.customer.name || '—' }}</h2><p>{{ detail.customer.parentCode || detail.parentCompany.parentCode || '—' }}</p></div></div>
+      </section>
+      <section class="detail-reference-card customer-company-information-card">
+        <div class="detail-reference-card-header"><h2>Company Information</h2><p>Legal identity of the parent company.</p></div>
+        <div class="detail-reference-card-body"><div class="detail-reference-list">
+          <div class="detail-reference-row"><span>Company Name</span><strong>{{ detail.parentCompany.name || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Company Code</span><strong>{{ detail.parentCompany.parentCode || '—' }}</strong></div>
+          <div class="detail-reference-row"><span>Company Tier</span><strong><span class="customer-company-tier-badge">{{ detail.parentCompany.companyTier || detail.parentCompany.tier || '—' }}</span></strong></div>
+          <div class="detail-reference-row"><span>3M Avg Invoice</span><strong>{{ detail.parentCompany.avgInvoice3m || detail.parentCompany.avgInvoice || '—' }}</strong></div>
+        </div></div>
+      </section>
+      </div>
+      <div class="detail-ai-column">
+        <AISummaryCard v-if="sourceProspectId && auth.hasPermission('view_ai_summary')" class="customer-admin-insight detail-ai-summary" :prospect-name="detail.customer.name" :analysis="initialAnalysis" context="customer" />
+        <ProspectComments v-if="sourceProspectId" class="detail-discussion" :prospect-id="sourceProspectId" role="ADMINISTRATOR" embedded />
+        <TanyaAICard v-if="sourceProspectId && auth.hasPermission('use_prospect_ai_chat')" class="detail-tanya-ai" :prospect-id="sourceProspectId" />
+        <section class="detail-reference-card customer-tax-information-card">
+          <div class="detail-reference-card-header"><h2>Tax Information</h2><p>Site-level tax identity and individual buyer identification.</p></div>
+          <div class="detail-reference-card-body"><div class="detail-reference-list">
+            <div class="detail-reference-row"><span>PPN</span><strong>{{ detail.customer.ppn || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>ID TKU Number</span><strong>{{ detail.customer.idTkuNumber || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>NIK</span><strong>{{ detail.customer.nik || '—' }}</strong></div>
+          </div></div>
+        </section>
+        <section class="detail-reference-card customer-master-data-card">
+          <div class="detail-reference-card-header"><h2>Other Master Data</h2><p>Site-level document defaults.</p></div>
+          <div class="detail-reference-card-body"><div class="detail-reference-list">
+            <div class="detail-reference-row"><span>Term of Payment</span><strong>{{ detail.customer.termOfPayment || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Shipment Cost</span><strong>{{ detail.customer.shipmentCost || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Invoice Type</span><strong>{{ detail.customer.invoiceType || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Bank Account</span><strong>{{ detail.customer.bankAccount || '—' }}</strong></div>
+          </div></div>
+        </section>
+      </div>
+      </div>
+      <section class="detail-reference-card customer-company-data-combined">
+        <div class="customer-company-data-header">
+          <div class="min-w-0"><p class="customer-company-eyebrow">Company Data</p><p class="customer-company-description">Data parent company untuk customer site ini.</p><div class="customer-company-data-summary"><div class="min-w-0"><h2>{{ detail.parentCompany.name || '—' }}</h2><p>{{ detail.parentCompany.parentCode || '—' }}</p></div></div></div>
+          <div class="customer-company-actions">
+            <button type="button" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}`)">Open Company Detail<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></button>
+            <button type="button" @click="router.push(`/admin/companies/${detail.parentCompany.parentCode}/edit`)">Edit Company Detail<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="m16.4 3.6 3 3L7.4 18.6l-3 .8.8-2.9z"></path></svg></button>
+            <span class="customer-company-tier-badge">{{ detail.parentCompany.companyTier || detail.parentCompany.tier || '—' }}</span>
+          </div>
+        </div>
+        <div class="customer-company-data-grid">
+          <section class="detail-reference-card"><div class="detail-reference-card-header"><h2>Company Information</h2><p>Legal identity of the parent company.</p></div><div class="detail-reference-card-body"><div class="detail-reference-list"><div class="detail-reference-row"><span>Company Name</span><strong>{{ detail.parentCompany.name || '—' }}</strong></div><div class="detail-reference-row"><span>Company Code</span><strong>{{ detail.parentCompany.parentCode || '—' }}</strong></div><div class="detail-reference-row"><span>Company Tier</span><strong><span class="customer-company-tier-badge">{{ detail.parentCompany.companyTier || detail.parentCompany.tier || '—' }}</span></strong></div><div class="detail-reference-row"><span>3M Avg Invoice</span><strong>{{ detail.parentCompany.avgInvoice3m || detail.parentCompany.avgInvoice || '—' }}</strong></div></div></div></section>
+          <section class="detail-reference-card"><div class="detail-reference-card-header"><h2>Tax Information</h2><p>Company NPWP data synced from company name and address.</p></div><div class="detail-reference-card-body"><div class="detail-reference-list"><div class="detail-reference-row"><span>Company NPWP Name</span><strong>{{ detail.parentCompany.npwpName || detail.parentCompany.name || '—' }}</strong></div><div class="detail-reference-row"><span>Company NPWP Address</span><strong>{{ detail.parentCompany.npwpAddress || detail.parentCompany.address?.previewAddress || '—' }}</strong></div><div class="detail-reference-row"><span>Company NPWP Number</span><strong>{{ detail.parentCompany.npwpNumber || '—' }}</strong></div></div></div></section>
+        </div>
+      </section>
+      <div class="customer-company-extra-grid">
+        <section class="detail-reference-card">
+          <div class="detail-reference-card-header"><h2>Company Address</h2><p>Legal and billing address used for company and tax records.</p></div>
+          <div class="detail-reference-card-body"><div class="detail-reference-list">
+            <div class="detail-reference-row"><span>Company Address</span><strong>{{ detail.parentCompany.address?.previewAddress || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>City, Province</span><strong>{{ [detail.parentCompany.address?.city, detail.parentCompany.address?.province].filter(Boolean).join(', ') || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Postal Code, District</span><strong>{{ [detail.parentCompany.address?.postalCode, detail.parentCompany.address?.district].filter(Boolean).join(' - ') || '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Latitude</span><strong>{{ detail.parentCompany.address?.latitude ?? '—' }}</strong></div>
+            <div class="detail-reference-row"><span>Longitude</span><strong>{{ detail.parentCompany.address?.longitude ?? '—' }}</strong></div>
+          </div></div>
+        </section>
+        <section class="detail-reference-card">
+          <div class="detail-reference-card-header"><h2>Company KAM</h2><p>Company-level key account manager ownership.</p></div>
+          <div class="detail-reference-card-body"><div v-if="!detail.parentCompany.kamAssignments?.length" class="detail-reference-empty">No KAM assignment registered.</div><div v-else class="detail-reference-list"><div v-for="(assignment, idx) in detail.parentCompany.kamAssignments" :key="idx" class="customer-kam-item"><strong>{{ assignment.ownerName || '—' }}</strong><span>{{ assignment.end === 'Until Now' ? 'Aktif' : assignment.end || '—' }}</span><p>{{ assignment.startMonth }} {{ assignment.startYear }} – sekarang</p></div></div></div>
+        </section>
+      </div>
+      <section class="detail-reference-card customer-company-contacts-card">
+        <div class="detail-reference-card-header"><h2>Company Contact Information</h2><p>General company contacts for coordination and follow up.</p></div>
+        <div class="detail-reference-card-body">
+          <div v-if="!detail.parentCompany.contacts?.length" class="detail-reference-empty">No company contacts registered.</div>
+          <div v-else class="customer-company-contacts-grid">
+            <div v-for="(contact, idx) in detail.parentCompany.contacts" :key="idx" class="detail-contact-item">
+              <div class="detail-contact-heading"><div><p>Contact {{ idx + 1 }}</p><strong>{{ contact.name || 'Unnamed Contact' }}</strong></div><span>{{ contact.position || '—' }}</span></div>
+              <div class="detail-contact-fields"><div><p>Phone Number</p><strong>{{ contact.phone || '—' }}</strong></div><div><p>Email Address</p><strong>{{ contact.email || '—' }}</strong></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="summary-strip customer-detail-card hidden">
         <div class="strip-item">
           <i class="pi pi-tag" />
           <div>
@@ -199,13 +337,7 @@ async function executeDelete() {
         </div>
       </div>
 
-      <CustomerSnapshotCard class="customer-admin-snapshot" :customer="detail.customer" :operating-status="placeDetails?.businessStatus" />
-
       <section v-if="sourceProspectId" class="customer-intelligence">
-        <AISummaryCard v-if="auth.hasPermission('view_ai_summary')" class="customer-admin-insight" :prospect-name="detail.customer.name" :analysis="initialAnalysis" context="customer" />
-        <CustomerProductOpportunityCard v-if="auth.hasPermission('view_ai_menu_profiling')" class="customer-admin-opportunity" :discovery="storedDiscovery" :profiling="storedProfiling" />
-        <ProspectComments class="admin-comments-section customer-admin-discussion" :prospect-id="sourceProspectId" role="ADMINISTRATOR" embedded />
-        <TanyaAICard v-if="auth.hasPermission('use_prospect_ai_chat')" class="customer-admin-chat" :prospect-id="sourceProspectId" />
       </section>
       <section v-else class="detail-card customer-ai-unavailable">
         <h3>Intelligence Customer</h3>
@@ -666,6 +798,20 @@ async function executeDelete() {
 </template>
 
 <style scoped>
+.customer-detail-topbar{height:44px;margin:0 -1rem;border-bottom:1px solid #e2e8f0;background:#fff;padding:0 32px}
+.customer-detail-topbar-inner{max-width:1400px;height:100%;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.customer-detail-topbar .page-heading-actions > button:first-child{height:36px!important;min-height:36px!important;width:auto!important;padding:0 14px!important;border-radius:10px!important;font-family:Inter,sans-serif!important;font-size:12px!important;font-weight:600!important;line-height:16px!important;white-space:nowrap!important}
+.detail-reference-card{overflow:hidden;border:1px solid #e2e8f0;border-radius:20px;background:#fff;box-shadow:0 14px 34px rgba(15,23,42,.06)}
+.detail-top-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:18px;align-items:start}.detail-left-column,.detail-top-grid .customer-information-card{min-width:0}.detail-left-column{display:flex;flex-direction:column;gap:18px}.detail-ai-column{display:flex;min-width:0;flex-direction:column;gap:18px}.detail-ai-column>*{width:100%;min-width:0}.detail-ai-summary{min-width:0;height:auto;margin:0!important;padding:20px!important;border:1px solid #e2e8f0!important;border-radius:20px!important;background:#fff!important;box-shadow:0 14px 34px rgba(15,23,42,.06)!important}.detail-reference-empty{padding:14px;border-radius:14px;background:#f8fafc;color:#64748b;font:500 13px/20px Inter,sans-serif}.detail-contact-item{padding:14px 16px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc}.detail-contact-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.detail-contact-heading p,.detail-contact-fields p{margin:0;color:#94a3b8;font:700 10px/16px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase}.detail-contact-heading strong{display:block;margin-top:4px;color:#0f172a;font:700 14px/20px Inter,sans-serif}.detail-contact-heading>span{padding:3px 10px;border:1px solid #dbeafe;border-radius:999px;background:#fff;color:#1d4ed8;font:700 10px/16px Inter,sans-serif}.detail-contact-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.detail-contact-fields>div{padding:10px 12px;border-radius:14px;background:#fff}.detail-contact-fields strong{display:block;margin-top:5px;color:#0f172a;font:600 13px/20px Inter,sans-serif;overflow-wrap:anywhere}
+.tabs-bar{display:none!important}.tabs-bar + .detail-grid{display:none!important}
+.customer-company-data-card{overflow:hidden}.customer-company-data-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid #fee2e2}.customer-company-eyebrow{margin:0;color:#94a3b8;font:700 11px/16px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase}.customer-company-description{margin:4px 0 0;color:#64748b;font:400 12px/18px Inter,sans-serif}.customer-company-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px}.customer-company-actions button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#dc2626;font:600 13px/18px Inter,sans-serif;cursor:pointer}.customer-company-actions button+button{color:#64748b}.customer-company-actions svg{width:15px;height:15px;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}.customer-company-data-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px}.customer-company-data-summary h2{margin:0;overflow:hidden;color:#0f172a;font:700 17px/22px Inter,sans-serif;text-overflow:ellipsis;white-space:nowrap}.customer-company-data-summary p{margin:4px 0 0;color:#64748b;font:400 12px/18px Inter,sans-serif}.customer-company-data-summary>span{flex-shrink:0;padding:4px 10px;border:1px solid #ddd6fe;border-radius:999px;background:#ede9fe;color:#7c3aed;font:600 11px/16px Inter,sans-serif}
+.summary-strip.hidden{display:none!important}
+.detail-reference-card-header{padding:18px 20px;border-bottom:1px solid #eef2f7}.detail-reference-card-header h2{margin:0;color:#0f172a;font:700 17px Inter,sans-serif}.detail-reference-card-header p{margin:4px 0 0;color:#64748b;font:400 12px Inter,sans-serif}.detail-reference-card-body{padding:20px}.detail-reference-list{display:flex;flex-direction:column;gap:10px}.detail-reference-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:14px;background:#f8fafc}.detail-reference-row span{color:#64748b;font:500 12px/18px Inter,sans-serif}.detail-reference-row strong{max-width:58%;overflow:hidden;color:#0f172a;font:600 13px/20px Inter,sans-serif;text-align:right;text-overflow:ellipsis;white-space:nowrap}
+.customer-detail-heading{display:flex;min-width:0;align-items:center;gap:10px}
+.customer-detail-back{display:flex;height:36px;align-items:center;gap:6px;border:0;background:transparent;color:#64748b;font:600 12px Inter,sans-serif;white-space:nowrap;cursor:pointer}
+.customer-detail-back:hover{color:#dc2626}.customer-detail-back i{font-size:14px}.customer-detail-divider{height:28px;width:1px;background:#e2e8f0}
+.customer-detail-title-row{display:flex;min-width:0;align-items:baseline;gap:12px}.customer-detail-title-row h1{margin:0;overflow:hidden;color:#1e293b;font:700 14px/18px Inter,sans-serif;text-overflow:ellipsis;white-space:nowrap}.customer-detail-title-row p{margin:0;overflow:hidden;color:#94a3b8;font:400 11px/14px Inter,sans-serif;text-overflow:ellipsis;white-space:nowrap}
+.customer-detail-topbar :deep(.page-heading-actions){display:flex;align-items:center;gap:8px}.customer-detail-topbar :deep(.p-button){height:36px;border-radius:10px;font:600 12px Inter,sans-serif}.customer-detail-topbar :deep(.p-button:first-child){border:0;background:#dc2626;box-shadow:0 4px 16px rgba(220,38,38,.22)}
 .customer-intelligence {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
@@ -709,6 +855,7 @@ async function executeDelete() {
   padding: 1.75rem 2rem;
   min-height: 100vh;
 }
+.admin-page > .customer-detail-topbar { margin: -1.75rem -2rem 0; }
 
 .admin-comments-section {
   width: 100%;
@@ -1198,4 +1345,11 @@ async function executeDelete() {
   .contact-card { flex-direction: column; align-items: center; text-align: center; }
   .contact-details { justify-content: center; }
 }
+.customer-company-tier-badge{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid #ddd6fe;border-radius:999px;background:#ede9fe;color:#7c3aed;font:600 11px/16px Inter,sans-serif}
+.customer-company-data-card,.customer-company-information-card,.customer-tax-information-card{display:none!important}.customer-company-data-combined{display:block!important;margin-top:18px}.customer-company-data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:20px}.customer-company-data-grid>.detail-reference-card{min-width:0;box-shadow:none}.customer-company-data-grid .detail-reference-card-header{padding:18px 20px}.customer-company-data-grid .detail-reference-card-body{padding:20px}
+.customer-company-extra-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:18px}.customer-company-extra-grid>.detail-reference-card{min-width:0}.customer-kam-item{padding:12px 14px;border:1px solid #fecdd3;border-radius:12px;background:#fff1f2}.customer-kam-item strong{display:block;color:#dc2626;font:700 13px/18px Inter,sans-serif}.customer-kam-item span{float:right;margin-top:-18px;padding:2px 8px;border-radius:999px;background:#dc2626;color:#fff;font:700 10px/15px Inter,sans-serif;text-transform:uppercase}.customer-kam-item p{margin:3px 0 0;color:#dc2626b3;font:500 11px/16px Inter,sans-serif}
+.customer-company-contacts-card{margin-top:18px}.customer-company-contacts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.customer-company-contacts-grid .detail-contact-item{min-width:0}
+@media (max-width: 900px){.customer-company-data-grid{grid-template-columns:1fr}}
+@media (max-width: 900px){.customer-company-extra-grid{grid-template-columns:1fr}}
+@media (max-width: 900px){.customer-company-contacts-grid{grid-template-columns:1fr}}
 </style>

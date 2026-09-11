@@ -197,6 +197,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/customers/filter-options", customerHandler.CustomerFilterOptions)
 	admin.Get("/customers/trash", customerHandler.TrashedCustomers)
 	admin.Get("/customers/:id", customerHandler.AdminCustomerDetail)
+	admin.Patch("/customers/:id", customerHandler.UpdateAdminCustomer)
 	admin.Get("/customers/:id/place-details", customerHandler.AdminCustomerPlaceDetails)
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
 	admin.Post("/customers/:id/restore", customerHandler.RestoreCustomer)

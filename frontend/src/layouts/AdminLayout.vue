@@ -537,7 +537,7 @@ async function logout() {
           <footer><button type="button" @click="closeDebug">Close</button></footer>
         </section>
       </div>
-      <div v-if="subPage && !route.path.endsWith('/create') && !route.path.includes('/role-management/') && !route.path.includes('/accounts/') && !route.path.endsWith('/add')" class="subpage-bar">
+      <div v-if="subPage && !route.path.endsWith('/create') && !route.path.includes('/role-management/') && !route.path.includes('/accounts/') && !route.path.includes('/admin/customers/') && !route.path.endsWith('/add')" class="subpage-bar">
         <RouterLink :to="subPage.backTo" class="subpage-back">← {{ subPage.back }}</RouterLink>
         <span class="subpage-divider" />
         <strong>{{ subPage.title }}</strong>

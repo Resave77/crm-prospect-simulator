@@ -51,6 +51,8 @@ export const useCustomerListStore = defineStore('customerList', () => {
     try {
       if (allCustomers.value.length === 0) {
         allCustomers.value = await crmApi.getAdminCustomers()
+        const edits = JSON.parse(localStorage.getItem('crm_customer_edits') || '{}') as Record<string, Partial<CustomerSite>>
+        allCustomers.value = allCustomers.value.map((customer) => edits[customer.id] ? { ...customer, ...edits[customer.id] } : customer)
       }
       if (!filterOptions.value) deriveFilterOptions()
 

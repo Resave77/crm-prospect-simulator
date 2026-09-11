@@ -225,7 +225,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="prospect-page">
+  <section class="prospect-page admin-page">
     <header class="workspace-header">
       <div class="workspace-heading">
         <div class="page-title-wrapper">
@@ -1379,4 +1379,22 @@ onMounted(async () => {
   line-height: 16px !important;
   letter-spacing: normal !important;
 }
+
+.prospect-page .data-table { border-collapse: collapse; }
+.prospect-page .data-table thead th { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e2e2e0; background:#f4f4f4; color:#000; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:11px; font-weight:600; line-height:12px; letter-spacing:.07em; text-align:left; text-transform:uppercase; vertical-align:middle; }
+.prospect-page .data-table tbody td { box-sizing:border-box; height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; color:#0f172a; font-size:11px; line-height:13px; }
+.prospect-page { display:flex; height:100%; min-height:0; flex-direction:column; gap:0; padding:0!important; overflow:hidden; }
+.prospect-page > .prospect-erp-toolbar { position:sticky; top:0; z-index:20; flex:none; background:#fff; }
+.prospect-page > .panel-stack { display:flex; min-height:0; flex:1; flex-direction:column; gap:0; }
+.prospect-page > .panel-stack > .table-panel { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; border-radius:0; }
+.prospect-page > .panel-stack > .table-panel > .table-scroll { min-height:0; flex:1; overflow:auto; }
+.prospect-page > .panel-stack > .table-panel > .pagination-bar { position:relative; z-index:10; flex:none; background:#fff; }
+@media(max-width:900px){.prospect-page{height:auto;min-height:100%;overflow:visible}.prospect-page > .panel-stack > .table-panel{overflow:visible}.prospect-page > .panel-stack > .table-panel > .table-scroll{max-height:calc(100dvh - 220px);overflow:auto}}
+.prospect-page > .table-panel { width:100%; max-width:none; margin:0!important; padding:0!important; }
+.prospect-page .data-table th:first-child,
+.prospect-page .data-table td:first-child { width:44px!important; min-width:44px; padding:0!important; text-align:center!important; }
+.prospect-page .prospect-checkbox { display:flex; align-items:center; justify-content:center; margin:0 auto; box-shadow:0 1px 2px rgba(15,23,42,.08)!important; }
+.prospect-page .prospect-preview { pointer-events:none; width:min(520px,calc(100vw - 48px)); max-width:calc(100vw - 48px); white-space:normal!important; }
+.prospect-page .prospect-preview span { white-space:normal!important; overflow-wrap:anywhere; }
+.prospect-page .prospect-erp-toolbar { padding-left:20px!important; padding-right:20px!important; }
 </style>

@@ -310,7 +310,7 @@ onMounted(() => { load() })
 </script>
 
 <template>
-  <section class="accounts-page">
+  <section class="accounts-page admin-page">
     <Toast position="top-right" />
 
     <AdminPageHeader title="Employee Management" subtitle="Manage employee accounts, roles, and access status.">
@@ -329,7 +329,7 @@ onMounted(() => { load() })
       <div class="toolbar-controls">
         <Select v-model="selectedRole" :options="roleOptions" optionLabel="label" optionValue="value" placeholder="All departments" class="toolbar-inline-filter" />
         <Select v-model="selectedStatus" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="All statuses" class="toolbar-inline-filter" />
-        <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
+        <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" class="more-filters-button" @click="showFilters = !showFilters" />
 
         <Button
           label="Trash"
@@ -369,21 +369,30 @@ onMounted(() => { load() })
     <AdminTableShell class="table-shell">
       <div class="accounts-pagination-top">
         <div class="accounts-page-links">
-          <Button
+          <button
             v-for="pageNumber in pageNumbers"
             :key="pageNumber"
-            :label="String(pageNumber)"
-            text
-            size="small"
+            type="button"
             :class="['accounts-page-link', { active: pageNumber === store.page }]"
             @click="selectPage(pageNumber)"
-          />
+          >{{ pageNumber }}</button>
           <span class="accounts-page-report">Page {{ store.page }} of {{ store.pages || 1 }} / {{ store.total }} records</span>
         </div>
         <div class="accounts-page-settings">
-          <label>Page size <Select v-model="selectedPageSize" :options="[10, 20, 50]" /></label>
-          <label>Go to <InputNumber v-model="goToPage" :min="1" :max="Math.max(store.pages, 1)" /></label>
-          <Button label="Set" outlined size="small" @click="goToSelectedPage" />
+          <div class="accounts-page-control">
+            <span>Page size</span>
+            <select v-model="selectedPageSize" aria-label="Page size">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+          </div>
+          <div class="accounts-page-control accounts-go-to-control">
+            <span>Go to</span>
+            <input v-model.number="goToPage" type="text" inputmode="numeric" aria-label="Go to page" />
+          </div>
+          <button type="button" class="accounts-set-button" @click="goToSelectedPage">Set</button>
+          <button type="button" class="accounts-refresh-button" title="Refresh employee data" @click="load"><i class="pi pi-refresh" /></button>
         </div>
       </div>
       <div v-if="store.loading && !store.users.length" class="skeleton-area">
@@ -443,7 +452,7 @@ onMounted(() => { load() })
           <template #body="{ data }"><div class="role-cell"><span>{{ data.email }}</span><span>{{ data.phone || '-' }}</span></div></template>
         </Column>
 
-        <Column header="Department" class="role-column">
+        <Column header="Job Title" class="role-column">
           <template #body="{ data }">
             <div class="role-cell">
               <strong>{{ data.role.replaceAll('_', ' ') }}</strong>
@@ -454,10 +463,10 @@ onMounted(() => { load() })
           </template>
         </Column>
 
-        <Column header="Job Title" class="reports-column">
+        <Column header="Report To" class="reports-column">
           <template #body="{ data }">
             <span class="single-line" :title="jobTitleLabel(data)">
-              {{ jobTitleLabel(data) }}
+              {{ reportsToLabel(data) }}
             </span>
           </template>
         </Column>
@@ -1431,4 +1440,69 @@ onMounted(() => { load() })
 .accounts-page .accounts-toolbar{padding-left:24px;padding-right:24px;overflow:visible}.accounts-page .employee-search{width:auto;min-width:220px;flex:1 1 360px}.accounts-page .toolbar-controls{min-width:0;flex:1 1 auto;flex-wrap:nowrap}.accounts-page .toolbar-inline-filter{flex:1 1 150px;min-width:130px}.accounts-page .toolbar-controls :deep(.p-button){white-space:nowrap;flex-shrink:0}.accounts-page .toolbar-controls .create-button{width:160px;min-width:160px}
 @media(max-width:1100px){.accounts-page .employee-search{width:300px;min-width:260px;flex-basis:300px}.accounts-page .toolbar-inline-filter{flex-basis:160px}}
 @media(max-width:800px){.accounts-page .accounts-toolbar{flex-wrap:wrap}.accounts-page .employee-search{width:100%;min-width:0;flex-basis:100%;max-width:none}.accounts-page .toolbar-controls{width:100%;flex-wrap:wrap}.accounts-page .toolbar-inline-filter{flex:1 1 150px}.accounts-page .toolbar-controls .trash-button{margin-left:auto}}
+.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th) { box-sizing:border-box; height:42px; padding:0 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e2e2e0; background:#f4f4f4; color:#000; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:11px; font-weight:600; line-height:12px; letter-spacing:.07em; text-align:left; text-transform:uppercase; vertical-align:middle; }
+.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td) { box-sizing:border-box; min-height:67px; padding:8px 10px; border-right:1px solid #e2e2e2; border-bottom:1px solid #e0e0e0; color:#0f172a; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:11px; line-height:13px; vertical-align:middle; }
+.accounts-page .accounts-table :deep(.p-datatable-thead > tr > th.select-column),
+.accounts-page .accounts-table :deep(.p-datatable-tbody > tr > td.select-column) { width:44px; min-width:44px; padding:0; text-align:center; }
+.accounts-page .accounts-table :deep(.p-checkbox) { width:18px; height:18px; }
+.accounts-page .accounts-table :deep(.p-checkbox-box) { width:18px; height:18px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.08); }
+.accounts-page .accounts-table :deep(.p-checkbox-box.p-highlight),
+.accounts-page .accounts-table :deep(.p-checkbox.p-checkbox-checked .p-checkbox-box) { border-color:#ef4444; background:#ef4444; }
+.accounts-page .accounts-table :deep(.p-checkbox-icon) { color:#fff; font-size:11px; font-weight:700; }
+.accounts-page > .table-shell { width:100%; max-width:none; margin:0!important; padding:0!important; }
+.accounts-page .table-shell :deep(.p-datatable-wrapper),
+.accounts-page .table-shell :deep(.p-datatable-table-container) { margin:0; padding:0; }
+.accounts-page .accounts-table :deep(.p-checkbox) { display:inline-flex; align-items:center; justify-content:center; margin:0 auto; vertical-align:middle; }
+.accounts-page .accounts-page-link { display:flex; width:30px; min-width:30px; height:30px; min-height:30px!important; align-items:center; justify-content:center; padding:0!important; border:0; border-radius:999px; background:transparent; color:#64748b!important; cursor:pointer; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px!important; font-weight:400!important; line-height:30px; }
+.accounts-page .accounts-page-link.active { background:#fff1f2!important; color:#991b1b!important; font-weight:700!important; }
+.accounts-page .accounts-page-report { font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px!important; color:#64748b; }
+.accounts-page .accounts-refresh-button { display:flex; width:30px; height:30px; align-items:center; justify-content:center; border:0; border-radius:999px; background:#fff; color:#475569; cursor:pointer; font-size:16px; }
+.accounts-page .accounts-refresh-button:hover { background:#f1f5f9; color:#1e293b; }
+.accounts-page .accounts-page-control { position:relative; display:flex; width:80px; height:34px; align-items:center; padding:0 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; }
+.accounts-page .accounts-page-control > span { position:absolute; top:-7px; left:8px; padding:0 4px; background:#fff; color:#475569; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:10px; font-weight:600; line-height:14px; }
+.accounts-page .accounts-page-control select,
+.accounts-page .accounts-page-control input { width:100%; height:32px; padding:0; border:0; outline:0; background:transparent; color:#334155; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; }
+.accounts-page .accounts-page-control select { appearance:auto; }
+.accounts-page .accounts-go-to-control { width:65px; }
+.accounts-page .accounts-set-button { display:flex; height:34px; align-items:center; padding:0 12px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#475569; cursor:pointer; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; font-weight:600; }
+.accounts-page .accounts-set-button:hover { background:#f8fafc; }
+.accounts-page .accounts-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; min-height:72px; height:auto; padding:16px 24px; border-bottom:1px solid #e2e8f0; background:#fff; }
+.accounts-page .employee-search { position:relative; display:flex; width:360px; max-width:100%; height:40px; flex:0 1 360px; align-items:center; gap:8px; padding:0 12px 0 36px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; box-sizing:border-box; }
+.accounts-page .employee-search i { position:absolute; left:12px; color:#94a3b8; font-size:16px; }
+.accounts-page .employee-search input { height:38px; padding:0 12px 0 0; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; }
+.accounts-page .toolbar-controls { display:flex; flex:1; align-items:center; justify-content:flex-start; gap:10px; margin:0; }
+.accounts-page .toolbar-inline-filter { height:40px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px; }
+.accounts-page .toolbar-inline-filter:first-child { width:200px; }
+.accounts-page .toolbar-inline-filter:nth-child(2) { width:170px; }
+.accounts-page .toolbar-inline-filter :deep(.p-select-label) { display:flex; height:38px; align-items:center; padding:0 12px; color:#94a3b8; font-size:12px; }
+.accounts-page .toolbar-controls :deep(.p-button) { height:40px; min-height:40px; padding:0 14px; border-radius:10px; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px; font-weight:600; white-space:nowrap; }
+.accounts-page .toolbar-controls .trash-button { margin-left:auto; min-width:88px; }
+.accounts-page .toolbar-controls .create-button { min-width:160px; background:#dc2626; border-color:#dc2626; font-size:13px; }
+.accounts-page .toolbar-controls .more-filters-button { display:flex; width:122px; min-width:122px; align-items:center; justify-content:center; gap:8px; padding:0; border:1px solid #e2e8f0; background:#fff; color:#475569; }
+.accounts-page .toolbar-controls .more-filters-button:hover { border-color:#cbd5e1; background:#f8fafc; color:#475569; }
+.accounts-page .toolbar-controls .more-filters-button .p-button-icon { margin:0; font-size:15px; }
+.accounts-page .toolbar-controls .more-filters-button .p-button-label { font-family:Inter,ui-sans-serif,system-ui,sans-serif!important; font-size:12px!important; font-weight:600!important; line-height:16px!important; }
+.accounts-page .toolbar-controls .trash-button { display:flex; width:88px; min-width:88px; height:40px; align-items:center; justify-content:center; gap:8px; padding:0; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#475569; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; font-weight:600; }
+
+/* Keep employee toolbar and pagination visible while only the table body scrolls. */
+.accounts-page { display:flex; height:100%; min-height:0; flex-direction:column; gap:0; padding:0!important; overflow:hidden; }
+.accounts-page > .accounts-toolbar { flex:none; }
+.accounts-page > .table-shell { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; border-radius:0; }
+.accounts-page .accounts-pagination-top { position:relative; z-index:10; flex:none; background:#fff; }
+.accounts-page .accounts-table { min-height:0; flex:1; }
+.accounts-page .accounts-table :deep(.p-datatable-table-container),
+.accounts-page .accounts-table :deep(.p-datatable-wrapper) { min-height:0; overflow:auto; }
+@media(max-width:900px){
+  .accounts-page { height:auto; min-height:100%; overflow:visible; }
+  .accounts-page > .table-shell { overflow:visible; }
+  .accounts-page .accounts-table :deep(.p-datatable-table-container),
+  .accounts-page .accounts-table :deep(.p-datatable-wrapper) { max-height:calc(100dvh - 220px); overflow:auto; }
+}
+.accounts-page .toolbar-controls .trash-button:hover { border-color:#cbd5e1; background:#f8fafc; color:#475569; }
+.accounts-page .toolbar-controls .trash-button .p-button-icon { margin:0; font-size:15px; }
+.accounts-page .toolbar-controls .trash-button .p-button-label { font-family:Inter,ui-sans-serif,system-ui,sans-serif!important; font-size:13px!important; font-weight:600!important; line-height:16px!important; }
+.accounts-page .toolbar-controls .create-button { display:flex; min-width:160px; height:40px; align-items:center; justify-content:center; gap:7px; padding:0 14px; border:1px solid #dc2626; border-radius:10px; background:#dc2626; color:#fff; box-shadow:0 4px 16px rgba(220,38,38,.22); font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; font-weight:600; }
+.accounts-page .toolbar-controls .create-button:hover { border-color:#dc2626; background:#dc2626; color:#fff; filter:brightness(1.1); }
+.accounts-page .toolbar-controls .create-button .p-button-icon { margin:0; font-size:15px; }
+.accounts-page .toolbar-controls .create-button .p-button-label { font-family:Inter,ui-sans-serif,system-ui,sans-serif!important; font-size:13px!important; font-weight:600!important; line-height:16px!important; }
 </style>

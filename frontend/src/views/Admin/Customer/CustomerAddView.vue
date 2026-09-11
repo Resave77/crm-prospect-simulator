@@ -6,7 +6,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import type { Contact } from '../../../types/crm'
+import type { Contact, CustomerSite } from '../../../types/crm'
 import { useCustomerListStore } from '../../../stores/customerList'
 import { getSalesExecutives } from '../../../api/crm'
 import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
@@ -337,6 +337,27 @@ async function handleSubmit() {
   saving.value = true
   try {
     await new Promise((r) => setTimeout(r, 1200))
+    const customerCode = `${form.parentCode || 'PC-000024'}-S${String(store.allCustomers.length + 1).padStart(3, '0')}`
+    const selectedSales = salesExecutives.value.find((item) => item.id === form.salesExecutiveId)
+    const created: CustomerSite = {
+      id: `local-${Date.now()}`,
+      customerCode,
+      parentCompanyId: '',
+      parentCode: form.parentCode || 'PC-000024',
+      parentCompanyName: form.parentCompanyName || form.name,
+      sourceProspectId: '', sourceGooglePlaceId: '', name: form.name,
+      segment: form.customerSegment, category: form.customerCategory,
+      region: form.region || '', address: { previewAddress: form.address, latitude: Number(form.latitude) || 0, longitude: Number(form.longitude) || 0, province: form.province, district: form.district, subDistrict: form.subDistrict, village: form.village } as CustomerSite['address'],
+      contacts: JSON.parse(JSON.stringify(form.contacts)), salesExecutiveId: form.salesExecutiveId || '', salesExecutiveName: selectedSales?.fullName || '',
+      companyContacts: JSON.parse(JSON.stringify(form.companyContacts)), companyAddress: { previewAddress: form.companyAddress, latitude: Number(form.companyLatitude) || 0, longitude: Number(form.companyLongitude) || 0, province: form.companyProvince, district: form.companyDistrict, subDistrict: form.companySubDistrict, village: form.companyVillage } as CustomerSite['address'],
+      ppn: form.pph, idTkuNumber: form.idTkuNumber, nik: form.nik,
+      shipmentCost: form.shipmentCost, invoiceType: form.invoiceType, bankAccount: form.bankAccount, termOfPayment: form.termPayment,
+      convertedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }
+    store.allCustomers = [created, ...store.allCustomers]
+    store.items = [created, ...store.items]
+    const createdCustomers = JSON.parse(localStorage.getItem('crm_created_customers') || '[]') as CustomerSite[]
+    localStorage.setItem('crm_created_customers', JSON.stringify([created, ...createdCustomers]))
     saved.value = true
   } catch (e) {
     error.value = 'Failed to save customer. Please try again.'

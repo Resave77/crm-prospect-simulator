@@ -27,7 +27,9 @@ func (f *fakeCustomerRepository) AutoConvert(context.Context, uuid.UUID) (custom
 	return customermodel.CustomerSite{}, nil
 }
 func (f *fakeCustomerRepository) DeleteCustomer(context.Context, uuid.UUID) error { return nil }
-func (f *fakeCustomerRepository) ListTrashedCustomers(context.Context) ([]customermodel.CustomerSite, error) { return nil, nil }
+func (f *fakeCustomerRepository) ListTrashedCustomers(context.Context) ([]customermodel.CustomerSite, error) {
+	return nil, nil
+}
 func (f *fakeCustomerRepository) RestoreCustomer(context.Context, uuid.UUID) error { return nil }
 func (f *fakeCustomerRepository) ListCustomers(context.Context) ([]customermodel.CustomerSite, error) {
 	return nil, nil
@@ -48,6 +50,9 @@ func (f *fakeCustomerRepository) FindCustomerForSales(context.Context, uuid.UUID
 	return customermodel.CustomerDetail{}, nil
 }
 func (f *fakeCustomerRepository) FindCustomer(context.Context, uuid.UUID) (customermodel.CustomerDetail, error) {
+	return customermodel.CustomerDetail{}, nil
+}
+func (f *fakeCustomerRepository) UpdateCustomer(context.Context, uuid.UUID, customermodel.UpdateCustomerInput) (customermodel.CustomerDetail, error) {
 	return customermodel.CustomerDetail{}, nil
 }
 func (f *fakeCustomerRepository) UpdateParentCompany(context.Context, uuid.UUID, customermodel.UpdateParentCompanyInput) (customermodel.ParentCompany, error) {

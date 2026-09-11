@@ -33,6 +33,7 @@ type Repository interface {
 	ListTeamCustomers(context.Context, uuid.UUID) (model.TeamCustomers, error)
 	FindCustomerForSales(context.Context, uuid.UUID, uuid.UUID) (model.CustomerDetail, error)
 	FindCustomer(context.Context, uuid.UUID) (model.CustomerDetail, error)
+	UpdateCustomer(context.Context, uuid.UUID, model.UpdateCustomerInput) (model.CustomerDetail, error)
 	UpdateParentCompany(context.Context, uuid.UUID, model.UpdateParentCompanyInput) (model.ParentCompany, error)
 	FindParentCompanyByCode(context.Context, string) (model.ParentCompany, error)
 }

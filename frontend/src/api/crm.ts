@@ -125,6 +125,10 @@ export async function getAdminCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`)).data.data
 }
 
+export async function updateAdminCustomer(id: string, input: Partial<CustomerSite>) {
+  return (await api.patch<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`, input)).data.data
+}
+
 export async function getAdminCustomerPlaceDetails(id: string) {
   return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/customers/${id}/place-details`)).data.data
 }
