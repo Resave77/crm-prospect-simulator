@@ -97,12 +97,12 @@ type PlaceResult struct {
 	PlaceTypes       []string `json:"placeTypes"`
 	PhoneNumber      string   `json:"phone"`
 	Distance         float64  `json:"distance"`
-	Rating           float64  `json:"-"`
-	UserRatingCount  int      `json:"-"`
-	BusinessStatus   string   `json:"-"`
+	Rating           float64  `json:"rating"`
+	UserRatingCount  int      `json:"userRatingCount"`
+	BusinessStatus   string   `json:"businessStatus"`
 	WebsiteURL       string   `json:"website"`
 	GoogleMapsURL    string   `json:"googleMapsUrl"`
-	MarkerCategory   string   `json:"-"`
+	MarkerCategory   string   `json:"markerCategory"`
 	MarkerColor      string   `json:"markerColor"`
 	MarkerIcon       string   `json:"markerIcon"`
 	HasMenuPhotos    bool     `json:"hasMenuPhotos"`

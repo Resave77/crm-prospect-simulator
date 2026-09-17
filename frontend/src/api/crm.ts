@@ -70,7 +70,9 @@ export async function rejectProspectDeletion(id: string) {
 export async function getSalesExecutives() { return (await api.get<ApiEnvelope<SalesExecutiveOption[]>>('/admin/sales-executives')).data.data }
 export async function getCustomerMarkers() { return (await api.get<ApiEnvelope<CustomerMarker[]>>('/admin/prospect-finder/customers')).data.data }
 export async function searchPlaces(params: { keyword: string; categories: string; radius: number; latitude: number; longitude: number }) { return (await api.get<ApiEnvelope<PlaceResult[]>>('/admin/prospect-finder/search', { params })).data.data }
-export async function getPlaceDetails(googlePlaceId: string) { return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/prospect-finder/place-details/${googlePlaceId}`)).data.data }
+export async function getPlaceDetails(googlePlaceId: string) {
+  return (await api.get<ApiEnvelope<PlaceDetails>>('/admin/prospect-finder/place-details', { params: { googlePlaceId } })).data.data
+}
 export async function getMenuImages(query: string, limit = 8) { return (await api.get<ApiEnvelope<MenuImage[]>>('/admin/prospect-finder/menu-images', { params: { query, limit } })).data.data }
 export function apiClientPath(path: string) { return path.replace(/^\/api\/v1(?=\/)/, '') }
 export async function getPlacePhotoBlob(photoUrl: string) { return (await api.get(apiClientPath(photoUrl), { responseType: 'blob' })).data as Blob }

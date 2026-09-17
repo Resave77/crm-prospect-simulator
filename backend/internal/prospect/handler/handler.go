@@ -795,6 +795,9 @@ func (h *Handler) PlaceFinderPlaceDetails(c *fiber.Ctx) error {
 	c.SetUserContext(usage.WithFeature(c.UserContext(), "PROSPECT_DETAIL"))
 	placeID := c.Params("googlePlaceId")
 	if strings.TrimSpace(placeID) == "" {
+		placeID = c.Query("googlePlaceId")
+	}
+	if strings.TrimSpace(placeID) == "" {
 		return response.Error(c, 400, "PLACE_ID_REQUIRED", "Google Place ID is required.")
 	}
 	place, err := h.service.PlaceDetailFull(c.UserContext(), placeID)

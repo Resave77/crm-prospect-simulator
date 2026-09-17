@@ -70,22 +70,20 @@ const menuFilterOptions = [
 const keyword = ref('')
 const masterCategories = ref<MasterDataCategory[]>([])
 const categories = ref<string[]>([])
-const radius = ref(5000)
+const radius = ref(1000)
 const minRating = ref(0)
 const savedFilter = ref<'all' | 'saved' | 'unsaved'>('all')
 const menuFilter = ref<'all' | 'likely' | 'ready' | 'not_ready'>('all')
 const savedPlaceIds = ref<Set<string>>(new Set())
 const queried = ref(false)
-const latitude = ref(0)
-const longitude = ref(0)
+const latitude = ref(-6.2)
+const longitude = ref(106.8)
 const geoResolved = ref(false)
 const results = ref<PlaceResult[]>([])
 const resultSearch = ref('')
 const selected = ref<PlaceResult | null>(null)
 const customerMarkers = ref<CustomerMarker[]>([])
 const customersLoading = ref(false)
-// Detail enrichment is disabled in Finder; keep an empty shape for legacy
-// hidden sections while rendering search metadata only.
 const placeDetails = ref<PlaceDetails>({} as PlaceDetails)
 const placeDetailsLoading = ref(false)
 const placeDetailsError = ref('')
@@ -122,6 +120,8 @@ let zooming = false
 let customerLayer: L.LayerGroup | null = null
 const markers = new Map<string, L.Marker>()
 const customerMarkerMap = new Map<string, L.Marker>()
+let placeDetailsRequestToken = 0
+let mapLifecycleToken = 0
 
 const selectedSalesCount = computed(() => {
   const exec = sales.value.find(s => s.id === salesExecutiveId.value)
@@ -151,14 +151,32 @@ const categoryGroups = computed(() => {
   ].filter(group => group.items.length > 0)
 })
 
-const activeCategoryGroupKey = ref('')
+type CategoryGroup = {
+  key: string
+  title: string
+  subtitle: string
+  items: MasterDataCategory[]
+}
 
-const activeCategoryGroup = computed(() =>
-  categoryGroups.value.find(group => group.key === activeCategoryGroupKey.value)
-    ?? categoryGroups.value[0],
+const allCategoryGroup = computed<CategoryGroup>(() => ({
+  key: 'all',
+  title: 'All',
+  subtitle: 'All customer segments',
+  items: activeMasterCategories.value,
+}))
+
+const segmentCategoryGroups = computed(() =>
+  categoryGroups.value.filter(group => group.key === 'b2b' || group.key === 'b2c'),
 )
 
-type CategoryGroup = (typeof categoryGroups.value)[number]
+const activeCategoryGroupKey = ref('all')
+
+const activeCategoryGroup = computed<CategoryGroup | undefined>(() => {
+  if (!activeMasterCategories.value.length) return undefined
+  if (activeCategoryGroupKey.value === 'all') return allCategoryGroup.value
+  return segmentCategoryGroups.value.find(group => group.key === activeCategoryGroupKey.value)
+    ?? allCategoryGroup.value
+})
 
 function groupIcon(key: string) {
   const GROUP_ICONS: Record<string, string> = { b2b: '🏢', b2c: '🛍️', other: '📌' }
@@ -166,12 +184,22 @@ function groupIcon(key: string) {
 }
 
 function selectAllGroup(group: CategoryGroup) {
-  categories.value = [...new Set([...categories.value, ...group.items.map(item => item.id)])]
+  const selected = [...new Set([...categories.value, ...group.items.map(item => item.id)])]
+  categories.value = selected
+}
+
+function activateAllCategories() {
+  activateCategoryGroup(allCategoryGroup.value)
+}
+
+function activateCategoryGroup(group: CategoryGroup) {
+  activeCategoryGroupKey.value = group.key
 }
 
 function clearAllGroup(group: CategoryGroup) {
   const ids = new Set(group.items.map(item => item.id))
-  categories.value = categories.value.filter(id => !ids.has(id))
+  const selected = categories.value.filter(id => !ids.has(id))
+  categories.value = selected
 }
 
 function groupSelectedCount(group: CategoryGroup) {
@@ -203,13 +231,12 @@ async function loadMasterData() {
   try {
     const loaded = (await listCategories()) ?? []
     masterCategories.value = loaded.length ? loaded : fallbackCategories
-    categories.value = activeMasterCategories.value.map(o => o.id)
+    categories.value = []
+    activeCategoryGroupKey.value = 'all'
   } catch (caught) {
     masterCategories.value = fallbackCategories
   }
 }
-
-function clearAllCategories() { categories.value = [] }
 
 const selectedPlaceCategory = computed(() =>
   placeDetails.value?.placeCategory?.trim() || selected.value?.category?.trim() || '',
@@ -668,14 +695,17 @@ function renderCustomerMarkers() {
 }
 
 async function loadCustomerMarkers() {
+  const lifecycleToken = mapLifecycleToken
   customersLoading.value = true
   try {
     customerMarkers.value = await crmApi.getCustomerMarkers()
   } catch (caught) {
-    toast.add({ severity: 'warn', summary: 'Customers unavailable', detail: crmError(caught), life: 5000 })
+    if (lifecycleToken === mapLifecycleToken) {
+      toast.add({ severity: 'warn', summary: 'Customers unavailable', detail: crmError(caught), life: 5000 })
+    }
   } finally {
     customersLoading.value = false
-    renderCustomerMarkers()
+    if (lifecycleToken === mapLifecycleToken) renderCustomerMarkers()
   }
 }
 
@@ -715,7 +745,18 @@ function renderMarkers() {
   nextTick(() => map?.invalidateSize())
 }
 
-function closeResults() { results.value = []; filteredResults.value = []; resultSearch.value = ''; detailOpen.value = false; placeDetails.value = {} as PlaceDetails; queried.value = false; nextTick(() => map?.invalidateSize()) }
+function closeResults() {
+  ++placeDetailsRequestToken
+  results.value = []
+  filteredResults.value = []
+  resultSearch.value = ''
+  detailOpen.value = false
+  placeDetailsLoading.value = false
+  placeDetailsError.value = ''
+  placeDetails.value = {} as PlaceDetails
+  queried.value = false
+  nextTick(() => map?.invalidateSize())
+}
 
 async function loadSavedPlaceIds() {
   try {
@@ -727,8 +768,11 @@ async function loadSavedPlaceIds() {
 }
 
 async function selectResult(item: PlaceResult, focusMap = true) {
+  const requestToken = ++placeDetailsRequestToken
   selected.value = item
-  placeDetails.value = {} as PlaceDetails
+  placeDetails.value = placeResultToDetails(item)
+  visiblePhotoCount.value = 1
+  revokePlacePhotoObjectUrls()
   placeDetailsError.value = ''
   menuImages.value = []
   menuImagesError.value = ''
@@ -736,12 +780,22 @@ async function selectResult(item: PlaceResult, focusMap = true) {
   if (!item.isCustomer && item.googlePlaceId) {
     placeDetailsLoading.value = true
     try {
-      placeDetails.value = await getPlaceDetails(item.googlePlaceId)
+      const details = await getPlaceDetails(item.googlePlaceId)
+      if (requestToken === placeDetailsRequestToken && selected.value?.googlePlaceId === item.googlePlaceId) {
+        placeDetails.value = details
+        void loadPlacePhotoObjectUrls((details.photos ?? []).slice(0, 1))
+      }
     } catch (caught) {
-      placeDetailsError.value = crmError(caught)
+      if (requestToken === placeDetailsRequestToken) {
+        placeDetailsError.value = crmError(caught)
+      }
     } finally {
-      placeDetailsLoading.value = false
+      if (requestToken === placeDetailsRequestToken) {
+        placeDetailsLoading.value = false
+      }
     }
+  } else {
+    placeDetailsLoading.value = false
   }
   if (focusMap && map && item.latitude !== null && item.longitude !== null) {
     map.flyTo([item.latitude, item.longitude], Math.max(map.getZoom(), 16), { duration: 0.55 })
@@ -787,6 +841,9 @@ async function search() {
     results.value = await crmApi.searchPlaces({ keyword: keyword.value, categories: searchCategoryKeys().join(','), radius: radius.value, latitude: latitude.value, longitude: longitude.value })
     queried.value = true
     selected.value = null
+    ++placeDetailsRequestToken
+    placeDetailsLoading.value = false
+    placeDetailsError.value = ''
     placeDetails.value = {} as PlaceDetails
     detailOpen.value = false
     await nextTick()
@@ -809,9 +866,9 @@ function useGPS() {
     drawSearchArea()
     map?.flyTo([latitude.value, longitude.value], 15)
   }, () => {
-    error.value = 'Location permission was denied. Please enable location access and try again.'
     geoResolved.value = true
-  })
+    error.value = 'Location permission was not granted. You can enter coordinates manually and continue searching.'
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 })
 }
 
 async function save() {
@@ -846,6 +903,38 @@ function crmError(err: unknown) {
   return candidate.response?.data?.error?.message ?? candidate.message ?? 'Prospect Finder request failed.'
 }
 
+function placeResultToDetails(item: PlaceResult): PlaceDetails {
+  return {
+    googlePlaceId: item.googlePlaceId,
+    placeName: item.name,
+    formattedAddress: item.address,
+    latitude: item.latitude ?? 0,
+    longitude: item.longitude ?? 0,
+    placeCategory: item.category,
+    placeTypes: item.placeTypes ?? [],
+    phoneNumber: item.phone,
+    internationalPhone: '',
+    websiteUrl: item.website,
+    googleMapsUrl: item.googleMapsUrl,
+    rating: item.rating,
+    userRatingCount: item.userRatingCount,
+    businessStatus: item.businessStatus,
+    priceLevel: '',
+    editorialSummary: '',
+    utcOffsetMinutes: 0,
+    photos: [],
+    openingHours: null,
+    reviews: [],
+    delivery: false,
+    dineIn: false,
+    takeout: false,
+    curbsidePickup: false,
+    parkingOptions: null,
+    paymentOptions: null,
+    accessibilityOptions: null,
+  }
+}
+
 function parkingLabel(key: string) {
   const labels: Record<string, string> = { freeStreetParking:'Free Street', paidStreetParking:'Paid Street', freeParkingLot:'Free Lot', paidParkingLot:'Paid Lot', valetParking:'Valet', garageParking:'Garage' }
   return labels[key] || key
@@ -870,6 +959,7 @@ function optionActive(details: PlaceDetails | null, key: string): boolean {
 }
 
 onMounted(async () => {
+  ++mapLifecycleToken
   await nextTick()
   initializeMap()
   useGPS()
@@ -885,7 +975,12 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  ++mapLifecycleToken
+  ++placeDetailsRequestToken
   revokePlacePhotoObjectUrls()
+  // Leaflet's animated zoom uses a delayed callback. Stop it before removing
+  // the pane so the callback cannot access a detached DOM element.
+  map?.stop()
   map?.remove()
   map = null
   centerMarker = null
@@ -898,59 +993,9 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="finder-page">
-    <header class="finder-page-header">
-      <div class="finder-heading-left">
-        <div class="finder-page-title">
-          <span class="finder-eyebrow">Prospect Management</span>
-          <h1>Prospect Finder</h1>
-          <p>Discover nearby businesses, review place details, and assign qualified prospects.</p>
-        </div>
-      </div>
-
-      <div class="finder-page-stats">
-        <div class="finder-stat">
-          <span>Location</span>
-          <strong>{{ geoResolved ? 'Ready' : 'Detecting' }}</strong>
-        </div>
-        <div class="finder-stat">
-          <span>Radius</span>
-          <strong>{{ (radius / 1000).toFixed(1) }} km</strong>
-        </div>
-        <div class="finder-stat">
-          <span>Categories</span>
-          <strong>{{ categories.length }}</strong>
-        </div>
-        <div class="finder-stat">
-          <span>Results</span>
-          <strong>{{ results.length }}</strong>
-        </div>
-      </div>
-    </header>
-
     <div class="finder-desktop-shell">
       <aside class="finder-left-panel">
-        <div class="finder-panel-header">
-          <div class="finder-panel-title">
-            <i class="pi pi-compass" />
-            <div>
-              <h1>Prospect Query</h1>
-              <span>Discover &amp; save qualified prospects</span>
-            </div>
-          </div>
-          <Button label="Create Pin" icon="pi pi-map-marker" severity="secondary" outlined class="create-pin-button" @click="openPinForm" />
-        </div>
-
         <div class="finder-filter-scroll">
-          <div class="filter-section">
-            <label class="field finder-keyword-field">
-              <span>Keyword</span>
-              <div class="keyword-input-wrap">
-                <i class="pi pi-search keyword-icon" />
-                <InputText v-model="keyword" placeholder="Search cafe, office, laundry..." @keyup.enter="search" />
-              </div>
-            </label>
-          </div>
-
           <div class="filter-section">
             <div class="filter-section-header category-header">
               <span class="filter-section-title">Categories</span>
@@ -962,22 +1007,29 @@ onBeforeUnmount(() => {
             </p>
             <template v-else>
               <div class="category-toolbar">
+                <button
+                  type="button"
+                  class="category-tab category-tab-all"
+                  :class="{ active: activeCategoryGroup.key === 'all' }"
+                  @click="activateAllCategories"
+                >
+                  <span class="category-tab-icon">🌐</span>
+                  All
+                  <span class="category-tab-count">{{ groupSelectedCount(allCategoryGroup) }}/{{ allCategoryGroup.items.length }}</span>
+                </button>
                 <div class="category-tabs">
                   <button
-                    v-for="group in categoryGroups"
+                    v-for="group in segmentCategoryGroups"
                     :key="group.key"
                     type="button"
                     class="category-tab"
                     :class="{ active: activeCategoryGroup.key === group.key }"
-                    @click="activeCategoryGroupKey = group.key"
+                    @click="activateCategoryGroup(group)"
                   >
                     <span class="category-tab-icon">{{ groupIcon(group.key) }}</span>
                     {{ group.title }}
                     <span class="category-tab-count">{{ groupSelectedCount(group) }}/{{ group.items.length }}</span>
                   </button>
-                </div>
-                <div class="category-tools">
-                  <button type="button" class="category-tool clear" @click="clearAllCategories"><i class="pi pi-times" /> Clear All</button>
                 </div>
               </div>
               <div v-if="activeCategoryGroup.subtitle" class="category-group-subtitle">{{ activeCategoryGroup.subtitle }}</div>
@@ -996,40 +1048,18 @@ onBeforeUnmount(() => {
               <span class="filter-section-title">Search Radius</span>
               <span class="radius-value">{{ (radius / 1000).toFixed(0) }} km</span>
             </div>
-            <Slider v-model="radius" :min="1000" :max="25000" :step="500" class="finder-slider" />
+            <Slider v-model="radius" :min="1000" :max="1000" :step="500" disabled class="finder-slider" />
             <div class="radius-range-labels">
               <span>1 km</span>
-              <span>25 km</span>
             </div>
           </div>
 
           <div class="filter-section">
-            <p class="filter-section-title">Search Location Anchor</p>
+            <p class="filter-section-title">Coordinates</p>
             <Button label="Use Current GPS" icon="pi pi-crosshairs" severity="secondary" outlined fluid class="gps-button" @click="useGPS" />
             <div class="coordinate-grid">
-              <label class="field"><span>LATITUDE</span><input v-model.number="latitude" type="number" step="0.000001" /></label>
-              <label class="field"><span>LONGITUDE</span><input v-model.number="longitude" type="number" step="0.000001" /></label>
-            </div>
-          </div>
-
-          <div class="filter-section">
-            <p class="filter-section-title">Minimum Rating Threshold</p>
-            <div class="segment-row">
-              <button v-for="opt in ratingOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: minRating === opt.value }" @click="minRating = opt.value">{{ opt.label }}</button>
-            </div>
-          </div>
-
-          <div class="filter-section">
-            <p class="filter-section-title">Leads saved state</p>
-            <div class="segment-row">
-              <button v-for="opt in savedFilterOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: savedFilter === opt.value }" @click="savedFilter = opt.value">{{ opt.label }}</button>
-            </div>
-          </div>
-
-          <div class="filter-section">
-            <p class="filter-section-title">Menu availability</p>
-            <div class="segment-row">
-              <button v-for="opt in menuFilterOptions" :key="opt.value" type="button" class="segment-chip" :class="{ active: menuFilter === opt.value }" @click="menuFilter = opt.value">{{ opt.label }}</button>
+              <label class="field"><span>LATITUDE</span><InputNumber v-model="latitude" :min="-90" :max="90" :min-fraction-digits="5" :max-fraction-digits="5" fluid /></label>
+              <label class="field"><span>LONGITUDE</span><InputNumber v-model="longitude" :min="-180" :max="180" :min-fraction-digits="5" :max-fraction-digits="5" fluid /></label>
             </div>
           </div>
 
@@ -1053,7 +1083,7 @@ onBeforeUnmount(() => {
               <strong>{{ filteredResults.length }} items</strong>
             </div>
             <span class="query-source"><i class="pi pi-cloud" /> GOOGLE API</span>
-            <span class="query-anchor">Map Anchor: {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }}</span>
+            <span class="query-anchor">Map Anchor: {{ latitude.toFixed(5) }}, {{ longitude.toFixed(5) }}</span>
           </div>
         </div>
 
@@ -1061,8 +1091,6 @@ onBeforeUnmount(() => {
 
       <div class="finder-map-stage" :class="{ 'has-results': results.length }">
         <div ref="mapElement" class="leaflet-map" role="region" aria-label="OpenStreetMap with Google Places prospect markers" />
-
-        
 
         <div v-if="loading" class="map-loading-state">
           <span class="map-loading-spinner" />
@@ -1139,7 +1167,7 @@ onBeforeUnmount(() => {
 
     <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '520px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
       <div v-if="placeDetailsLoading" class="dialog-loading"><div class="loading-pulse" /><span>Loading full details...</span></div>
-      <div v-else-if="selected" class="detail-dialog">
+      <div v-if="selected" class="detail-dialog">
         <div class="detail-hero-bar">
           <span class="detail-hero" :class="{ 'is-customer': selected.isCustomer }" :style="selected.isCustomer ? undefined : { background: selected.markerColor }">
             <b v-if="selected.isCustomer">Y</b>
@@ -1209,7 +1237,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false && placeDetails.openingHours" class="detail-section">
+        <div v-if="placeDetails?.openingHours" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-clock" /> Opening Hours</h3>
           <div class="detail-hours-grid">
             <div class="detail-hours-badge" :class="{ 'is-open': placeDetails.openingHours?.openNow }">
@@ -1220,7 +1248,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false" class="detail-section">
+        <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-cog" /> Services &amp; Options</h3>
           <div class="detail-options-grid">
             <div v-if="placeDetails.delivery !== undefined" class="detail-option-chip" :class="{ active: placeDetails.delivery }">
@@ -1238,7 +1266,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false && placeDetails.parkingOptions" class="detail-section">
+        <div v-if="placeDetails?.parkingOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-car" /> Parking</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['freeStreetParking','paidStreetParking','freeParkingLot','paidParkingLot','valetParking','garageParking']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1247,7 +1275,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false && placeDetails.paymentOptions" class="detail-section">
+        <div v-if="placeDetails?.paymentOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-credit-card" /> Payment</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['cashOnly','creditCardOnly','debitCardOnly','nfcOnly']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1256,7 +1284,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false && placeDetails.accessibilityOptions" class="detail-section">
+        <div v-if="placeDetails?.accessibilityOptions" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-universal-access" /> Accessibility</h3>
           <div class="detail-options-grid">
             <div v-for="key in ['wheelchairAccessibleEntrance','wheelchairAccessibleParking','wheelchairAccessibleRestroom','wheelchairAccessibleSeating']" :key="key" class="detail-option-chip" :class="{ active: optionActive(placeDetails, key) }">
@@ -1265,7 +1293,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false && placeDetails.reviews?.length" class="detail-section">
+        <div v-if="placeDetails?.reviews?.length" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-comments" /> Reviews ({{ placeDetails.reviews.length }})</h3>
           <div class="detail-reviews-list">
             <div v-for="review in placeDetails.reviews.slice(0, 5)" :key="review.authorName + review.time" class="detail-review">
@@ -1280,7 +1308,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="placeDetails && false" class="detail-section">
+        <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-book" /> Menu Photos</h3>
           <div v-if="menuPhotos.length" class="detail-photos-row">
             <template v-for="photo in menuPhotos" :key="photo.name">
@@ -1305,7 +1333,7 @@ onBeforeUnmount(() => {
           <div v-else class="detail-photo-empty"><i class="pi pi-book" /> Menu photos are not loaded automatically</div>
         </div>
 
-        <div v-if="false && placeDetails" class="detail-section">
+        <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
           <div v-if="visiblePhotos.length" class="detail-photos-row">
             <template v-for="(photo, index) in visiblePhotos" :key="photo.name">
@@ -1317,10 +1345,6 @@ onBeforeUnmount(() => {
           </div>
           <div v-else class="detail-photo-empty"><i class="pi pi-images" /> No photos available</div>
           <Button v-if="hasMorePhotos" label="Load one more photo" icon="pi pi-plus" severity="secondary" outlined size="small" @click="loadNextPlacePhoto" />
-        </div>
-
-        <div v-if="placeDetailsError" class="detail-section">
-          <Message severity="warn" :closable="false">{{ placeDetailsError }}</Message>
         </div>
 
         <div class="detail-assignment">
@@ -1335,6 +1359,10 @@ onBeforeUnmount(() => {
               {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
             </Message>
           </div>
+        </div>
+
+        <div v-if="placeDetailsError" class="detail-section">
+          <Message severity="warn" :closable="false">{{ placeDetailsError }}</Message>
         </div>
       </div>
 
@@ -1409,13 +1437,13 @@ onBeforeUnmount(() => {
 .finder-page {
   box-sizing: border-box;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  width: calc(100% + 3rem);
+  width: 100%;
   min-width: 0;
-  height: calc(100dvh - 4rem);
+  height: 100%;
   min-height: 0;
-  margin: -1.5rem;
+  margin: 0;
   padding: 0;
   overflow: hidden;
   background: #f8fafc;
@@ -1507,15 +1535,19 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  width: 100%;
+  height: auto;
+  margin: 0;
 }
 
 /* ── Left Panel ──────────────────────────────────────────────── */
 .finder-left-panel {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: var(--surface-card);
-  border-right: 1px solid var(--border-light);
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 5px 0 18px rgba(15, 23, 42, 0.035);
 }
 
 .finder-panel-header {
@@ -1525,7 +1557,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 0.6rem;
   border-bottom: 1px solid var(--border-light);
-  background: linear-gradient(150deg, var(--brand-blue-50) 0%, #ffffff 70%);
+  background: linear-gradient(145deg, #f0f7ff 0%, #ffffff 76%);
 }
 
 .create-pin-button {
@@ -1582,9 +1614,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.finder-filter-scroll::-webkit-scrollbar { width: 4px; }
+.finder-filter-scroll::-webkit-scrollbar { display: none; }
 .finder-filter-scroll::-webkit-scrollbar-track { background: transparent; }
 .finder-filter-scroll::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
 .finder-filter-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
@@ -1617,20 +1651,24 @@ onBeforeUnmount(() => {
 
 .category-header { margin-top: 0.35rem; }
 .category-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
+  gap: 0.3rem;
   margin-top: 0.55rem;
 }
-.category-tabs { display: flex; gap: 0.3rem; }
+.category-tabs,
+.category-tabs { display: contents; }
 .category-tab-icon { font-size: 0.68rem; line-height: 1; }
 .category-tab {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.28rem 0.6rem;
+  min-width: 0;
+  width: 100%;
+  height: 1.75rem;
+  padding: 0 0.3rem;
+  justify-content: center;
   border: 1px solid var(--border-default);
   border-radius: 999px;
   background: var(--surface-subtle);
@@ -1641,6 +1679,23 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
+.category-tab-all {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  height: 2rem;
+  padding-inline: 0.7rem;
+  background: linear-gradient(135deg, #fff7f8 0%, #fff 100%);
+  border-color: var(--brand-blue-100);
+  color: var(--brand-blue);
+  box-shadow: 0 2px 8px rgba(230, 57, 70, 0.08);
+}
+.category-tab-all.active {
+  background: linear-gradient(135deg, var(--brand-blue) 0%, #c81e31 100%);
+  border-color: var(--brand-blue);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(230, 57, 70, 0.22);
+}
+.category-tab-all .category-tab-icon { margin-right: auto; }
 .category-tab:hover { background: var(--brand-blue-50); border-color: var(--brand-blue); }
 .category-tab.active {
   background: var(--brand-blue);
@@ -1663,10 +1718,6 @@ onBeforeUnmount(() => {
   margin-bottom: 0.45rem;
   color: var(--text-muted);
   font-size: 0.58rem;
-}
-.category-tools {
-  display: flex;
-  gap: 0.4rem;
 }
 .category-empty {
   display: flex;
@@ -1698,91 +1749,39 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-/* Keyword */
-.finder-keyword-field { gap: 0.32rem; }
-.finder-keyword-field > span { color: var(--text-muted); font-size: 0.65rem; font-weight: 700; }
-
-.keyword-input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.keyword-icon {
-  position: absolute;
-  left: 0.7rem;
-  color: var(--text-faint);
-  font-size: 0.7rem;
-  pointer-events: none;
-}
-
-.keyword-input-wrap :deep(.p-inputtext) {
-  padding-left: 1.9rem;
-  border-radius: 0.6rem;
-  border-color: var(--border-default);
-  font-size: 0.78rem;
-  padding-top: 0.52rem;
-  padding-bottom: 0.52rem;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-
-.keyword-input-wrap :deep(.p-inputtext:focus) {
-  border-color: var(--brand-blue);
-  box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.10);
-}
-
-/* Categories */
-
-.category-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  padding: 0.24rem 0.55rem;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: var(--surface-subtle);
-  color: var(--brand-blue);
-  font-size: 0.56rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-
-.category-tool:hover { background: var(--brand-blue-50); border-color: var(--brand-blue); }
-
-.category-tool.clear { color: var(--text-muted); }
-.category-tool.clear:hover { color: var(--brand-blue); }
-
-.category-tool i { font-size: 0.5rem; }
-
 .category-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.3rem;
+  gap: 0.35rem;
+  width: 100%;
 }
 
 .category-chip {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.4rem;
   align-items: center;
   min-width: 0;
-  padding: 0.32rem 0.4rem;
-  border-radius: 0.55rem;
-  background: var(--surface-subtle);
-  border: 1px solid transparent;
+  min-height: 1.95rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
-.category-chip:hover { background: var(--surface-hover); border-color: var(--border-default); transform: translateY(-1px); }
+.category-chip:hover { background: #fff7f8; border-color: var(--brand-blue); transform: translateY(-1px); }
 
 .category-chip.active {
-  background: linear-gradient(135deg, var(--brand-blue-50) 0%, #fff5f5 100%);
+  background: #fff;
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 1px rgba(230, 57, 70, 0.14), 0 2px 6px -2px rgba(230, 57, 70, 0.25);
 }
 
 .category-chip-icon {
+  width: 1rem;
+  flex: 0 0 1rem;
+  text-align: center;
   font-size: 0.72rem;
   flex-shrink: 0;
   filter: grayscale(0.15);
@@ -1846,7 +1845,11 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.coordinate-grid input {
+.coordinate-grid :deep(.p-inputnumber) {
+  width: 100%;
+}
+
+.coordinate-grid :deep(.p-inputnumber-input) {
   width: 100%;
   padding: 0.42rem 0.6rem;
   border: 1px solid var(--border-default);
@@ -1857,7 +1860,7 @@ onBeforeUnmount(() => {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.coordinate-grid input:focus {
+.coordinate-grid :deep(.p-inputnumber-input:focus) {
   outline: none;
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.10);
@@ -1983,6 +1986,7 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   overflow: hidden;
+  overflow-x: hidden;
   animation: float-results-in 0.25s ease both;
 }
 
@@ -2078,12 +2082,15 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding: 0.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   display: grid;
   gap: 0.35rem;
   align-content: start;
 }
 
-.floating-results-list::-webkit-scrollbar { width: 4px; }
+.floating-results-list::-webkit-scrollbar { display: none; }
 .floating-results-list::-webkit-scrollbar-track { background: transparent; }
 .floating-results-list::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
 .floating-results-list::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
@@ -2901,7 +2908,7 @@ onBeforeUnmount(() => {
 @media (min-width: 901px) {
   .finder-map-stage.has-results {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) 400px;
   }
 
   .finder-map-stage.has-results .leaflet-map {
@@ -2917,7 +2924,7 @@ onBeforeUnmount(() => {
     position: relative;
     top: auto;
     right: auto;
-    width: 340px;
+    width: 400px;
     height: 100%;
     max-height: none;
     border: none;
@@ -2930,11 +2937,11 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1180px) and (min-width: 901px) {
   .finder-map-stage.has-results {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 380px;
   }
 
   .finder-map-stage.has-results .finder-floating-results {
-    width: 300px;
+    width: 380px;
   }
 }
 

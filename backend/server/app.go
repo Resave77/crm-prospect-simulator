@@ -169,6 +169,7 @@ func New(cfg config.Config, authService *service.AuthService, prospectService *p
 	admin.Get("/prospect-finder/search", prospectHandler.SearchPlaces)
 	admin.Get("/prospect-finder/customers", prospectHandler.CustomerMarkers)
 	admin.Get("/prospect-finder/places/:placeId", prospectHandler.PlaceDetail)
+	admin.Get("/prospect-finder/place-details", prospectHandler.PlaceFinderPlaceDetails)
 	admin.Get("/prospect-finder/place-details/:googlePlaceId", prospectHandler.PlaceFinderPlaceDetails)
 	admin.Get("/prospect-finder/menu-images", prospectHandler.PlaceFinderMenuImages)
 	admin.Post("/prospects", prospectHandler.Save)

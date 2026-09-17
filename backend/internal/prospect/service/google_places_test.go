@@ -4,7 +4,6 @@ import (
 	"context"
 	"crm-prospect-simulator/backend/internal/prospect/model"
 	"crm-prospect-simulator/backend/internal/usage"
-	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"net/http"
@@ -14,6 +13,15 @@ import (
 	"time"
 )
 
+func TestLegacySearchTypeDoesNotNarrowMultiTypeCategories(t *testing.T) {
+	if got := legacySearchType([]string{"restaurant", "cafe"}); got != "" {
+		t.Fatalf("multi-type search filter=%q, want empty", got)
+	}
+	if got := legacySearchType([]string{"restaurant", "restaurant"}); got != "restaurant" {
+		t.Fatalf("single-type search filter=%q, want restaurant", got)
+	}
+}
+
 func TestSearchTextPreservesMultiplePlacesInOneRequestWithoutFanout(t *testing.T) {
 	previous := placesBaseURL
 	defer func() { placesBaseURL = previous }()
@@ -22,22 +30,16 @@ func TestSearchTextPreservesMultiplePlacesInOneRequestWithoutFanout(t *testing.T
 	photoCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasSuffix(r.URL.Path, ":searchText"):
+		case strings.HasSuffix(r.URL.Path, "/textsearch/json"):
 			searchCalls++
-			var body struct {
-				PageSize int `json:"pageSize"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode search request: %v", err)
-			}
-			if body.PageSize != 20 {
-				t.Fatalf("pageSize=%d, want 20", body.PageSize)
+			if r.URL.Query().Get("query") != "cafe" {
+				t.Fatalf("query=%q, want cafe", r.URL.Query().Get("query"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"places":[
-				{"id":"places/p1","displayName":{"text":"Cafe One"},"formattedAddress":"Address One","primaryTypeDisplayName":{"text":"Cafe"},"types":["cafe"],"location":{"latitude":-6.2,"longitude":106.8}},
-				{"id":"places/p2","displayName":{"text":"Cafe Two"},"formattedAddress":"Address Two","primaryTypeDisplayName":{"text":"Cafe"},"types":["cafe"],"location":{"latitude":-6.201,"longitude":106.801}}
-			],"nextPageToken":"should-not-be-followed"}`))
+			_, _ = w.Write([]byte(`{"results":[
+				{"place_id":"p1","name":"Cafe One","formatted_address":"Address One","types":["cafe"],"geometry":{"location":{"lat":-6.2,"lng":106.8}}},
+				{"place_id":"p2","name":"Cafe Two","formatted_address":"Address Two","types":["cafe"],"geometry":{"location":{"lat":-6.201,"lng":106.801}}
+			}],"next_page_token":"should-not-be-followed","status":"OK"}`))
 		case strings.HasSuffix(r.URL.Path, "/media"):
 			photoCalls++
 			http.Error(w, "unexpected photo request", http.StatusInternalServerError)
@@ -67,9 +69,15 @@ func TestDetailCoreAndBusinessInfoUseSeparateMasks(t *testing.T) {
 	defer func() { placesBaseURL = previous }()
 	var masks []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		masks = append(masks, r.Header.Get("X-Goog-FieldMask"))
+		if r.URL.Query().Get("place_id") != "p1" {
+			t.Fatalf("place_id=%q, want p1", r.URL.Query().Get("place_id"))
+		}
+		if r.URL.Query().Get("placeid") != "" {
+			t.Fatalf("legacy placeid parameter must not be sent: %q", r.URL.Query().Get("placeid"))
+		}
+		masks = append(masks, r.URL.Query().Get("fields"))
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"p1","displayName":{"text":"Mock"},"location":{"latitude":-6.2,"longitude":106.8}}`))
+		_, _ = w.Write([]byte(`{"result":{"place_id":"p1","name":"Mock","geometry":{"location":{"lat":-6.2,"lng":106.8}}},"status":"OK"}`))
 	}))
 	defer server.Close()
 	placesBaseURL = server.URL
@@ -96,7 +104,7 @@ func TestSearchCacheMissThenHitSkipsProviderUsageOnHit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		outbound++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"places":[{"id":"p1","displayName":{"text":"Cached Cafe"},"location":{"latitude":-6.2,"longitude":106.8}}]}`))
+		_, _ = w.Write([]byte(`{"results":[{"place_id":"p1","name":"Cached Cafe","geometry":{"location":{"lat":-6.2,"lng":106.8}},"types":["cafe"]}],"status":"OK"}`))
 	}))
 	defer server.Close()
 	placesBaseURL = server.URL
@@ -150,7 +158,7 @@ func TestCoreAndBusinessInfoCachesAreSeparate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		outbound++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"p1","displayName":{"text":"Mock"},"location":{"latitude":-6.2,"longitude":106.8}}`))
+		_, _ = w.Write([]byte(`{"result":{"place_id":"p1","name":"Mock","geometry":{"location":{"lat":-6.2,"lng":106.8}}},"status":"OK"}`))
 	}))
 	defer server.Close()
 	placesBaseURL = server.URL
@@ -187,15 +195,21 @@ func TestBusinessInfoCacheIsolatedByFieldMask(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		outbound++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"p1","displayName":{"text":"Mock"},"location":{"latitude":-6.2,"longitude":106.8}}`))
+		_, _ = w.Write([]byte(`{"result":{"place_id":"p1","name":"Mock","geometry":{"location":{"lat":-6.2,"lng":106.8}}},"status":"OK"}`))
 	}))
 	defer server.Close()
 	placesBaseURL = server.URL
 	client := NewGooglePlacesClient("mock-key")
 	client.http = server.Client()
-	if _, err := client.DetailBusinessInfo(context.Background(), "p1"); err != nil { t.Fatal(err) }
-	if _, err := client.DetailFull(context.Background(), "p1"); err != nil { t.Fatal(err) }
-	if outbound != 2 { t.Fatalf("different field masks must not collide; outbound=%d", outbound) }
+	if _, err := client.DetailBusinessInfo(context.Background(), "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.DetailFull(context.Background(), "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if outbound != 2 {
+		t.Fatalf("different field masks must not collide; outbound=%d", outbound)
+	}
 }
 
 func TestGoogleOutboundRequestsProduceOneAttributedEventEach(t *testing.T) {
@@ -204,15 +218,15 @@ func TestGoogleOutboundRequestsProduceOneAttributedEventEach(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
-		if strings.HasSuffix(r.URL.Path, "/media") {
+		if strings.HasSuffix(r.URL.Path, "/photo") {
 			_, _ = w.Write([]byte("image"))
 			return
 		}
-		if strings.Contains(r.URL.Path, ":search") {
-			_, _ = w.Write([]byte(`{"places":[]}`))
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte(`{"results":[],"status":"OK"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":"places/p1","displayName":{"text":"Mock"},"location":{"latitude":-6.2,"longitude":106.8}}`))
+		_, _ = w.Write([]byte(`{"result":{"place_id":"p1","name":"Mock","geometry":{"location":{"lat":-6.2,"lng":106.8}}},"status":"OK"}`))
 	}))
 	defer server.Close()
 	placesBaseURL = server.URL
@@ -232,10 +246,10 @@ func TestGoogleOutboundRequestsProduceOneAttributedEventEach(t *testing.T) {
 	if _, err := c.Detail(ctx, "p1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.FetchPhoto(ctx, "places/p1/photos/a"); err != nil {
+	if _, _, err := c.FetchPhoto(ctx, "legacy:photo-a"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.FetchPhoto(ctx, "places/p1/photos/b"); err != nil {
+	if _, _, err := c.FetchPhoto(ctx, "legacy:photo-b"); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 5 {
@@ -273,7 +287,7 @@ func TestMapPlaceDetailsPhotoURLUsesCRMProxy(t *testing.T) {
 			URI         string `json:"uri"`
 		} `json:"attributions"`
 	}{
-		Name:     "places/ChIJ123/photos/A_B-c",
+		Name:     "legacy:A_B-c",
 		WidthPx:  1200,
 		HeightPx: 900,
 	})
@@ -283,7 +297,7 @@ func TestMapPlaceDetailsPhotoURLUsesCRMProxy(t *testing.T) {
 		t.Fatalf("photos len=%d, want 1", len(details.Photos))
 	}
 	photo := details.Photos[0]
-	if photo.Name != "places/ChIJ123/photos/A_B-c" {
+	if photo.Name != "legacy:A_B-c" {
 		t.Fatalf("photo name=%q", photo.Name)
 	}
 	if strings.Contains(photo.PhotoURL, "SECRET_KEY") || strings.Contains(photo.PhotoURL, "key=") {
@@ -301,7 +315,8 @@ func TestPlacePhotoRejectsMalformedResourceNames(t *testing.T) {
 	svc := New(&fakeProspectRepository{}, &fakePlaces{})
 	for _, name := range []string{
 		"",
-		"https://places.googleapis.com/v1/places/ChIJ/photos/ref/media?key=SECRET",
+		"legacy:",
+		"legacy:photo/ref",
 		"places/ChIJ",
 		"places/ChIJ/photos/ref?target=https://example.com",
 		"../places/ChIJ/photos/ref",
@@ -315,15 +330,15 @@ func TestPlacePhotoRejectsMalformedResourceNames(t *testing.T) {
 func TestFetchPhotoPreservesContentTypeAndUsesHeaderKey(t *testing.T) {
 	var gotKey string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotKey = r.Header.Get("X-Goog-Api-Key")
-		if strings.Contains(r.URL.RawQuery, "key=") {
-			t.Fatalf("query exposes key: %s", r.URL.RawQuery)
-		}
-		if r.URL.Path != "/places/ChIJ123/photos/photo-ref/media" {
+		gotKey = r.URL.Query().Get("key")
+		if r.URL.Path != "/photo" {
 			t.Fatalf("path=%q", r.URL.Path)
 		}
-		if r.URL.Query().Get("maxWidthPx") != "800" {
-			t.Fatalf("maxWidthPx=%q", r.URL.Query().Get("maxWidthPx"))
+		if r.URL.Query().Get("maxwidth") != "800" {
+			t.Fatalf("maxwidth=%q", r.URL.Query().Get("maxwidth"))
+		}
+		if r.URL.Query().Get("photo_reference") != "photo-ref" {
+			t.Fatalf("photo_reference=%q", r.URL.Query().Get("photo_reference"))
 		}
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("png-data"))
@@ -335,7 +350,7 @@ func TestFetchPhotoPreservesContentTypeAndUsesHeaderKey(t *testing.T) {
 	defer func() { placesBaseURL = previousBaseURL }()
 
 	client := NewGooglePlacesClient("SECRET_KEY")
-	data, contentType, err := client.FetchPhoto(context.Background(), "places/ChIJ123/photos/photo-ref")
+	data, contentType, err := client.FetchPhoto(context.Background(), "legacy:photo-ref")
 	if err != nil {
 		t.Fatalf("FetchPhoto err=%v", err)
 	}
@@ -346,7 +361,7 @@ func TestFetchPhotoPreservesContentTypeAndUsesHeaderKey(t *testing.T) {
 		t.Fatalf("contentType=%q", contentType)
 	}
 	if gotKey != "SECRET_KEY" {
-		t.Fatalf("X-Goog-Api-Key=%q", gotKey)
+		t.Fatalf("query key=%q", gotKey)
 	}
 }
 
@@ -361,7 +376,7 @@ func TestFetchPhotoHandlesGoogleNon2xxSafely(t *testing.T) {
 	defer func() { placesBaseURL = previousBaseURL }()
 
 	client := NewGooglePlacesClient("SECRET_KEY")
-	_, _, err := client.FetchPhoto(context.Background(), "places/ChIJ123/photos/photo-ref")
+	_, _, err := client.FetchPhoto(context.Background(), "legacy:photo-ref")
 	if !errors.Is(err, ErrPlacePhotoUnavailable) {
 		t.Fatalf("err=%v, want ErrPlacePhotoUnavailable", err)
 	}
