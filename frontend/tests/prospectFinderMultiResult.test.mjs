@@ -18,3 +18,14 @@ test('Prospect Finder renders the complete search collection and loads details o
   assert.doesNotMatch(source, /categorySelections/)
   assert.doesNotMatch(source, /label="Create Pin"[\s\S]*@click="openPinForm"/)
 })
+
+test('Prospect Finder protects map, photo, menu, and coordinate state across actions', () => {
+  assert.match(source, /markers\.forEach\(\(marker\) => marker\.remove\(\)\)/)
+  assert.match(source, /selected\.value = null/)
+  assert.match(source, /revokePlacePhotoObjectUrls\(\)/)
+  assert.match(source, /let menuImagesRequestToken = 0/)
+  assert.match(source, /requestToken !== menuImagesRequestToken/)
+  assert.match(source, /const hasVisiblePhotos = computed/)
+  assert.match(source, /Number\.isFinite\(latitude\.value\)/)
+  assert.match(source, /Number\.isFinite\(pinLat\.value\)/)
+})

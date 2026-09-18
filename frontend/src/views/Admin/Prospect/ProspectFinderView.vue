@@ -254,8 +254,10 @@ const menuPhotos = computed<PlacePhoto[]>(() => [])
 const regularPhotos = computed(() => placeDetails.value?.photos ?? [])
 const visiblePhotos = computed(() => regularPhotos.value.slice(0, visiblePhotoCount.value))
 const hasMorePhotos = computed(() => visiblePhotoCount.value < regularPhotos.value.length)
+const hasVisiblePhotos = computed(() => visiblePhotos.value.some(photo => canShowPlacePhoto(photo)))
 
 let photoLoadToken = 0
+let menuImagesRequestToken = 0
 
 function revokePlacePhotoObjectUrls() {
   photoLoadToken += 1
@@ -306,16 +308,20 @@ async function loadMenuImages() {
   if (!placeDetails.value || menuImagesLoading.value) return
   const query = menuImageQuery()
   if (!query) return
+  const requestToken = ++menuImagesRequestToken
   menuImagesLoading.value = true
   menuImagesError.value = ''
   try {
-    menuImages.value = (await crmApi.getMenuImages(query, 3)).slice(0, 3)
-    if (selected.value) selected.value.hasMenuPhotos = menuImages.value.length > 0
+    const images = (await crmApi.getMenuImages(query, 3)).slice(0, 3)
+    if (requestToken !== menuImagesRequestToken) return
+    menuImages.value = images
+    if (selected.value) selected.value.hasMenuPhotos = images.length > 0
   } catch (caught) {
+    if (requestToken !== menuImagesRequestToken) return
     menuImagesError.value = crmError(caught)
     menuImages.value = []
   } finally {
-    menuImagesLoading.value = false
+    if (requestToken === menuImagesRequestToken) menuImagesLoading.value = false
   }
 }
 
@@ -569,6 +575,11 @@ async function savePin() {
     toast.add({ severity: 'warn', summary: 'Missing information', detail: 'Select a Sales Executive before saving.', life: 4000 })
     return
   }
+  if (!Number.isFinite(pinLat.value) || !Number.isFinite(pinLng.value) || pinLat.value < -90 || pinLat.value > 90 || pinLng.value < -180 || pinLng.value > 180) {
+    pinError.value = 'Enter valid latitude and longitude before saving the pin.'
+    toast.add({ severity: 'warn', summary: 'Invalid coordinates', detail: pinError.value, life: 5000 })
+    return
+  }
   pinError.value = ''
   pinSaving.value = true
   try {
@@ -710,7 +721,7 @@ async function loadCustomerMarkers() {
 }
 
 function drawSearchArea() {
-  if (!map) return
+  if (!map || !Number.isFinite(latitude.value) || !Number.isFinite(longitude.value)) return
   const latlng: L.LatLngExpression = [latitude.value, longitude.value]
   if (searchCircle) {
     searchCircle.setLatLng(latlng)
@@ -747,13 +758,21 @@ function renderMarkers() {
 
 function closeResults() {
   ++placeDetailsRequestToken
+  ++menuImagesRequestToken
+  markers.forEach((marker) => marker.remove())
+  markers.clear()
+  revokePlacePhotoObjectUrls()
   results.value = []
   filteredResults.value = []
   resultSearch.value = ''
+  selected.value = null
   detailOpen.value = false
   placeDetailsLoading.value = false
   placeDetailsError.value = ''
   placeDetails.value = {} as PlaceDetails
+  menuImages.value = []
+  menuImagesError.value = ''
+  menuImagesLoading.value = false
   queried.value = false
   nextTick(() => map?.invalidateSize())
 }
@@ -769,6 +788,7 @@ async function loadSavedPlaceIds() {
 
 async function selectResult(item: PlaceResult, focusMap = true) {
   const requestToken = ++placeDetailsRequestToken
+  ++menuImagesRequestToken
   selected.value = item
   placeDetails.value = placeResultToDetails(item)
   visiblePhotoCount.value = 1
@@ -776,6 +796,7 @@ async function selectResult(item: PlaceResult, focusMap = true) {
   placeDetailsError.value = ''
   menuImages.value = []
   menuImagesError.value = ''
+  menuImagesLoading.value = false
   detailOpen.value = true
   if (!item.isCustomer && item.googlePlaceId) {
     placeDetailsLoading.value = true
@@ -834,6 +855,11 @@ watch([latitude, longitude], () => {
 
 async function search() {
   if (loading.value) return
+  if (!Number.isFinite(latitude.value) || !Number.isFinite(longitude.value)) {
+    error.value = 'Enter valid latitude and longitude before searching.'
+    toast.add({ severity: 'warn', summary: 'Invalid coordinates', detail: error.value, life: 5000 })
+    return
+  }
   error.value = ''
   success.value = ''
   loading.value = true
@@ -842,10 +868,15 @@ async function search() {
     queried.value = true
     selected.value = null
     ++placeDetailsRequestToken
+    ++menuImagesRequestToken
+    revokePlacePhotoObjectUrls()
     placeDetailsLoading.value = false
     placeDetailsError.value = ''
     placeDetails.value = {} as PlaceDetails
     detailOpen.value = false
+    menuImages.value = []
+    menuImagesError.value = ''
+    menuImagesLoading.value = false
     await nextTick()
     renderMarkers()
   } catch (caught) {
@@ -1335,7 +1366,7 @@ onBeforeUnmount(() => {
 
         <div v-if="placeDetails" class="detail-section">
           <h3 class="detail-section-title"><i class="pi pi-images" /> Photos</h3>
-          <div v-if="visiblePhotos.length" class="detail-photos-row">
+          <div v-if="hasVisiblePhotos" class="detail-photos-row">
             <template v-for="(photo, index) in visiblePhotos" :key="photo.name">
               <button v-if="canShowPlacePhoto(photo)" type="button" class="detail-photo-tile detail-photo-button" @click="openPhotoPreview(resolvedPlacePhotoUrl(photo), 'Place photo', photo.attribution)">
                 <img :src="resolvedPlacePhotoUrl(photo)" alt="Place photo" class="detail-photo" loading="lazy" />
