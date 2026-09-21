@@ -60,7 +60,7 @@ func (r *stubSessionRepo) RevokeAllForUser(_ context.Context, _ uuid.UUID, _ str
 	return nil
 }
 
-type adminRepoStub struct{}
+type adminRepoStub struct{ adminrepo.Repository }
 
 func (r *adminRepoStub) ListUsers(_ context.Context, _ adminmodel.ListFilter) (adminmodel.UserListResult, error) {
 	return adminmodel.UserListResult{Items: []adminmodel.UserListItem{}, Total: 0, Page: 1, Limit: 10, Pages: 0}, nil
@@ -213,6 +213,7 @@ func TestAdminGetManagersReturnsJSONArray(t *testing.T) {
 }
 
 type patchAdminRepo struct {
+	adminrepo.Repository
 	current  authmodel.User
 	detail   adminmodel.UserDetail
 	captured *adminmodel.UpdateUserInput
@@ -266,6 +267,10 @@ type resetAdminRepo struct {
 	adminRepoStub
 	revoked  int64
 	resetErr error
+}
+
+func (r *resetAdminRepo) CountActiveAdministrators(_ context.Context) (int, error) {
+	return 1, nil
 }
 
 func (r *resetAdminRepo) ResetPassword(_ context.Context, _, _ uuid.UUID, _ string) (int64, error) {

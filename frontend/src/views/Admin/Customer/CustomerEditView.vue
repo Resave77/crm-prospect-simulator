@@ -8,7 +8,8 @@ import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
 import { useCrmStore } from '../../../stores/crm'
 import { useCustomerListStore } from '../../../stores/customerList'
-import type { CustomerDetail, Contact } from '../../../types/crm'
+import { updateAdminCustomer } from '../../../api/crm'
+import type { Address, ConversionInput, CustomerDetail, Contact, ParentMethod } from '../../../types/crm'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,20 +21,16 @@ const loading = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 
-const segmentOptions = [
-  { label: 'Select segment', value: '' },
-  { label: 'Key Account', value: 'Key Account' },
-  { label: 'Modern Trade', value: 'Modern Trade' },
-  { label: 'Food Service', value: 'Food Service' },
-  { label: 'General Trade', value: 'General Trade' },
-]
-const categoryOptions = [
-  { label: 'Select category', value: '' },
-  { label: 'HORECA', value: 'HORECA' },
-  { label: 'Retail', value: 'Retail' },
-  { label: 'Institution', value: 'Institution' },
-  { label: 'Distributor', value: 'Distributor' },
-]
+const segmentOptions = computed(() => {
+  const segments = ['B2B', 'B2C']
+  if (form.customerSegment && !segments.includes(form.customerSegment)) segments.unshift(form.customerSegment)
+  return [{ label: 'Select segment', value: '' }, ...segments.map((segment) => ({ label: segment, value: segment }))]
+})
+const categoryOptions = computed(() => {
+  const categories = [...(listStore.filterOptions?.categories ?? [])]
+  if (form.customerCategory && !categories.includes(form.customerCategory)) categories.unshift(form.customerCategory)
+  return [{ label: 'Select category', value: '' }, ...categories.map((category) => ({ label: category, value: category }))]
+})
 const regionOptions = computed(() => {
   const regs = listStore.filterOptions?.regions ?? []
   return [{ label: 'Select region', value: '' }, ...regs.map((r) => ({ label: r, value: r }))]
@@ -82,14 +79,90 @@ const hasChanges = computed(() => {
   )
 })
 
+const emptyAddress = (): Address => ({
+  mode: 'MANUAL',
+  province: '',
+  district: '',
+  subDistrict: '',
+  village: '',
+  latitude: null,
+  longitude: null,
+  previewAddress: '',
+})
+
+const addressOrFallback = (address?: Address | null, fallback?: Address | null): Address => ({
+  ...emptyAddress(),
+  ...(fallback ?? {}),
+  ...(address ?? {}),
+  mode: address?.mode || fallback?.mode || 'MANUAL',
+  previewAddress: address?.previewAddress || fallback?.previewAddress || '',
+})
+
+function buildUpdateInput(): ConversionInput {
+  if (!detail.value) throw new Error('Customer detail is not loaded.')
+  const customer = detail.value.customer as typeof detail.value.customer & Record<string, any>
+  const parentCompany = detail.value.parentCompany as typeof detail.value.parentCompany & Record<string, any>
+  const siteAddress = addressOrFallback(customer.address)
+  const companyAddress = addressOrFallback(parentCompany.address, siteAddress)
+  const salesExecutiveId = form.salesExecutiveId || customer.salesExecutiveId || listStore.filterOptions?.salesExecutives?.[0]?.id || ''
+  if (!salesExecutiveId) throw new Error('Sales executive is required.')
+
+  return {
+    customerName: form.name.trim(),
+    customerSegment: form.customerSegment,
+    customerCategory: form.customerCategory,
+    parentMethod: 'MANUAL_ENTRY' as ParentMethod,
+    existingParentCompanyId: null,
+    parentCompanyName: form.parentCompanyName.trim() || parentCompany.name || customer.parentCompanyName || form.name.trim(),
+    sameAsSiteAddress: false,
+    siteAddress,
+    companyAddress,
+    siteContacts: JSON.parse(JSON.stringify(form.contacts ?? [])),
+    companyContacts: JSON.parse(JSON.stringify(parentCompany.contacts ?? [])),
+    ppn: customer.ppn || 'PPN 12%',
+    idTkuNumber: customer.idTkuNumber || '',
+    nik: customer.nik || '',
+    companyNpwpName: parentCompany.npwpName || form.parentCompanyName.trim() || parentCompany.name || '',
+    companyNpwpAddress: parentCompany.npwpAddress || companyAddress.previewAddress || '',
+    companyNpwpNumber: parentCompany.npwpNumber || '',
+    shipmentCost: customer.shipmentCost || '0',
+    invoiceType: customer.invoiceType || 'Invoice 2',
+    bankAccount: customer.bankAccount || '',
+    termOfPayment: parentCompany.termOfPayment || '30 Days',
+    billToSource: customer.billToSource || 'company',
+    shipToSource: customer.shipToSource || 'site',
+    billingAddressPreview: customer.billingAddressPreview || companyAddress.previewAddress || '',
+    shippingAddressPreview: customer.shippingAddressPreview || siteAddress.previewAddress || '',
+    salesExecutiveId,
+    salesAssignments: JSON.parse(JSON.stringify(customer.salesAssignments ?? [])),
+    kamAssignments: JSON.parse(JSON.stringify(parentCompany.kamAssignments ?? [])),
+  }
+}
+
 async function handleSave() {
-  if (!isFormValid.value) return
+  if (!isFormValid.value || !detail.value) return
   saving.value = true
   try {
-    await new Promise((r) => setTimeout(r, 1000))
+    const updatedCustomer = await updateAdminCustomer(String(route.params.id), buildUpdateInput())
+    await listStore.updateCustomer(updatedCustomer)
+    detail.value = {
+      ...detail.value,
+      customer: updatedCustomer,
+      parentCompany: {
+        ...detail.value.parentCompany,
+        name: updatedCustomer.parentCompanyName,
+      },
+    }
+    form.name = updatedCustomer.name
+    form.customerSegment = updatedCustomer.segment
+    form.customerCategory = updatedCustomer.category
+    form.region = updatedCustomer.region
+    form.salesExecutiveId = updatedCustomer.salesExecutiveId
+    form.parentCompanyName = updatedCustomer.parentCompanyName
+    form.contacts = updatedCustomer.contacts?.length ? JSON.parse(JSON.stringify(updatedCustomer.contacts)) : []
     saved.value = true
-  } catch {
-    error.value = 'Failed to update customer. Please try again.'
+  } catch (e) {
+    error.value = crm.errorMessage(e) || 'Failed to update customer. Please try again.'
   } finally {
     saving.value = false
   }

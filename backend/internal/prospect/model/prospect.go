@@ -39,6 +39,7 @@ type Prospect struct {
 	FollowUpNotes            string     `json:"followUpNotes"`
 	Status                   Status     `json:"status"`
 	DeletionRequested        bool       `json:"deletionRequested"`
+	DeletedAt                *time.Time `json:"deletedAt,omitempty"`
 	ConvertedAt              *time.Time `json:"convertedAt,omitempty"`
 	CreatedAt                time.Time  `json:"createdAt"`
 	UpdatedAt                time.Time  `json:"updatedAt"`

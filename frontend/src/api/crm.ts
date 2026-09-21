@@ -58,6 +58,9 @@ export async function deleteProspect(id: string) {
 export async function requestProspectDeletion(id: string) {
   await api.post(`/sales/prospects/${id}/request-deletion`)
 }
+export async function trashProspect(id: string) { await api.post(`/admin/prospects/${id}/trash`) }
+export async function listTrashedProspects() { return (await api.get<ApiEnvelope<Prospect[]>>('/admin/prospects/trash')).data.data }
+export async function restoreProspect(id: string) { await api.post(`/admin/prospects/${id}/restore`) }
 export async function cancelProspectDeletion(id: string) {
   await api.post(`/sales/prospects/${id}/cancel-deletion`)
 }
@@ -93,6 +96,14 @@ export async function searchParentCompanies(search = '') {
 
 export async function convertProspect(id: string, input: ConversionInput) {
   return (await api.post<ApiEnvelope<CustomerSite>>(`/admin/prospects/${id}/convert`, input)).data.data
+}
+
+export async function createAdminCustomer(input: ConversionInput) {
+  return (await api.post<ApiEnvelope<CustomerSite>>('/admin/customers', input)).data.data
+}
+
+export async function updateAdminCustomer(id: string, input: ConversionInput) {
+  return (await api.patch<ApiEnvelope<CustomerSite>>(`/admin/customers/${id}`, input)).data.data
 }
 
 export async function getAdminCustomers() {

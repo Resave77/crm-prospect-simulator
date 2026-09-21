@@ -223,13 +223,16 @@ onMounted(load)
     </Message>
 
     <header class="roles-toolbar">
-      <div class="toolbar-title">
-        <span class="eyebrow">Sales Organization</span>
-        <h1>Manajemen Role</h1>
+      <div class="toolbar-title role-management-heading">
+        <div class="role-heading-icon"><i class="pi pi-shield" /></div>
+        <div>
+        <span class="eyebrow">Access Control</span>
+        <h1>Role Management</h1>
         <p>{{ filteredRoles.length }} visible · {{ activeRoles }} active</p>
+        <p class="role-management-description">Kelola role, jumlah module yang diakses, dan pengguna yang terhubung ke role tersebut.</p></div>
       </div>
 
-      <div class="toolbar-controls">
+      <div class="toolbar-controls role-filter-controls">
         <Select
           v-model="levelFilter"
           :options="levelFilterOptions"
@@ -284,6 +287,8 @@ onMounted(load)
         <strong>{{ item.count }}</strong>
       </div>
     </div>
+
+    <div class="role-table-toolbar"><div><h2>Role Table</h2><p>Cari role berdasarkan nama, module count, user count, atau status.</p></div><div class="role-table-actions"><label class="role-search"><i class="pi pi-search" /><input v-model="search" placeholder="Search role..." /></label><Button label="Add Role" icon="pi pi-plus" class="create-button" @click="goCreate" /></div></div>
 
     <div v-if="store.salesRolesLoading && !roleList.length" class="skeleton-area">
       <Skeleton v-for="n in 7" :key="n" class="skeleton-row" />
@@ -1311,4 +1316,24 @@ onMounted(load)
   .mobile-label { font-size:.52rem; }
   .role-row .p-tag { font-size:.53rem; padding:.18rem .35rem; }
 }
+.role-management-heading { display:flex; align-items:flex-start; gap:12px; min-width:0; padding:16px; border:1px solid #e2e8f0; border-radius:20px; background:#fff; box-shadow:0 12px 40px rgba(15,23,42,.05); }
+.roles-toolbar { align-items:stretch; }
+.role-management-heading { box-sizing:border-box; width:100%; flex:1 1 100%; }
+.role-heading-icon { display:flex; width:44px; height:44px; flex:0 0 44px; align-items:center; justify-content:center; border-radius:14px; background:#eff6ff; color:#2563eb; }
+.role-heading-icon .pi { font-size:22px; }
+.role-management-heading .eyebrow { color:#94a3b8; font:700 11px/16px Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.role-management-heading h1 { margin:4px 0 0; color:#0f172a; font:700 24px/30px Inter,ui-sans-serif,system-ui,sans-serif; }
+.role-management-heading .role-management-description { margin:4px 0 0; max-width:780px; color:#64748b; font:400 13px/20px Inter,ui-sans-serif,system-ui,sans-serif; }
+.role-management-heading > div:last-child > p:not(.role-management-description) { display:none; }
+.role-filter-controls { display:none !important; }
+.role-table-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid #eef2f7; background:#fff; }
+.role-table-toolbar h2 { margin:0; color:#0f172a; font:700 16px/22px Inter,ui-sans-serif,system-ui,sans-serif; }
+.role-table-toolbar p { margin:2px 0 0; color:#64748b; font:400 12px/16px Inter,ui-sans-serif,system-ui,sans-serif; }
+.role-table-actions { display:flex; width:100%; max-width:420px; gap:10px; }
+.role-search { display:flex; height:40px; flex:1; align-items:center; gap:8px; padding:0 12px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
+.role-search i { color:#94a3b8; font-size:16px; }
+.role-search input { width:100%; border:0; outline:0; color:#0f172a; font:400 13px Inter,ui-sans-serif,system-ui,sans-serif; }
+.role-search input::placeholder { color:#94a3b8; }
+.role-table-actions :deep(.create-button) { height:40px; border-radius:10px; background:#dc2626; border-color:#dc2626; font:600 13px Inter,ui-sans-serif,system-ui,sans-serif; white-space:nowrap; }
+@media(max-width:700px){ .role-table-toolbar { align-items:stretch; flex-direction:column; padding:16px; } .role-table-actions { max-width:none; } }
 </style>

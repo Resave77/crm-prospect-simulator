@@ -94,6 +94,20 @@ export function saveCustomerVisit(record: Omit<CustomerVisitRecord, 'id'>) {
   localStorage.setItem(CUSTOMER_VISITS_KEY, JSON.stringify(existing))
 }
 
+export function upsertCustomerVisit(record: CustomerVisitRecord) {
+  const visits = loadCustomerVisits()
+  const index = visits.findIndex((visit) => visit.id === record.id)
+  if (index >= 0) visits[index] = record
+  else visits.push(record)
+  localStorage.setItem(CUSTOMER_VISITS_KEY, JSON.stringify(visits))
+}
+
+export function getOpenCustomerVisit(entityId: string): CustomerVisitRecord | undefined {
+  return loadCustomerVisits()
+    .filter((visit) => visit.entityId === entityId && !visit.checkOutAt)
+    .sort((a, b) => new Date(b.checkInAt).getTime() - new Date(a.checkInAt).getTime())[0]
+}
+
 export function loadCustomerVisits(): CustomerVisitRecord[] {
   try {
     const raw = localStorage.getItem(CUSTOMER_VISITS_KEY)

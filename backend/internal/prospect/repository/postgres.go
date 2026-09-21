@@ -35,13 +35,13 @@ const prospectSelect = `
 	       p.industry_group,
 	       COALESCE(p.phone_number, ''), COALESCE(p.website_url, ''), COALESCE(p.google_maps_url, ''), p.assigned_sales_executive_id,
 	       u.full_name, p.visit_notes, p.follow_up_notes, p.status::text,
-	       p.deletion_requested, p.converted_at, p.created_at, p.updated_at
+	       p.deletion_requested, p.deleted_at, p.converted_at, p.created_at, p.updated_at
 	FROM prospects p
 	JOIN users u ON u.id = p.assigned_sales_executive_id`
 
 func (r *PostgresRepository) ListAssigned(ctx context.Context, salesExecutiveID uuid.UUID) ([]model.Prospect, error) {
 	rows, err := r.pool.Query(ctx, prospectSelect+`
-		WHERE p.assigned_sales_executive_id = $1
+		WHERE p.assigned_sales_executive_id = $1 AND p.deleted_at IS NULL
 		ORDER BY p.updated_at DESC`, salesExecutiveID)
 	if err != nil {
 		return nil, fmt.Errorf("list assigned prospects: %w", err)
@@ -93,7 +93,7 @@ func (r *PostgresRepository) TeamDashboard(ctx context.Context, actorID uuid.UUI
 		       COUNT(DISTINCT v.id) FILTER (WHERE v.check_in_at::date = CURRENT_DATE AND v.check_out_at IS NULL)::int
 		FROM descendants d
 		JOIN users u ON u.id = d.user_id
-		LEFT JOIN prospects p ON p.assigned_sales_executive_id = d.user_id
+		LEFT JOIN prospects p ON p.assigned_sales_executive_id = d.user_id AND p.deleted_at IS NULL
 		LEFT JOIN customer_sites cs ON cs.sales_executive_id = d.user_id
 		LEFT JOIN prospect_visits v ON v.sales_executive_id = d.user_id
 		GROUP BY d.user_id, u.full_name, d.role_name, d.role_level, d.parent_user_id, d.depth
@@ -140,6 +140,7 @@ func (r *PostgresRepository) TeamDashboard(ctx context.Context, actorID uuid.UUI
 		SELECT p.status::text, COUNT(*)::int
 		FROM prospects p
 		JOIN descendants d ON d.user_id = p.assigned_sales_executive_id
+		WHERE p.deleted_at IS NULL
 		GROUP BY p.status`, actorID)
 	if err != nil {
 		return model.TeamDashboard{}, fmt.Errorf("read team pipeline counts: %w", err)
@@ -157,9 +158,18 @@ func (r *PostgresRepository) TeamDashboard(ctx context.Context, actorID uuid.UUI
 }
 
 func (r *PostgresRepository) ListAll(ctx context.Context) ([]model.Prospect, error) {
-	rows, err := r.pool.Query(ctx, prospectSelect+` ORDER BY p.updated_at DESC`)
+	rows, err := r.pool.Query(ctx, prospectSelect+` WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list prospects: %w", err)
+	}
+	defer rows.Close()
+	return scanProspects(rows)
+}
+
+func (r *PostgresRepository) ListTrashed(ctx context.Context) ([]model.Prospect, error) {
+	rows, err := r.pool.Query(ctx, prospectSelect+` WHERE p.deleted_at IS NOT NULL ORDER BY p.deleted_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list trashed prospects: %w", err)
 	}
 	defer rows.Close()
 	return scanProspects(rows)
@@ -169,7 +179,7 @@ func (r *PostgresRepository) ListSalesExecutives(ctx context.Context) ([]model.S
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.full_name, COUNT(p.id)::int AS active_prospect_count
 		FROM users u
-		LEFT JOIN prospects p ON p.assigned_sales_executive_id = u.id AND p.status IN ('NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION')
+		LEFT JOIN prospects p ON p.assigned_sales_executive_id = u.id AND p.deleted_at IS NULL AND p.status IN ('NEW_LEAD','CONTACTED','INTERESTED','QUALIFIED','PROPOSAL_SENT','NEGOTIATION')
 		WHERE u.role = 'SALES_EXECUTIVE' AND u.status = 'ACTIVE'
 		GROUP BY u.id, u.full_name
 		ORDER BY u.full_name`)
@@ -207,7 +217,7 @@ func (r *PostgresRepository) ListMentionUsers(ctx context.Context) ([]model.Sale
 
 func (r *PostgresRepository) ListWon(ctx context.Context) ([]model.Prospect, error) {
 	rows, err := r.pool.Query(ctx, prospectSelect+`
-		WHERE p.status = 'WON' ORDER BY p.updated_at DESC`)
+		WHERE p.status = 'WON' AND p.deleted_at IS NULL ORDER BY p.updated_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list won prospects: %w", err)
 	}
@@ -422,8 +432,12 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 		-- Checkout tolerance is measured from the actual check-in position.
 		-- This allows the user to finish the visit without returning to the
 		-- prospect/customer point, while still limiting location drift.
-		AND ($9 OR (2 * 6371000 * ASIN(SQRT(POWER(SIN(RADIANS($4 - v.check_in_latitude) / 2), 2) + COS(RADIANS(v.check_in_latitude)) * COS(RADIANS($4)) * POWER(SIN(RADIANS($5 - v.check_in_longitude) / 2), 2))))) <= `+fmt.Sprintf("%.0f", checkoutToleranceMeters)+`))`,
-		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome, input.AutoCheckOut)
+		AND ($9 OR 2 * 6371000 * ASIN(SQRT(
+			POWER(SIN(RADIANS($4 - v.check_in_latitude) / 2), 2) +
+			COS(RADIANS(v.check_in_latitude)) * COS(RADIANS($4)) *
+			POWER(SIN(RADIANS($5 - v.check_in_longitude) / 2), 2)
+		)) <= $10)`,
+		prospectID, visitID, salesExecutiveID, input.Latitude, input.Longitude, input.FollowUpNotes, input.VisitResult, input.VisitOutcome, input.AutoCheckOut, checkoutToleranceMeters)
 	if err != nil {
 		return model.Visit{}, fmt.Errorf("check out prospect visit: %w", err)
 	}
@@ -676,6 +690,28 @@ func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) (
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return selfies, nil
+}
+
+func (r *PostgresRepository) TrashProspect(ctx context.Context, id uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, `UPDATE prospects SET deleted_at = COALESCE(deleted_at, now()), updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return fmt.Errorf("trash prospect: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) RestoreProspect(ctx context.Context, id uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, `UPDATE prospects SET deleted_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, id)
+	if err != nil {
+		return fmt.Errorf("restore prospect: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func isForeignKeyViolation(err error) bool {
@@ -1040,7 +1076,7 @@ func scanProspect(row rowScanner) (model.Prospect, error) {
 	err := row.Scan(&item.ID, &item.GooglePlaceID, &item.PlaceName, &item.FormattedAddress,
 		&item.Latitude, &item.Longitude, &item.PlaceCategory, &placeTypes, &item.IndustryGroup,
 		&item.PhoneNumber, &item.WebsiteURL, &item.GoogleMapsURL, &item.AssignedSalesExecutiveID, &item.AssignedSalesExecutive,
-		&item.VisitNotes, &item.FollowUpNotes, &item.Status, &item.DeletionRequested, &item.ConvertedAt,
+		&item.VisitNotes, &item.FollowUpNotes, &item.Status, &item.DeletionRequested, &item.DeletedAt, &item.ConvertedAt,
 		&item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Prospect{}, ErrNotFound

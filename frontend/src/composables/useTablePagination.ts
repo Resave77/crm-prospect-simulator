@@ -1,0 +1,8 @@
+import { computed, ref } from 'vue'
+export function normalizePageSizePresets(values: number[] = []) { return [...new Set(values.filter((v) => Number.isFinite(v) && v > 0))].sort((a, b) => a - b) }
+export function resolvePageSizeBounds(values: number[]) { const normalized = normalizePageSizePresets(values); return { min: normalized[0] ?? 1, max: normalized[normalized.length - 1] ?? 100 } }
+export function useTablePagination(options: any) {
+  const tableState = ref({ page: options.initialPage || 1, rows: options.initialPageSize || 25, sortField: options.initialSortField || null, sortDirection: options.initialSortDirection || 'desc' })
+  const pageSizeInput = ref(tableState.value.rows); const pageSizePreset = ref<number | 'custom'>(tableState.value.rows); const jumpPage = ref(tableState.value.page); const presets = normalizePageSizePresets(options.pageSizePresets)
+  return { tableState, pageSizeInput, pageSizePreset, jumpPage, minPageSize: computed(() => Math.min(...presets, 1)), maxPageSize: computed(() => Math.max(...presets, 100)), initializeFromUrl: () => undefined, updateUrlParams: () => undefined, applyCustomPageSize: (...args: any[]) => { const value = Number(args[0] ?? pageSizeInput.value); tableState.value.rows = value; pageSizeInput.value = value }, onJumpPage: (...args: any[]) => { const p = Number(args[0] ?? jumpPage.value); tableState.value.page = p; jumpPage.value = p }, onPageChange: (e: any) => { tableState.value.page = (e.page ?? 0) + 1; tableState.value.rows = e.rows ?? tableState.value.rows }, onSelectPageSizePreset: (v: number | string) => { if (typeof v === 'number') { tableState.value.rows = v; pageSizePreset.value = v } } }
+}

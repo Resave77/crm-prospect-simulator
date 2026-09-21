@@ -33,6 +33,9 @@ export interface AdminUserListItem {
   fullName: string
   email: string
   phone: string
+  city?: string | null
+  province?: string | null
+  district?: string | null
   role: AdminUserRole
   accountType?: AdminAccountType
   status: AdminUserStatus

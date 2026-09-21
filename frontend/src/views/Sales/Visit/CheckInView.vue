@@ -12,6 +12,8 @@ import {
   normalizeRouteId,
   fetchProspectVisitData,
   fetchCustomerVisitData,
+  saveCustomerVisit,
+  getOpenCustomerVisit,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
 import VisitLocationCard from '../../../components/sales/visit/VisitLocationCard.vue'
@@ -36,6 +38,7 @@ const pageError = ref('')
 const submitBusy = ref(false)
 const visitNotes = ref('')
 const selfieFile = ref<File | null>(null)
+const sourceProspectId = ref('')
 
 const location = useVisitLocation()
 
@@ -169,8 +172,20 @@ async function initialize() {
         return
       }
     } else {
-      const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
+      const { entity: ctx, sourceProspectId: sourceId } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx
+      sourceProspectId.value = sourceId
+      if (sourceProspectId.value) {
+        const { review } = await fetchProspectVisitData(sourceProspectId.value)
+        if (review.visits.some((visit) => !visit.checkOutAt)) {
+          router.replace({ name: 'SalesCustomerVisitResult', params: { id: resolvedEntityId.value } })
+          return
+        }
+      }
+      if (getOpenCustomerVisit(resolvedEntityId.value)) {
+        router.replace({ name: 'SalesCustomerVisitResult', params: { id: resolvedEntityId.value } })
+        return
+      }
     }
 
     if (!entity.value) {
@@ -219,12 +234,28 @@ async function submitCheckIn() {
 
     let notes = visitNotes.value
 
-    await checkInProspect(entity.value.entityId, {
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      visitNotes: notes,
-      selfie: selfieFile.value,
-    })
+    if (entity.value.entityType === 'customer' && !sourceProspectId.value) {
+      saveCustomerVisit({
+        entityId: entity.value.entityId,
+        entityName: entity.value.name,
+        entityType: 'customer',
+        checkInAt: new Date().toISOString(),
+        checkOutAt: '',
+        checkInLatitude: coords.latitude,
+        checkInLongitude: coords.longitude,
+        visitResult: '',
+        visitOutcome: '',
+        followUpNotes: notes,
+        followUpDate: '',
+      })
+    } else {
+      await checkInProspect(entity.value.entityType === 'customer' ? sourceProspectId.value : entity.value.entityId, {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        visitNotes: notes,
+        selfie: selfieFile.value,
+      })
+    }
 
     selfieFile.value = null
 

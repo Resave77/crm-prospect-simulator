@@ -7,3 +7,5 @@ export function useIsMobile(breakpoint = 768) {
   onUnmounted(() => window.removeEventListener('resize', update))
   return computed(() => width.value < breakpoint)
 }
+
+export default useIsMobile()

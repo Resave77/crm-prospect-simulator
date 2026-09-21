@@ -339,12 +339,12 @@ onMounted(() => { load() })
 
       <template v-if="user">
         <!-- PAGE HEADER -->
-        <header class="page-heading">
+        <header class="page-heading detail-ref-header">
           <div class="compact-heading-main">
           <Button label="Back to Employee" icon="pi pi-arrow-left" text class="back-detail-button" @click="router.push('/admin/accounts')" />
           <div class="page-title-wrapper">
             <span class="eyebrow">Employee Detail</span>
-            <h1>Employee Detail</h1>
+            <h1>Employee Detail</h1><p class="detail-breadcrumb">Employee Management &gt; Employee &gt; Detail</p>
             <div class="subtitle-row">
               <code class="code-tag code-blue">{{ user.employeeId || '—' }}</code>
               <span class="muted">&mdash;</span>
@@ -418,8 +418,16 @@ onMounted(() => { load() })
               <div class="detail-row"><span class="detail-label">Employee ID</span><span class="detail-value">{{ user.employeeId || '' }}</span></div>
             </div></div>
 
+            <div class="detail-card additional-detail-card"><div class="detail-card-header"><div><h3>Additional Details</h3><p>Additional employee profile data.</p></div></div><div class="detail-rows">
+              <div class="detail-row"><span class="detail-label">Gender</span><span class="detail-value">{{ user.gender || '—' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Date of Birth</span><span class="detail-value">{{ user.dateOfBirth?.slice(0, 10) || '—' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Primary Phone</span><span class="detail-value">{{ user.phones?.find((phone) => phone.isPrimary)?.phoneNumber || user.phone || '—' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Additional Phones</span><span class="detail-value">{{ user.phones?.filter((phone) => !phone.isPrimary).map((phone) => phone.phoneNumber).join(', ') || '—' }}</span></div>
+              <div class="detail-row"><span class="detail-label">Avatar File</span><span class="detail-value">{{ user.avatarUrl?.split('/').pop() || '—' }}</span></div>
+            </div></div>
+
             <!-- ROLE -->
-            <div class="detail-card">
+            <div class="detail-card role-management-card">
               <div class="detail-card-header">
                 <div class="detail-card-icon si-violet"><i class="pi pi-sitemap" /></div>
                 <div>
@@ -1025,7 +1033,6 @@ onMounted(() => { load() })
 .password-show-button { float: right; padding: 2px 8px; border: 1px solid #dce5f0; border-radius: 8px; background: #fff; color: #526783; font: inherit; font-size: 11px; cursor: pointer; }
 .legacy-user-fields { display: none !important; }
 .left-stack > .detail-card:nth-child(2) { display: none; }
-.left-stack > .detail-card:nth-child(4) { display: none; }
 .right-stack > .detail-card:nth-child(4) { display: none; }
 .account-info-stack { gap: 18px; }
 .detail-rows { gap: 12px 14px; }
@@ -1225,4 +1232,59 @@ onMounted(() => { load() })
 @media (max-width: 1000px) {
   .account-info-columns { width: calc(100% - 32px); grid-template-columns: 1fr; }
 }
+.detail-ref-header { position:sticky; top:0; z-index:40; box-sizing:border-box; width:100%; min-height:58px; margin:0; padding:10px 24px; border:0; border-bottom:1px solid #e2e8f0; background:rgba(255,255,255,.95); box-shadow:0 2px 8px rgba(15,23,42,.04); backdrop-filter:blur(8px); }
+.detail-ref-header { flex-wrap:nowrap; }
+.detail-ref-header .subtitle-row { display:none; }
+.detail-ref-header .compact-heading-main { display:flex; align-items:center; gap:12px; min-width:0; }
+.detail-ref-header .back-detail-button { position:relative; margin-right:0; padding-right:14px; color:#64748b; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:13px; }
+.detail-ref-header .back-detail-button::after { content:''; position:absolute; right:0; top:50%; width:1px; height:28px; background:#e2e8f0; transform:translateY(-50%); }
+.detail-ref-header .page-title-wrapper { display:flex; flex-direction:row; align-items:center; gap:8px; min-width:0; }
+.detail-ref-header .page-title-wrapper .eyebrow { display:none; }
+.detail-ref-header .page-title-wrapper h1 { margin:0; color:#1e293b; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:17px; font-weight:700; line-height:22px; }
+.detail-ref-header .detail-breadcrumb { margin:0; color:#94a3b8; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:11px; white-space:nowrap; }
+.detail-ref-header .page-heading-actions { display:flex; align-items:center; gap:8px; padding:0; }
+.detail-ref-header .page-heading-actions { flex:0 0 auto; margin-left:auto; }
+.detail-ref-header .page-heading-actions :deep(.p-button) { height:32px; border-radius:8px; padding:0 14px; font-family:Inter,ui-sans-serif,system-ui,sans-serif; font-size:12px; font-weight:600; }
+.detail-ref-header .page-heading-actions :deep(.p-button:first-child) { background:#fff; border-color:#e2e8f0; color:#475569; }
+.detail-ref-header .page-heading-actions :deep(.p-button:nth-child(2)) { background:#dc2626; border-color:#dc2626; color:#fff; }
+.detail-ref-header .page-heading-actions :deep(.p-button:last-child) { background:#fff; border-color:#fecaca; color:#dc2626; }
+@media(max-width:700px){ .detail-ref-header { padding:10px 16px; } .detail-ref-header .detail-breadcrumb { display:none; } .detail-ref-header .page-heading-actions :deep(.p-button-label) { display:none; } .detail-ref-header .page-heading-actions :deep(.p-button) { width:32px; min-width:32px; padding:0; } }
+.corrected-user-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; padding:20px; }
+.left-stack > .detail-card:first-child > .detail-card-header { padding:18px 20px; border-bottom:1px solid #eef2f7; }
+.left-stack > .detail-card:first-child > .detail-card-header h3 { margin:0; color:#0f172a; font:700 16px/22px Inter,ui-sans-serif,system-ui,sans-serif; }
+.left-stack > .detail-card:first-child > .detail-card-header p { margin:4px 0 0; color:#64748b; font:400 12px/16px Inter,ui-sans-serif,system-ui,sans-serif; }
+.left-stack > .detail-card:first-child > .detail-card-header .detail-card-icon { display:none; }
+.corrected-user-fields { box-sizing:border-box; width:100%; padding:20px; gap:14px; background:#fff; }
+.corrected-user-fields .detail-row { display:flex; flex-direction:column; align-items:stretch; gap:4px; min-width:0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.corrected-user-fields .detail-label { color:#94a3b8; font:600 11px/16px Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.corrected-user-fields .detail-value { min-width:0; color:#0f172a; font:600 14px/20px Inter,ui-sans-serif,system-ui,sans-serif; overflow-wrap:anywhere; }
+.corrected-user-fields .detail-row .detail-value { margin:0; }
+.corrected-user-fields .password-mask { letter-spacing:.08em; }
+.corrected-user-fields .password-show-button { align-self:flex-end; margin-top:-28px; height:32px; padding:0 10px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; color:#475569; font:600 12px Inter,ui-sans-serif,system-ui,sans-serif; }
+.corrected-user-fields .password-show-button { float:right; margin-left:8px; }
+.corrected-user-fields .detail-row:has(.password-show-button) { position:relative; }
+.corrected-user-fields .detail-row:has(.password-show-button) .detail-label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.corrected-user-fields .detail-row:has(.password-show-button) .password-show-button { position:static; order:2; float:none; margin:0; flex-shrink:0; }
+.legacy-user-fields { display:none !important; }
+.left-stack > .detail-card:nth-child(2) { display:none; }
+.left-stack > .detail-card:nth-child(5) { display:none; }
+.role-management-card { display:none !important; }
+.erp-job-card .detail-card-header { padding:18px 20px; border-bottom:1px solid #eef2f7; }
+.erp-job-card .detail-card-header h3 { margin:0; color:#0f172a; font:700 16px/22px Inter,ui-sans-serif,system-ui,sans-serif; }
+.erp-job-card .detail-card-header p { margin:4px 0 0; color:#64748b; font:400 12px/16px Inter,ui-sans-serif,system-ui,sans-serif; }
+.erp-job-card .detail-rows { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; padding:20px; }
+.erp-job-card .detail-row { display:flex; flex-direction:column; align-items:stretch; gap:4px; min-width:0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.erp-job-card .detail-label { color:#94a3b8; font:600 11px/16px Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.erp-job-card .detail-value { color:#0f172a; font:600 14px/20px Inter,ui-sans-serif,system-ui,sans-serif; overflow-wrap:anywhere; }
+.additional-detail-card .detail-card-header { padding:18px 20px; border-bottom:1px solid #eef2f7; }
+.additional-detail-card .detail-card-header { display:block; min-height:70px; box-sizing:border-box; background:#fff; }
+.additional-detail-card .detail-card-header h3 { margin:0; color:#0f172a; font:700 16px/22px Inter,ui-sans-serif,system-ui,sans-serif; }
+.additional-detail-card .detail-card-header p { margin:4px 0 0; color:#64748b; font:400 12px/16px Inter,ui-sans-serif,system-ui,sans-serif; }
+.additional-detail-card .detail-rows { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; padding:20px; }
+.additional-detail-card .detail-row { display:flex; flex-direction:column; gap:4px; padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.additional-detail-card .detail-label { color:#94a3b8; font:600 11px/16px Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.additional-detail-card .detail-value { color:#0f172a; font:600 14px/20px Inter,ui-sans-serif,system-ui,sans-serif; overflow-wrap:anywhere; }
+@media(max-width:640px){ .additional-detail-card .detail-rows { grid-template-columns:1fr; padding:16px; } }
+@media(max-width:640px){ .erp-job-card .detail-rows { grid-template-columns:1fr; padding:16px; } }
+@media(max-width:640px){ .corrected-user-fields { grid-template-columns:1fr; padding:16px; } }
 </style>

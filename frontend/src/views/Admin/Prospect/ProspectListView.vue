@@ -6,7 +6,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import Dialog from 'primevue/dialog'
-import { getPipeline, getSalesExecutives, deleteProspect, approveProspectDeletion, rejectProspectDeletion } from '../../../api/crm'
+import { getPipeline, getSalesExecutives, trashProspect, listTrashedProspects, restoreProspect, approveProspectDeletion, rejectProspectDeletion } from '../../../api/crm'
 import { listCategories, type MasterDataCategory } from '../../../api/masterData'
 import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
@@ -39,6 +39,21 @@ const deleteDialogVisible = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const deleting = ref(false)
+const trashVisible = ref(false)
+const trashedProspects = ref<Prospect[]>([])
+async function openTrash() {
+  trashVisible.value = true
+  try { trashedProspects.value = await listTrashedProspects() } catch (e) { error.value = crm.errorMessage(e) }
+}
+
+async function restoreTrashedProspect(id: string) {
+  try {
+    await restoreProspect(id)
+    trashedProspects.value = trashedProspects.value.filter((item) => item.id !== id)
+    await crm.loadPipeline()
+    prospects.value = crm.pipeline
+  } catch (e) { error.value = crm.errorMessage(e) }
+}
 
 const deletionTarget = ref<Prospect | null>(null)
 const showDeletionDialog = ref(false)
@@ -163,7 +178,7 @@ function confirmDelete(id: string, name: string) {
 async function executeDelete() {
   deleting.value = true
   try {
-    await deleteProspect(deleteTargetId.value)
+    await trashProspect(deleteTargetId.value)
     prospects.value = prospects.value.filter((p) => p.id !== deleteTargetId.value)
     deleteDialogVisible.value = false
   } catch (e) {
@@ -262,7 +277,7 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
-    <nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
+<nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" @click="openTrash"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
     <div class="panel-stack">
       <div v-if="showFilters" class="filter-panel">
         <div class="filter-grid">
@@ -459,8 +474,8 @@ onMounted(async () => {
             @click="requestDeleteFromActions(actionTarget)"
           >
             <span>
-              <strong>Delete Prospect</strong>
-              <small>Permanently remove this prospect and related data.</small>
+              <strong>Move to Trash</strong>
+              <small>Move this prospect to Trash. It can be restored later.</small>
             </span>
             <span class="action-arrow">›</span>
           </button>
@@ -468,11 +483,22 @@ onMounted(async () => {
       </div>
     </Dialog>
 
-    <Dialog v-model:visible="deleteDialogVisible" header="Delete Prospect" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
-      <p>Are you sure you want to delete <strong>{{ deleteTargetName }}</strong>? This action cannot be undone.</p>
+    <Dialog v-model:visible="trashVisible" header="Prospect Trash" modal :draggable="false" :style="{ width: 'min(620px, calc(100vw - 2rem))' }">
+      <div v-if="trashedProspects.length" class="space-y-2">
+        <div v-for="item in trashedProspects" :key="item.id" class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+          <div class="min-w-0"><strong class="block truncate">{{ item.placeName }}</strong><small class="text-slate-500">{{ item.formattedAddress }}</small></div>
+          <Button label="Restore" icon="pi pi-refresh" size="small" outlined @click="restoreTrashedProspect(item.id)" />
+        </div>
+      </div>
+      <p v-else class="m-0 text-sm text-slate-500">Trash is empty.</p>
+      <template #footer><Button label="Close" severity="secondary" text @click="trashVisible = false" /></template>
+    </Dialog>
+
+    <Dialog v-model:visible="deleteDialogVisible" header="Move to Trash" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
+      <p>Move <strong>{{ deleteTargetName }}</strong> to Trash? You can restore it later.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
-        <Button label="Delete" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
+        <Button label="Move to Trash" severity="danger" icon="pi pi-trash" :loading="deleting" @click="executeDelete" />
       </template>
     </Dialog>
 

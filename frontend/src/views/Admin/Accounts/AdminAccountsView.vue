@@ -479,7 +479,7 @@ onMounted(() => { load() })
 
         <Column header="Location" class="updated-column">
           <template #body="{ data }">
-            <span class="single-line">{{ fallback(String(data.location || data.city || data.province || '')) }}</span>
+            <span class="single-line">{{ fallback(String(data.location || [data.city, data.province, data.district].filter(Boolean).join(', ') || '')) }}</span>
           </template>
         </Column>
 

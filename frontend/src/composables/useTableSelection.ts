@@ -1,0 +1,2 @@
+import { ref, type Ref } from 'vue'
+export function useTableSelection(options: { items: Ref<unknown[]>; selectionMode?: string | null; dataKey?: string; valueKey?: string }) { const internalSelection = ref<unknown[]>([]); return { internalSelection, clearSelection: () => { internalSelection.value = [] }, syncSelectionWithData: () => { if (options.selectionMode !== 'multiple') internalSelection.value = internalSelection.value.slice(0, 1) } } }

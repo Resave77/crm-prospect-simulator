@@ -32,7 +32,8 @@ const parentSelect = `
 
 const customerSelect = `
 	SELECT cs.id, cs.customer_code, cs.parent_company_id, pc.parent_code, pc.name,
-	       cs.source_prospect_id, cs.source_google_place_id, cs.name, cs.segment,
+	       COALESCE(cs.source_prospect_id, '00000000-0000-0000-0000-000000000000'::uuid),
+	       COALESCE(cs.source_google_place_id, ''), cs.name, cs.segment,
 	       cs.category, cs.address_mode, cs.province, cs.district, cs.sub_district,
 	       cs.village, cs.latitude, cs.longitude, cs.preview_address, cs.site_contacts,
 	       cs.ppn, cs.id_tku_number, cs.nik, cs.shipment_cost, cs.invoice_type,
@@ -215,6 +216,225 @@ func (r *PostgresRepository) Convert(ctx context.Context, prospectID, administra
 	return result, nil
 }
 
+func (r *PostgresRepository) CreateCustomer(ctx context.Context, administratorID uuid.UUID, input model.ConversionInput) (model.CustomerSite, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("begin customer creation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	parent, err := r.resolveParentCompany(ctx, tx, input)
+	if err != nil {
+		return model.CustomerSite{}, err
+	}
+
+	var salesName string
+	err = tx.QueryRow(ctx, `
+		SELECT full_name FROM users WHERE id = $1 AND role = 'SALES_EXECUTIVE' AND status = 'ACTIVE'`, input.SalesExecutiveID).
+		Scan(&salesName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.CustomerSite{}, ErrSalesUnavailable
+	}
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("validate sales executive: %w", err)
+	}
+	for _, assignment := range input.SalesAssignments {
+		if assignment.OwnerID == "" {
+			continue
+		}
+		assignmentOwnerID, parseErr := uuid.Parse(assignment.OwnerID)
+		if parseErr != nil {
+			return model.CustomerSite{}, ErrSalesUnavailable
+		}
+		var active bool
+		if queryErr := tx.QueryRow(ctx, `
+			SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND role = 'SALES_EXECUTIVE' AND status = 'ACTIVE')`, assignmentOwnerID).Scan(&active); queryErr != nil {
+			return model.CustomerSite{}, fmt.Errorf("validate additional sales assignment: %w", queryErr)
+		}
+		if !active {
+			return model.CustomerSite{}, ErrSalesUnavailable
+		}
+	}
+
+	var customerSequence int64
+	if err := tx.QueryRow(ctx, `SELECT nextval('customer_site_code_seq')`).Scan(&customerSequence); err != nil {
+		return model.CustomerSite{}, fmt.Errorf("generate customer code: %w", err)
+	}
+	customerCode := simulationCustomerCode(parent.ParentCode, customerSequence)
+
+	siteContacts, err := json.Marshal(input.SiteContacts)
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("encode site contacts: %w", err)
+	}
+	salesAssignments, err := json.Marshal(input.SalesAssignments)
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("encode sales assignments: %w", err)
+	}
+	convertedAt := time.Now().UTC()
+	customerID := uuid.New()
+	_, err = tx.Exec(ctx, `
+		INSERT INTO customer_sites (
+			id, customer_code, parent_company_id, source_prospect_id, source_google_place_id,
+			name, segment, category, address_mode, province, district, sub_district, village,
+			latitude, longitude, preview_address, site_contacts, ppn, id_tku_number, nik,
+			shipment_cost, invoice_type, bank_account, bill_to_source, ship_to_source,
+			billing_address_preview, shipping_address_preview, sales_executive_id,
+			sales_assignments, converted_at, converted_by_admin_id, updated_at)
+		VALUES ($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+			$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29, now())`,
+		customerID, customerCode, parent.ID,
+		input.CustomerName, input.CustomerSegment, input.CustomerCategory,
+		input.SiteAddress.Mode, input.SiteAddress.Province, input.SiteAddress.District,
+		input.SiteAddress.SubDistrict, input.SiteAddress.Village, input.SiteAddress.Latitude,
+		input.SiteAddress.Longitude, input.SiteAddress.PreviewAddress, siteContacts,
+		input.PPN, input.IDTKUNumber, input.NIK, input.ShipmentCost, input.InvoiceType,
+		input.BankAccount, input.BillToSource, input.ShipToSource,
+		input.BillingAddressPreview, input.ShippingAddressPreview,
+		input.SalesExecutiveID, salesAssignments, convertedAt, administratorID)
+	if err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	result, err := scanCustomer(tx.QueryRow(ctx, customerSelect+` WHERE cs.id = $1`, customerID))
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("read created customer: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
+func (r *PostgresRepository) UpdateCustomer(ctx context.Context, customerID uuid.UUID, input model.ConversionInput) (model.CustomerSite, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("begin customer update: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var currentParentID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT parent_company_id FROM customer_sites WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, customerID).Scan(&currentParentID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.CustomerSite{}, ErrNotFound
+		}
+		return model.CustomerSite{}, fmt.Errorf("lock customer site: %w", err)
+	}
+
+	parentID := currentParentID
+	if input.ParentMethod == model.ParentMethodExisting {
+		if input.ExistingParentCompanyID == nil {
+			return model.CustomerSite{}, ErrParentUnavailable
+		}
+		parent, err := scanParent(tx.QueryRow(ctx, parentSelect+` WHERE pc.id = $1 FOR SHARE`, *input.ExistingParentCompanyID))
+		if errors.Is(err, ErrNotFound) {
+			return model.CustomerSite{}, ErrParentUnavailable
+		}
+		if err != nil {
+			return model.CustomerSite{}, err
+		}
+		parentID = parent.ID
+	} else {
+		contacts, err := json.Marshal(input.CompanyContacts)
+		if err != nil {
+			return model.CustomerSite{}, fmt.Errorf("encode company contacts: %w", err)
+		}
+		kams, err := json.Marshal(input.KAMAssignments)
+		if err != nil {
+			return model.CustomerSite{}, fmt.Errorf("encode KAM assignments: %w", err)
+		}
+		command, err := tx.Exec(ctx, `
+			UPDATE parent_companies
+			SET name = $2, address_mode = $3, province = $4, district = $5,
+				sub_district = $6, village = $7, latitude = $8, longitude = $9,
+				preview_address = $10, company_contacts = $11, npwp_name = $12,
+				npwp_address = $13, npwp_number = $14, term_of_payment = $15,
+				kam_assignments = $16, updated_at = now()
+			WHERE id = $1`,
+			currentParentID, input.ParentCompanyName, input.CompanyAddress.Mode,
+			input.CompanyAddress.Province, input.CompanyAddress.District,
+			input.CompanyAddress.SubDistrict, input.CompanyAddress.Village,
+			input.CompanyAddress.Latitude, input.CompanyAddress.Longitude,
+			input.CompanyAddress.PreviewAddress, contacts, input.CompanyNPWPName,
+			input.CompanyNPWPAddress, input.CompanyNPWPNumber, input.TermOfPayment, kams)
+		if err != nil {
+			return model.CustomerSite{}, mapDatabaseError(err)
+		}
+		if command.RowsAffected() == 0 {
+			return model.CustomerSite{}, ErrParentUnavailable
+		}
+	}
+
+	var salesName string
+	err = tx.QueryRow(ctx, `
+		SELECT full_name FROM users WHERE id = $1 AND role = 'SALES_EXECUTIVE' AND status = 'ACTIVE'`, input.SalesExecutiveID).
+		Scan(&salesName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.CustomerSite{}, ErrSalesUnavailable
+	}
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("validate sales executive: %w", err)
+	}
+	for _, assignment := range input.SalesAssignments {
+		if assignment.OwnerID == "" {
+			continue
+		}
+		assignmentOwnerID, parseErr := uuid.Parse(assignment.OwnerID)
+		if parseErr != nil {
+			return model.CustomerSite{}, ErrSalesUnavailable
+		}
+		var active bool
+		if queryErr := tx.QueryRow(ctx, `
+			SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND role = 'SALES_EXECUTIVE' AND status = 'ACTIVE')`, assignmentOwnerID).Scan(&active); queryErr != nil {
+			return model.CustomerSite{}, fmt.Errorf("validate additional sales assignment: %w", queryErr)
+		}
+		if !active {
+			return model.CustomerSite{}, ErrSalesUnavailable
+		}
+	}
+
+	siteContacts, err := json.Marshal(input.SiteContacts)
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("encode site contacts: %w", err)
+	}
+	salesAssignments, err := json.Marshal(input.SalesAssignments)
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("encode sales assignments: %w", err)
+	}
+	command, err := tx.Exec(ctx, `
+		UPDATE customer_sites
+		SET parent_company_id = $2, name = $3, segment = $4, category = $5,
+			address_mode = $6, province = $7, district = $8, sub_district = $9,
+			village = $10, latitude = $11, longitude = $12, preview_address = $13,
+			site_contacts = $14, ppn = $15, id_tku_number = $16, nik = $17,
+			shipment_cost = $18, invoice_type = $19, bank_account = $20,
+			bill_to_source = $21, ship_to_source = $22, billing_address_preview = $23,
+			shipping_address_preview = $24, sales_executive_id = $25,
+			sales_assignments = $26, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL`,
+		customerID, parentID, input.CustomerName, input.CustomerSegment,
+		input.CustomerCategory, input.SiteAddress.Mode, input.SiteAddress.Province,
+		input.SiteAddress.District, input.SiteAddress.SubDistrict, input.SiteAddress.Village,
+		input.SiteAddress.Latitude, input.SiteAddress.Longitude,
+		input.SiteAddress.PreviewAddress, siteContacts, input.PPN, input.IDTKUNumber,
+		input.NIK, input.ShipmentCost, input.InvoiceType, input.BankAccount,
+		input.BillToSource, input.ShipToSource, input.BillingAddressPreview,
+		input.ShippingAddressPreview, input.SalesExecutiveID, salesAssignments)
+	if err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return model.CustomerSite{}, ErrNotFound
+	}
+
+	result, err := scanCustomer(tx.QueryRow(ctx, customerSelect+` WHERE cs.id = $1`, customerID))
+	if err != nil {
+		return model.CustomerSite{}, fmt.Errorf("read updated customer: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return model.CustomerSite{}, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
 func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UUID) (model.CustomerSite, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
@@ -345,8 +565,12 @@ func (r *PostgresRepository) ListTrashedCustomers(ctx context.Context) ([]model.
 
 func (r *PostgresRepository) RestoreCustomer(ctx context.Context, id uuid.UUID) error {
 	command, err := r.pool.Exec(ctx, `UPDATE customer_sites SET deleted_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, id)
-	if err != nil { return fmt.Errorf("restore customer site: %w", err) }
-	if command.RowsAffected() == 0 { return ErrNotFound }
+	if err != nil {
+		return fmt.Errorf("restore customer site: %w", err)
+	}
+	if command.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 
@@ -530,7 +754,8 @@ const customerListBase = `
 
 const customerListSelect = `
 	SELECT cs.id, cs.customer_code, cs.parent_company_id, pc.parent_code, pc.name,
-	       cs.source_prospect_id, cs.source_google_place_id, cs.name, cs.segment,
+	       COALESCE(cs.source_prospect_id, '00000000-0000-0000-0000-000000000000'::uuid),
+	       COALESCE(cs.source_google_place_id, ''), cs.name, cs.segment,
 	       cs.category, cs.address_mode, cs.province, cs.district, cs.sub_district,
 	       cs.village, cs.latitude, cs.longitude, cs.preview_address, cs.site_contacts,
 	       cs.ppn, cs.id_tku_number, cs.nik, cs.shipment_cost, cs.invoice_type,

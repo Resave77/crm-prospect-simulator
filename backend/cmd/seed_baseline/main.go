@@ -43,12 +43,12 @@ const (
 	assignmentSales3Level3ID = "f93b718f-d2ad-5189-b75a-b6224252750e"
 
 	passwordHashAdmin  = "$2a$10$lwUpcBt35Icbgyur1LEnnuz20ZNdL0wKZjOq8.9TwSKgsBsPG8d5K"
-	passwordHashDelete = "$2a$10$4cQnfxHhD9uS5jyl2gTa3e8sIYXOJoNlAp3hBsKRtiAyblCEBFyi."
-	passwordHashLevel1 = "$2a$10$9Bp/SGHaxPBOxRrwUhO4tu9vBttkf66piBG3T9gBhX8X7vYer5ppK"
-	passwordHashLevel2 = "$2a$10$GruyFaUHg7gC5F1Qop3v0uipXxQASfvTXgNoWtIE/s7jgkB1AIEPe"
-	passwordHashLevel3 = "$2a$10$OPbMhtFWpd3wn3/UwpAIQ.917hlz4OgVxxNEFUm8PJozQ9uyTfNMO"
-	passwordHashSales  = "$2a$10$Z8BxSU0x17PaG22C54KaXu5NEbl6foX4/WhgiscMIq6ybRbXYWql2"
-	passwordHashSandy  = "$2a$10$hoRg4AHVKo0Bhn/vPm78QuA.KIfBGzFV/u1L76he2brBQpdgufAKy"
+	passwordHashDelete = passwordHashAdmin
+	passwordHashLevel1 = passwordHashAdmin
+	passwordHashLevel2 = passwordHashAdmin
+	passwordHashLevel3 = passwordHashAdmin
+	passwordHashSales  = passwordHashAdmin
+	passwordHashSandy  = passwordHashAdmin
 )
 
 var levelOnePermissions = adminservice.DefaultPermissionKeys(1)

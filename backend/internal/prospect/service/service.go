@@ -757,6 +757,27 @@ func (s *Service) DeleteProspect(ctx context.Context, actor Actor, id uuid.UUID)
 	return s.repository.DeleteProspect(ctx, id)
 }
 
+func (s *Service) TrashProspect(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	return s.repository.TrashProspect(ctx, id)
+}
+
+func (s *Service) ListTrashed(ctx context.Context, actor Actor) ([]prospectmodel.Prospect, error) {
+	if !actor.Role.IsAdminRole() {
+		return nil, ErrForbidden
+	}
+	return s.repository.ListTrashed(ctx)
+}
+
+func (s *Service) RestoreProspect(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	return s.repository.RestoreProspect(ctx, id)
+}
+
 func (s *Service) RequestDeletion(ctx context.Context, actor Actor, id uuid.UUID) error {
 	if !actor.can("request_prospect_deletion") {
 		return ErrForbidden

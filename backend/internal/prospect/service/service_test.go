@@ -28,6 +28,7 @@ func TestNormalizeChatJSONAcceptsMarkdownWrappedObject(t *testing.T) {
 }
 
 type fakeProspectRepository struct {
+	repository.Repository
 	prospect      prospectmodel.Prospect
 	accessible    *bool
 	history       []prospectmodel.StatusHistory

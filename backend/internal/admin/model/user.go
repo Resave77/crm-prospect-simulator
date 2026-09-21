@@ -10,12 +10,12 @@ import (
 )
 
 type ListFilter struct {
-	Page      int
-	Limit     int
-	Search    string
-	Role      string
-	Status    string
-	ManagerID string
+	Page           int
+	Limit          int
+	Search         string
+	Role           string
+	Status         string
+	ManagerID      string
 	IncludeDeleted bool
 }
 
@@ -25,6 +25,9 @@ type UserListItem struct {
 	FullName           string                     `json:"fullName"`
 	Email              string                     `json:"email"`
 	Phone              string                     `json:"phone"`
+	City               *string                    `json:"city"`
+	Province           *string                    `json:"province"`
+	District           *string                    `json:"district"`
 	Role               authmodel.Role             `json:"role"`
 	Status             authmodel.UserStatus       `json:"status"`
 	ManagerID          *uuid.UUID                 `json:"managerId"`
@@ -78,10 +81,10 @@ type UserDetail struct {
 }
 
 type PhoneNumber struct {
-	ID string `json:"id"`
-	PhoneNumber string `json:"phoneNumber"`
-	Label *string `json:"label"`
-	IsPrimary bool `json:"isPrimary"`
+	ID          string  `json:"id"`
+	PhoneNumber string  `json:"phoneNumber"`
+	Label       *string `json:"label"`
+	IsPrimary   bool    `json:"isPrimary"`
 }
 
 type OrganizationalRoleSummary struct {
@@ -109,30 +112,34 @@ const (
 )
 
 type CreateUserInput struct {
-	EmployeeID        string         `json:"employeeId"`
-	FullName          string         `json:"name"`
-	Email             string         `json:"email"`
-	Phone             string         `json:"phone"`
-	AccountType       AccountType    `json:"accountType"`
-	Role              authmodel.Role `json:"role"`
-	SalesRoleID       *uuid.UUID     `json:"salesRoleId"`
-	ManagerID         *uuid.UUID     `json:"managerId"`
-	TemporaryPassword string         `json:"temporaryPassword"`
-	Timezone string `json:"timezone"`
-	City *string `json:"city"`
-	Province *string `json:"province"`
-	District *string `json:"district"`
-	JobTitle *string `json:"jobTitle"`
-	PositionGrade *string `json:"positionGrade"`
-	SubDepartment *string `json:"subDepartment"`
-	JoinDate *string `json:"joinDate"`
-	Gender *string `json:"gender"`
-	DateOfBirth *string `json:"dateOfBirth"`
-	AvatarPath *string `json:"avatarPath"`
-	Phones []PhoneNumberInput `json:"phones"`
+	EmployeeID        string             `json:"employeeId"`
+	FullName          string             `json:"name"`
+	Email             string             `json:"email"`
+	Phone             string             `json:"phone"`
+	AccountType       AccountType        `json:"accountType"`
+	Role              authmodel.Role     `json:"role"`
+	SalesRoleID       *uuid.UUID         `json:"salesRoleId"`
+	ManagerID         *uuid.UUID         `json:"managerId"`
+	TemporaryPassword string             `json:"temporaryPassword"`
+	Timezone          string             `json:"timezone"`
+	City              *string            `json:"city"`
+	Province          *string            `json:"province"`
+	District          *string            `json:"district"`
+	JobTitle          *string            `json:"jobTitle"`
+	PositionGrade     *string            `json:"positionGrade"`
+	SubDepartment     *string            `json:"subDepartment"`
+	JoinDate          *string            `json:"joinDate"`
+	Gender            *string            `json:"gender"`
+	DateOfBirth       *string            `json:"dateOfBirth"`
+	AvatarPath        *string            `json:"avatarPath"`
+	Phones            []PhoneNumberInput `json:"phones"`
 }
 
-type PhoneNumberInput struct { PhoneNumber string `json:"phoneNumber"`; Label *string `json:"label"`; IsPrimary bool `json:"isPrimary"` }
+type PhoneNumberInput struct {
+	PhoneNumber string  `json:"phoneNumber"`
+	Label       *string `json:"label"`
+	IsPrimary   bool    `json:"isPrimary"`
+}
 
 // OptionalUUID tracks whether a JSON field was present so a PATCH request
 // can distinguish an omitted managerId from an explicit null (clear).
@@ -167,42 +174,42 @@ func (o OptionalUUID) MarshalJSON() ([]byte, error) {
 }
 
 type UpdateUserInput struct {
-	EmployeeID  *string         `json:"employeeId"`
-	FullName    *string         `json:"name"`
-	Email       *string         `json:"email"`
-	Phone       *string         `json:"phone"`
-	AccountType *AccountType    `json:"accountType"`
-	Role        *authmodel.Role `json:"role"`
-	SalesRoleID OptionalUUID    `json:"salesRoleId"`
-	ManagerID   OptionalUUID    `json:"managerId"`
-	Timezone *string `json:"timezone"`
-	City *string `json:"city"`
-	Province *string `json:"province"`
-	District *string `json:"district"`
-	JobTitle *string `json:"jobTitle"`
-	PositionGrade *string `json:"positionGrade"`
-	SubDepartment *string `json:"subDepartment"`
-	JoinDate *string `json:"joinDate"`
-	Gender *string `json:"gender"`
-	DateOfBirth *string `json:"dateOfBirth"`
-	AvatarPath *string `json:"avatarPath"`
-	Phones *[]PhoneNumberInput `json:"phones"`
+	EmployeeID    *string             `json:"employeeId"`
+	FullName      *string             `json:"name"`
+	Email         *string             `json:"email"`
+	Phone         *string             `json:"phone"`
+	AccountType   *AccountType        `json:"accountType"`
+	Role          *authmodel.Role     `json:"role"`
+	SalesRoleID   OptionalUUID        `json:"salesRoleId"`
+	ManagerID     OptionalUUID        `json:"managerId"`
+	Timezone      *string             `json:"timezone"`
+	City          *string             `json:"city"`
+	Province      *string             `json:"province"`
+	District      *string             `json:"district"`
+	JobTitle      *string             `json:"jobTitle"`
+	PositionGrade *string             `json:"positionGrade"`
+	SubDepartment *string             `json:"subDepartment"`
+	JoinDate      *string             `json:"joinDate"`
+	Gender        *string             `json:"gender"`
+	DateOfBirth   *string             `json:"dateOfBirth"`
+	AvatarPath    *string             `json:"avatarPath"`
+	Phones        *[]PhoneNumberInput `json:"phones"`
 }
 
 // ProfileUpdateInput is deliberately separate from organizational account updates.
 type ProfileUpdateInput struct {
-	Timezone *string `json:"timezone"`
-	City *string `json:"city"`
-	Province *string `json:"province"`
-	District *string `json:"district"`
-	JobTitle *string `json:"jobTitle"`
-	PositionGrade *string `json:"positionGrade"`
-	SubDepartment *string `json:"subDepartment"`
-	JoinDate *string `json:"joinDate"`
-	Gender *string `json:"gender"`
-	DateOfBirth *string `json:"dateOfBirth"`
-	Phones *[]PhoneNumberInput `json:"phones"`
-	AvatarPath *string `json:"avatarPath"`
+	Timezone      *string             `json:"timezone"`
+	City          *string             `json:"city"`
+	Province      *string             `json:"province"`
+	District      *string             `json:"district"`
+	JobTitle      *string             `json:"jobTitle"`
+	PositionGrade *string             `json:"positionGrade"`
+	SubDepartment *string             `json:"subDepartment"`
+	JoinDate      *string             `json:"joinDate"`
+	Gender        *string             `json:"gender"`
+	DateOfBirth   *string             `json:"dateOfBirth"`
+	Phones        *[]PhoneNumberInput `json:"phones"`
+	AvatarPath    *string             `json:"avatarPath"`
 }
 
 type UpdateStatusInput struct {

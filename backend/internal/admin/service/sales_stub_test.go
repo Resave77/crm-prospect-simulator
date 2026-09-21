@@ -49,6 +49,9 @@ func (r *repoStub) SetCurrentSalesAssignment(_ context.Context, _ uuid.UUID, _ *
 func (r *repoStub) DeleteUser(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
+func (r *repoStub) RestoreUser(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
 func (r *repoStub) FindSalesAssignment(_ context.Context, _ uuid.UUID) (model.SalesStructureAssignment, error) {
 	return model.SalesStructureAssignment{}, repository.ErrNotFound
 }

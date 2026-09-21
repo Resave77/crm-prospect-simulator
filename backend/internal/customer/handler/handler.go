@@ -61,6 +61,34 @@ func (h *Handler) Convert(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusCreated, item)
 }
 
+func (h *Handler) CreateCustomer(c *fiber.Ctx) error {
+	var request customermodel.ConversionInput
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	item, err := h.service.CreateCustomer(c.UserContext(), actor(c), request)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusCreated, item)
+}
+
+func (h *Handler) UpdateCustomer(c *fiber.Ctx) error {
+	id, err := parseID(c)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "CUSTOMER_ID_INVALID", "The customer ID is invalid.")
+	}
+	var request customermodel.ConversionInput
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	item, err := h.service.UpdateCustomer(c.UserContext(), actor(c), id, request)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, item)
+}
+
 func (h *Handler) AdminCustomers(c *fiber.Ctx) error {
 	items, err := h.service.AdminCustomers(c.UserContext(), actor(c))
 	if err != nil {
@@ -186,13 +214,20 @@ func (h *Handler) DeleteCustomer(c *fiber.Ctx) error {
 
 func (h *Handler) TrashedCustomers(c *fiber.Ctx) error {
 	items, err := h.service.ListTrashedCustomers(c.UserContext(), actor(c))
-	if err != nil { return writeError(c, err) }
+	if err != nil {
+		return writeError(c, err)
+	}
 	return response.Data(c, fiber.StatusOK, items)
 }
 
 func (h *Handler) RestoreCustomer(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id")); if err != nil { return response.Error(c, 400, "CUSTOMER_ID_INVALID", "Customer ID is invalid.") }
-	if err := h.service.RestoreCustomer(c.UserContext(), actor(c), id); err != nil { return writeError(c, err) }
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "CUSTOMER_ID_INVALID", "Customer ID is invalid.")
+	}
+	if err := h.service.RestoreCustomer(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
 	return response.Data(c, fiber.StatusOK, fiber.Map{"restored": true})
 }
 

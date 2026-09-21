@@ -6,9 +6,9 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import type { Contact } from '../../../types/crm'
+import type { Contact, ConversionInput, ParentMethod } from '../../../types/crm'
 import { useCustomerListStore } from '../../../stores/customerList'
-import { getSalesExecutives } from '../../../api/crm'
+import { createAdminCustomer, getSalesExecutives } from '../../../api/crm'
 import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
 
 const router = useRouter()
@@ -156,10 +156,10 @@ const previewCustomerSiteCode = computed(() => {
 })
 
 const existingParentCompanies = computed(() => {
-  const companies = new Map<string, { code: string; name: string }>()
+  const companies = new Map<string, { id: string; code: string; name: string }>()
   for (const customer of store.allCustomers) {
     if (customer.parentCode && customer.parentCompanyName && !companies.has(customer.parentCode)) {
-      companies.set(customer.parentCode, { code: customer.parentCode, name: customer.parentCompanyName })
+      companies.set(customer.parentCode, { id: customer.parentCompanyId, code: customer.parentCode, name: customer.parentCompanyName })
     }
   }
   return [...companies.values()]
@@ -332,14 +332,116 @@ const isFormValid = computed(() =>
   form.customerCategory !== ''
 )
 
+function splitCityProvince(value: string) {
+  const [city = '', province = ''] = value.split(',').map((item) => item.trim())
+  return { city, province }
+}
+
+function toNumberOrNull(value: string) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+function createAddress(
+  previewAddress: string,
+  cityProvince: string,
+  postalDetail: string,
+  latitude: string,
+  longitude: string,
+) {
+  const { city, province } = splitCityProvince(cityProvince)
+  const cleanPreview = previewAddress.trim()
+  const cleanCity = city.trim()
+  const cleanProvince = province.trim() || cityProvince.trim()
+  const cleanPostal = postalDetail.trim()
+  return {
+    mode: 'MANUAL',
+    province: cleanProvince || cleanCity || 'Indonesia',
+    district: cleanCity || cleanProvince || 'Indonesia',
+    subDistrict: cleanPostal || cleanCity || cleanProvince || 'Indonesia',
+    village: cleanPostal || cleanCity || cleanProvince || 'Indonesia',
+    latitude: toNumberOrNull(latitude),
+    longitude: toNumberOrNull(longitude),
+    previewAddress: cleanPreview || [cleanPostal, cleanCity, cleanProvince].filter(Boolean).join(', '),
+  }
+}
+
+function nonEmptyContacts(contacts: Contact[]) {
+  return contacts.filter((contact) =>
+    contact.name.trim() ||
+    contact.position.trim() ||
+    contact.phone.trim() ||
+    contact.email.trim(),
+  )
+}
+
 async function handleSubmit() {
   if (!isFormValid.value) return
   saving.value = true
+  error.value = ''
   try {
-    await new Promise((r) => setTimeout(r, 1200))
+    const selectedParent = existingParentCompanies.value.find((company) => company.code === form.parentCode || company.name === form.parentCompanyName)
+    const parentMethodByMode: Record<'manual' | 'match' | 'existing', ParentMethod> = {
+      manual: 'MANUAL_ENTRY',
+      match: 'MATCH_CUSTOMER_NAME',
+      existing: 'EXISTING_COMPANY',
+    }
+    const parentCompanyName = parentCompanyMode.value === 'match'
+      ? form.name.trim()
+      : form.parentCompanyName.trim() || form.name.trim()
+    const siteAddress = createAddress(
+      form.address.trim(),
+      form.province.trim(),
+      form.district.trim(),
+      form.latitude.trim(),
+      form.longitude.trim(),
+    )
+    const companyAddress = createAddress(
+      form.companyAddress.trim() || siteAddress.previewAddress,
+      form.companyProvince.trim() || form.province.trim(),
+      form.companyDistrict.trim() || form.district.trim(),
+      form.companyLatitude.trim() || form.latitude.trim(),
+      form.companyLongitude.trim() || form.longitude.trim(),
+    )
+    const salesExecutiveId = form.salesExecutiveId || salesExecutives.value[0]?.id || ''
+    if (!salesExecutiveId) {
+      throw new Error('Sales executive is required.')
+    }
+    const input: ConversionInput = {
+      customerName: form.name.trim(),
+      customerSegment: form.customerSegment,
+      customerCategory: form.customerCategory,
+      parentMethod: parentMethodByMode[parentCompanyMode.value],
+      existingParentCompanyId: parentCompanyMode.value === 'existing' ? (selectedParent?.id || null) : null,
+      parentCompanyName,
+      sameAsSiteAddress: form.companyAddress.trim() === '' || form.companyAddress.trim() === form.address.trim(),
+      siteAddress,
+      companyAddress,
+      siteContacts: nonEmptyContacts(form.contacts),
+      companyContacts: nonEmptyContacts(form.companyContacts),
+      ppn: form.pph,
+      idTkuNumber: form.idTkuNumber.trim(),
+      nik: form.nik.trim(),
+      companyNpwpName: form.companyNpwpName.trim() || parentCompanyName,
+      companyNpwpAddress: form.companyNpwpAddress.trim() || companyAddress.previewAddress,
+      companyNpwpNumber: form.companyNpwpNumber.trim(),
+      shipmentCost: form.shipmentCost.trim() || '0',
+      invoiceType: form.invoiceType,
+      bankAccount: form.bankAccount,
+      termOfPayment: form.termPayment ? `${form.termPayment} Days` : '30 Days',
+      billToSource: billToSource.value,
+      shipToSource: shipToSource.value,
+      billingAddressPreview: billToSource.value === 'site' ? siteAddress.previewAddress : companyAddress.previewAddress,
+      shippingAddressPreview: shipToSource.value === 'company' ? companyAddress.previewAddress : siteAddress.previewAddress,
+      salesExecutiveId,
+      salesAssignments: [],
+      kamAssignments: [],
+    }
+    const createdCustomer = await createAdminCustomer(input)
+    await store.addCustomer(createdCustomer, false)
     saved.value = true
   } catch (e) {
-    error.value = 'Failed to save customer. Please try again.'
+    error.value = e instanceof Error ? e.message : 'Failed to save customer. Please try again.'
   } finally {
     saving.value = false
   }

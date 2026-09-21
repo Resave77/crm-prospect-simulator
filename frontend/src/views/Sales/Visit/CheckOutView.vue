@@ -11,6 +11,8 @@ import {
   normalizeRouteId,
   fetchProspectVisitData,
   fetchCustomerVisitData,
+  getOpenCustomerVisit,
+  upsertCustomerVisit,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
 import { formatErrorMessage } from '../../../utils/format'
@@ -33,6 +35,7 @@ const pageState = ref<PageState>('loading')
 const pageError = ref('')
 const submitBusy = ref(false)
 const autoCheckoutStarted = ref(false)
+const sourceProspectId = ref('')
 const CHECKOUT_TOLERANCE_METERS = 500
 
 const location = useVisitLocation()
@@ -43,10 +46,17 @@ async function autoCheckOutIfOutside(coords: GpsCoords) {
   if (distance === null || distance <= CHECKOUT_TOLERANCE_METERS || coords.accuracy > CHECKOUT_TOLERANCE_METERS / 2) return
   autoCheckoutStarted.value = true
   try {
-    await checkOutProspect(entity.value!.entityId, activeVisit.value.id, {
-      latitude: coords.latitude, longitude: coords.longitude,
-      followUpNotes: '', visitResult: '', visitOutcome: '', autoCheckOut: true,
-    })
+    if (entity.value!.entityType === 'customer' && !sourceProspectId.value) {
+      const open = getOpenCustomerVisit(entity.value!.entityId)
+      if (open && open.id === activeVisit.value.id) {
+        upsertCustomerVisit({ ...open, checkOutAt: new Date().toISOString() })
+      }
+    } else {
+      await checkOutProspect(entity.value!.entityType === 'customer' ? sourceProspectId.value : entity.value!.entityId, activeVisit.value.id, {
+        latitude: coords.latitude, longitude: coords.longitude,
+        followUpNotes: '', visitResult: '', visitOutcome: '', autoCheckOut: true,
+      })
+    }
     localStorage.removeItem(localStorageKey())
     router.replace({ name: resolvedEntityType.value === 'customer' ? 'SalesCustomerCheckOutSuccess' : 'SalesProspectCheckOutSuccess', params: { id: entity.value!.entityId } })
   } catch (caught) {
@@ -189,16 +199,40 @@ async function initialize() {
       location.startWatching()
       loadStoredVisitResult()
     } else {
-      const { entity: ctx, sourceProspectId } = await fetchCustomerVisitData(resolvedEntityId.value)
+      const { entity: ctx, sourceProspectId: sourceId } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx
+      sourceProspectId.value = sourceId
 
       if (!entity.value) {
         pageState.value = 'not-found'
         return
       }
 
-      const { review } = await fetchProspectVisitData(sourceProspectId)
-      const open = review.visits.find((v) => !v.checkOutAt)
+      let open = getOpenCustomerVisit(resolvedEntityId.value)
+      if (sourceProspectId.value) {
+        try {
+          const sourceReview = await fetchProspectVisitData(sourceProspectId.value)
+          const sourceOpen = sourceReview.review.visits.find((visit) => !visit.checkOutAt)
+          if (sourceOpen) {
+            open = {
+              id: sourceOpen.id,
+              entityId: resolvedEntityId.value,
+              entityName: ctx.name,
+              entityType: 'customer',
+              checkInAt: sourceOpen.checkInAt,
+              checkOutAt: '',
+              checkInLatitude: sourceOpen.checkInLatitude,
+              checkInLongitude: sourceOpen.checkInLongitude,
+              visitResult: sourceOpen.visitResult,
+              visitOutcome: sourceOpen.visitOutcome,
+              followUpNotes: sourceOpen.followUpNotes,
+              followUpDate: '',
+            }
+          }
+        } catch {
+          // Fall back to a direct customer visit record below.
+        }
+      }
       if (!open) {
         pageState.value = 'no-active-visit'
         return
@@ -237,44 +271,46 @@ async function handleSubmit() {
     const lat = coords?.latitude ?? 0
     const lng = coords?.longitude ?? 0
     const stored = storedVisitResult.value
+    const distanceFromCheckIn = location.distanceTo(
+      activeVisit.value.checkInLatitude,
+      activeVisit.value.checkInLongitude,
+    )
+    const autoCheckOut = distanceFromCheckIn !== null && distanceFromCheckIn > CHECKOUT_TOLERANCE_METERS
 
-    if (entity.value.entityType === 'prospect') {
-      await checkOutProspect(entity.value.entityId, activeVisit.value.id, {
-        latitude: lat,
-        longitude: lng,
-        followUpNotes: stored?.followUpNotes ?? '',
-        visitResult: stored?.visitResult ?? '',
-        visitOutcome: stored?.visitOutcome ?? '',
-      })
-
-      try {
-        await transitionProspect(entity.value.entityId, 'CONTACTED', '')
-      } catch {
-        // Transition may fail if already CONTACTED or beyond
-      }
-
-      localStorage.removeItem(localStorageKey())
-
-      router.replace({
-        name: 'SalesProspectCheckOutSuccess',
-        params: { id: entity.value.entityId },
+    if (entity.value.entityType === 'customer' && !sourceProspectId.value) {
+      const open = getOpenCustomerVisit(entity.value.entityId)
+      if (!open || open.id !== activeVisit.value.id) throw new Error('Active customer visit not found')
+      upsertCustomerVisit({
+        ...open,
+        checkOutAt: new Date().toISOString(),
+        visitResult: stored?.visitResult ?? open.visitResult,
+        visitOutcome: stored?.visitOutcome ?? open.visitOutcome,
+        followUpNotes: stored?.followUpNotes ?? open.followUpNotes,
+        followUpDate: stored?.followUpDate ?? open.followUpDate,
       })
     } else {
-      await checkOutProspect(entity.value.entityId, activeVisit.value.id, {
+      await checkOutProspect(entity.value.entityType === 'customer' ? sourceProspectId.value : entity.value.entityId, activeVisit.value.id, {
         latitude: lat,
         longitude: lng,
         followUpNotes: stored?.followUpNotes ?? '',
         visitResult: stored?.visitResult ?? '',
         visitOutcome: stored?.visitOutcome ?? '',
-      })
-
-      localStorage.removeItem(localStorageKey())
-
-      router.replace({
-        name: 'SalesCustomerCheckOutSuccess',
-        params: { id: entity.value.entityId },
+        autoCheckOut,
       })
     }
+
+    try {
+      await transitionProspect(entity.value.entityId, 'CONTACTED', '')
+    } catch {
+      // Transition may fail if already CONTACTED or beyond
+    }
+
+    localStorage.removeItem(localStorageKey())
+
+    router.replace({
+      name: entity.value.entityType === 'customer' ? 'SalesCustomerCheckOutSuccess' : 'SalesProspectCheckOutSuccess',
+      params: { id: entity.value.entityId },
+    })
   } catch (caught) {
     pageError.value = formatErrorMessage(caught)
   } finally {
@@ -321,8 +357,8 @@ onBeforeUnmount(() => {
     <!-- No active visit -->
     <div v-else-if="pageState === 'no-active-visit'" class="checkout-empty">
       <div class="checkout-empty-icon"><i class="pi pi-sign-in" /></div>
-      <strong>{{ resolvedEntityType === 'customer' ? 'Customer checkout not available' : 'No active visit' }}</strong>
-      <p>{{ resolvedEntityType === 'customer' ? 'Customer visit check-out is not yet supported by the backend.' : 'You need to check in before you can check out.' }}</p>
+      <strong>No active visit</strong>
+      <p>You need to complete the check-in and visit result before checking out.</p>
       <button class="checkout-empty-btn" @click="goBack()"><i class="pi pi-arrow-left" /> Back to detail</button>
     </div>
 

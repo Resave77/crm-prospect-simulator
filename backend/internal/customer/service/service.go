@@ -102,6 +102,30 @@ func (s *Service) Convert(ctx context.Context, actor Actor, prospectID uuid.UUID
 	return s.repository.Convert(ctx, prospectID, actor.UserID, input)
 }
 
+func (s *Service) CreateCustomer(ctx context.Context, actor Actor, input customermodel.ConversionInput) (customermodel.CustomerSite, error) {
+	if !actor.Role.IsAdminRole() {
+		return customermodel.CustomerSite{}, ErrForbidden
+	}
+	normalize(&input)
+	prepareDirectCreateInput(&input)
+	if err := validate(input); err != nil {
+		return customermodel.CustomerSite{}, err
+	}
+	return s.repository.CreateCustomer(ctx, actor.UserID, input)
+}
+
+func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.ConversionInput) (customermodel.CustomerSite, error) {
+	if !actor.Role.IsAdminRole() {
+		return customermodel.CustomerSite{}, ErrForbidden
+	}
+	normalize(&input)
+	prepareDirectCreateInput(&input)
+	if err := validate(input); err != nil {
+		return customermodel.CustomerSite{}, err
+	}
+	return s.repository.UpdateCustomer(ctx, id, input)
+}
+
 func (s *Service) AdminCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
 	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
@@ -175,12 +199,16 @@ func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID)
 }
 
 func (s *Service) ListTrashedCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
-	if !actor.can("view_customers") { return nil, ErrForbidden }
+	if !actor.can("view_customers") {
+		return nil, ErrForbidden
+	}
 	return s.repository.ListTrashedCustomers(ctx)
 }
 
 func (s *Service) RestoreCustomer(ctx context.Context, actor Actor, id uuid.UUID) error {
-	if !actor.can("view_customers") { return ErrForbidden }
+	if !actor.can("view_customers") {
+		return ErrForbidden
+	}
 	return s.repository.RestoreCustomer(ctx, id)
 }
 
@@ -212,6 +240,70 @@ func normalize(input *customermodel.ConversionInput) {
 	}
 	if input.SameAsSiteAddress && input.ParentMethod != customermodel.ParentMethodExisting {
 		input.CompanyAddress = input.SiteAddress
+	}
+}
+
+func prepareDirectCreateInput(input *customermodel.ConversionInput) {
+	if input.ParentMethod == "" {
+		input.ParentMethod = customermodel.ParentMethodManual
+	}
+	if input.ParentMethod == customermodel.ParentMethodMatchSite {
+		input.ParentCompanyName = input.CustomerName
+	}
+	prepareRequiredAddress(&input.SiteAddress, input.CustomerName)
+	if input.ParentMethod != customermodel.ParentMethodExisting {
+		if input.SameAsSiteAddress || strings.TrimSpace(input.CompanyAddress.PreviewAddress) == "" {
+			input.CompanyAddress = input.SiteAddress
+		}
+		prepareRequiredAddress(&input.CompanyAddress, input.ParentCompanyName)
+	}
+	if input.PPN == "" {
+		input.PPN = "PPN 12%"
+	}
+	if input.InvoiceType == "" {
+		input.InvoiceType = "Invoice 2"
+	}
+	if input.TermOfPayment == "" {
+		input.TermOfPayment = "30 Days"
+	}
+	if input.BillToSource == "" {
+		input.BillToSource = "company"
+	}
+	if input.ShipToSource == "" {
+		input.ShipToSource = "site"
+	}
+	if strings.TrimSpace(input.BillingAddressPreview) == "" {
+		input.BillingAddressPreview = input.CompanyAddress.PreviewAddress
+	}
+	if strings.TrimSpace(input.ShippingAddressPreview) == "" {
+		input.ShippingAddressPreview = input.SiteAddress.PreviewAddress
+	}
+}
+
+func prepareRequiredAddress(address *customermodel.Address, fallbackPreview string) {
+	address.Mode = strings.TrimSpace(address.Mode)
+	if address.Mode == "" {
+		address.Mode = "MANUAL"
+	}
+	address.Province = strings.TrimSpace(address.Province)
+	address.District = strings.TrimSpace(address.District)
+	address.SubDistrict = strings.TrimSpace(address.SubDistrict)
+	address.Village = strings.TrimSpace(address.Village)
+	address.PreviewAddress = strings.TrimSpace(address.PreviewAddress)
+	if address.PreviewAddress == "" {
+		address.PreviewAddress = strings.TrimSpace(fallbackPreview)
+	}
+	if address.Province == "" {
+		address.Province = address.District
+	}
+	if address.District == "" {
+		address.District = address.Province
+	}
+	if address.SubDistrict == "" {
+		address.SubDistrict = address.District
+	}
+	if address.Village == "" {
+		address.Village = address.SubDistrict
 	}
 }
 

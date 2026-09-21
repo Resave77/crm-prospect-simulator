@@ -1001,6 +1001,9 @@ async function logout() {
 .admin-content:has(.compact-admin-page) {
   padding: 0.75rem 1rem 1rem;
 }
+.admin-content:has(.edit-employee-header) {
+  padding: 0;
+}
 .admin-content:has(.admin-page),
 .admin-content:has(.finder-page) {
   padding: 0;

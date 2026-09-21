@@ -24,6 +24,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 const listColumns = `u.id, u.email, u.full_name, u.employee_id, u.phone,
+	u.city, u.province, u.district,
 	u.role::text, u.status::text, u.must_change_password,
 	u.manager_id, COALESCE(m.full_name, ''),
 	active_assignment.parent_user_id, COALESCE(parent.full_name, ''),
@@ -115,7 +116,11 @@ func (r *PostgresRepository) ListUsers(ctx context.Context, filter model.ListFil
 
 func buildListWhere(filter model.ListFilter) (string, []any) {
 	conditions := []string{}
-	if !filter.IncludeDeleted { conditions = append(conditions, `u.deleted_at IS NULL`) } else { conditions = append(conditions, `u.deleted_at IS NOT NULL`) }
+	if !filter.IncludeDeleted {
+		conditions = append(conditions, `u.deleted_at IS NULL`)
+	} else {
+		conditions = append(conditions, `u.deleted_at IS NOT NULL`)
+	}
 	args := make([]any, 0)
 	idx := 1
 
@@ -480,8 +485,12 @@ func (r *PostgresRepository) DeleteUser(ctx context.Context, id uuid.UUID) error
 
 func (r *PostgresRepository) RestoreUser(ctx context.Context, id uuid.UUID) error {
 	command, err := r.pool.Exec(ctx, `UPDATE users SET deleted_at = NULL, status = 'ACTIVE', updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, id)
-	if err != nil { return mapError(err) }
-	if command.RowsAffected() == 0 { return ErrNotFound }
+	if err != nil {
+		return mapError(err)
+	}
+	if command.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 
@@ -627,6 +636,7 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	var item model.UserListItem
 	var employeeID pgtype.Text
 	var phone pgtype.Text
+	var city, province, district pgtype.Text
 	var orgRoleID *uuid.UUID
 	var orgRoleName pgtype.Text
 	var orgRoleLevel pgtype.Int2
@@ -638,6 +648,7 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	var reportsToUserID *uuid.UUID
 	err := row.Scan(&item.ID, &item.Email, &item.FullName,
 		&employeeID, &phone,
+		&city, &province, &district,
 		&item.Role, &item.Status, &item.MustChangePassword,
 		&managerID, &item.ManagerName,
 		&reportsToUserID, &item.ReportsToName,
@@ -648,6 +659,15 @@ func scanUserListItem(row pgx.Row) (model.UserListItem, error) {
 	}
 	if employeeID.Valid {
 		item.EmployeeID = employeeID.String
+	}
+	if city.Valid {
+		item.City = &city.String
+	}
+	if province.Valid {
+		item.Province = &province.String
+	}
+	if district.Valid {
+		item.District = &district.String
 	}
 	if phone.Valid {
 		item.Phone = phone.String

@@ -437,6 +437,36 @@ func (h *Handler) DeleteProspect(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, fiber.Map{"deleted": true})
 }
 
+func (h *Handler) TrashProspect(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.TrashProspect(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"trashed": true})
+}
+
+func (h *Handler) TrashedProspects(c *fiber.Ctx) error {
+	items, err := h.service.ListTrashed(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) RestoreProspect(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	if err := h.service.RestoreProspect(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"restored": true})
+}
+
 func (h *Handler) RequestDeletion(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

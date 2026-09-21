@@ -11,6 +11,8 @@ import {
   normalizeRouteId,
   fetchProspectVisitData,
   fetchCustomerVisitData,
+  getOpenCustomerVisit,
+  upsertCustomerVisit,
   type VisitEntityContext,
 } from '../../../utils/visitEntity'
 import { formatErrorMessage } from '../../../utils/format'
@@ -31,6 +33,7 @@ const entity = ref<VisitEntityContext | null>(null)
 const activeVisit = ref<{ id: string; checkInAt: string } | null>(null)
 const pageState = ref<PageState>('loading')
 const pageError = ref('')
+const sourceProspectId = ref('')
 
 const visitResult = ref('')
 const visitOutcome = ref('')
@@ -177,8 +180,9 @@ async function initialize() {
       pageState.value = 'ready'
       location.startWatching()
     } else {
-      const { entity: ctx } = await fetchCustomerVisitData(resolvedEntityId.value)
+      const { entity: ctx, sourceProspectId: sourceId } = await fetchCustomerVisitData(resolvedEntityId.value)
       entity.value = ctx
+      sourceProspectId.value = sourceId
 
       if (!entity.value) {
         pageState.value = 'not-found'
@@ -190,7 +194,14 @@ async function initialize() {
         return
       }
 
-      activeVisit.value = { id: 'customer-sim', checkInAt: new Date().toISOString() }
+      const open = sourceProspectId.value
+        ? (await fetchProspectVisitData(sourceProspectId.value)).review.visits.find((visit) => !visit.checkOutAt)
+        : getOpenCustomerVisit(resolvedEntityId.value)
+      if (!open) {
+        pageState.value = 'no-active-visit'
+        return
+      }
+      activeVisit.value = { id: open.id, checkInAt: open.checkInAt }
       startElapsedTimer()
 
       pageState.value = 'ready'
@@ -217,6 +228,13 @@ function handleSave() {
     followUpDate: followUpDate.value,
   }
   localStorage.setItem(localStorageKey(), JSON.stringify(data))
+
+  if (resolvedEntityType.value === 'customer' && activeVisit.value) {
+    const open = getOpenCustomerVisit(resolvedEntityId.value)
+    if (open && open.id === activeVisit.value.id) {
+      upsertCustomerVisit({ ...open, ...data })
+    }
+  }
 
   const checkoutRoute = resolvedEntityType.value === 'customer'
     ? { name: 'SalesCustomerCheckOut', params: { id: resolvedEntityId.value } }

@@ -4,6 +4,7 @@ import axios from 'axios'
 import * as crmApi from '../api/crm'
 import type { ApiErrorEnvelope } from '../types/auth'
 import type { CustomerSite, CustomerDetail, Prospect, ProspectStatus, TeamCustomers } from '../types/crm'
+import { useCustomerListStore } from './customerList'
 
 export const useCrmStore = defineStore('crm', () => {
   const myProspects = ref<Prospect[]>([])
@@ -110,7 +111,14 @@ export const useCrmStore = defineStore('crm', () => {
   }
 
   async function loadAdminCustomer(id: string) {
-    return await run(() => crmApi.getAdminCustomer(id))
+    try {
+      return await run(() => crmApi.getAdminCustomer(id))
+    } catch (error) {
+      const customerList = useCustomerListStore()
+      const localCustomer = customerList.findCustomer(id)
+      if (localCustomer) return customerList.makeCustomerDetail(localCustomer)
+      throw error
+    }
   }
 
   function errorMessage(error: unknown) {

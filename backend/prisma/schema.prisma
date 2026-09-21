@@ -192,6 +192,7 @@ model Prospect {
   followUpNotes            String                  @default("") @map("follow_up_notes")
   status                   ProspectStatus          @default(NEW_LEAD)
   deletionRequested        Boolean                 @default(false) @map("deletion_requested")
+  deletedAt                DateTime?               @map("deleted_at") @db.Timestamptz(6)
   convertedAt              DateTime?               @map("converted_at") @db.Timestamptz(6)
   createdAt                DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -311,8 +312,8 @@ model CustomerSite {
 	deletedAt                DateTime?     @map("deleted_at") @db.Timestamptz(6)
   customerCode             String        @unique @map("customer_code")
   parentCompanyId          String        @map("parent_company_id") @db.Uuid
-  sourceProspectId         String        @unique @map("source_prospect_id") @db.Uuid
-  sourceGooglePlaceId      String        @unique @map("source_google_place_id")
+  sourceProspectId         String?       @unique @map("source_prospect_id") @db.Uuid
+  sourceGooglePlaceId      String?       @map("source_google_place_id")
   name                     String
   segment                  String
   category                 String
@@ -342,7 +343,7 @@ model CustomerSite {
   createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
   parentCompany            ParentCompany @relation(fields: [parentCompanyId], references: [id], onDelete: Restrict)
-  sourceProspect           Prospect      @relation(fields: [sourceProspectId], references: [id], onDelete: Restrict)
+  sourceProspect           Prospect?     @relation(fields: [sourceProspectId], references: [id], onDelete: Restrict)
   salesExecutive           User          @relation("CustomerSalesExecutive", fields: [salesExecutiveId], references: [id], onDelete: Restrict)
   convertedByAdmin         User          @relation("CustomerConverter", fields: [convertedByAdminId], references: [id], onDelete: Restrict)
 

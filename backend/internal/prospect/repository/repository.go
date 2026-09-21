@@ -24,6 +24,7 @@ type Repository interface {
 	TeamDashboard(context.Context, uuid.UUID) (model.TeamDashboard, error)
 	ListWon(context.Context) ([]model.Prospect, error)
 	ListAll(context.Context) ([]model.Prospect, error)
+	ListTrashed(context.Context) ([]model.Prospect, error)
 	ListSalesExecutives(context.Context) ([]model.SalesExecutive, error)
 	ListMentionUsers(context.Context) ([]model.SalesExecutive, error)
 	FindReview(context.Context, uuid.UUID) (model.Review, error)
@@ -36,6 +37,8 @@ type Repository interface {
 	ListProspectVisits(context.Context, uuid.UUID) ([]model.Visit, error)
 	DeleteVisit(context.Context, uuid.UUID, uuid.UUID) (model.Visit, error)
 	DeleteProspect(context.Context, uuid.UUID) ([]string, error)
+	TrashProspect(context.Context, uuid.UUID) error
+	RestoreProspect(context.Context, uuid.UUID) error
 	RequestDeletion(context.Context, uuid.UUID, uuid.UUID) error
 	ApproveDeletion(context.Context, uuid.UUID) ([]string, error)
 	RejectDeletion(context.Context, uuid.UUID) error
