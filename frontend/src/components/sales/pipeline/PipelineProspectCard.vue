@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { stageTone, stageLabel } from './stageColors'
 import { nextStage, previousStage } from '../../../domain/pipeline'
 import type { Prospect } from '../../../types/crm'
@@ -7,7 +8,10 @@ const props = withDefaults(defineProps<{
   item: Prospect
   highlight: boolean
   compact?: boolean
-}>(), { compact: false })
+  newLeadAction?: 'sales' | 'admin'
+}>(), { compact: false, newLeadAction: 'sales' })
+
+const expanded = ref(false)
 
 const emit = defineEmits<{
   moveNext: [item: Prospect]
@@ -31,7 +35,27 @@ function cardTone() {
   if (props.item.status === 'NEGOTIATION' || props.item.status === 'PROPOSAL_SENT') return 'pipeline-card--attention'
   return 'pipeline-card--progress'
 }
-function openDetail() { emit('viewDetail', props.item) }
+const leadInitials = computed(() => {
+  const names = props.item.placeName.trim().split(/\s+/).filter(Boolean)
+  return (names.slice(0, 2).map((name) => name.charAt(0).toUpperCase()).join('') || '?')
+})
+const leadCode = computed(() => {
+  const numericPart = props.item.id.replace(/\D/g, '').slice(-3)
+  const fallback = props.item.id.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase().padEnd(3, '0')
+  return `CTID-${numericPart ? numericPart.padStart(3, '0') : fallback}`
+})
+const leadDate = computed(() => {
+  if (!props.item.updatedAt) return '—'
+  const date = new Date(props.item.updatedAt)
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(date)
+})
+function openDetail() {
+  if (isNewLead()) {
+    expanded.value = !expanded.value
+    return
+  }
+  emit('viewDetail', props.item)
+}
 function onCardKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail() }
 }
@@ -41,14 +65,91 @@ function onCardKeydown(event: KeyboardEvent) {
   <article
     :id="`prospect-card-${item.id}`"
     class="pipeline-card"
-    :class="[cardTone(), { 'pipeline-card--highlight': highlight, 'pipeline-card--compact': compact }]"
-    role="link"
+    :class="[cardTone(), { 'pipeline-card--highlight': highlight, 'pipeline-card--compact': compact, 'pipeline-card--new-lead': isNewLead() }]"
+    :role="isNewLead() ? 'button' : 'link'"
     tabindex="0"
+    :aria-expanded="isNewLead() ? expanded : undefined"
     @click="openDetail"
     @keydown="onCardKeydown"
   >
+    <!-- ── COLLAPSED NEW LEAD ── -->
+    <template v-if="isNewLead()">
+      <div class="nl-preview">
+        <div class="nl-preview-topline">
+          <span class="nl-stage-label">New lead</span>
+          <button
+            class="nl-menu-button"
+            type="button"
+            title="Open prospect detail"
+            aria-label="Open prospect detail"
+            @click.stop="emit('viewDetail', item)"
+          >⋮</button>
+        </div>
+
+        <div class="nl-identity-row">
+          <div class="nl-avatar-stack" aria-hidden="true">
+            <span class="nl-avatar nl-avatar-primary">{{ leadInitials.charAt(0) }}</span>
+            <span v-if="leadInitials.length > 1" class="nl-avatar nl-avatar-secondary">{{ leadInitials.charAt(1) }}</span>
+          </div>
+          <div class="nl-name-block">
+            <span class="nl-name">{{ item.placeName }}</span>
+            <span class="nl-helper">{{ expanded ? 'Click to hide details' : 'Click to view prospect' }}</span>
+          </div>
+          <i class="pi pi-bell nl-activity-icon" title="New lead activity" />
+        </div>
+
+        <div class="nl-preview-meta">
+          <span class="nl-code"><i class="pi pi-tag" /> {{ leadCode }}</span>
+          <time class="nl-date" :datetime="item.updatedAt">{{ leadDate }}</time>
+        </div>
+      </div>
+
+      <!-- ── EXPANDED NEW LEAD ── -->
+      <div v-if="expanded" class="nl-details" @click.stop>
+        <div class="nl-details-heading">
+          <div>
+            <span class="nl-details-kicker">Prospect details</span>
+            <strong>{{ item.placeName }}</strong>
+          </div>
+          <span class="nl-status">{{ stageLabel(item.status) }}</span>
+        </div>
+
+        <div class="nl-detail-grid">
+          <div class="nl-detail-item nl-detail-item-wide">
+            <span><i class="pi pi-map-marker" /> Address</span>
+            <strong>{{ item.formattedAddress || '—' }}</strong>
+          </div>
+          <div class="nl-detail-item">
+            <span><i class="pi pi-briefcase" /> Category</span>
+            <strong>{{ item.placeCategory || item.industryGroup || '—' }}</strong>
+          </div>
+          <div class="nl-detail-item">
+            <span><i class="pi pi-user" /> Assigned to</span>
+            <strong>{{ item.assignedSalesExecutive || 'Assigned to you' }}</strong>
+          </div>
+          <div v-if="item.phoneNumber" class="nl-detail-item">
+            <span><i class="pi pi-phone" /> Phone</span>
+            <strong>{{ item.phoneNumber }}</strong>
+          </div>
+        </div>
+
+        <p v-if="item.visitNotes || item.followUpNotes" class="nl-notes">
+          {{ item.followUpNotes || item.visitNotes }}
+        </p>
+
+        <div class="nl-detail-actions">
+          <button class="nl-open-detail" type="button" @click.stop="emit('viewDetail', item)">
+            <i class="pi pi-eye" /> {{ newLeadAction === 'admin' ? 'Open ticketing' : 'Buka detail prospect' }}
+          </button>
+          <button v-if="newLeadAction === 'sales' && nxt()" class="nl-start-progress" type="button" @click.stop="emit('moveNext', item)">
+            Mulai progress <i class="pi pi-arrow-right" />
+          </button>
+        </div>
+      </div>
+    </template>
+
     <!-- ── COMPACT (DESKTOP) ── -->
-    <template v-if="compact">
+    <template v-else-if="compact">
       <div class="cpt-body">
         <div class="cpt-row-top">
           <div
@@ -487,6 +588,187 @@ function onCardKeydown(event: KeyboardEvent) {
   font-size: 0.65rem;
 }
 .pact-lost:hover { background: #fef2f2; }
+
+/* ── NEW LEAD SUMMARY ── */
+.pipeline-card--new-lead {
+  padding: 0;
+  overflow: hidden;
+  border-color: #e7e9ee;
+  background: #fff;
+}
+.pipeline-card--new-lead::before {
+  margin: 0;
+  border-radius: 15px 15px 0 0;
+  background: #ef4444;
+}
+.pipeline-card--new-lead:hover { border-color: #cbd5e1; }
+.nl-preview { padding: 0.72rem 0.78rem 0.68rem; }
+.nl-preview-topline,
+.nl-identity-row,
+.nl-preview-meta,
+.nl-details-heading,
+.nl-detail-actions {
+  display: flex;
+  align-items: center;
+}
+.nl-preview-topline { justify-content: space-between; margin-bottom: 0.65rem; }
+.nl-stage-label {
+  color: #ef4444;
+  font-size: 0.57rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nl-menu-button {
+  display: grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0 0 0.35rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: #94a3b8;
+  font-family: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.nl-menu-button:hover { background: #f1f5f9; color: #475569; }
+.nl-identity-row { gap: 0.56rem; min-width: 0; }
+.nl-avatar-stack { display: flex; min-width: 2rem; }
+.nl-avatar {
+  display: grid;
+  place-items: center;
+  width: 1.78rem;
+  height: 1.78rem;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.nl-avatar-primary { background: #3548a8; z-index: 1; }
+.nl-avatar-secondary { margin-left: -0.55rem; background: #ef6b73; }
+.nl-name-block { display: grid; min-width: 0; flex: 1; gap: 0.08rem; }
+.nl-name {
+  overflow: hidden;
+  color: #172033;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-helper {
+  color: #a0a7b4;
+  font-size: 0.54rem;
+  font-weight: 500;
+}
+.nl-activity-icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 auto;
+  border-radius: 0.5rem;
+  background: #fff0f1;
+  color: #e63946;
+  font-size: 0.7rem;
+}
+.nl-preview-meta {
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.78rem;
+  padding-top: 0.58rem;
+  border-top: 1px solid #f0f1f4;
+}
+.nl-code,
+.nl-date {
+  color: #8b93a1;
+  font-size: 0.55rem;
+  font-weight: 600;
+}
+.nl-code { display: inline-flex; align-items: center; gap: 0.24rem; }
+.nl-code i { color: #b7beca; font-size: 0.55rem; }
+.nl-date { white-space: nowrap; }
+.nl-details {
+  padding: 0.72rem 0.78rem 0.78rem;
+  border-top: 1px solid #edf0f4;
+  background: #fbfcfe;
+}
+.nl-details-heading { justify-content: space-between; gap: 0.5rem; margin-bottom: 0.62rem; }
+.nl-details-heading > div { display: grid; min-width: 0; gap: 0.12rem; }
+.nl-details-kicker {
+  color: #94a3b8;
+  font-size: 0.53rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.nl-details-heading strong {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-status {
+  flex: 0 0 auto;
+  padding: 0.18rem 0.38rem;
+  border: 1px solid #fecdd3;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: 0.49rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.nl-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.48rem; }
+.nl-detail-item { display: grid; min-width: 0; gap: 0.18rem; }
+.nl-detail-item-wide { grid-column: 1 / -1; }
+.nl-detail-item span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #9aa3b1;
+  font-size: 0.51rem;
+  font-weight: 600;
+}
+.nl-detail-item span i { font-size: 0.5rem; }
+.nl-detail-item strong {
+  overflow: hidden;
+  color: #475569;
+  font-size: 0.59rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-notes {
+  margin: 0.58rem 0 0;
+  padding: 0.48rem 0.55rem;
+  border-radius: 0.45rem;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+.nl-detail-actions { gap: 0.4rem; margin-top: 0.68rem; }
+.nl-detail-actions button {
+  min-width: 0;
+  min-height: 1.8rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.45rem;
+  font-family: inherit;
+  font-size: 0.55rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.nl-open-detail { flex: 1; border: 1px solid #e2e8f0; background: #fff; color: #475569; }
+.nl-open-detail:hover { background: #f8fafc; }
+.nl-start-progress { flex: 1; border: 1px solid #e63946; background: #e63946; color: #fff; }
+.nl-start-progress:hover { background: #d62839; }
 
 /* ── DEFAULT (MOBILE) ── */
 .card-header {
