@@ -11,6 +11,7 @@ import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectReview, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
 import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
+import NewLeadGroupCard from '../../../components/sales/pipeline/NewLeadGroupCard.vue'
 
 const crm = useCrmStore()
 const router = useRouter()
@@ -248,15 +249,24 @@ onMounted(async () => {
           </header>
 
           <div class="pipeline-column-body">
-            <article
-              v-for="item in byStage(stage)"
-              :key="item.id"
-              class="kanban-card"
-              role="button"
-              tabindex="0"
-              @click="openTicketing(item.id)"
-              @keydown.enter="openTicketing(item.id)"
-            >
+            <template v-if="stage === 'NEW_LEAD' && byStage(stage).length">
+              <NewLeadGroupCard
+                :items="byStage(stage)"
+                action="admin"
+                @view-detail="(prospect) => openTicketing(prospect.id)"
+              />
+            </template>
+            <template v-else-if="stage !== 'NEW_LEAD'">
+              <article
+                v-for="item in byStage(stage)"
+                :key="item.id"
+                class="kanban-card"
+                role="button"
+                tabindex="0"
+                @click="openTicketing(item.id)"
+                @keydown.enter.self="openTicketing(item.id)"
+                @keydown.space.self.prevent="openTicketing(item.id)"
+              >
               <div class="card-top-row">
                 <span class="industry-pill">{{ item.industryGroup }}</span>
                 <i class="pi pi-chevron-right card-chevron" />
@@ -307,7 +317,8 @@ onMounted(async () => {
                   Open ticketing
                 </span>
               </div>
-            </article>
+              </article>
+            </template>
 
             <div v-if="!byStage(stage).length" class="pipeline-empty">
               <i class="pi pi-inbox" />
