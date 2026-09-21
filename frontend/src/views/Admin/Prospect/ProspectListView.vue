@@ -23,6 +23,8 @@ const error = ref('')
 const loading = ref(true)
 const showFilters = ref(false)
 const prospectTrashEnabled = DEV_CAPABILITIES.prospectTrash
+const prospectPage = ref(1)
+const prospectPageSize = ref(10)
 
 const searchQuery = ref('')
 const salesFilter = ref('')
@@ -31,8 +33,7 @@ const statusFilter = ref('')
 const hoveredProspectId = ref('')
 const hoveredProspectCell = ref('')
 const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
-const prospectPageSize = ref(10)
-const prospectTotalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / prospectPageSize.value)))
+const prospectTotalPages = computed(() => Math.max(1, Math.ceil(allFiltered.value.length / prospectPageSize.value)))
 watch(() => route.query.search, (value) => {
   searchQuery.value = typeof value === 'string' ? value : ''
 }, { immediate: true })
@@ -70,7 +71,7 @@ const categoryOptions = computed(() => [{ label: 'All Categories', value: '' }, 
 const statusOptions = computed(() => [{ label: 'All Pipeline Statuses', value: '' }, ...BOARD_STATUSES.map((v) => ({ label: v.replaceAll('_', ' '), value: v }))])
 const salesOptions = computed(() => [{ label: 'All Sales Executives', value: '' }, ...sales.value.map((s) => ({ label: s.fullName, value: s.id }))])
 
-const filtered = computed(() => {
+const allFiltered = computed(() => {
   const visibleProspects = prospects.value.filter((item) => item.status !== 'CONVERTED')
   return filterProspects(visibleProspects, {
     salesExecutiveId: salesFilter.value,
@@ -81,9 +82,27 @@ const filtered = computed(() => {
   })
 })
 
+const paginatedProspects = computed(() => {
+  const start = (prospectPage.value - 1) * prospectPageSize.value
+  return allFiltered.value.slice(start, start + prospectPageSize.value)
+})
+const filtered = paginatedProspects
+
+function goToProspectPage(page: number) {
+  prospectPage.value = Math.max(1, Math.min(page, prospectTotalPages.value))
+}
+
 const totalActive = computed(() => prospects.value.filter((p) => !['CONVERTED', 'LOST'].includes(p.status)).length)
 const totalWon = computed(() => prospects.value.filter((p) => p.status === 'WON').length)
 const totalLost = computed(() => prospects.value.filter((p) => p.status === 'LOST').length)
+
+watch([searchQuery, salesFilter, categoryFilter, statusFilter], () => {
+  prospectPage.value = 1
+})
+
+watch(prospectTotalPages, (total) => {
+  if (prospectPage.value > total) prospectPage.value = total
+})
 
 function statusSeverity(status: ProspectStatus) {
   switch (status) {
@@ -305,7 +324,7 @@ onMounted(async () => {
       </div>
 
       <section class="table-panel">
-    <div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" class="flex size-[30px] cursor-pointer items-center justify-center rounded-full font-['Inter'] text-[12px] transition-all bg-[#fff1f2] font-bold text-[#991b1b]">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap font-['Inter'] text-[12px] text-[#64748b]">Page 1 of {{ prospectTotalPages }} / {{ filtered.length }} records</span></div><div class="flex items-center gap-[10px]"><div class="relative flex h-[34px] w-[80px] items-center rounded-[8px] border border-[#e2e8f0] px-[10px]"><span class="absolute left-[8px] top-[-7px] bg-white px-[4px] font-['Inter'] text-[10px] font-semibold leading-tight text-[#475569]">Page size</span><span class="font-['Inter'] text-[13px] text-[#334155]">10</span></div><div class="relative flex h-[34px] w-[65px] items-center rounded-[8px] border border-[#e2e8f0] px-[10px]"><span class="absolute left-[8px] top-[-7px] bg-white px-[4px] font-['Inter'] text-[10px] font-semibold leading-tight text-[#475569]">Go to</span><input type="text" class="w-full bg-transparent font-['Inter'] text-[13px] text-[#334155] focus:outline-none" value="1" /></div><button type="button" class="h-[34px] rounded-[8px] border border-[#e2e8f0] bg-white px-[12px] font-['Inter'] text-[13px] font-semibold text-[#475569] transition-colors hover:bg-[#f8fafc]">Set</button><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9] hover:text-[#1e293b]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
+<div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" type="button" :class="['flex size-[30px] items-center justify-center rounded-full text-[12px] transition-all', page === prospectPage ? 'bg-[#fff1f2] font-bold text-[#991b1b]' : 'text-[#64748b] hover:bg-[#f8fafc]']" @click="goToProspectPage(page)">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap text-[12px]">Page {{ prospectPage }} of {{ prospectTotalPages }} / {{ allFiltered.length }} records</span><div class="flex items-center gap-[4px]"><button type="button" :disabled="prospectPage <= 1" @click="goToProspectPage(prospectPage - 1)">Previous</button><button type="button" :disabled="prospectPage >= prospectTotalPages" @click="goToProspectPage(prospectPage + 1)">Next</button></div></div><div class="flex items-center gap-[10px]"><span class="text-[13px] text-[#334155]">Page size {{ prospectPageSize }}</span><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
 
         <div v-if="loading" class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
@@ -1396,6 +1415,8 @@ onMounted(async () => {
   line-height: 16px !important;
 }
 .prospect-page .prospect-checkbox {
+  appearance: none !important;
+  display: inline-flex !important;
   width: 18px !important;
   height: 18px !important;
   padding: 0 !important;
@@ -1403,6 +1424,10 @@ onMounted(async () => {
   border-radius: 4px !important;
   background: #fff !important;
   color: transparent !important;
+}
+.prospect-page .prospect-checkbox:focus-visible {
+  outline: 2px solid #93c5fd !important;
+  outline-offset: 2px;
 }
 .prospect-page .prospect-trash-button,
 .prospect-page .prospect-trash-button span {

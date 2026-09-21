@@ -92,24 +92,24 @@ const salesOptions = computed(() => {
 
 const selectedSort = computed({
   get: () => sortOptions.find((o) => o.value === store.params.sort) ?? sortOptions[0],
-  set: (val) => store.setParam('sort', val.value)
+  set: (val) => { store.setParam('sort', val.value); store.setPage(1); load() }
 })
 
 const selectedSegment = computed({
   get: () => store.params.segment,
-  set: (val) => { store.setParam('segment', val); store.setParam('page', 1) }
+  set: (val) => { store.setParam('segment', val); store.setPage(1); load() }
 })
 const selectedCategory = computed({
   get: () => store.params.category,
-  set: (val) => { store.setParam('category', val); store.setParam('page', 1) }
+  set: (val) => { store.setParam('category', val); store.setPage(1); load() }
 })
 const selectedRegion = computed({
   get: () => store.params.region,
-  set: (val) => { store.setParam('region', val); store.setParam('page', 1) }
+  set: (val) => { store.setParam('region', val); store.setPage(1); load() }
 })
 const selectedSales = computed({
   get: () => store.params.sales,
-  set: (val) => { store.setParam('sales', val); store.setParam('page', 1) }
+  set: (val) => { store.setParam('sales', val); store.setPage(1); load() }
 })
 
 const companyKeyword = ref('')
@@ -270,7 +270,8 @@ function resetAll() {
 }
 
 function goToPage(p: number) {
-  store.setPage(p)
+  const target = Math.max(1, Math.min(p, store.pages || 1))
+  store.setPage(target)
   load()
 }
 
@@ -822,6 +823,8 @@ async function executeDeleteCompany() {
 .data-table :deep(.p-tag) { border-radius:999px; padding:3px 9px; font-size:10px; font-weight:500; }
 .data-table input[type="checkbox"] { width:16px; height:16px; accent-color:#e63946; }
 .customer-site-table .customer-checkbox {
+  appearance: none;
+  display: inline-flex;
   width: 18px !important;
   height: 18px !important;
   padding: 0 !important;
@@ -829,6 +832,11 @@ async function executeDeleteCompany() {
   border-radius: 4px !important;
   background: #fff !important;
   color: transparent !important;
+}
+.customer-site-table .customer-checkbox:focus-visible,
+.company-table .customer-checkbox:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 .customer-site-table .customer-checkbox.customer-checkbox-selected {
   border-color: #ef4444 !important;
