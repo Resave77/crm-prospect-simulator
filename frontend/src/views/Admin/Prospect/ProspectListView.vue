@@ -25,6 +25,7 @@ const showFilters = ref(false)
 const prospectTrashEnabled = DEV_CAPABILITIES.prospectTrash
 const prospectPage = ref(1)
 const prospectPageSize = ref(10)
+const selectedProspectIds = ref<Set<string>>(new Set())
 
 const searchQuery = ref('')
 const salesFilter = ref('')
@@ -87,6 +88,29 @@ const paginatedProspects = computed(() => {
   return allFiltered.value.slice(start, start + prospectPageSize.value)
 })
 const filtered = paginatedProspects
+
+const allVisibleProspectsSelected = computed(() => (
+  filtered.value.length > 0 && filtered.value.every((prospect) => selectedProspectIds.value.has(prospect.id))
+))
+
+function toggleProspectSelection(id: string) {
+  const next = new Set(selectedProspectIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedProspectIds.value = next
+}
+
+function toggleAllVisibleProspects() {
+  const next = new Set(selectedProspectIds.value)
+  if (allVisibleProspectsSelected.value) filtered.value.forEach((prospect) => next.delete(prospect.id))
+  else filtered.value.forEach((prospect) => next.add(prospect.id))
+  selectedProspectIds.value = next
+}
+
+function updateProspectPageSize(size: number) {
+  prospectPageSize.value = Math.max(1, size)
+  prospectPage.value = 1
+}
 
 function goToProspectPage(page: number) {
   prospectPage.value = Math.max(1, Math.min(page, prospectTotalPages.value))
@@ -324,7 +348,7 @@ onMounted(async () => {
       </div>
 
       <section class="table-panel">
-<div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" type="button" :class="['flex size-[30px] items-center justify-center rounded-full text-[12px] transition-all', page === prospectPage ? 'bg-[#fff1f2] font-bold text-[#991b1b]' : 'text-[#64748b] hover:bg-[#f8fafc]']" @click="goToProspectPage(page)">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap text-[12px]">Page {{ prospectPage }} of {{ prospectTotalPages }} / {{ allFiltered.length }} records</span><div class="flex items-center gap-[4px]"><button type="button" :disabled="prospectPage <= 1" @click="goToProspectPage(prospectPage - 1)">Previous</button><button type="button" :disabled="prospectPage >= prospectTotalPages" @click="goToProspectPage(prospectPage + 1)">Next</button></div></div><div class="flex items-center gap-[10px]"><span class="text-[13px] text-[#334155]">Page size {{ prospectPageSize }}</span><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
+<div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" type="button" :class="['flex size-[30px] items-center justify-center rounded-full text-[12px] transition-all', page === prospectPage ? 'bg-[#fff1f2] font-bold text-[#991b1b]' : 'text-[#64748b] hover:bg-[#f8fafc]']" @click="goToProspectPage(page)">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap text-[12px]">Page {{ prospectPage }} of {{ prospectTotalPages }} / {{ allFiltered.length }} records</span><div class="flex items-center gap-[4px]"><button type="button" :disabled="prospectPage <= 1" @click="goToProspectPage(prospectPage - 1)">Previous</button><button type="button" :disabled="prospectPage >= prospectTotalPages" @click="goToProspectPage(prospectPage + 1)">Next</button></div></div><div class="flex items-center gap-[10px]"><label class="text-[12px] text-[#475569]" for="prospect-page-size">Page size</label><select id="prospect-page-size" :value="prospectPageSize" class="h-[30px] rounded-[6px] border border-[#e2e8f0] bg-white px-[6px] text-[13px] text-[#334155]" @change="updateProspectPageSize(Number(($event.target as HTMLSelectElement).value))"><option v-for="size in [1, 10, 20, 50]" :key="size" :value="size">{{ size }}</option></select><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
 
         <div v-if="loading" class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
@@ -339,7 +363,7 @@ onMounted(async () => {
           <table class="data-table">
             <thead>
               <tr>
-                <th class="w-[56px] border-r border-[#e0e0e0] bg-[#f4f4f4] px-[12px] text-center"><button type="button" class="prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm" aria-label="Select all visible prospects"></button></th>
+                <th class="w-[56px] border-r border-[#e0e0e0] bg-[#f4f4f4] px-[12px] text-center"><button type="button" :class="['prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border bg-white shadow-sm', { 'prospect-checkbox-selected': allVisibleProspectsSelected }]" aria-label="Select all visible prospects" :aria-pressed="allVisibleProspectsSelected" @click.stop="toggleAllVisibleProspects"><i v-if="allVisibleProspectsSelected" class="pi pi-check text-[11px]" /></button></th>
                 <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Place Name</span></th>
                 <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Category</span></th>
                 <th class="border-r border-[#e0e0e0] bg-[#f4f4f4] p-[12px] text-left last:border-r-0"><span class="select-none font-['Inter'] text-[11px] font-semibold uppercase tracking-wider text-black">Sales Executive</span></th>
@@ -357,7 +381,7 @@ onMounted(async () => {
                   @click="openActions(p)"
                   @keydown.enter="openActions(p)"
               >
-                <td class="border-r border-[#e0e0e0] px-[12px] text-center"><button type="button" class="prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border border-[#cbd5e1] bg-white shadow-sm" :aria-label="`Select prospect ${p.placeName}`" @click.stop></button></td>
+                <td class="border-r border-[#e0e0e0] px-[12px] text-center"><button type="button" :class="['prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border bg-white shadow-sm', { 'prospect-checkbox-selected': selectedProspectIds.has(p.id) }]" :aria-label="`Select prospect ${p.placeName}`" :aria-pressed="selectedProspectIds.has(p.id)" @click.stop="toggleProspectSelection(p.id)"><i v-if="selectedProspectIds.has(p.id)" class="pi pi-check text-[11px]" /></button></td>
                 <td class="prospect-name-cell" @mouseenter="hoveredProspectId = p.id" @mouseleave="hoveredProspectId = ''">
                   <div class="min-w-0">
                     <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.placeName }}</p>
@@ -1428,6 +1452,11 @@ onMounted(async () => {
 .prospect-page .prospect-checkbox:focus-visible {
   outline: 2px solid #93c5fd !important;
   outline-offset: 2px;
+}
+.prospect-page .prospect-checkbox-selected {
+  border-color: #ef4444 !important;
+  background: #ef4444 !important;
+  color: #fff !important;
 }
 .prospect-page .prospect-trash-button,
 .prospect-page .prospect-trash-button span {
