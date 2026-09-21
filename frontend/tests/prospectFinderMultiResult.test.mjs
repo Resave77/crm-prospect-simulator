@@ -12,7 +12,7 @@ test('Prospect Finder renders the complete search collection and loads details o
   assert.doesNotMatch(source, /results\.value\s*=.*\[0\]/)
   assert.equal((source.match(/getPlaceDetails\(/g) || []).length, 1)
   assert.match(source, /await getPlaceDetails\(item\.googlePlaceId\)/)
-  assert.match(apiSource, /'\/admin\/prospect-finder\/place-details', \{ params: \{ googlePlaceId \} \}/)
+  assert.match(apiSource, /`\/admin\/prospect-finder\/place-details\/\$\{encodeURIComponent\(googlePlaceId\)\}`/)
   assert.match(source, /placeDetails\.value = placeResultToDetails\(item\)/)
   assert.equal((source.match(/getPlacePhotoBlob\(/g) || []).length, 1)
   assert.doesNotMatch(source, /categorySelections/)

@@ -12,6 +12,7 @@ import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
+import { DEV_CAPABILITIES } from '../../../config/capabilities'
 
 const crm = useCrmStore()
 const router = useRouter()
@@ -21,6 +22,7 @@ const sales = ref<SalesExecutiveOption[]>([])
 const error = ref('')
 const loading = ref(true)
 const showFilters = ref(false)
+const prospectTrashEnabled = DEV_CAPABILITIES.prospectTrash
 
 const searchQuery = ref('')
 const salesFilter = ref('')
@@ -42,11 +44,13 @@ const deleting = ref(false)
 const trashVisible = ref(false)
 const trashedProspects = ref<Prospect[]>([])
 async function openTrash() {
+  if (!prospectTrashEnabled) return
   trashVisible.value = true
   try { trashedProspects.value = await listTrashedProspects() } catch (e) { error.value = crm.errorMessage(e) }
 }
 
 async function restoreTrashedProspect(id: string) {
+  if (!prospectTrashEnabled) return
   try {
     await restoreProspect(id)
     trashedProspects.value = trashedProspects.value.filter((item) => item.id !== id)
@@ -176,6 +180,7 @@ function confirmDelete(id: string, name: string) {
 }
 
 async function executeDelete() {
+  if (!prospectTrashEnabled) return
   deleting.value = true
   try {
     await trashProspect(deleteTargetId.value)
@@ -277,7 +282,7 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
-<nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" @click="openTrash"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
+<nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button v-if="prospectTrashEnabled" type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" @click="openTrash"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
     <div class="panel-stack">
       <div v-if="showFilters" class="filter-panel">
         <div class="filter-grid">
@@ -483,7 +488,7 @@ onMounted(async () => {
       </div>
     </Dialog>
 
-    <Dialog v-model:visible="trashVisible" header="Prospect Trash" modal :draggable="false" :style="{ width: 'min(620px, calc(100vw - 2rem))' }">
+    <Dialog v-if="prospectTrashEnabled" v-model:visible="trashVisible" header="Prospect Trash" modal :draggable="false" :style="{ width: 'min(620px, calc(100vw - 2rem))' }">
       <div v-if="trashedProspects.length" class="space-y-2">
         <div v-for="item in trashedProspects" :key="item.id" class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
           <div class="min-w-0"><strong class="block truncate">{{ item.placeName }}</strong><small class="text-slate-500">{{ item.formattedAddress }}</small></div>
@@ -494,7 +499,7 @@ onMounted(async () => {
       <template #footer><Button label="Close" severity="secondary" text @click="trashVisible = false" /></template>
     </Dialog>
 
-    <Dialog v-model:visible="deleteDialogVisible" header="Move to Trash" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
+    <Dialog v-if="prospectTrashEnabled" v-model:visible="deleteDialogVisible" header="Move to Trash" modal :draggable="false" :style="{ width: 'min(420px, calc(100vw - 2rem))' }">
       <p>Move <strong>{{ deleteTargetName }}</strong> to Trash? You can restore it later.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="deleteDialogVisible = false" :disabled="deleting" />
@@ -516,6 +521,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.prospect-trash-button,
+.action-menu-item.danger { display: none !important; }
 .prospect-page {
   box-sizing: border-box;
   display: flex;
