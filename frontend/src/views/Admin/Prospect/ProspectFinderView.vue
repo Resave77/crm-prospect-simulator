@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import Button from 'primevue/button'
@@ -19,9 +20,10 @@ import { getPlaceDetails, getPlacePhotoBlob } from '../../../api/crm'
 import { listCategories, type MasterDataCategory } from '../../../api/masterData'
 import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { categoryIcon } from '../../../utils/categoryIcons'
-import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, SalesExecutiveOption } from '../../../types/crm'
+import type { CustomerMarker, MenuImage, PlaceDetails, PlacePhoto, PlaceResult, Prospect, SalesExecutiveOption } from '../../../types/crm'
 
 const toast = useToast()
+const router = useRouter()
 
 const categoryOptions = [
   { key: 'resto_cafe', label: 'Resto & Café', icon: '🍽️' },
@@ -75,6 +77,7 @@ const minRating = ref(0)
 const savedFilter = ref<'all' | 'saved' | 'unsaved'>('all')
 const menuFilter = ref<'all' | 'likely' | 'ready' | 'not_ready'>('all')
 const savedPlaceIds = ref<Set<string>>(new Set())
+const savedProspectsByPlaceId = ref<Map<string, Prospect>>(new Map())
 const queried = ref(false)
 const latitude = ref(-6.2)
 const longitude = ref(106.8)
@@ -127,6 +130,59 @@ const selectedSalesCount = computed(() => {
   const exec = sales.value.find(s => s.id === salesExecutiveId.value)
   return exec?.activeProspectCount ?? 0
 })
+
+const selectedPipelineProspect = computed(() => {
+  const placeId = selected.value?.googlePlaceId
+  return placeId ? savedProspectsByPlaceId.value.get(placeId) ?? null : null
+})
+
+const selectedIsPipeline = computed(() => !!selectedPipelineProspect.value)
+const selectedIsCustomer = computed(() => !!selected.value?.isCustomer)
+const selectedCustomerId = computed(() => {
+  if (!selected.value) return ''
+  return selected.value.customerId
+    || customerMarkers.value.find(item => item.googlePlaceId === selected.value?.googlePlaceId)?.customerId
+    || ''
+})
+const selectedIsAssigned = computed(() => {
+  const id = selectedPipelineProspect.value?.assignedSalesExecutiveId?.trim() ?? ''
+  return !!id && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)
+})
+const selectedAssignedName = computed(() =>
+  selectedPipelineProspect.value?.assignedSalesExecutive
+  || sales.value.find(item => item.id === selectedPipelineProspect.value?.assignedSalesExecutiveId)?.fullName
+  || '',
+)
+const selectedSegment = computed(() => resolveSegmentName(selectedPlaceCategory.value))
+const selectedDiscoveryDate = computed(() => formatDiscoveryDate(selectedPipelineProspect.value?.createdAt))
+const selectedStatusRows = computed(() => [
+  {
+    key: 'pipeline',
+    label: 'Sudah masuk ke Prospect Pipeline?',
+    description: selectedIsPipeline.value ? 'Customer ini sudah terdaftar di prospect pipeline.' : 'Customer ini belum terdaftar di prospect pipeline.',
+    active: selectedIsPipeline.value,
+    value: selectedIsPipeline.value ? 'YA' : 'TIDAK',
+    icon: selectedIsPipeline.value ? 'pi pi-check' : 'pi pi-times',
+  },
+  {
+    key: 'customer',
+    label: 'Sudah menjadi Customer Existing?',
+    description: selectedIsCustomer.value ? 'Customer ini sudah menjadi customer existing.' : 'Customer ini belum menjadi customer existing.',
+    active: selectedIsCustomer.value,
+    value: selectedIsCustomer.value ? 'YA' : 'TIDAK',
+    icon: selectedIsCustomer.value ? 'pi pi-check' : 'pi pi-times',
+  },
+  {
+    key: 'assignment',
+    label: 'Sudah di-assign ke Sales?',
+    description: selectedIsAssigned.value
+      ? `${selectedAssignedName.value || 'Sales Executive'} sudah ditugaskan untuk customer ini.`
+      : 'Belum ada sales yang ditugaskan untuk customer ini.',
+    active: selectedIsAssigned.value,
+    value: selectedIsAssigned.value ? 'YA' : 'TIDAK',
+    icon: selectedIsAssigned.value ? 'pi pi-check' : 'pi pi-times',
+  },
+])
 
 function selectAllCategories() {
   categories.value = categoryOptions.map(o => o.key)
@@ -215,6 +271,23 @@ function resolveCategoryKey(masterDataId: string): string {
     if (normalized.includes(key) || key.includes(normalized)) return mapped
   }
   return ''
+}
+
+function resolveSegmentName(categoryName: string): string {
+  const normalized = categoryName.trim().toLowerCase()
+  if (!normalized) return '—'
+  const category = activeMasterCategories.value.find((item) => {
+    const name = item.name.trim().toLowerCase()
+    return name === normalized || name.includes(normalized) || normalized.includes(name)
+  })
+  return category?.segmentName?.trim() || '—'
+}
+
+function formatDiscoveryDate(value?: string): string {
+  if (!value) return 'Belum tersimpan'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Belum tersimpan'
+  return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
 }
 
 function searchCategoryKeys(): string[] {
@@ -781,8 +854,27 @@ async function loadSavedPlaceIds() {
   try {
     const items = await crmApi.getPipeline()
     savedPlaceIds.value = new Set(items.map(p => p.googlePlaceId).filter(Boolean))
+    savedProspectsByPlaceId.value = new Map(items.filter(item => item.googlePlaceId).map(item => [item.googlePlaceId, item]))
   } catch {
     savedPlaceIds.value = new Set()
+    savedProspectsByPlaceId.value = new Map()
+  }
+}
+
+async function openSelectedEntity() {
+  try {
+    if (selectedIsCustomer.value && selectedCustomerId.value) {
+      detailOpen.value = false
+      await router.push({ name: 'AdminCustomerDetail', params: { id: selectedCustomerId.value } })
+      return
+    }
+    if (selectedPipelineProspect.value?.id) {
+      detailOpen.value = false
+      await router.push({ name: 'AdminProspectReview', params: { id: selectedPipelineProspect.value.id } })
+    }
+  } catch (caught) {
+    error.value = crmError(caught)
+    toast.add({ severity: 'error', summary: 'Open detail failed', detail: error.value, life: 6000 })
   }
 }
 
@@ -1196,7 +1288,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '520px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
+    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '640px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
       <div v-if="placeDetailsLoading" class="dialog-loading"><div class="loading-pulse" /><span>Loading full details...</span></div>
       <div v-if="selected" class="detail-dialog">
         <div class="detail-hero-bar">
@@ -1206,6 +1298,20 @@ onBeforeUnmount(() => {
           </span>
           <div class="detail-hero-info">
             <h2>{{ placeDetails?.placeName || selected.name }}</h2>
+            <span class="detail-hero-category">{{ placeDetails?.placeCategory || selected.category }}</span>
+            <a v-if="placeDetails?.phoneNumber || selected.phone" class="detail-hero-phone" :href="`tel:${placeDetails?.phoneNumber || selected.phone}`">
+              <i class="pi pi-phone" /> {{ placeDetails?.phoneNumber || selected.phone }}
+            </a>
+            <div class="detail-status-badges">
+              <span class="detail-status-badge is-pipeline" :class="{ 'is-muted': !selectedIsPipeline }">
+                <i :class="selectedIsPipeline ? 'pi pi-check-circle' : 'pi pi-minus-circle'" />
+                {{ selectedIsPipeline ? 'Prospect Pipeline' : 'Belum Pipeline' }}
+              </span>
+              <span class="detail-status-badge is-assignment" :class="{ 'is-muted': selectedIsAssigned }">
+                <i :class="selectedIsAssigned ? 'pi pi-user' : 'pi pi-user-plus'" />
+                {{ selectedIsAssigned ? selectedAssignedName : 'Belum Assign' }}
+              </span>
+            </div>
             <div class="detail-hero-meta">
               <span>{{ placeDetails?.placeCategory || selected.category }}</span>
               <Tag v-if="selected.isCustomer" value="Existing Customer" severity="success" />
@@ -1216,27 +1322,53 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <section class="detail-status-section">
+          <h3 class="detail-section-title"><i class="pi pi-chart-bar" /> Status Customer</h3>
+          <div class="detail-status-list">
+            <div v-for="status in selectedStatusRows" :key="status.key" class="detail-status-row" :class="{ active: status.active }">
+              <span class="detail-status-icon"><i :class="status.icon" /></span>
+              <span class="detail-status-copy">
+                <strong>{{ status.label }}</strong>
+                <small>{{ status.description }}</small>
+              </span>
+              <span class="detail-status-value">{{ status.value }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section detail-quick-section">
+          <h3 class="detail-section-title"><i class="pi pi-bolt" /> Info Cepat</h3>
+          <div class="detail-quick-grid">
+            <div class="detail-quick-item"><i class="pi pi-tags" /><span>Kategori</span><strong>{{ selectedPlaceCategory || '—' }}</strong></div>
+            <div class="detail-quick-item"><i class="pi pi-users" /><span>Segment</span><strong>{{ selectedSegment }}</strong></div>
+            <div class="detail-quick-item"><i class="pi pi-map-marker" /><span>Lokasi</span><strong>{{ placeDetails?.formattedAddress || selected.address || '—' }}</strong></div>
+            <div class="detail-quick-item"><i class="pi pi-phone" /><span>Telepon</span><strong>{{ placeDetails?.phoneNumber || selected.phone || '—' }}</strong></div>
+            <div class="detail-quick-item"><i class="pi pi-globe" /><span>Sumber</span><strong>Google Maps / Places</strong></div>
+            <div class="detail-quick-item"><i class="pi pi-calendar" /><span>Tanggal Ditemukan</span><strong>{{ selectedDiscoveryDate }}</strong></div>
+          </div>
+        </section>
+
+        <div class="detail-assignment">
+          <h3>Assignment</h3>
+          <Message v-if="selected?.isCustomer" severity="success" :closable="false" class="assignment-warning">
+            <strong>Existing customer</strong> â€” this place has already been converted to a customer and can no longer be assigned to sales.
+          </Message>
+          <div v-else class="detail-assignment-fields">
+            <label class="field"><span>Category</span><InputText :model-value="selectedPlaceCategory" disabled fluid /></label>
+            <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
+            <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
+              {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} sudah memiliki <strong>{{ selectedSalesCount }}</strong> customer aktif.
+            </Message>
+          </div>
+        </div>
+
         <div v-if="placeDetails?.editorialSummary" class="detail-editorial">
           <i class="pi pi-quote-left" /> {{ placeDetails.editorialSummary }}
         </div>
 
         <div class="detail-section">
-          <h3 class="detail-section-title"><i class="pi pi-info-circle" /> Basic Info</h3>
+          <h3 class="detail-section-title"><i class="pi pi-info-circle" /> Google Details</h3>
           <div class="detail-info-grid">
-            <div class="detail-info-item">
-              <i class="pi pi-map-marker" />
-              <div>
-                <span class="detail-info-label">Address</span>
-                <span class="detail-info-value">{{ placeDetails?.formattedAddress || selected.address }}</span>
-              </div>
-            </div>
-            <div v-if="placeDetails?.phoneNumber || selected.phone" class="detail-info-item">
-              <i class="pi pi-phone" />
-              <div>
-                <span class="detail-info-label">Phone</span>
-                <span class="detail-info-value">{{ placeDetails?.phoneNumber || selected.phone }}</span>
-              </div>
-            </div>
             <div v-if="placeDetails?.internationalPhone" class="detail-info-item">
               <i class="pi pi-phone" />
               <div>
@@ -1378,20 +1510,6 @@ onBeforeUnmount(() => {
           <Button v-if="hasMorePhotos" label="Load one more photo" icon="pi pi-plus" severity="secondary" outlined size="small" @click="loadNextPlacePhoto" />
         </div>
 
-        <div class="detail-assignment">
-          <h3>Assignment</h3>
-          <Message v-if="selected?.isCustomer" severity="success" :closable="false" class="assignment-warning">
-            <strong>Existing customer</strong> — this place has already been converted to a customer and can no longer be assigned to sales.
-          </Message>
-          <div v-else class="detail-assignment-fields">
-            <label class="field"><span>Category</span><InputText :model-value="selectedPlaceCategory" disabled fluid /></label>
-            <label class="field"><span>Assign Sales Executive</span><Select v-model="salesExecutiveId" :options="sales" option-label="fullName" option-value="id" placeholder="Select Sales Executive" fluid /></label>
-            <Message v-if="selectedSalesCount > 0" severity="warn" :closable="false" class="assignment-warning">
-              {{ sales.find(s => s.id === salesExecutiveId)?.fullName }} already has <strong>{{ selectedSalesCount }}</strong> active prospect{{ selectedSalesCount !== 1 ? 's' : '' }} assigned.
-            </Message>
-          </div>
-        </div>
-
         <div v-if="placeDetailsError" class="detail-section">
           <Message severity="warn" :closable="false">{{ placeDetailsError }}</Message>
         </div>
@@ -1400,7 +1518,8 @@ onBeforeUnmount(() => {
       <template #footer>
         <div class="detail-dialog-footer">
           <Button label="Cancel" severity="secondary" text @click="detailOpen = false" />
-          <Button v-if="selected?.isCustomer" label="Existing Customer" icon="pi pi-check" severity="success" disabled />
+          <Button v-if="selectedIsCustomer" label="View Customer" icon="pi pi-external-link" severity="success" :disabled="!selectedCustomerId" @click="openSelectedEntity" />
+          <Button v-else-if="selectedIsPipeline" label="View Prospect" icon="pi pi-external-link" severity="secondary" @click="openSelectedEntity" />
           <Button v-else label="Save as Prospect" icon="pi pi-save" :loading="saving" :disabled="!salesExecutiveId || !selectedPlaceCategory" @click="save" />
         </div>
       </template>
@@ -2492,6 +2611,31 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
 }
 
+.detail-hero-info {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.detail-hero-category {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.detail-hero-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  color: var(--brand-blue);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.detail-hero-phone:hover { text-decoration: underline; }
+
 .detail-hero-meta {
   display: flex;
   align-items: center;
@@ -2500,13 +2644,177 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-/* Finder detail keeps category only; rating/review badges are list metadata. */
-.detail-hero-meta :deep(.p-tag) { display: none; }
+/* Finder detail keeps category and phone in the redesigned header. */
+.detail-hero-meta { display: none; }
 
 .detail-hero-meta > span {
   color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 500;
+}
+
+.detail-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  margin-top: 0.4rem;
+}
+
+.detail-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.34rem 0.62rem;
+  border-radius: 999px;
+  color: #15803d;
+  background: #dcfce7;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.detail-status-badge.is-assignment {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.detail-status-badge.is-assignment:not(.is-muted) {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.detail-status-badge.is-muted {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.detail-status-badge.is-pipeline.is-muted {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.detail-status-badge i { font-size: 0.68rem; }
+
+.detail-status-section,
+.detail-quick-section {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid #dbeafe;
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.detail-status-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.detail-status-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #fee2e2;
+  border-radius: 0.72rem;
+  background: #fffafa;
+}
+
+.detail-status-row.active {
+  border-color: #dcfce7;
+  background: #fbfffc;
+}
+
+.detail-status-icon {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  color: #dc2626;
+  background: #fee2e2;
+  font-size: 0.8rem;
+}
+
+.detail-status-row.active .detail-status-icon {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.detail-status-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.detail-status-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-status-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-status-value {
+  padding: 0.3rem 0.58rem;
+  border-radius: 999px;
+  color: #dc2626;
+  background: #fee2e2;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.detail-status-row.active .detail-status-value {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.detail-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.detail-quick-item {
+  display: grid;
+  grid-template-columns: 1rem minmax(5.3rem, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.detail-quick-item > i {
+  margin-top: 0.12rem;
+  color: var(--brand-blue);
+  font-size: 0.72rem;
+}
+
+.detail-quick-item > span {
+  color: var(--text-muted);
+  font-size: 0.67rem;
+}
+
+.detail-quick-item > strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.71rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.detail-google-section {
+  padding-top: 0.2rem;
 }
 
 .detail-editorial {
@@ -3027,6 +3335,12 @@ onBeforeUnmount(() => {
     border-radius: 0;
     border: none;
   }
+
+  .detail-quick-grid { grid-template-columns: 1fr; }
+  .detail-quick-item { grid-template-columns: 1rem 5.4rem minmax(0, 1fr); }
+  .detail-status-row { gap: 0.5rem; padding-inline: 0.55rem; }
+  .detail-status-copy small { white-space: normal; }
+  .detail-status-value { padding-inline: 0.45rem; }
 }
 
 @supports not (height: 100dvh) {
