@@ -159,6 +159,28 @@ func (h *Handler) Decide(c *fiber.Ctx) error {
 	return response.Data(c, fiber.StatusOK, item)
 }
 
+func (h *Handler) Assign(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 400, "PROSPECT_ID_INVALID", "Prospect ID is invalid.")
+	}
+	var request struct {
+		SalesExecutiveID string `json:"salesExecutiveId"`
+	}
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, 400, "REQUEST_INVALID", "The request body is invalid.")
+	}
+	salesID, err := uuid.Parse(request.SalesExecutiveID)
+	if err != nil {
+		return response.Error(c, 400, "SALES_EXECUTIVE_INVALID", "Sales executive is invalid.")
+	}
+	item, err := h.service.AssignProspect(c.UserContext(), actor(c), id, salesID)
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, 200, item)
+}
+
 func (h *Handler) autoConvert(ctx context.Context, prospectID uuid.UUID) {
 	if h.customerSvc == nil {
 		return
@@ -376,6 +398,25 @@ func (h *Handler) ListVisitMonitoring(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) ListTrashedVisits(c *fiber.Ctx) error {
+	items, err := h.service.ListTrashedVisits(c.UserContext(), actor(c))
+	if err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, items)
+}
+
+func (h *Handler) RestoreVisit(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("visitId"))
+	if err != nil {
+		return response.Error(c, 400, "VISIT_ID_INVALID", "Visit ID is invalid.")
+	}
+	if err := h.service.RestoreVisit(c.UserContext(), actor(c), id); err != nil {
+		return writeError(c, err)
+	}
+	return response.Data(c, fiber.StatusOK, fiber.Map{"restored": true})
 }
 
 func (h *Handler) Report(c *fiber.Ctx) error {

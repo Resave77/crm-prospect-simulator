@@ -1398,4 +1398,34 @@ onMounted(async () => {
   .user-section { margin: 12px 0 0; }
   .job-section .form-grid { grid-template-columns:1fr; padding:16px; }
 }
+
+/* Keep the create form compact and aligned with the page grid. */
+.content-layout { width: min(1180px, calc(100% - 32px)); gap: 16px; margin-top: 16px; }
+.form-column { gap: 16px; }
+.job-section,
+.user-section { margin: 0; }
+.form-section,
+.preview-card,
+.required-card,
+.help-card { box-sizing: border-box; }
+.topbar-actions :deep(.p-button) { min-width: 0; }
+@media (max-width: 900px) {
+  .content-layout { grid-template-columns: minmax(0, 1fr) 280px; }
+}
+@media (max-width: 760px) {
+  .content-layout { grid-template-columns: 1fr; width: min(100% - 24px, 680px); }
+  .sidebar-column { position: static; }
+}
+.create-account-page > .topbar { box-sizing: border-box !important; min-height: 52px !important; height: 52px !important; padding: 0 24px !important; gap: 12px !important; }
+.topbar-left { gap: 10px; }
+.topbar h1 { font-size: 17px; line-height: 22px; }
+.topbar p { font-size: 11px; line-height: 16px; }
+.topbar-actions { gap: 8px; }
+.topbar-actions :deep(.p-button) { height: 40px; min-height: 40px; padding: 0 14px; border-radius: 10px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 600; }
+@media (max-width: 640px) {
+  .create-account-page > .topbar { min-height: 50px !important; height: auto !important; padding: 7px 12px !important; }
+  .topbar-left { align-items: flex-start; }
+  .topbar-left > div:last-child p { display: none; }
+  .topbar-actions :deep(.p-button) { padding: 0 11px; }
+}
 </style>

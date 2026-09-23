@@ -12,7 +12,6 @@ import { fallbackCategories } from '../../../utils/masterDataFallback'
 import { BOARD_STATUSES, filterProspects } from '../../../domain/pipeline'
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus, SalesExecutiveOption } from '../../../types/crm'
-import { DEV_CAPABILITIES } from '../../../config/capabilities'
 
 const crm = useCrmStore()
 const router = useRouter()
@@ -22,17 +21,16 @@ const sales = ref<SalesExecutiveOption[]>([])
 const error = ref('')
 const loading = ref(true)
 const showFilters = ref(false)
-const prospectTrashEnabled = DEV_CAPABILITIES.prospectTrash
+const prospectTrashEnabled = true
 const prospectPage = ref(1)
 const prospectPageSize = ref(10)
 const selectedProspectIds = ref<Set<string>>(new Set())
+const selectedProspectCount = computed(() => selectedProspectIds.value.size)
 
 const searchQuery = ref('')
 const salesFilter = ref('')
 const categoryFilter = ref('')
 const statusFilter = ref('')
-const hoveredProspectId = ref('')
-const hoveredProspectCell = ref('')
 const masterCategories = ref<MasterDataCategory[]>(fallbackCategories)
 const prospectTotalPages = computed(() => Math.max(1, Math.ceil(allFiltered.value.length / prospectPageSize.value)))
 watch(() => route.query.search, (value) => {
@@ -47,6 +45,10 @@ const trashVisible = ref(false)
 const trashedProspects = ref<Prospect[]>([])
 async function openTrash() {
   if (!prospectTrashEnabled) return
+  if (selectedProspectIds.value.size) {
+    confirmSelectedDelete()
+    return
+  }
   trashVisible.value = true
   try { trashedProspects.value = await listTrashedProspects() } catch (e) { error.value = crm.errorMessage(e) }
 }
@@ -222,13 +224,41 @@ function confirmDelete(id: string, name: string) {
   deleteDialogVisible.value = true
 }
 
+function confirmSelectedDelete() {
+  if (!selectedProspectIds.value.size) return
+  deleteTargetId.value = ''
+  deleteTargetName.value = `${selectedProspectIds.value.size} selected prospect${selectedProspectIds.value.size === 1 ? '' : 's'}`
+  deleteDialogVisible.value = true
+}
+
 async function executeDelete() {
   if (!prospectTrashEnabled) return
+  if (!deleteTargetId.value && selectedProspectIds.value.size) {
+    deleteDialogVisible.value = false
+    await moveSelectedToTrash()
+    return
+  }
   deleting.value = true
   try {
     await trashProspect(deleteTargetId.value)
     prospects.value = prospects.value.filter((p) => p.id !== deleteTargetId.value)
     deleteDialogVisible.value = false
+  } catch (e) {
+    error.value = crm.errorMessage(e)
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function moveSelectedToTrash() {
+  if (!prospectTrashEnabled || !selectedProspectIds.value.size) return
+  deleting.value = true
+  try {
+    const ids = [...selectedProspectIds.value]
+    await Promise.all(ids.map((id) => trashProspect(id)))
+    const deletedIds = new Set(ids)
+    prospects.value = prospects.value.filter((prospect) => !deletedIds.has(prospect.id))
+    selectedProspectIds.value = new Set()
   } catch (e) {
     error.value = crm.errorMessage(e)
   } finally {
@@ -325,7 +355,7 @@ onMounted(async () => {
 
     <Message v-if="error" severity="error" class="page-message">{{ error }}</Message>
 
-<nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button v-if="prospectTrashEnabled" type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" @click="openTrash"><i class="pi pi-trash text-[15px]" /><span>Trash</span></button></nav>
+<nav class="prospect-erp-toolbar flex min-w-0 flex-wrap items-center gap-[10px] overflow-x-auto pb-[1px]" aria-label="Prospect management sections"><label class="prospect-search relative w-[260px] shrink-0 lg:w-[300px]"><i class="pi pi-search" /><input v-model="searchQuery" placeholder="Search prospect name, category, sales executive" /></label><Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" /><button v-if="prospectTrashEnabled" type="button" class="prospect-trash-button ml-auto flex h-[36px] w-[82px] shrink-0 items-center justify-center gap-[7px] rounded-[10px] border border-[#fecaca] bg-[#fff5f5] px-[12px] font-['Inter'] text-[12px] font-semibold text-[#b91c1b] transition-all hover:bg-[#fff1f2]" @click="openTrash"><i class="pi pi-trash text-[15px]" /><span>{{ selectedProspectCount ? 'Move to Trash' : 'Trash Prospect' }}</span></button></nav>
     <div class="panel-stack">
       <div v-if="showFilters" class="filter-panel">
         <div class="filter-grid">
@@ -348,7 +378,7 @@ onMounted(async () => {
       </div>
 
       <section class="table-panel">
-<div class="pagination-bar flex items-center justify-between border-b border-[#e2e8f0] px-[16px] py-[5px] lg:px-[24px]"><div class="flex items-center gap-[12px]"><div class="flex items-center gap-[4px]"><button v-for="page in prospectTotalPages" :key="page" type="button" :class="['flex size-[30px] items-center justify-center rounded-full text-[12px] transition-all', page === prospectPage ? 'bg-[#fff1f2] font-bold text-[#991b1b]' : 'text-[#64748b] hover:bg-[#f8fafc]']" @click="goToProspectPage(page)">{{ page }}</button></div><span class="ml-[8px] whitespace-nowrap text-[12px]">Page {{ prospectPage }} of {{ prospectTotalPages }} / {{ allFiltered.length }} records</span><div class="flex items-center gap-[4px]"><button type="button" :disabled="prospectPage <= 1" @click="goToProspectPage(prospectPage - 1)">Previous</button><button type="button" :disabled="prospectPage >= prospectTotalPages" @click="goToProspectPage(prospectPage + 1)">Next</button></div></div><div class="flex items-center gap-[10px]"><label class="text-[12px] text-[#475569]" for="prospect-page-size">Page size</label><select id="prospect-page-size" :value="prospectPageSize" class="h-[30px] rounded-[6px] border border-[#e2e8f0] bg-white px-[6px] text-[13px] text-[#334155]" @change="updateProspectPageSize(Number(($event.target as HTMLSelectElement).value))"><option v-for="size in [1, 10, 20, 50]" :key="size" :value="size">{{ size }}</option></select><button type="button" class="flex size-[30px] items-center justify-center rounded-full text-[#475569] transition-all hover:bg-[#f1f5f9]" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh text-[18px]" /></button></div></div>
+<div class="pagination-bar"><div class="flex items-center gap-[12px]"><div class="pagination-controls flex items-center gap-[4px]"><button type="button" class="p-button p-component p-button-icon-only p-button-rounded p-button-text p-button-sm" :disabled="prospectPage <= 1" aria-label="Previous page" @click="goToProspectPage(prospectPage - 1)"><i class="pi pi-angle-left" /></button><button v-for="page in prospectTotalPages" :key="page" type="button" :class="['p-button p-component p-button-rounded p-button-text p-button-sm pagination-num', { 'is-active': page === prospectPage }]" :aria-label="`Page ${page}`" @click="goToProspectPage(page)">{{ page }}</button><button type="button" class="p-button p-component p-button-icon-only p-button-rounded p-button-text p-button-sm" :disabled="prospectPage >= prospectTotalPages" aria-label="Next page" @click="goToProspectPage(prospectPage + 1)"><i class="pi pi-angle-right" /></button></div><span class="pagination-info ml-[8px]">Page {{ prospectPage }} of {{ prospectTotalPages }} / {{ allFiltered.length }} records</span></div><div class="pagination-settings"><label class="page-size-control"><span>Page size</span><select v-model="prospectPageSize" aria-label="Page size" @change="updateProspectPageSize(prospectPageSize)"><option v-for="size in [10, 20, 50]" :key="size" :value="size">{{ size }}</option></select></label><label><span>Go to</span><input v-model.number="prospectPage" type="number" min="1" :max="prospectTotalPages" aria-label="Go to page" @change="goToProspectPage(prospectPage)" /></label><button type="button" @click="goToProspectPage(prospectPage)">Set</button><button type="button" class="pagination-refresh" title="Refresh prospect data" @click="crm.loadPipeline()"><i class="pi pi-refresh" /></button></div></div>
 
         <div v-if="loading" class="state-box">
           <i class="pi pi-spin pi-spinner state-icon" />
@@ -382,27 +412,24 @@ onMounted(async () => {
                   @keydown.enter="openActions(p)"
               >
                 <td class="border-r border-[#e0e0e0] px-[12px] text-center"><button type="button" :class="['prospect-checkbox mx-auto flex size-[18px] items-center justify-center rounded-[4px] border bg-white shadow-sm', { 'prospect-checkbox-selected': selectedProspectIds.has(p.id) }]" :aria-label="`Select prospect ${p.placeName}`" :aria-pressed="selectedProspectIds.has(p.id)" @click.stop="toggleProspectSelection(p.id)"><i v-if="selectedProspectIds.has(p.id)" class="pi pi-check text-[11px]" /></button></td>
-                <td class="prospect-name-cell" @mouseenter="hoveredProspectId = p.id" @mouseleave="hoveredProspectId = ''">
+                <td class="prospect-name-cell">
                   <div class="min-w-0">
                     <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.placeName }}</p>
                     <p class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ p.formattedAddress || 'Address unavailable' }}</p>
                   </div>
-                  <div v-if="hoveredProspectId === p.id" class="prospect-preview"><strong>{{ p.placeName }}</strong><span>Category: {{ p.placeCategory }}</span><span>Address: {{ p.formattedAddress || 'Address unavailable' }}</span><span>Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</span></div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-category`" @mouseleave="hoveredProspectCell = ''">
+                <td class="preview-cell">
                   <div class="min-w-0">
                     <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.placeCategory || 'Not provided' }}</p>
                     <p v-if="segmentForProspect(p)" class="mt-[2px] truncate font-['Inter'] text-[12px] text-[#64748b]">{{ segmentForProspect(p) }}</p>
                   </div>
-                  <div v-if="hoveredProspectCell === `${p.id}-category`" class="cell-preview">Category: {{ p.placeCategory || 'Unavailable' }}</div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-sales`" @mouseleave="hoveredProspectCell = ''">
+                <td class="preview-cell">
                   <div class="min-w-0">
                     <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ p.assignedSalesExecutive || 'Unassigned' }}</p>
                   </div>
-                  <div v-if="hoveredProspectCell === `${p.id}-sales`" class="cell-preview">Sales Executive: {{ p.assignedSalesExecutive || 'Unassigned' }}</div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-status`" @mouseleave="hoveredProspectCell = ''">
+                <td class="preview-cell">
                   <div class="status-cell">
                     <span v-if="p.status === 'WON'" class="won-badge">
                       <i class="pi pi-trophy" />
@@ -416,11 +443,10 @@ onMounted(async () => {
                     <span v-if="p.deletionRequested" class="deletion-badge">Deletion Requested</span>
                   </div>
                 </td>
-                <td class="preview-cell" @mouseenter="hoveredProspectCell = `${p.id}-created`" @mouseleave="hoveredProspectCell = ''">
+                <td class="preview-cell">
                   <div class="min-w-0">
                     <p class="truncate font-['Inter'] text-[13px] font-semibold text-[#0f172a]">{{ formatDate(p.createdAt) }}</p>
                   </div>
-                  <div v-if="hoveredProspectCell === `${p.id}-created`" class="cell-preview">Created: {{ formatDate(p.createdAt) }}</div>
                 </td>
               </tr>
             </tbody>
@@ -564,8 +590,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.prospect-trash-button,
-.action-menu-item.danger { display: none !important; }
 .prospect-page {
   box-sizing: border-box;
   display: flex;
@@ -1412,6 +1436,7 @@ onMounted(async () => {
 .prospect-page .data-table th:nth-child(6), .prospect-page .data-table td:nth-child(6) { width: 10% !important; }
 .prospect-page { padding-left: 0 !important; }
 .prospect-page .prospect-erp-toolbar { padding-left: 0 !important; }
+.prospect-page .prospect-erp-toolbar { padding-left: 20px !important; }
 .prospect-page .table-panel { margin-left: 0 !important; }
 .prospect-page .data-table thead th:not(:first-child) {
   border-right: 1px solid #e0e0e0 !important;
@@ -1449,6 +1474,7 @@ onMounted(async () => {
   background: #fff !important;
   color: transparent !important;
 }
+
 .prospect-page .prospect-checkbox:focus-visible {
   outline: 2px solid #93c5fd !important;
   outline-offset: 2px;
@@ -1466,4 +1492,22 @@ onMounted(async () => {
   line-height: 16px !important;
   letter-spacing: normal !important;
 }
+.prospect-page .prospect-erp-toolbar .prospect-trash-button {
+  width: max-content !important;
+  min-width: max-content !important;
+  padding: 0 14px !important;
+  white-space: nowrap;
+}
+.prospect-page .pagination-bar > div:first-child > div:nth-child(3) > button:first-child{display:none!important}
+.prospect-page .pagination-bar{display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:0 20px;border-bottom:1px solid #e2e8f0;background:#fff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#64748b}.prospect-page .pagination-controls{display:flex;align-items:center;gap:4px}.prospect-page .pagination-controls button{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0;border:0;border-radius:999px;background:transparent;color:#475569;cursor:pointer}.prospect-page .pagination-controls button:hover:not(:disabled),.prospect-page .pagination-controls button.pagination-num.is-active{background:#fff1f2;color:#991b1b;font-weight:700}.prospect-page .pagination-controls button:disabled{cursor:not-allowed;opacity:.45}.prospect-page .pagination-settings{display:flex;align-items:center;gap:10px}.prospect-page .pagination-settings label{position:relative;display:flex;width:80px;height:34px;align-items:center;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;color:#334155}.prospect-page .pagination-settings label span{position:absolute;top:-7px;left:8px;padding:0 4px;background:#fff;font-size:10px;font-weight:600;color:#475569}.prospect-page .pagination-settings select,.prospect-page .pagination-settings input{width:100%;border:0;outline:0;background:transparent;color:#334155;font-size:11px}.prospect-page .pagination-settings input{padding-top:4px}.prospect-page .pagination-settings>button{height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569;cursor:pointer}.prospect-page .pagination-settings .pagination-refresh{width:30px;padding:0;border:0;border-radius:999px}
+.prospect-page .data-table thead th{height:49px!important;padding:0 12px!important;border-right:1px solid #e2e2e2!important;border-bottom:1px solid #e0e0e0!important;background:#f4f4f4!important;color:#000!important;font-size:10px!important;font-weight:600!important;letter-spacing:.07em!important;text-transform:uppercase}.prospect-page .data-table tbody td{height:84px!important;padding:10px 12px!important;border-right:1px solid #e2e8f0!important;border-bottom:1px solid #e0e0e0!important;font-size:12px!important}.prospect-page .data-table tbody tr:hover{background:#fff!important}
+.prospect-page .data-table{table-layout:fixed!important}
+.prospect-page .data-table thead th,.prospect-page .data-table tbody td{padding:7px 10px!important}
+.prospect-page .data-table tbody td{height:58px!important;line-height:16px!important}
+.prospect-page .data-table th:nth-child(1),.prospect-page .data-table td:nth-child(1){width:48px!important}
+.prospect-page .data-table th:nth-child(2),.prospect-page .data-table td:nth-child(2){width:38%!important}
+.prospect-page .data-table th:nth-child(3),.prospect-page .data-table td:nth-child(3){width:18%!important}
+.prospect-page .data-table th:nth-child(4),.prospect-page .data-table td:nth-child(4){width:18%!important}
+.prospect-page .data-table th:nth-child(5),.prospect-page .data-table td:nth-child(5){width:14%!important}
+.prospect-page .data-table th:nth-child(6),.prospect-page .data-table td:nth-child(6){width:12%!important}
 </style>

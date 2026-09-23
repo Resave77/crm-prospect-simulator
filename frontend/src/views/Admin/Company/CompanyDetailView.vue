@@ -7,7 +7,8 @@ import Tag from 'primevue/tag'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 import { useCustomerListStore } from '../../../stores/customerList'
-import { deleteCustomer } from '../../../api/crm'
+import { deleteCustomer, getParentCompany } from '../../../api/crm'
+import type { ParentCompany } from '../../../types/crm'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +19,7 @@ const loading = ref(true)
 const activeTab = ref('sites')
 const deleteDialogVisible = ref(false)
 const deleting = ref(false)
+const company = ref<ParentCompany | null>(null)
 
 const tabs = [
   { key: 'sites', label: 'Sites', icon: 'pi pi-map-marker' },
@@ -51,6 +53,7 @@ function segmentSeverity(seg: string) {
 onMounted(async () => {
   try {
     if (store.allCustomers.length === 0) await store.fetchCustomers()
+    company.value = await getParentCompany(code.value)
   } catch (e) { error.value = store.errorMessage(e) }
   finally { loading.value = false }
 })
@@ -104,6 +107,35 @@ async function executeDelete() {
           <Button label="Delete" icon="pi pi-trash" severity="danger" text size="small" @click="confirmDelete" />
         </div>
       </header>
+
+      <section v-if="company" class="company-reference-card">
+        <div class="company-reference-header">
+          <div><p class="company-eyebrow">Company Data</p><p class="company-description">Data parent company untuk customer site ini.</p></div>
+          <div class="company-reference-actions"><button type="button" @click="router.push(`/admin/companies/${code}/edit`)">Edit Company Detail <i class="pi pi-pencil" /></button></div>
+          <div class="company-reference-title"><div><h2>{{ company.name }}</h2><p>{{ company.parentCode }}</p></div><span>Key Account</span></div>
+        </div>
+        <div class="company-reference-grid">
+          <div class="company-reference-section"><div class="company-section-header"><h3>Company Address</h3><p>Legal and billing address used for company and tax records.</p></div><div class="company-data-list"><div><span>Company Address</span><strong>{{ company.address?.previewAddress || '—' }}</strong></div><div><span>Province</span><strong>{{ company.address?.province || '—' }}</strong></div><div><span>District</span><strong>{{ company.address?.district || '—' }}</strong></div><div><span>Latitude</span><strong>{{ company.address?.latitude ?? '—' }}</strong></div><div><span>Longitude</span><strong>{{ company.address?.longitude ?? '—' }}</strong></div></div></div>
+          <div class="company-reference-section"><div class="company-section-header"><h3>Company KAM</h3><p>Company-level key account manager ownership.</p></div><div class="company-data-list"><div><span>Assigned KAM</span><strong>{{ company.kamAssignments?.[0]?.ownerName || '—' }}</strong></div><div><span>Status</span><strong>{{ company.kamAssignments?.[0]?.end ? 'Selesai' : 'Aktif' }}</strong></div></div></div>
+          <div class="company-reference-section company-contact-reference"><div class="company-section-header"><h3>Company Contact Information</h3><p>General company contacts for coordination and follow up.</p></div><div class="company-contact-list"><div v-for="(contact, index) in company.contacts" :key="`${contact.email}-${index}`" class="company-contact-item"><div class="company-contact-heading"><div><span>Contact {{ index + 1 }}</span><strong>{{ contact.name || '—' }}</strong></div><em>{{ contact.position || 'General' }}</em></div><div class="company-contact-fields"><div><span>Phone Number</span><strong>{{ contact.phone || '—' }}</strong></div><div><span>Email Address</span><strong>{{ contact.email || '—' }}</strong></div></div></div><p v-if="!company.contacts?.length" class="company-contact-empty">No company contact information available.</p></div></div>
+          <div class="company-reference-section"><div class="company-section-header"><h3>Company Information</h3><p>Legal identity of the parent company.</p></div><div class="company-data-list"><div><span>Company Name</span><strong>{{ company.name }}</strong></div><div><span>Company Code</span><strong>{{ company.parentCode }}</strong></div><div><span>Company Tier</span><strong>Key Account</strong></div><div><span>Total Sites</span><strong>{{ totalSites }}</strong></div></div></div>
+          <div class="company-reference-section"><div class="company-section-header"><h3>Tax Information</h3><p>Company NPWP data synced from company name and address.</p></div><div class="company-data-list"><div><span>Company NPWP Name</span><strong>{{ company.npwpName || company.name }}</strong></div><div><span>Company NPWP Address</span><strong>{{ company.npwpAddress || company.address?.previewAddress || '—' }}</strong></div><div><span>Company NPWP Number</span><strong>{{ company.npwpNumber || '—' }}</strong></div></div></div>
+        </div>
+      </section>
+
+      <section v-if="company" class="company-sites-reference">
+        <div class="company-sites-header">
+          <h2>Customer Sites ({{ sites.length }})</h2>
+          <p>All outlet, branch, store, or office records under this company.</p>
+        </div>
+        <div class="company-sites-list">
+          <button v-for="site in sites" :key="site.id" type="button" class="company-site-item" @click="router.push(`/admin/customers/${site.id}`)">
+            <div class="company-site-main"><strong>{{ site.name }}</strong><span>{{ site.customerCode }}</span></div>
+            <div class="company-site-meta"><span>{{ site.category || '—' }}</span><span>{{ site.region || '—' }}</span><i class="pi pi-chevron-right" /></div>
+          </button>
+          <p v-if="!sites.length" class="company-sites-empty">No customer sites available.</p>
+        </div>
+      </section>
 
       <!-- SUMMARY STRIP -->
       <div class="summary-strip">
@@ -537,6 +569,7 @@ async function executeDelete() {
 }
 
 /* ── RESPONSIVE ────────────────────────────────────────────────────── */
+ .admin-page:has(.company-reference-card)>.page-heading,.admin-page:has(.company-reference-card)>.summary-strip,.admin-page:has(.company-reference-card)>.tabs-bar,.admin-page:has(.company-reference-card)>.panel-stack,.admin-page:has(.company-reference-card)>.detail-grid{display:none}.company-reference-card{overflow:hidden;border:1px solid #fecaca;border-radius:20px;background:#fff}.company-reference-header{border-bottom:1px solid #fee2e2;padding:20px}.company-eyebrow{margin:0;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.company-description{margin:4px 0 0;color:#64748b;font-size:12px}.company-reference-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;float:right;margin-top:-34px}.company-reference-actions button{border:0;background:transparent;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer}.company-reference-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:24px}.company-reference-title h2{margin:0;color:#0f172a;font-size:17px}.company-reference-title p{margin:4px 0 0;color:#64748b;font-size:12px}.company-reference-title span{border:1px solid #ddd6fe;border-radius:999px;background:#ede9fe;padding:4px 10px;color:#7c3aed;font-size:11px;font-weight:600}.company-reference-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:20px}.company-reference-section{overflow:hidden;border:1px solid #dfe6ef;border-radius:20px;background:#fff}.company-section-header{border-bottom:1px solid #eef2f7;padding:20px}.company-section-header h3{margin:0;color:#0f172a;font-size:17px}.company-section-header p{margin:4px 0 0;color:#64748b;font-size:12px}.company-data-list{display:grid;gap:10px;padding:20px}.company-data-list>div{display:flex;min-height:48px;align-items:center;justify-content:space-between;gap:16px;border-radius:14px;background:#f8fafc;padding:14px 16px}.company-data-list span{color:#64748b;font-size:12px}.company-data-list strong{max-width:62%;color:#0f172a;font-size:13px;text-align:right;overflow-wrap:anywhere}
 @media (max-width: 1024px) { .detail-grid { grid-template-columns: 1fr; } }
 @media (max-width: 768px) {
   .admin-page { padding: 1.25rem 1rem; }
@@ -546,4 +579,9 @@ async function executeDelete() {
   .strip-item:last-child { border-bottom: none; }
   .info-grid { grid-template-columns: 1fr; }
 }
+.admin-page:has(.company-reference-card){padding:0!important;background:#f8fafc}.company-reference-card{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}.company-reference-card>.company-reference-header{display:none!important}.company-reference-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:18px!important;padding:20px 30px!important}.company-reference-section{border:1px solid #dfe6ef!important;border-radius:20px!important;box-shadow:0 14px 34px rgba(15,23,42,.06)}.company-reference-section .company-section-header{padding:20px!important}.company-reference-section .company-data-list{gap:10px!important;padding:20px!important}.company-reference-section .company-data-list>div{min-height:48px!important;padding:14px 16px!important}.company-reference-section .company-data-list span{font-size:12px!important}.company-reference-section .company-data-list strong{font-size:13px!important}@media(max-width:800px){.company-reference-grid{grid-template-columns:1fr!important;padding:16px!important}}
+.company-reference-grid>.company-reference-section:nth-child(1){grid-column:1;grid-row:2!important}.company-reference-grid>.company-reference-section:nth-child(2){grid-column:2;grid-row:2!important}.company-reference-grid>.company-reference-section:nth-child(3){grid-column:1/-1;grid-row:3!important}.company-reference-grid>.company-reference-section:nth-child(4){grid-column:1;grid-row:1!important}.company-reference-grid>.company-reference-section:nth-child(5){grid-column:2;grid-row:1!important}.company-reference-grid>.company-contact-reference{grid-column:1/-1!important;grid-row:3!important}
+.company-reference-card,.company-reference-card *{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.company-contact-reference{grid-column:1/-1!important}.company-contact-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:20px}.company-contact-item{border:1px solid #dfe6ef;border-radius:16px;background:#f8fafc;padding:14px 16px}.company-contact-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.company-contact-heading span,.company-contact-fields span{display:block;color:#94a3b8;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.company-contact-heading strong{display:block;margin-top:4px;color:#0f172a;font-size:14px;font-weight:700;line-height:20px}.company-contact-heading em{border:1px solid #dbeafe;border-radius:999px;background:#fff;padding:3px 10px;color:#1d4ed8;font-size:10px;font-style:normal;font-weight:600}.company-contact-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.company-contact-fields>div{border-radius:14px;background:#fff;padding:10px 12px}.company-contact-fields strong{display:block;margin-top:5px;color:#0f172a;font-size:13px;font-weight:600;line-height:20px;overflow-wrap:anywhere}.company-contact-empty{margin:0;padding:20px;color:#64748b;font-size:12px}@media(max-width:700px){.company-contact-list{grid-template-columns:1fr}.company-contact-fields{grid-template-columns:1fr}}
+@media(max-width:800px){.company-reference-grid>.company-reference-section{grid-column:1!important;grid-row:auto!important}}
+.company-sites-reference{margin:0 30px 20px;overflow:hidden;border:1px solid #dfe6ef;border-radius:20px;background:#fff;box-shadow:0 14px 34px rgba(15,23,42,.06);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.company-sites-header{border-bottom:1px solid #eef2f7;padding:18px 20px}.company-sites-header h2{margin:0;color:#0f172a;font-size:17px;font-weight:700}.company-sites-header p{margin:4px 0 0;color:#64748b;font-size:12px}.company-sites-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:20px}.company-site-item{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;border:1px solid #dfe6ef;border-radius:16px;background:#f8fafc;padding:14px 16px;text-align:left;cursor:pointer;transition:border-color .2s,background .2s}.company-site-item:hover{border-color:#cbd5e1;background:#f1f5f9}.company-site-main{display:grid;min-width:0;gap:4px}.company-site-main strong{overflow:hidden;color:#0f172a;font-size:13px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.company-site-main span,.company-site-meta span{color:#64748b;font-size:11px}.company-site-meta{display:flex;align-items:center;justify-content:flex-end;gap:8px;white-space:nowrap}.company-site-meta i{color:#94a3b8;font-size:12px}.company-sites-empty{margin:0;padding:20px;color:#64748b;font-size:12px}@media(max-width:800px){.company-sites-reference{margin:0 16px 16px}.company-sites-list{grid-template-columns:1fr;padding:16px}}
 </style>

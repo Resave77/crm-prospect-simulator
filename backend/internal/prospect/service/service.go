@@ -610,11 +610,53 @@ func (s *Service) Save(ctx context.Context, actor Actor, input prospectmodel.Sav
 	return item, err
 }
 
+func (s *Service) AssignProspect(ctx context.Context, actor Actor, id, salesExecutiveID uuid.UUID) (prospectmodel.Prospect, error) {
+	if !actor.Role.IsAdminRole() {
+		return prospectmodel.Prospect{}, ErrForbidden
+	}
+	if salesExecutiveID == uuid.Nil {
+		return prospectmodel.Prospect{}, ErrFinderInput
+	}
+	repo, ok := s.repository.(interface {
+		AssignProspect(context.Context, uuid.UUID, uuid.UUID) (prospectmodel.Prospect, error)
+	})
+	if !ok {
+		return prospectmodel.Prospect{}, errors.New("prospect assignment is unavailable")
+	}
+	return repo.AssignProspect(ctx, id, salesExecutiveID)
+}
+
 func (s *Service) ListVisitMonitoring(ctx context.Context, actor Actor, filter prospectmodel.VisitMonitoringFilter) ([]prospectmodel.VisitMonitoringItem, error) {
 	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListVisitMonitoring(ctx, filter)
+}
+
+func (s *Service) ListTrashedVisits(ctx context.Context, actor Actor) ([]prospectmodel.VisitMonitoringItem, error) {
+	if !actor.Role.IsAdminRole() {
+		return nil, ErrForbidden
+	}
+	repo, ok := s.repository.(interface {
+		ListTrashedVisits(context.Context) ([]prospectmodel.VisitMonitoringItem, error)
+	})
+	if !ok {
+		return nil, errors.New("visit trash is unavailable")
+	}
+	return repo.ListTrashedVisits(ctx)
+}
+
+func (s *Service) RestoreVisit(ctx context.Context, actor Actor, id uuid.UUID) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	repo, ok := s.repository.(interface {
+		RestoreVisit(context.Context, uuid.UUID) error
+	})
+	if !ok {
+		return errors.New("visit restore is unavailable")
+	}
+	return repo.RestoreVisit(ctx, id)
 }
 
 func (s *Service) Report(ctx context.Context, actor Actor, filter prospectmodel.ReportFilter) (prospectmodel.Report, error) {

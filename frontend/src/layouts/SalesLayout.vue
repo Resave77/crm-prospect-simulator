@@ -261,6 +261,109 @@ function toggleCollapse() {
     max-height: calc(100dvh - 18rem - env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* Keep Sales surfaces on the same component language as Admin. */
+.sales-layout,
+.sales-layout button,
+.sales-layout input,
+.sales-layout select,
+.sales-layout textarea {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sales-layout .p-button,
+.sales-layout button:not(.topbar-icon-btn):not(.sidebar-collapse-btn):not(.sidebar-logout):not(.nav-item) {
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.sales-layout .p-button:not(.p-button-text):not(.p-button-outlined):not(.p-button-secondary) {
+  border-color: #dc2626;
+  background: #dc2626;
+  box-shadow: 0 5px 12px rgba(220, 38, 38, .14);
+}
+
+.sales-layout .p-button:not(.p-button-text):not(.p-button-outlined):not(.p-button-secondary):hover {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
+
+.sales-layout .p-button.p-button-outlined,
+.sales-layout .p-button.p-button-secondary,
+.sales-layout .p-button.p-button-text {
+  color: #475569;
+}
+
+.sales-layout .p-inputtext,
+.sales-layout input:not([type="checkbox"]):not([type="radio"]),
+.sales-layout textarea,
+.sales-layout select,
+.sales-layout .p-select,
+.sales-layout .p-multiselect {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.sales-layout .p-inputtext:focus,
+.sales-layout input:not([type="checkbox"]):not([type="radio"]):focus,
+.sales-layout textarea:focus,
+.sales-layout select:focus,
+.sales-layout .p-select.p-focus,
+.sales-layout .p-multiselect.p-focus {
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(219, 234, 254, .8);
+  outline: none;
+}
+
+.sales-layout .p-dialog {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+}
+
+.sales-layout .p-dialog .p-dialog-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef2f7;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sales-layout .p-dialog .p-dialog-content {
+  padding: 20px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.sales-layout .p-dialog .p-dialog-footer {
+  padding: 14px 20px 18px;
+  border-top: 1px solid #eef2f7;
+}
+
+.sales-layout .p-card,
+.sales-layout .cicard,
+.sales-layout .cocard,
+.sales-layout .vrcard,
+.sales-layout .checkout-card,
+.sales-layout .detail-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+
+.sales-layout .p-tag {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
 </style>
 
 <style scoped>
@@ -362,6 +465,18 @@ function toggleCollapse() {
   max-width: 480px;
   margin: 0 auto;
   padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem 1.25rem;
+}
+
+/* Keep detail-page Back buttons visible while the page content is scrolled. */
+.sales-content > .detail-page > .back-link,
+.sales-content > .back-link {
+  position: sticky;
+  top: var(--sales-topbar-h, 0px);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
 }
 
 /* ── Desktop Breakpoint ───────────────────────────────────────── */

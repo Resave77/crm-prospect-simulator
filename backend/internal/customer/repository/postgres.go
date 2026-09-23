@@ -707,9 +707,9 @@ func (r *PostgresRepository) FindCustomerForSales(ctx context.Context, id, sales
 	if err != nil {
 		return model.CustomerDetail{}, err
 	}
-	var sourceName string
-	if err := r.pool.QueryRow(ctx, `SELECT place_name FROM prospects WHERE id=$1`, customer.SourceProspectID).Scan(&sourceName); err != nil {
-		return model.CustomerDetail{}, fmt.Errorf("read source prospect: %w", err)
+	sourceName, err := r.readSourceProspectName(ctx, customer.SourceProspectID)
+	if err != nil {
+		return model.CustomerDetail{}, err
 	}
 	return model.CustomerDetail{Customer: customer, ParentCompany: parent, SourceProspectName: sourceName}, nil
 }
@@ -723,11 +723,28 @@ func (r *PostgresRepository) FindCustomer(ctx context.Context, id uuid.UUID) (mo
 	if err != nil {
 		return model.CustomerDetail{}, err
 	}
-	var sourceName string
-	if err := r.pool.QueryRow(ctx, `SELECT place_name FROM prospects WHERE id=$1`, customer.SourceProspectID).Scan(&sourceName); err != nil {
-		return model.CustomerDetail{}, fmt.Errorf("read source prospect: %w", err)
+	sourceName, err := r.readSourceProspectName(ctx, customer.SourceProspectID)
+	if err != nil {
+		return model.CustomerDetail{}, err
 	}
 	return model.CustomerDetail{Customer: customer, ParentCompany: parent, SourceProspectName: sourceName}, nil
+}
+
+// Directly-created customer sites do not have a source prospect. The source
+// prospect is enrichment data and must not make the customer detail request
+// fail when it is absent or has been removed.
+func (r *PostgresRepository) readSourceProspectName(ctx context.Context, prospectID uuid.UUID) (string, error) {
+	if prospectID == uuid.Nil {
+		return "", nil
+	}
+	var sourceName string
+	if err := r.pool.QueryRow(ctx, `SELECT place_name FROM prospects WHERE id=$1`, prospectID).Scan(&sourceName); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read source prospect: %w", err)
+	}
+	return sourceName, nil
 }
 
 func (r *PostgresRepository) listCustomers(ctx context.Context, query string, args ...any) ([]model.CustomerSite, error) {

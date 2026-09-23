@@ -80,6 +80,7 @@ export async function getMenuImages(query: string, limit = 8) { return (await ap
 export function apiClientPath(path: string) { return path.replace(/^\/api\/v1(?=\/)/, '') }
 export async function getPlacePhotoBlob(photoUrl: string) { return (await api.get(apiClientPath(photoUrl), { responseType: 'blob' })).data as Blob }
 export async function saveProspect(place: PlaceResult, category: string, assignedSalesExecutiveId: string) { return (await api.post<ApiEnvelope<Prospect>>('/admin/prospects', { place, industryGroup: category, assignedSalesExecutiveId })).data.data }
+export async function assignProspect(id: string, salesExecutiveId: string) { return (await api.patch<ApiEnvelope<Prospect>>(`/admin/prospects/${id}/assignment`, { salesExecutiveId })).data.data }
 
 
 export async function getProspectReview(id: string) {
@@ -181,6 +182,8 @@ export async function getMyVisits(filters?: { dateFrom?: string; dateTo?: string
 export async function deleteVisit(visitId: string) {
   await api.post(`/admin/visits/${visitId}/delete`)
 }
+export async function listTrashedVisits() { return (await api.get<ApiEnvelope<VisitMonitoringItem[]>>('/admin/visits/trash')).data.data }
+export async function restoreVisit(visitId: string) { await api.post(`/admin/visits/${visitId}/restore`) }
 
 export async function deleteMyVisit(visitId: string) {
   await api.post(`/sales/visits/${visitId}/delete`)

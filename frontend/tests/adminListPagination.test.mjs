@@ -19,7 +19,7 @@ test('prospect list pagination slices the complete loaded dataset and updates ac
   assert.match(prospect, /page === prospectPage/)
   assert.match(prospect, /@click="goToProspectPage\(prospectPage - 1\)"/)
   assert.match(prospect, /@click="goToProspectPage\(prospectPage \+ 1\)"/)
-  assert.match(prospect, /@change="updateProspectPageSize\(Number\(\(\$event\.target as HTMLSelectElement\)\.value\)\)"/)
+  assert.match(prospect, /@change="updateProspectPageSize\(prospectPageSize\)"/)
   assert.match(prospect, /prospectPageSize = ref\(10\)/)
 })
 

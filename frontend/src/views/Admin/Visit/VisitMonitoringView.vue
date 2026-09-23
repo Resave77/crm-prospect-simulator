@@ -7,7 +7,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 import vTooltip from 'primevue/tooltip'
-import { getAdminVisits, getSalesExecutives, deleteVisit as apiDeleteVisit } from '../../../api/crm'
+import { getAdminVisits, getSalesExecutives, deleteVisit as apiDeleteVisit, listTrashedVisits, restoreVisit } from '../../../api/crm'
 import type { VisitMonitoringItem, VisitMonitoringFilters, SalesExecutiveOption, ProspectStatus, ProspectVisit } from '../../../types/crm'
 import VisitSelfieModal from './VisitSelfieModal.vue'
 
@@ -50,6 +50,10 @@ const showFilters = ref(false)
 const selectedVisitIds = ref<Set<string>>(new Set())
 const showBulkDeleteModal = ref(false)
 const bulkDeleteBusy = ref(false)
+const trashVisible = ref(false)
+const trashLoading = ref(false)
+const trashedVisits = ref<VisitMonitoringItem[]>([])
+const restoringVisitId = ref('')
 
 const filters = ref<VisitMonitoringFilters>({
   dateFrom: '',
@@ -71,6 +75,15 @@ const salesOptions = computed(() => {
 
 const selectedSales = ref('')
 const selectedRadius = ref('ALL')
+
+async function openTrash() {
+  trashVisible.value = true; trashLoading.value = true
+  try { trashedVisits.value = await listTrashedVisits() } catch (e) { error.value = (e as any)?.response?.data?.error?.message || 'Failed to load visit trash.' } finally { trashLoading.value = false }
+}
+async function restoreTrashedVisit(item: VisitMonitoringItem) {
+  restoringVisitId.value = item.id
+  try { await restoreVisit(item.id); trashedVisits.value = trashedVisits.value.filter((v) => v.id !== item.id); await fetchData() } catch (e) { error.value = (e as any)?.response?.data?.error?.message || 'Failed to restore visit.' } finally { restoringVisitId.value = '' }
+}
 const visitPage = ref(1)
 const visitPageSize = ref(10)
 const visitGoToPage = ref(1)
@@ -441,7 +454,7 @@ onMounted(() => {
     <nav class="visit-erp-toolbar" aria-label="Visit monitoring controls">
       <label class="visit-search"><i class="pi pi-search" /><input v-model="customerSearch" placeholder="Search customer or industry group" /></label>
       <Button label="More Filters" icon="pi pi-sliders-h" severity="secondary" outlined size="small" @click="showFilters = !showFilters" />
-      <button type="button" class="visit-trash-button" :disabled="!selectedVisitIds.size" :class="{ 'visit-trash-disabled': !selectedVisitIds.size }" @click="showBulkDeleteModal = true"><i class="pi pi-trash" /><span>Trash{{ selectedVisitIds.size ? ` (${selectedVisitIds.size})` : '' }}</span></button>
+      <button type="button" class="visit-trash-button" @click="selectedVisitIds.size ? (showBulkDeleteModal = true) : openTrash()"><i class="pi pi-trash" /><span>{{ selectedVisitIds.size ? `Move to Trash (${selectedVisitIds.size})` : 'Trash' }}</span></button>
     </nav>
 
     <div v-if="showFilters" class="filter-panel">
@@ -469,7 +482,7 @@ onMounted(() => {
     </div>
 
     <section class="table-panel">
-      <div class="visit-pagination-bar"><div class="visit-pagination-info"><button type="button" class="visit-page-number" :disabled="visitPage <= 1" @click="goToVisitPage(visitPage - 1)">{{ visitPage }}</button><span>Page {{ visitPage }} of {{ visitTotalPages }} / {{ filteredGroupedVisits.length }} records</span></div><div class="visit-pagination-settings"><label><span>Page size</span><select v-model.number="visitPageSize"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label><label><span>Go to</span><input v-model.number="visitGoToPage" type="number" min="1" :max="visitTotalPages" /></label><button type="button" @click="applyVisitPagination">Set</button><button type="button" title="Refresh visit data" @click="fetchData"><i class="pi pi-refresh" /></button></div></div>
+      <div class="visit-pagination-bar"><div class="visit-pagination-info"><div class="pagination-controls"><button type="button" :disabled="visitPage <= 1" aria-label="Previous page" @click="goToVisitPage(visitPage - 1)"><i class="pi pi-angle-left" /></button><button type="button" class="visit-page-number">{{ visitPage }}</button><button type="button" :disabled="visitPage >= visitTotalPages" aria-label="Next page" @click="goToVisitPage(visitPage + 1)"><i class="pi pi-angle-right" /></button></div><span>Page {{ visitPage }} of {{ visitTotalPages }} / {{ filteredGroupedVisits.length }} records</span></div><div class="visit-pagination-settings"><label><span>Page size</span><select v-model.number="visitPageSize"><option :value="10">10</option><option :value="20">20</option><option :value="50">50</option></select></label><label><span>Go to</span><input v-model.number="visitGoToPage" type="number" min="1" :max="visitTotalPages" /></label><button type="button" @click="applyVisitPagination">Set</button><button type="button" title="Refresh visit data" @click="fetchData"><i class="pi pi-refresh" /></button></div></div>
       <div class="table-heading">
         <div>
           <strong>Prospect Visit Overview</strong>
@@ -580,6 +593,9 @@ onMounted(() => {
         <Button label="Cancel" severity="secondary" outlined :disabled="deleteBusy" @click="showDeleteModal = false" />
         <Button label="Delete" icon="pi pi-trash" severity="danger" :loading="deleteBusy" @click="executeDelete" />
       </template>
+    </Dialog>
+    <Dialog v-model:visible="trashVisible" modal header="Trash Visits" :style="{ width: 'min(100%, 700px)' }">
+      <div class="visit-trash-list"><p class="trash-intro">Deleted visits are stored here and can be restored.</p><div v-if="trashLoading" class="state-box">Loading trash...</div><div v-else-if="!trashedVisits.length" class="state-box"><strong>Trash is empty</strong></div><div v-else v-for="item in trashedVisits" :key="item.id" class="visit-trash-row"><div><strong>{{ item.customerName }}</strong><small>{{ formatDateShort(item.checkInAt) }} · {{ item.salesExecutiveName }}</small></div><Button label="Restore" icon="pi pi-undo" size="small" :loading="restoringVisitId === item.id" @click="restoreTrashedVisit(item)" /></div></div>
     </Dialog>
 
     <!-- Visit Result Modal -->
@@ -1257,7 +1273,6 @@ onMounted(() => {
   .visit-page .data-table thead th:nth-child(2), .visit-page .data-table tbody td:nth-child(2),
   .visit-page .data-table thead th:nth-child(3), .visit-page .data-table tbody td:nth-child(3),
   .visit-page .data-table thead th:nth-child(5), .visit-page .data-table tbody td:nth-child(5),
-  .visit-page .data-table thead th:nth-child(7), .visit-page .data-table tbody td:nth-child(7) { display:none; }
   .visit-page .data-table thead th { font-size:0; }
   .visit-page .data-table thead th:nth-child(1)::after { content:'Customer'; font-size:.56rem; }
   .visit-page .data-table thead th:nth-child(4)::after { content:'Sales'; font-size:.56rem; }
@@ -1282,7 +1297,20 @@ onMounted(() => {
 .visit-page .visit-checkbox{display:flex;width:18px;height:18px;margin:0 auto;align-items:center;justify-content:center;padding:0;border:1px solid #cbd5e1;border-radius:4px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.08);cursor:pointer}
 .visit-page .status-badge{display:inline-flex;width:fit-content;align-items:center;justify-content:center;padding:4px 10px;border:1px solid;border-radius:999px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:600;line-height:16px;white-space:nowrap}.visit-page .status-badge-info{border-color:#bfdbfe;background:#dbeafe;color:#1d4ed8}.visit-page .status-badge-success{border-color:#bbf7d0;background:#dcfce7;color:#166534}.visit-page .status-badge-warning{border-color:#fed7aa;background:#fff7ed;color:#c2410c}.visit-page .status-badge-lost{border-color:#fecaca;background:#fff1f2;color:#b91c1c}
 .visit-page .visit-checkbox-selected{border-color:#ef4444;background:#ef4444;color:#fff}.visit-trash-button:disabled{cursor:not-allowed;opacity:.55}.visit-trash-disabled{pointer-events:none}
+.visit-page .data-table thead th{height:49px!important;padding:0 12px!important;border-right:1px solid #e2e2e2!important;border-bottom:1px solid #e0e0e0!important;background:#f4f4f4!important;color:#000!important;font-size:10px!important;font-weight:600!important;letter-spacing:.07em!important;text-transform:uppercase}.visit-page .data-table tbody td{height:84px!important;padding:10px 12px!important;border-right:1px solid #e2e8f0!important;border-bottom:1px solid #e0e0e0!important;font-size:12px!important}.visit-page .data-table tbody tr:hover{background:#fff!important}
 .visit-page .data-table th:first-child,.visit-page .data-table td:first-child{width:54px !important;min-width:54px !important;padding:0 !important;text-align:center !important}
-.visit-pagination-bar{display:flex;min-height:44px;align-items:center;justify-content:space-between;padding:5px 16px;border-bottom:1px solid #e2e8f0;background:#fff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#64748b}.visit-pagination-info{display:flex;align-items:center;gap:12px}.visit-page-number{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:999px;background:#fff1f2;color:#991b1b;font-weight:600}.visit-pagination-settings{display:flex;align-items:center;gap:10px}.visit-pagination-settings label{position:relative;display:flex;width:80px;height:34px;align-items:center;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;color:#334155}.visit-pagination-settings label span{position:absolute;top:-7px;left:8px;padding:0 4px;background:#fff;font-size:10px;font-weight:600;color:#475569}.visit-pagination-settings label strong{font-weight:400}.visit-pagination-settings button{height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569}.visit-pagination-settings button:last-child{width:30px;padding:0;border:0;border-radius:999px}
+.visit-pagination-bar{display:flex;min-height:42px;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #e2e8f0;background:#fff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:12px;color:#64748b}.visit-pagination-info,.visit-pagination-info .pagination-controls{display:flex;align-items:center;gap:12px}.visit-pagination-info .pagination-controls{gap:4px}.visit-pagination-info .pagination-controls button{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;padding:0;border:0;border-radius:999px;background:transparent;color:#475569;cursor:pointer}.visit-pagination-info .pagination-controls button:hover:not(:disabled){background:#fff1f2;color:#991b1b}.visit-pagination-info .pagination-controls button:disabled{cursor:not-allowed;opacity:.45}.visit-page-number{background:#fff1f2!important;color:#991b1b!important;font-weight:700}.visit-pagination-settings{display:flex;align-items:center;gap:10px}.visit-pagination-settings label{position:relative;display:flex;width:80px;height:34px;align-items:center;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;color:#334155}.visit-pagination-settings label span{position:absolute;top:-7px;left:8px;padding:0 4px;background:#fff;font-size:10px;font-weight:600;color:#475569}.visit-pagination-settings label select,.visit-pagination-settings label input{width:100%;border:0;outline:0;background:transparent;color:#334155;font-size:11px}.visit-pagination-settings button{height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#475569}.visit-pagination-settings button:last-child{width:30px;padding:0;border:0;border-radius:999px}
 .bulk-delete-warning{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;color:#334155}.bulk-delete-warning>i{display:flex;width:32px;height:32px;flex:none;align-items:center;justify-content:center;border-radius:999px;background:#fee2e2;color:#dc2626;font-size:15px}.bulk-delete-warning strong{display:block;font-size:13px;font-weight:700;color:#0f172a}.bulk-delete-warning p{margin:4px 0 0;font-size:12px;line-height:18px;color:#64748b}.bulk-delete-dialog :deep(.p-dialog-footer){display:flex;justify-content:flex-end;gap:8px;padding-top:4px}.bulk-delete-dialog :deep(.p-dialog-footer .p-button){min-height:38px;border-radius:10px}
+.visit-page .data-table{table-layout:fixed!important}
+.visit-page .data-table thead th,.visit-page .data-table tbody td{padding:7px 10px!important}
+.visit-page .data-table tbody td{height:60px!important;line-height:16px!important}
+.visit-page .data-table th:first-child,.visit-page .data-table td:first-child{width:46px!important;min-width:46px!important;padding:0!important}
+.visit-page .data-table th:nth-child(2),.visit-page .data-table td:nth-child(2){width:27%!important}
+.visit-page .data-table th:nth-child(3),.visit-page .data-table td:nth-child(3){width:14%!important}
+.visit-page .data-table th:nth-child(4),.visit-page .data-table td:nth-child(4){width:14%!important}
+.visit-page .data-table th:nth-child(5),.visit-page .data-table td:nth-child(5){width:14%!important}
+.visit-page .data-table th:nth-child(6),.visit-page .data-table td:nth-child(6){width:12%!important}
+.visit-page .data-table th:nth-child(7),.visit-page .data-table td:nth-child(7){width:12%!important}
+.visit-page .data-table th:nth-child(8),.visit-page .data-table td:nth-child(8){width:7%!important}
+.visit-trash-list{display:grid;gap:10px}.visit-trash-list .trash-intro{margin:0;color:#64748b;font-size:12px}.visit-trash-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px}.visit-trash-row strong,.visit-trash-row small{display:block}.visit-trash-row small{margin-top:3px;color:#64748b;font-size:11px}
 </style>

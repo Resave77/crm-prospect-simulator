@@ -1128,4 +1128,33 @@ onMounted(async () => {
 .sales-secondary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }.sales-mini-card { padding:1rem 1.1rem; border:1px solid #e5eaf0; border-radius:14px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); }.sales-mini-card header { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }.sales-mini-card h2 { margin:0; color:#172033; font-size:1rem; }.sales-mini-card header a { color:#e63946; font-size:.7rem; font-weight:700; text-decoration:none; }.summary-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }.summary-metrics span { display:grid; gap:.15rem; color:#64748b; font-size:.63rem; }.summary-metrics b { color:#172033; font-size:1.25rem; }.completion-row { display:flex; justify-content:space-between; color:#64748b; font-size:.68rem; }.completion-row strong { color:#172033; }.completion-track { height:7px; margin-top:.4rem; overflow:hidden; border-radius:99px; background:#eef2f7; }.completion-track i { display:block; height:100%; border-radius:inherit; background:#e63946; }.activity-row { display:flex; align-items:center; gap:.65rem; padding:.6rem 0; border-bottom:1px solid #f1f5f9; color:#172033; text-decoration:none; }.activity-row:last-child { border-bottom:0; }.activity-row span { display:grid; min-width:0; gap:.15rem; }.activity-row b { overflow:hidden; font-size:.74rem; text-overflow:ellipsis; white-space:nowrap; }.activity-row small { color:#64748b; font-size:.65rem; }.activity-done { color:#16a34a; }.activity-open { color:#f59e0b; font-size:.55rem; }.activity-empty { padding:1rem 0; color:#64748b; font-size:.72rem; }
 @media (max-width: 900px) { .sales-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.sales-dashboard-columns { grid-template-columns:1fr; }.sales-dashboard-grid { grid-template-columns:1fr; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-state), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route), .sales-dashboard-grid > .health-card,.activity-card { grid-column:1; grid-row:auto; } }
 @media (max-width: 560px) { .sales-home { padding-inline:.75rem; }.sales-command-header { align-items:flex-start; flex-direction:column; gap:.3rem; }.sales-kpi { padding:.8rem .75rem; }.sales-kpi strong { font-size:1.5rem; }.sales-kpi small { font-size:.65rem; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route), .sales-dashboard-grid > .health-card, .activity-card { border-radius:12px; }.sales-dashboard-grid :deep(.schedule-heading), .sales-dashboard-grid :deep(.schedule-list), .sales-dashboard-grid :deep(.inline-weekly-route) { padding:.85rem; } }
+
+/* Final dashboard refinement: clearer hierarchy without removing existing sections. */
+.sales-command-header {
+  min-height: 92px;
+  padding: 1.15rem 1.3rem;
+  border: 1px solid #ead1d5;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff 0%, #fff8f8 100%);
+  box-shadow: 0 8px 22px rgba(110, 28, 42, .06);
+}
+.sales-command-header h1 { font-weight: 800; }
+.sales-command-header time { padding: .45rem .7rem; border: 1px solid #f3d4d8; border-radius: 9px; background: #fff; }
+.sales-kpi-grid { gap: 1rem; }
+.sales-kpi { position: relative; overflow: hidden; min-height: 126px; padding: 1.1rem 1.2rem; border-color: #eadfe1; border-radius: 16px; box-shadow: 0 7px 20px rgba(15, 23, 42, .05); }
+.sales-kpi::after { position: absolute; right: -24px; bottom: -30px; width: 92px; height: 92px; border-radius: 50%; background: var(--kpi-tint, #fff0f1); content: ''; opacity: .8; }
+.sales-kpi span, .sales-kpi strong, .sales-kpi small { position: relative; z-index: 1; }
+.sales-kpi strong { font-size: 2rem; }
+.kpi-attention { --kpi-tint: #fff0f1; }.kpi-today { --kpi-tint: #fff7ed; }.kpi-progress { --kpi-tint: #eff6ff; }.kpi-won { --kpi-tint: #f0fdf4; }
+.sales-dashboard-columns { gap: 1rem; }
+.sales-dashboard-left > *, .sales-dashboard-right > * { border-color: #eadfe1; border-radius: 16px; box-shadow: 0 7px 20px rgba(15, 23, 42, .045); }
+.activity-card { padding: 1.1rem 1.2rem; }
+.activity-card header { padding-bottom: .75rem; border-bottom: 1px solid #f1e5e7; }
+@media (max-width: 560px) {
+  .sales-command-header { min-height: auto; padding: 1rem; }
+  .sales-command-header time { align-self: stretch; text-align: center; }
+  .sales-kpi-grid { gap: .65rem; }
+  .sales-kpi { min-height: 108px; padding: .85rem; }
+  .sales-kpi strong { font-size: 1.55rem; }
+}
 </style>

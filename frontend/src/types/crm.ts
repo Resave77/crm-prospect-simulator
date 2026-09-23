@@ -216,6 +216,11 @@ export interface PeriodAssignment {
   startMonth: number
   startYear: number
   end: string
+  userId?: string
+  id?: string
+  userName?: string
+  fullName?: string
+  isActive?: boolean
 }
 
 export interface ParentCompany {
@@ -229,6 +234,7 @@ export interface ParentCompany {
   npwpNumber: string
   termOfPayment: string
   kamAssignments: PeriodAssignment[]
+  notes?: string
 }
 
 export interface CustomerSite {
@@ -485,6 +491,7 @@ export interface UpdateParentCompanyInput {
   npwpName: string
   npwpAddress: string
   npwpNumber: string
+  notes?: string
   companyAddress?: Address
   companyContacts?: Contact[]
 }

@@ -98,15 +98,16 @@ onMounted(load)
       <template v-if="role">
         <header class="page-heading">
           <div class="compact-heading-main">
-          <div class="page-title-wrapper">
-            <span class="eyebrow">Role Detail</span>
-            <h1>{{ role.name }}</h1>
-            <div class="subtitle-row">
-              <Tag :value="role.isActive ? 'Active' : 'Inactive'" :severity="role.isActive ? 'success' : 'secondary'" size="small" />
-              <span class="level-chip" :class="`level-chip-${role.level}`">Level {{ role.level }}</span>
-              <span class="muted">Updated {{ formatDate(role.updatedAt) }}</span>
+            <Button label="Back to Role Management" icon="pi pi-arrow-left" text class="back-role-detail" @click="router.push('/admin/role-management')" />
+            <div class="page-title-wrapper">
+              <span class="eyebrow">Role Detail</span>
+              <h1>{{ role.name }}</h1>
+              <div class="subtitle-row">
+                <Tag :value="role.isActive ? 'Active' : 'Inactive'" :severity="role.isActive ? 'success' : 'secondary'" size="small" />
+                <span class="level-chip" :class="`level-chip-${role.level}`">Level {{ role.level }}</span>
+                <span class="muted">Updated {{ formatDate(role.updatedAt) }}</span>
+              </div>
             </div>
-          </div>
           </div>
           <div class="page-heading-actions">
             <Button label="Edit Role" icon="pi pi-pencil" size="small" @click="router.push(`/admin/role-management/${id}/edit`)" />
@@ -469,4 +470,73 @@ h1 {
 .compact-admin-page .page-heading { padding: 0.7rem 0.85rem; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
 .compact-heading-main { display: flex; align-items: center; min-width: 0; gap: 0.35rem; }
 .header-back { flex: 0 0 auto; }
+
+/* Match the compact Add/Edit Role header and shared Admin components. */
+.compact-admin-page {
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  background: #f8fafc;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.compact-admin-page > .page-heading {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  width: calc(100% + 2rem);
+  min-height: 64px;
+  box-sizing: border-box;
+  margin: -.9rem -1.25rem .75rem;
+  padding: 8px 24px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  backdrop-filter: blur(10px);
+}
+.compact-heading-main { min-height: 48px; gap: 0; }
+.back-role-detail {
+  width: auto;
+  min-width: max-content;
+  height: 32px;
+  min-height: 32px;
+  margin: 0 12px 0 0;
+  padding: 0 12px 0 0;
+  border-right: 1px solid #e2e8f0;
+  border-radius: 0;
+  color: #64748b;
+  font: 500 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+}
+.back-role-detail:hover { background: transparent; color: #0f172a; }
+.back-role-detail .p-button-icon,
+.back-role-detail .p-button-label { line-height: 1; }
+.compact-admin-page .page-title-wrapper { min-width: 0; }
+.compact-admin-page .page-title-wrapper .eyebrow { display: none; }
+.compact-admin-page .page-title-wrapper h1 { margin: 0; font: 700 17px/22px Inter, ui-sans-serif, system-ui, sans-serif; }
+.compact-admin-page .subtitle-row { margin-top: 3px; gap: 6px; }
+.compact-admin-page .page-title-wrapper .muted { font: 400 11px/16px Inter, ui-sans-serif, system-ui, sans-serif; color: #94a3b8; }
+.compact-admin-page .page-heading-actions :deep(.p-button) { height: 32px; min-height: 32px; border-radius: 8px; font: 600 12px/1 Inter, ui-sans-serif, system-ui, sans-serif; }
+.compact-admin-page .page-heading-actions :deep(.p-button) { background: #dc2626; border-color: #dc2626; color: #fff; box-shadow: 0 5px 12px rgba(220, 38, 38, .14); }
+.compact-admin-page .panel { border-color: #e2e8f0; border-radius: 18px; box-shadow: 0 8px 22px rgba(15, 23, 42, .05); }
+.compact-admin-page .panel-header h3 { font: 700 16px/22px Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; }
+.compact-admin-page .panel-header p,
+.compact-admin-page .detail-label,
+.compact-admin-page .muted { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.compact-admin-page .detail-layout {
+  grid-template-columns: minmax(360px, 38%) minmax(0, 62%);
+  gap: 24px;
+  margin-top: 16px;
+  padding: 0 8px 16px;
+}
+.compact-admin-page .detail-row { min-height: 44px; border-radius: 12px; background: #f8fafc; }
+.compact-admin-page .route-badge,
+.compact-admin-page .key-badge { border-radius: 6px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+@media (max-width: 768px) {
+  .compact-admin-page > .page-heading { width: calc(100% + 2rem); margin: -.9rem -1rem .75rem; padding: 8px 16px; }
+  .compact-admin-page .back-role-detail { font-size: 11px; }
+  .compact-admin-page .detail-layout { grid-template-columns: 1fr; gap: 16px; margin-top: 12px; padding: 0 0 16px; }
+}
 </style>

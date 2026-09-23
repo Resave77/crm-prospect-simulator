@@ -1364,4 +1364,105 @@ h1 {
 .compact-admin-page{min-width:0;padding:0;gap:0;background:#f8fafc;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.compact-admin-page>.page-heading{min-height:48px;height:48px;box-sizing:border-box;align-items:center;padding:0 32px;border-bottom:1px solid #e2e8f0;background:#fff}.compact-admin-page .page-title-wrapper .eyebrow{display:none}.compact-admin-page .page-title-wrapper h1{font-size:17px;font-weight:700}.compact-admin-page .page-title-wrapper .muted{font-size:11px;color:#94a3b8}.compact-admin-page .page-heading-actions{gap:8px}.compact-admin-page .page-heading-actions :deep(.p-button){height:32px;min-height:32px;border-radius:8px;padding:0 14px;font-size:12px}.compact-admin-page .page-heading-actions :deep(.p-button:last-child){background:#94a3b8;border-color:#94a3b8}.editor-layout{grid-template-columns:minmax(0,792px) minmax(320px,1fr);gap:24px;width:min(1136px,calc(100% - 64px));margin:32px auto;min-height:0}.panel{border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 6px 18px rgba(15,23,42,.035)}.info-panel,.permission-panel{padding:24px}.panel-header{gap:12px;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid #e8edf3}.panel-icon{width:36px;height:36px;border-radius:10px}.panel-header h3{font-size:16px;font-weight:700}.panel-header p{font-size:12px;color:#64748b}.form-field{gap:6px}.form-field label{font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:#334155}.form-field :deep(.p-inputtext),.form-field :deep(.p-select),.form-field :deep(.p-textarea){height:48px;border:1px solid #d6e0ec;border-radius:14px;padding:0 14px;font-size:13px}.form-field :deep(.p-select-label){padding:0 14px;line-height:46px}.permission-toolbar,.explorer-toolbar{border-color:#e2e8f0;border-radius:12px;background:#fff}.permission-section{border-color:#e2e8f0;border-radius:12px}.key-badge{border-radius:6px}.compact-admin-page .required{color:#dc2626}@media(max-width:1000px){.editor-layout{grid-template-columns:1fr;width:min(792px,calc(100% - 32px));margin:20px auto}}@media(max-width:640px){.compact-admin-page>.page-heading{height:auto;min-height:56px;padding:10px 16px}.compact-admin-page .page-title-wrapper h1{font-size:15px}.compact-admin-page .page-title-wrapper .muted{font-size:10px}.compact-admin-page .page-heading-actions{width:100%;justify-content:flex-end}.editor-layout{width:calc(100% - 24px);margin:12px auto}.info-panel,.permission-panel{padding:16px}}
 .editor-layout{grid-template-columns:minmax(360px,420px) minmax(0,1fr)}
 .back-role-button{height:32px;margin-right:12px;padding:0 12px 0 0;border-right:1px solid #e2e8f0;border-radius:0;color:#64748b;font-size:12px}.compact-heading-main{display:flex;align-items:center;min-width:0}.back-role-button .p-button-icon{font-size:13px}
+.compact-admin-page > .page-heading {
+  width: calc(100% + 2rem);
+  margin: -.75rem -1rem 0;
+  min-height: 64px;
+  height: auto;
+  padding: 8px 24px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+}
+.compact-admin-page .compact-heading-main { min-height: 48px; }
+.compact-admin-page .back-role-button {
+  width: auto;
+  min-width: max-content;
+  height: 32px;
+  min-height: 32px;
+  margin: 0 12px 0 0;
+  padding: 0 12px 0 0;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  line-height: 1;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.compact-admin-page .back-role-button .p-button-icon,
+.compact-admin-page .back-role-button .p-button-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.compact-admin-page .back-role-button .p-button-label { white-space: nowrap; }
+.compact-admin-page .page-title-wrapper { min-width: 0; }
+.compact-admin-page .page-title-wrapper h1 { line-height: 1.25; }
+.compact-admin-page .page-title-wrapper .muted { line-height: 1.3; }
+.compact-admin-page .page-heading-actions :deep(.p-button) { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+.compact-admin-page .page-heading-actions :deep(.p-button:last-child) {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(220, 38, 38, .14);
+}
+.compact-admin-page .page-heading-actions :deep(.p-button:last-child:hover) {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
+.compact-admin-page .panel {
+  border-color: #e2e8f0;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .05);
+}
+.compact-admin-page .search-field {
+  min-height: 40px;
+  border-color: #e2e8f0;
+  border-radius: 10px;
+}
+.compact-admin-page .form-field :deep(.p-inputtext),
+.compact-admin-page .form-field :deep(.p-select),
+.compact-admin-page .form-field :deep(.p-textarea) {
+  border-color: #e2e8f0;
+  border-radius: 10px;
+}
+.compact-admin-page .form-field :deep(.p-inputtext),
+.compact-admin-page .form-field :deep(.p-textarea),
+.compact-admin-page .form-field :deep(.p-select-label),
+.compact-admin-page .search-field :deep(input),
+.compact-admin-page .permission-toolbar :deep(input),
+.compact-admin-page .explorer-toolbar :deep(input) {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+}
+.compact-admin-page .form-field :deep(.p-inputtext::placeholder),
+.compact-admin-page .form-field :deep(.p-textarea::placeholder),
+.compact-admin-page .search-field :deep(input::placeholder),
+.compact-admin-page .permission-toolbar :deep(input::placeholder),
+.compact-admin-page .explorer-toolbar :deep(input::placeholder) {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.compact-admin-page :deep(.p-select-label.p-placeholder) { color: #94a3b8; font-weight: 400; }
+.compact-admin-page :deep(.p-select-overlay),
+.compact-admin-page :deep(.p-select-option) {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+.compact-admin-page :deep(.p-select-option) { color: #334155; }
+.compact-admin-page :deep(.p-select-option.p-select-option-selected) { color: #0f172a; font-weight: 600; }
+@media (max-width: 640px) {
+  .compact-admin-page > .page-heading {
+    width: calc(100% + 2rem);
+    margin: -.75rem -1rem 0;
+    min-height: 64px;
+    padding: 8px 16px;
+  }
+}
 </style>

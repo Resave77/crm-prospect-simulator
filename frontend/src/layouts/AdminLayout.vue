@@ -1,4 +1,4 @@
-<script setup lang="ts">
+Request failed with status code 400<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Toast from 'primevue/toast'
@@ -126,7 +126,7 @@ const subPage = computed(() => {
     return { back: 'Customer List', backTo: '/admin/customers', title: path.includes('/edit') ? 'Edit Customer' : 'Add Customer', crumb: 'Customer Management > Customer' }
   }
   if (path.includes('/companies/add') || path.includes('/companies/')) {
-    return { back: 'Customer List', backTo: '/admin/customers', title: path.includes('/edit') ? 'Edit Company' : 'Add Company', crumb: 'Customer Management > Company' }
+    return { back: 'Company List', backTo: '/admin/customers?tab=company', title: path.includes('/edit') ? 'Edit Company' : 'Customer Company Detail', crumb: path.includes('/edit') ? 'Customer Management > Company > Edit' : 'Customer List > Company > Detail' }
   }
   const mainPages = ['/admin/dashboard', '/admin/accounts', '/admin/customers', '/admin/prospect-finder', '/admin/prospects/list', '/admin/prospects/pipeline', '/admin/visit-monitoring', '/admin/reports', '/admin/api-usage', '/admin/role-management', '/admin/sales-structure']
   if (!mainPages.includes(path)) {
@@ -537,11 +537,12 @@ async function logout() {
           <footer><button type="button" @click="closeDebug">Close</button></footer>
         </section>
       </div>
-      <div v-if="subPage && !route.path.endsWith('/create') && !route.path.includes('/role-management/') && !route.path.includes('/accounts/') && !route.path.endsWith('/add')" class="subpage-bar">
+      <div v-if="subPage && !route.path.endsWith('/create') && !route.path.includes('/role-management/') && !route.path.includes('/accounts/') && !route.path.endsWith('/add') && !/^\/admin\/companies\/[^/]+\/edit$/.test(route.path) && !/^\/admin\/customers\/[^/]+$/.test(route.path) && !/^\/admin\/customers\/[^/]+\/edit$/.test(route.path)" class="subpage-bar">
         <RouterLink :to="subPage.backTo" class="subpage-back">← {{ subPage.back }}</RouterLink>
         <span class="subpage-divider" />
         <strong>{{ subPage.title }}</strong>
         <small>{{ subPage.crumb }} &gt; {{ subPage.title.replace('Create ', '').replace('Add ', '') }}</small>
+        <button v-if="/^\/admin\/companies\/[^/]+$/.test(route.path)" type="button" class="subpage-action" @click="router.push(`/admin/companies/${route.params.id}/edit`)"><i class="pi pi-pencil" /> Edit Company</button>
       </div>
       <main class="admin-content"><RouterView /></main>
     </div>
@@ -1015,6 +1016,23 @@ async function logout() {
   min-height: 100%;
   box-sizing: border-box;
 }
+.admin-content:has(.prospect-page),
+.admin-content:has(.visit-page),
+.admin-content:has(.accounts-page) {
+  padding: 0 !important;
+}
+.admin-content:has(.create-account-page) {
+  padding: 0 !important;
+}
+.admin-content:has(.prospect-page) > .prospect-page,
+.admin-content:has(.visit-page) > .visit-page,
+.admin-content:has(.accounts-page) > .accounts-page {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
 @media (min-width: 901px) {
   .admin-content :deep(.p-button) {
     min-height: 34px;
@@ -1140,9 +1158,18 @@ async function logout() {
 .sidebar-profile-info small { display: flex; align-items: center; gap: .25rem; }
 .sidebar-profile-info small i { font-size: .5rem; color: #e63946; }
 .profile-chevron { transition: transform .2s ease; }.sidebar-profile[open] .profile-chevron { transform: rotate(180deg); }
-.sidebar-profile-menu { width: 218px; padding: .65rem; border-radius: 14px; }
-.profile-menu-heading { display: grid; gap: .2rem; padding: .25rem .45rem .6rem; }.profile-menu-heading span { color: #e63946; font-size: .48rem; font-weight: 800; letter-spacing: .12em; }.profile-menu-heading strong { color: #172033; font-size: .65rem; }
-.signout-btn { display: flex; align-items: center; gap: .55rem; width: 100%; padding: .55rem .45rem; border: 0; border-radius: 10px; background: #fff5f5; color: #b4232d; cursor: pointer; text-align: left; }.signout-btn:hover { background: #fee2e2; }.signout-btn > span:nth-child(2) { display: grid; gap: .12rem; flex: 1; }.signout-btn strong { font-size: .63rem; }.signout-btn small { color: #c26a72; font-size: .5rem; }.logout-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: #fff; }.logout-arrow { font-size: .62rem; }
+.sidebar-profile-menu { width: 224px; padding: .7rem; border-radius: 14px; }
+.profile-menu-heading { display: grid; gap: .25rem; padding: .2rem .45rem .65rem; }
+.profile-menu-heading span { color: #e63946; font-size: .52rem; font-weight: 800; letter-spacing: .12em; }
+.profile-menu-heading strong { color: #172033; font-size: .72rem; line-height: 1.25; }
+.signout-btn { display: flex; align-items: center; gap: .6rem; width: 100%; min-height: 48px; padding: .55rem .45rem; border: 0; border-radius: 10px; background: #fff5f5; color: #b4232d; cursor: pointer; text-align: left; }
+.signout-btn:hover { background: #fee2e2; }
+.signout-btn > span:nth-child(2) { display: grid; gap: .16rem; min-width: 0; flex: 1; }
+.signout-btn strong { font-size: .68rem; line-height: 1.2; }
+.signout-btn small { color: #c26a72; font-size: .55rem; line-height: 1.2; }
+.logout-icon { display: grid; place-items: center; width: 29px; height: 29px; flex: none; border-radius: 8px; background: #fff; }
+.logout-icon i { font-size: .75rem; }
+.logout-arrow { flex: none; font-size: .68rem; }
 .topbar-actions { display: flex; align-items: center; gap: .45rem; margin-left: auto; }
 .topbar-action-btn {
   height: 32px; display: inline-flex; align-items: center; gap: .4rem; padding: 0 .78rem;
@@ -1168,11 +1195,35 @@ async function logout() {
   border-bottom: 1px solid #e5eaf1;
   color: #172033;
 }
+.subpage-bar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  flex-shrink: 0;
+}
 .subpage-back { color: #51627b; text-decoration: none; font-size: 0.76rem; }
 .subpage-back:hover { color: #c52b38; }
 .subpage-divider { height: 24px; border-left: 1px solid #dce3ec; }
 .subpage-bar strong { font-size: 0.82rem; }
 .subpage-bar small { color: #8b9ab0; font-size: 0.58rem; }
+.subpage-action { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: #dc2626; color: #fff; font: 600 12px Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.subpage-action:hover { background: #b91c1c; }
+
+/* Keep every view-level Back To/title row visible while the content scrolls. */
+.admin-content :deep(.page-heading),
+.admin-content :deep(.edit-employee-header),
+.admin-content :deep(.workspace-header) {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+}
+
+.admin-content :deep(.compact-admin-page > .page-heading) {
+  top: 0;
+  z-index: 35;
+}
 
 /* Settlement-style shell: compact navigation chrome matching the reference UI. */
 @media (min-width: 901px) {
@@ -1496,5 +1547,8 @@ async function logout() {
   .topbar-icon-btn:hover { color: #334155; border-color: #d9e3ef; background: #f8fafc; }
   .topbar-icon-btn.status-ok { width: 34px; height: 34px; border-color: #bbf7d0; background: #f0fdf4; color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.06); }
   .topbar-icon-btn.cloud-btn { width: auto; min-width: 42px; height: 34px; padding: 0 8px; border-color: #d9e3ef; color: #0284c7; }
+  .admin-sidebar:not(.collapsed) .sidebar-profile-menu { left: 6px; right: 6px; bottom: calc(100% + 6px); width: auto; }
+  .admin-sidebar:not(.collapsed) .profile-menu-heading strong { font-size: .68rem; }
+  .admin-sidebar:not(.collapsed) .signout-btn { min-height: 46px; }
 }
 </style>

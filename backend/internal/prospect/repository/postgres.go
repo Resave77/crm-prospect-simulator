@@ -316,6 +316,17 @@ func (r *PostgresRepository) Transition(ctx context.Context, id, salesExecutiveI
 	return scanProspect(r.pool.QueryRow(ctx, prospectSelect+` WHERE p.id = $1`, id))
 }
 
+func (r *PostgresRepository) AssignProspect(ctx context.Context, id, salesExecutiveID uuid.UUID) (model.Prospect, error) {
+	result, err := r.pool.Exec(ctx, `UPDATE prospects SET assigned_sales_executive_id = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, id, salesExecutiveID)
+	if err != nil {
+		return model.Prospect{}, fmt.Errorf("assign prospect: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return model.Prospect{}, ErrNotFound
+	}
+	return scanProspect(r.pool.QueryRow(ctx, prospectSelect+` WHERE p.id = $1`, id))
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, input model.SaveProspectInput, administratorID uuid.UUID) (model.Prospect, error) {
 	placeTypes, err := json.Marshal(input.Place.PlaceTypes)
 	if err != nil {
@@ -461,14 +472,18 @@ func (r *PostgresRepository) CheckOut(ctx context.Context, prospectID, visitID, 
 }
 
 func (r *PostgresRepository) ListVisitMonitoring(ctx context.Context, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
-	return r.listVisitsWithFilter(ctx, "", filter)
+	return r.listVisitsWithFilter(ctx, "", filter, false)
+}
+
+func (r *PostgresRepository) ListTrashedVisits(ctx context.Context) ([]model.VisitMonitoringItem, error) {
+	return r.listVisitsWithFilter(ctx, "", model.VisitMonitoringFilter{}, true)
 }
 
 func (r *PostgresRepository) ListMyVisits(ctx context.Context, salesExecutiveID uuid.UUID, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
-	return r.listVisitsWithFilter(ctx, salesExecutiveID.String(), filter)
+	return r.listVisitsWithFilter(ctx, salesExecutiveID.String(), filter, false)
 }
 
-func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExecutiveID string, filter model.VisitMonitoringFilter) ([]model.VisitMonitoringItem, error) {
+func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExecutiveID string, filter model.VisitMonitoringFilter, deletedOnly bool) ([]model.VisitMonitoringItem, error) {
 	const baseQuery = `
 		SELECT v.id, v.prospect_id, COALESCE(cs.name, p.place_name), COALESCE(cs.category, p.place_category),
 		       COALESCE(p.industry_group, ''),
@@ -508,6 +523,11 @@ func (r *PostgresRepository) listVisitsWithFilter(ctx context.Context, salesExec
 		  AND cs.sales_executive_id = v.sales_executive_id`
 
 	whereClauses := make([]string, 0)
+	if deletedOnly {
+		whereClauses = append(whereClauses, "v.deleted_at IS NOT NULL")
+	} else {
+		whereClauses = append(whereClauses, "v.deleted_at IS NULL")
+	}
 	args := make([]any, 0)
 	argIdx := 1
 
@@ -630,10 +650,21 @@ func (r *PostgresRepository) DeleteVisit(ctx context.Context, visitID uuid.UUID,
 	if err != nil {
 		return model.Visit{}, err
 	}
-	if _, err := r.pool.Exec(ctx, `DELETE FROM prospect_visits WHERE id = $1`, visitID); err != nil {
-		return model.Visit{}, fmt.Errorf("delete visit: %w", err)
+	if _, err := r.pool.Exec(ctx, `UPDATE prospect_visits SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, visitID); err != nil {
+		return model.Visit{}, fmt.Errorf("trash visit: %w", err)
 	}
 	return visit, nil
+}
+
+func (r *PostgresRepository) RestoreVisit(ctx context.Context, visitID uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, `UPDATE prospect_visits SET deleted_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL`, visitID)
+	if err != nil {
+		return fmt.Errorf("restore visit: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *PostgresRepository) DeleteProspect(ctx context.Context, id uuid.UUID) ([]string, error) {
