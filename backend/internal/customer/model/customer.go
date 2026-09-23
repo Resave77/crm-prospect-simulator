@@ -109,6 +109,27 @@ type CustomerDetail struct {
 	SourceProspectName string        `json:"sourceProspectName"`
 }
 
+type UpdateCustomerInput struct {
+	Name             string             `json:"name"`
+	Segment          string             `json:"segment"`
+	Category         string             `json:"category"`
+	Region           string             `json:"region"`
+	Address          Address            `json:"address"`
+	Contacts         []Contact          `json:"contacts"`
+	PPN              string             `json:"ppn"`
+	IDTKUNumber      string             `json:"idTkuNumber"`
+	NIK              string             `json:"nik"`
+	ShipmentCost     string             `json:"shipmentCost"`
+	InvoiceType      string             `json:"invoiceType"`
+	BankAccount      string             `json:"bankAccount"`
+	BillToSource     string             `json:"billToSource"`
+	ShipToSource     string             `json:"shipToSource"`
+	BillingPreview   string             `json:"billingAddressPreview"`
+	ShippingPreview  string             `json:"shippingAddressPreview"`
+	SalesExecutiveID uuid.UUID          `json:"salesExecutiveId"`
+	SalesAssignments []PeriodAssignment `json:"salesAssignments"`
+}
+
 type ConversionInput struct {
 	CustomerName            string             `json:"customerName"`
 	CustomerSegment         string             `json:"customerSegment"`

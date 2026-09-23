@@ -58,6 +58,9 @@ func (f *fakeCustomerRepository) FindCustomerForSales(context.Context, uuid.UUID
 func (f *fakeCustomerRepository) FindCustomer(context.Context, uuid.UUID) (customermodel.CustomerDetail, error) {
 	return customermodel.CustomerDetail{}, nil
 }
+func (f *fakeCustomerRepository) UpdateCustomer(context.Context, uuid.UUID, customermodel.UpdateCustomerInput) (customermodel.CustomerDetail, error) {
+	return customermodel.CustomerDetail{}, nil
+}
 func (f *fakeCustomerRepository) UpdateParentCompany(context.Context, uuid.UUID, customermodel.UpdateParentCompanyInput) (customermodel.ParentCompany, error) {
 	return customermodel.ParentCompany{}, nil
 }

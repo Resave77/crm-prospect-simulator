@@ -559,6 +559,45 @@ func (r *PostgresRepository) DeleteCustomer(ctx context.Context, id uuid.UUID) e
 	return nil
 }
 
+func (r *PostgresRepository) UpdateCustomer(ctx context.Context, id uuid.UUID, input model.UpdateCustomerInput) (model.CustomerDetail, error) {
+	contacts, err := json.Marshal(input.Contacts)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("encode customer contacts: %w", err)
+	}
+	assignments, err := json.Marshal(input.SalesAssignments)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("encode sales assignments: %w", err)
+	}
+	command, err := r.pool.Exec(ctx, `
+		UPDATE customer_sites SET
+			name = $2, segment = $3, category = $4, province = $5, district = $6,
+			sub_district = $7, village = $8, latitude = $9, longitude = $10,
+			preview_address = $11, site_contacts = $12, ppn = $13, id_tku_number = $14,
+			nik = $15, shipment_cost = $16, invoice_type = $17, bank_account = $18,
+			bill_to_source = $19, ship_to_source = $20, billing_address_preview = $21,
+			shipping_address_preview = $22,
+			sales_executive_id = CASE
+				WHEN $23 = '00000000-0000-0000-0000-000000000000'::uuid THEN sales_executive_id
+				ELSE $23
+			END,
+			sales_assignments = $24,
+			updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL`,
+		id, input.Name, input.Segment, input.Category, input.Address.Province,
+		input.Address.District, input.Address.SubDistrict, input.Address.Village,
+		input.Address.Latitude, input.Address.Longitude, input.Address.PreviewAddress,
+		contacts, input.PPN, input.IDTKUNumber, input.NIK, input.ShipmentCost,
+		input.InvoiceType, input.BankAccount, input.BillToSource, input.ShipToSource,
+		input.BillingPreview, input.ShippingPreview, input.SalesExecutiveID, assignments)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("update customer: %w", err)
+	}
+	if command.RowsAffected() == 0 {
+		return model.CustomerDetail{}, ErrNotFound
+	}
+	return r.FindCustomer(ctx, id)
+}
+
 func (r *PostgresRepository) ListTrashedCustomers(ctx context.Context) ([]model.CustomerSite, error) {
 	return r.listCustomers(ctx, customerSelect+` WHERE cs.deleted_at IS NOT NULL ORDER BY cs.updated_at DESC`)
 }

@@ -194,6 +194,8 @@ export interface ProspectVisit {
 
 export interface Address {
   mode: string
+  city?: string
+  postalCode?: string
   province: string
   district: string
   subDistrict: string
@@ -227,6 +229,10 @@ export interface ParentCompany {
   id: string
   parentCode: string
   name: string
+  companyTier?: string
+  tier?: string
+  avgInvoice3m?: string
+  avgInvoice?: string
   address: Address
   contacts: Contact[]
   npwpName: string
@@ -251,6 +257,17 @@ export interface CustomerSite {
   region: string
   address: Address
   contacts: Contact[]
+  ppn?: string
+  idTkuNumber?: string
+  nik?: string
+  termOfPayment?: string
+  shipmentCost?: string
+  invoiceType?: string
+  bankAccount?: string
+  billToSource?: string
+  shipToSource?: string
+  billingAddressPreview?: string
+  shippingAddressPreview?: string
   salesExecutiveId: string
   salesExecutiveName: string
   assignedSales?: AssignedSalesInfo | null

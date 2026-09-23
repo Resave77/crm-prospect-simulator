@@ -198,6 +198,13 @@ func (s *Service) DeleteCustomer(ctx context.Context, actor Actor, id uuid.UUID)
 	return s.repository.DeleteCustomer(ctx, id)
 }
 
+func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.UpdateCustomerInput) (customermodel.CustomerDetail, error) {
+	if !actor.Role.IsAdminRole() {
+		return customermodel.CustomerDetail{}, ErrForbidden
+	}
+	return s.repository.UpdateCustomer(ctx, id, input)
+}
+
 func (s *Service) ListTrashedCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
 	if !actor.can("view_customers") {
 		return nil, ErrForbidden
