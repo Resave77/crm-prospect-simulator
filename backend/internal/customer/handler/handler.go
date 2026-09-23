@@ -82,7 +82,7 @@ func (h *Handler) UpdateCustomer(c *fiber.Ctx) error {
 	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "REQUEST_INVALID", "The request body is invalid.")
 	}
-	item, err := h.service.UpdateCustomer(c.UserContext(), actor(c), id, request)
+	item, err := h.service.UpdateCustomerFromConversion(c.UserContext(), actor(c), id, request)
 	if err != nil {
 		return writeError(c, err)
 	}
@@ -245,6 +245,13 @@ func (h *Handler) RestoreCustomer(c *fiber.Ctx) error {
 		return writeError(c, err)
 	}
 	return response.Data(c, fiber.StatusOK, fiber.Map{"restored": true})
+}
+
+func (h *Handler) ClearTrashedCustomers(c *fiber.Ctx) error {
+	if err := h.service.PermanentlyDeleteTrashedCustomers(c.UserContext(), actor(c)); err != nil {
+		return writeError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) GetParentCompanyByCode(c *fiber.Ctx) error {

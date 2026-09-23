@@ -1,5 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { ApiEnvelope, AuthPayload } from '../types/auth'
+import { recordApiFailure } from '../utils/debugConsole'
 
 interface RetryableRequest extends InternalAxiosRequestConfig {
   _retry?: boolean
@@ -54,10 +55,16 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
   const request = error.config as RetryableRequest | undefined
   const isAuthEndpoint = request?.url?.startsWith('/auth/') ?? false
   if (error.response?.status !== 401 || !request || request._retry || isAuthEndpoint) {
+    recordApiFailure(error)
     throw error
   }
   request._retry = true
-  const payload = await refreshSession()
-  request.headers.Authorization = `Bearer ${payload.accessToken}`
-  return api(request)
+  try {
+    const payload = await refreshSession()
+    request.headers.Authorization = `Bearer ${payload.accessToken}`
+    return api(request)
+  } catch (refreshError) {
+    recordApiFailure(refreshError)
+    throw refreshError
+  }
 })

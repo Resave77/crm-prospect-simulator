@@ -22,12 +22,13 @@ type Repository interface {
 	SearchParentCompanies(context.Context, string) ([]model.ParentCompany, error)
 	ListActiveSalesExecutives(context.Context) ([]model.UserOption, error)
 	CreateCustomer(context.Context, uuid.UUID, model.ConversionInput) (model.CustomerSite, error)
-	UpdateCustomer(context.Context, uuid.UUID, model.ConversionInput) (model.CustomerSite, error)
+	UpdateCustomerFromConversion(context.Context, uuid.UUID, model.ConversionInput) (model.CustomerSite, error)
 	Convert(context.Context, uuid.UUID, uuid.UUID, model.ConversionInput) (model.CustomerSite, error)
 	AutoConvert(context.Context, uuid.UUID) (model.CustomerSite, error)
 	DeleteCustomer(context.Context, uuid.UUID) error
 	ListTrashedCustomers(context.Context) ([]model.CustomerSite, error)
 	RestoreCustomer(context.Context, uuid.UUID) error
+	PermanentlyDeleteTrashedCustomers(context.Context) error
 	ListCustomers(context.Context) ([]model.CustomerSite, error)
 	ListCustomersPaged(context.Context, model.CustomerListParams) (model.CustomerListResult, error)
 	ListFilterOptions(context.Context) (model.ListFilterOptions, error)

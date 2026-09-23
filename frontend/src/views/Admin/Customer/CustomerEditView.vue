@@ -6,7 +6,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Message from 'primevue/message'
-import type { Contact, ConversionInput, ParentMethod } from '../../../types/crm'
+import type { Contact, ParentMethod, UpdateCustomerInput } from '../../../types/crm'
 import { useCustomerListStore } from '../../../stores/customerList'
 import { getAdminCustomer, getParentCompany, getSalesExecutives, updateAdminCustomer, updateParentCompany } from '../../../api/crm'
 import { listCategories, listSegments, type MasterDataCategory, type MasterDataSegment } from '../../../api/masterData'
@@ -377,6 +377,17 @@ function nonEmptyContacts(contacts: Contact[]) {
   )
 }
 
+function buildPeriodAssignment(ownerId: string, ownerName: string, startMonth: string, startYear: string, end: string) {
+  const month = monthOptions.findIndex((option) => option.value === startMonth) + 1
+  return {
+    ownerId,
+    ownerName,
+    startMonth: month > 0 ? month : 0,
+    startYear: Number(startYear) || new Date().getFullYear(),
+    end: end || 'Until Now',
+  }
+}
+
 async function handleSubmit() {
   if (!isFormValid.value) return
   saving.value = true
@@ -429,38 +440,37 @@ async function handleSubmit() {
     if (!salesExecutiveId) {
       throw new Error('Sales executive is required.')
     }
-    const input: ConversionInput = {
-      customerName: form.name.trim(),
-      customerSegment: form.customerSegment,
-      customerCategory: form.customerCategory,
-      parentMethod: parentMethodByMode[parentCompanyMode.value],
-      existingParentCompanyId: parentCompanyMode.value === 'existing' ? (selectedParent?.id || null) : null,
-      parentCompanyName,
-      sameAsSiteAddress: form.companyAddress.trim() === '' || form.companyAddress.trim() === form.address.trim(),
-      siteAddress,
-      companyAddress,
-      siteContacts: nonEmptyContacts(form.contacts),
-      companyContacts: nonEmptyContacts(form.companyContacts),
+    const input: UpdateCustomerInput = {
+      name: form.name.trim(),
+      segment: form.customerSegment,
+      category: form.customerCategory,
+      region: form.region.trim(),
+      address: siteAddress,
+      contacts: nonEmptyContacts(form.contacts),
       ppn: form.pph,
       idTkuNumber: form.idTkuNumber.trim(),
       nik: form.nik.trim(),
-      companyNpwpName: form.companyNpwpName.trim() || parentCompanyName,
-      companyNpwpAddress: form.companyNpwpAddress.trim() || companyAddress.previewAddress,
-      companyNpwpNumber: form.companyNpwpNumber.trim(),
       shipmentCost: form.shipmentCost.trim() || '0',
       invoiceType: form.invoiceType,
       bankAccount: form.bankAccount,
-      termOfPayment: form.termPayment ? `${form.termPayment} Days` : '30 Days',
       billToSource: billToSource.value,
       shipToSource: shipToSource.value,
       billingAddressPreview: billToSource.value === 'site' ? siteAddress.previewAddress : companyAddress.previewAddress,
       shippingAddressPreview: shipToSource.value === 'company' ? companyAddress.previewAddress : siteAddress.previewAddress,
       salesExecutiveId,
-      salesAssignments: [],
+      salesAssignments: [buildPeriodAssignment(salesExecutiveId, salesExecutives.value.find((item) => item.id === salesExecutiveId)?.fullName || '', form.startMonth, form.startYear, form.endPeriod)],
+      parentCompanyCode: form.parentCode.trim(),
+      parentCompanyName,
+      companyAddress,
+      companyContacts: nonEmptyContacts(form.companyContacts),
+      companyNpwpName: form.companyNpwpName.trim() || parentCompanyName,
+      companyNpwpAddress: form.companyNpwpAddress.trim() || companyAddress.previewAddress,
+      companyNpwpNumber: form.companyNpwpNumber.trim(),
+      termOfPayment: form.termPayment ? `${form.termPayment} Days` : '',
       kamAssignments: [],
     }
-    const updatedCustomer = await updateAdminCustomer(String(route.params.id), input)
-    await store.updateCustomer(updatedCustomer)
+    const updatedDetail = await updateAdminCustomer(String(route.params.id), input)
+    await store.updateCustomer(updatedDetail.customer)
     saved.value = true
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to save customer. Please try again.'
@@ -477,24 +487,25 @@ const removeSalesAssignment = () => {
 }
 
 onMounted(async () => {
-  if (isCompanyEditRoute.value) return
-  setupBillingSourceInteractions()
-  optionsLoading.value = true
-  try {
-    const [segmentData, categoryData, salesData] = await Promise.all([
-      listSegments({ status: 'ACTIVE' }),
-      listCategories({ status: 'ACTIVE' }),
-      getSalesExecutives(),
-      store.fetchCustomers(),
-      store.fetchFilterOptions(),
-    ])
-    segments.value = segmentData
-    categories.value = categoryData
-    salesExecutives.value = salesData
-  } catch {
-    optionsError.value = 'Unable to load master data and sales executives. Please try again.'
-  } finally {
-    optionsLoading.value = false
+  if (!isCompanyEditRoute.value) {
+    setupBillingSourceInteractions()
+    optionsLoading.value = true
+    try {
+      const [segmentData, categoryData, salesData] = await Promise.all([
+        listSegments({ status: 'ACTIVE' }),
+        listCategories({ status: 'ACTIVE' }),
+        getSalesExecutives(),
+        store.fetchCustomers(),
+        store.fetchFilterOptions(),
+      ])
+      segments.value = segmentData
+      categories.value = categoryData
+      salesExecutives.value = salesData
+    } catch {
+      optionsError.value = 'Unable to load master data and sales executives. Please try again.'
+    } finally {
+      optionsLoading.value = false
+    }
   }
   if (isCompanyEditRoute.value && route.params.id) {
     try {
@@ -557,10 +568,17 @@ onMounted(async () => {
       form.shipmentCost = customer.shipmentCost || '0'
       form.invoiceType = customer.invoiceType || form.invoiceType
       form.bankAccount = customer.bankAccount || ''
-      form.termPayment = String(customer.termOfPayment || '30').replace(/\s*Days?\s*$/i, '') || '30'
+      form.termPayment = String(company.termOfPayment || '30').replace(/\s*Days?\s*$/i, '') || '30'
       form.notes = customer.notes || ''
       billToSource.value = customer.billToSource === 'site' ? 'site' : 'company'
       shipToSource.value = customer.shipToSource === 'company' ? 'company' : 'site'
+      const assignment = customer.salesAssignments?.[0]
+      if (assignment) {
+        form.startMonth = monthOptions[Number(assignment.startMonth) - 1]?.value || ''
+        form.startYear = assignment.startYear ? String(assignment.startYear) : ''
+        form.endPeriod = assignment.end || 'Until Now'
+      }
+      salesAssignmentCount.value = Math.max(1, customer.salesAssignments?.length || 1)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load customer.'
     }

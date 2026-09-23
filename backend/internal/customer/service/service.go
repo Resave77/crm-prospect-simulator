@@ -114,7 +114,7 @@ func (s *Service) CreateCustomer(ctx context.Context, actor Actor, input custome
 	return s.repository.CreateCustomer(ctx, actor.UserID, input)
 }
 
-func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.ConversionInput) (customermodel.CustomerSite, error) {
+func (s *Service) UpdateCustomerFromConversion(ctx context.Context, actor Actor, id uuid.UUID, input customermodel.ConversionInput) (customermodel.CustomerSite, error) {
 	if !actor.Role.IsAdminRole() {
 		return customermodel.CustomerSite{}, ErrForbidden
 	}
@@ -123,7 +123,7 @@ func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID,
 	if err := validate(input); err != nil {
 		return customermodel.CustomerSite{}, err
 	}
-	return s.repository.UpdateCustomer(ctx, id, input)
+	return s.repository.UpdateCustomerFromConversion(ctx, id, input)
 }
 
 func (s *Service) AdminCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
@@ -206,17 +206,24 @@ func (s *Service) UpdateCustomer(ctx context.Context, actor Actor, id uuid.UUID,
 }
 
 func (s *Service) ListTrashedCustomers(ctx context.Context, actor Actor) ([]customermodel.CustomerSite, error) {
-	if !actor.can("view_customers") {
+	if !actor.Role.IsAdminRole() {
 		return nil, ErrForbidden
 	}
 	return s.repository.ListTrashedCustomers(ctx)
 }
 
 func (s *Service) RestoreCustomer(ctx context.Context, actor Actor, id uuid.UUID) error {
-	if !actor.can("view_customers") {
+	if !actor.Role.IsAdminRole() {
 		return ErrForbidden
 	}
 	return s.repository.RestoreCustomer(ctx, id)
+}
+
+func (s *Service) PermanentlyDeleteTrashedCustomers(ctx context.Context, actor Actor) error {
+	if !actor.Role.IsAdminRole() {
+		return ErrForbidden
+	}
+	return s.repository.PermanentlyDeleteTrashedCustomers(ctx)
 }
 
 func (s *Service) FindParentCompanyByCode(ctx context.Context, actor Actor, code string) (customermodel.ParentCompany, error) {

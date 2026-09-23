@@ -39,11 +39,11 @@ const customerSelect = `
 	       cs.ppn, cs.id_tku_number, cs.nik, cs.shipment_cost, cs.invoice_type,
 	       cs.bank_account, cs.bill_to_source, cs.ship_to_source,
 	       cs.billing_address_preview, cs.shipping_address_preview,
-	       cs.sales_executive_id, u.full_name, cs.sales_assignments,
+	       cs.sales_executive_id, COALESCE(u.full_name, ''), cs.sales_assignments,
 	       cs.converted_at, cs.updated_at, cs.converted_by_admin_id
 	FROM customer_sites cs
 	JOIN parent_companies pc ON pc.id = cs.parent_company_id
-	JOIN users u ON u.id = cs.sales_executive_id`
+	LEFT JOIN users u ON u.id = cs.sales_executive_id`
 
 func (r *PostgresRepository) SearchParentCompanies(ctx context.Context, search string) ([]model.ParentCompany, error) {
 	pattern := "%" + strings.TrimSpace(search) + "%"
@@ -304,7 +304,7 @@ func (r *PostgresRepository) CreateCustomer(ctx context.Context, administratorID
 	return result, nil
 }
 
-func (r *PostgresRepository) UpdateCustomer(ctx context.Context, customerID uuid.UUID, input model.ConversionInput) (model.CustomerSite, error) {
+func (r *PostgresRepository) UpdateCustomerFromConversion(ctx context.Context, customerID uuid.UUID, input model.ConversionInput) (model.CustomerSite, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return model.CustomerSite{}, fmt.Errorf("begin customer update: %w", err)
@@ -519,10 +519,11 @@ func (r *PostgresRepository) AutoConvert(ctx context.Context, prospectID uuid.UU
 			shipment_cost, invoice_type, bank_account, bill_to_source, ship_to_source,
 			billing_address_preview, shipping_address_preview, sales_executive_id,
 			sales_assignments, converted_at, converted_by_admin_id, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,'General Trade',$7,'AUTO_CONVERTED','','','','',$8,$9,$10,$11,'','','','','','','',$12,$13,$14,$15, now())`,
-		customerID, customerCode, parentID, prospectID, googlePlaceID,
-		placeName, placeCategory, latitude, longitude, formattedAddress, siteContacts,
-		assignedSalesExecID, salesAssignments, convertedAt, uuid.Nil)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,now())`,
+		customerID, customerCode, parentID, prospectID, googlePlaceID, placeName,
+		"General Trade", placeCategory, "AUTO_CONVERTED", "", "", "", "",
+		latitude, longitude, formattedAddress, siteContacts, "", "", "", "", "", "", "",
+		"", "", "", assignedSalesExecID, salesAssignments, convertedAt, uuid.Nil)
 	if err != nil {
 		return model.CustomerSite{}, mapDatabaseError(err)
 	}
@@ -568,6 +569,14 @@ func (r *PostgresRepository) UpdateCustomer(ctx context.Context, id uuid.UUID, i
 	if err != nil {
 		return model.CustomerDetail{}, fmt.Errorf("encode sales assignments: %w", err)
 	}
+	companyContacts, err := json.Marshal(input.CompanyContacts)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("encode company contacts: %w", err)
+	}
+	kamAssignments, err := json.Marshal(input.KAMAssignments)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("encode KAM assignments: %w", err)
+	}
 	command, err := r.pool.Exec(ctx, `
 		UPDATE customer_sites SET
 			name = $2, segment = $3, category = $4, province = $5, district = $6,
@@ -595,6 +604,40 @@ func (r *PostgresRepository) UpdateCustomer(ctx context.Context, id uuid.UUID, i
 	if command.RowsAffected() == 0 {
 		return model.CustomerDetail{}, ErrNotFound
 	}
+	_, err = r.pool.Exec(ctx, `
+		UPDATE parent_companies pc SET
+			parent_code = COALESCE(NULLIF($2, ''), pc.parent_code),
+			name = COALESCE(NULLIF($3, ''), pc.name),
+			address_mode = COALESCE(NULLIF($4, ''), pc.address_mode),
+			province = COALESCE(NULLIF($5, ''), pc.province),
+			district = COALESCE(NULLIF($6, ''), pc.district),
+			sub_district = COALESCE(NULLIF($7, ''), pc.sub_district),
+			village = COALESCE(NULLIF($8, ''), pc.village),
+			latitude = COALESCE($9, pc.latitude), longitude = COALESCE($10, pc.longitude),
+			preview_address = COALESCE(NULLIF($11, ''), pc.preview_address),
+			company_contacts = $12, npwp_name = $13, npwp_address = $14,
+			npwp_number = $15, term_of_payment = $16, kam_assignments = $17,
+			updated_at = now()
+		FROM customer_sites cs WHERE cs.id = $1 AND pc.id = cs.parent_company_id`,
+		id, input.ParentCompanyCode, input.ParentCompanyName, input.CompanyAddress.Mode,
+		input.CompanyAddress.Province, input.CompanyAddress.District, input.CompanyAddress.SubDistrict,
+		input.CompanyAddress.Village, input.CompanyAddress.Latitude, input.CompanyAddress.Longitude,
+		input.CompanyAddress.PreviewAddress, companyContacts, input.CompanyNPWPName,
+		input.CompanyNPWPAddress, input.CompanyNPWPNumber, input.TermOfPayment, kamAssignments)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("update parent company from customer: %w", err)
+	}
+	// Keep the site code aligned with a changed parent company code while
+	// preserving the site's own sequence suffix (for example, -S024).
+	_, err = r.pool.Exec(ctx, `
+		UPDATE customer_sites cs
+		SET customer_code = pc.parent_code || COALESCE(substring(cs.customer_code from '-S.*'), ''),
+			updated_at = now()
+		FROM parent_companies pc
+		WHERE cs.id = $1 AND pc.id = cs.parent_company_id AND pc.parent_code <> ''`, id)
+	if err != nil {
+		return model.CustomerDetail{}, fmt.Errorf("sync customer code with parent company: %w", err)
+	}
 	return r.FindCustomer(ctx, id)
 }
 
@@ -609,6 +652,14 @@ func (r *PostgresRepository) RestoreCustomer(ctx context.Context, id uuid.UUID) 
 	}
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) PermanentlyDeleteTrashedCustomers(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM customer_sites WHERE deleted_at IS NOT NULL`)
+	if err != nil {
+		return fmt.Errorf("clear trashed customers: %w", err)
 	}
 	return nil
 }

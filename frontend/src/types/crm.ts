@@ -513,6 +513,36 @@ export interface UpdateParentCompanyInput {
   companyContacts?: Contact[]
 }
 
+export interface UpdateCustomerInput {
+  name: string
+  segment: string
+  category: string
+  region: string
+  address: Address
+  contacts: Contact[]
+  ppn: string
+  idTkuNumber: string
+  nik: string
+  shipmentCost: string
+  invoiceType: string
+  bankAccount: string
+  billToSource: string
+  shipToSource: string
+  billingAddressPreview: string
+  shippingAddressPreview: string
+  salesExecutiveId: string
+  salesAssignments: PeriodAssignment[]
+  parentCompanyCode: string
+  parentCompanyName: string
+  companyAddress: Address
+  companyContacts: Contact[]
+  companyNpwpName: string
+  companyNpwpAddress: string
+  companyNpwpNumber: string
+  termOfPayment: string
+  kamAssignments: PeriodAssignment[]
+}
+
 export interface ProspectComment {
   id: string
   prospectId: string

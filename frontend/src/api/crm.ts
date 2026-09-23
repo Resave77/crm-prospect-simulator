@@ -1,6 +1,6 @@
 import { api } from './client'
 import type { ApiEnvelope, UserRole } from '../types/auth'
-import type { AIStatus, AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectChatResponse, ProspectAIChatHistory, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, ProspectInitialAnalysis, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
+import type { AIStatus, AdminReport, ConversionFormData, ConversionInput, CustomerDetail, CustomerListParams, CustomerListResult, CustomerMarker, CustomerSite, ListFilterOptions, MenuImage, ParentCompany, PhotoCategory, PlaceDetails, PlaceResult, Prospect, ProspectChatResponse, ProspectAIChatHistory, ProspectComment, ProspectPhotoTag, ProspectReview, ProspectStatus, ProspectVisit, ProspectInitialAnalysis, SalesExecutiveOption, TeamCustomers, TeamDashboard, UpdateCustomerInput, UpdateParentCompanyInput, VisitMonitoringItem, VisitMonitoringFilters } from '../types/crm'
 
 export async function getMyProspects() {
   return (await api.get<ApiEnvelope<Prospect[]>>('/sales/prospects')).data.data
@@ -103,8 +103,8 @@ export async function createAdminCustomer(input: ConversionInput) {
   return (await api.post<ApiEnvelope<CustomerSite>>('/admin/customers', input)).data.data
 }
 
-export async function updateAdminCustomer(id: string, input: ConversionInput) {
-  return (await api.patch<ApiEnvelope<CustomerSite>>(`/admin/customers/${id}`, input)).data.data
+export async function updateAdminCustomer(id: string, input: UpdateCustomerInput) {
+  return (await api.patch<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`, input)).data.data
 }
 
 export async function getAdminCustomers() {
@@ -139,10 +139,6 @@ export async function getAdminCustomer(id: string) {
   return (await api.get<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`)).data.data
 }
 
-export async function updateAdminCustomer(id: string, input: Partial<CustomerSite>) {
-  return (await api.patch<ApiEnvelope<CustomerDetail>>(`/admin/customers/${id}`, input)).data.data
-}
-
 export async function getAdminCustomerPlaceDetails(id: string) {
   return (await api.get<ApiEnvelope<PlaceDetails>>(`/admin/customers/${id}/place-details`)).data.data
 }
@@ -155,6 +151,9 @@ export async function listTrashedCustomers() {
 }
 export async function restoreCustomer(id: string) {
   await api.post(`/admin/customers/${id}/restore`)
+}
+export async function clearTrashedCustomers() {
+  await api.delete('/admin/customers/trash')
 }
 
 export async function getAdminVisits(filters: VisitMonitoringFilters) {

@@ -1,8 +1,9 @@
 Request failed with status code 400<script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Toast from 'primevue/toast'
 import { useAuthStore } from '../stores/auth'
+import { clearDebugFailures, getApiFailures, subscribeDebug } from '../utils/debugConsole'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -16,6 +17,30 @@ const debugMode = ref(false)
 const toolbarActionsOpen = ref(true)
 const isOnline = ref(navigator.onLine)
 const cloudSyncing = ref(false)
+const debugFailures = ref(getApiFailures())
+const debugRuntimeErrors = ref<{ message: string; source: string; time: string }[]>([])
+let unsubscribeDebug: (() => void) | undefined
+
+function captureRuntimeError(event: ErrorEvent) {
+  debugRuntimeErrors.value.unshift({ message: event.message || 'Unknown runtime error', source: event.filename || 'window', time: new Date().toLocaleTimeString() })
+  debugRuntimeErrors.value = debugRuntimeErrors.value.slice(0, 30)
+}
+function captureUnhandledRejection(event: PromiseRejectionEvent) {
+  debugRuntimeErrors.value.unshift({ message: event.reason instanceof Error ? event.reason.message : String(event.reason), source: 'Unhandled Promise Rejection', time: new Date().toLocaleTimeString() })
+  debugRuntimeErrors.value = debugRuntimeErrors.value.slice(0, 30)
+}
+function clearDebugConsole() { clearDebugFailures(); debugRuntimeErrors.value = [] }
+
+onMounted(() => {
+  unsubscribeDebug = subscribeDebug(() => { debugFailures.value = [...getApiFailures()] })
+  window.addEventListener('error', captureRuntimeError)
+  window.addEventListener('unhandledrejection', captureUnhandledRejection)
+})
+onBeforeUnmount(() => {
+  unsubscribeDebug?.()
+  window.removeEventListener('error', captureRuntimeError)
+  window.removeEventListener('unhandledrejection', captureUnhandledRejection)
+})
 
 const userInitials = computed(() => {
   const name = auth.user?.fullName ?? ''
@@ -531,9 +556,11 @@ async function logout() {
       <div v-if="debugMode" class="debug-overlay" @click.self="closeDebug">
         <section class="debug-modal" role="dialog" aria-modal="true" aria-labelledby="debug-title">
           <header><div><span class="debug-kicker">SYSTEM DIAGNOSTICS</span><h2 id="debug-title">Debug Console</h2></div><button type="button" aria-label="Close debug" @click="closeDebug">×</button></header>
-          <div class="debug-status"><i class="pi pi-check-circle" /><div><strong>No errors detected</strong><span>Frontend is running normally.</span></div></div>
+          <div class="debug-status" :class="{ 'has-errors': debugFailures.length || debugRuntimeErrors.length }"><i :class="debugFailures.length || debugRuntimeErrors.length ? 'pi pi-exclamation-triangle' : 'pi pi-check-circle'" /><div><strong>{{ debugFailures.length || debugRuntimeErrors.length ? `${debugFailures.length + debugRuntimeErrors.length} issue(s) detected` : 'No errors detected' }}</strong><span>{{ debugFailures.length || debugRuntimeErrors.length ? 'Review the diagnostic details below.' : 'Frontend is running normally.' }}</span></div></div>
           <div class="debug-detail"><span>Current route</span><code>{{ route.fullPath }}</code></div>
           <div class="debug-detail"><span>Network</span><strong :class="isOnline ? 'online' : 'offline'">{{ isOnline ? 'Online' : 'Offline' }}</strong></div>
+          <div class="debug-section"><div class="debug-section-title"><strong>API failures</strong><button type="button" @click="clearDebugConsole">Clear</button></div><p v-if="!debugFailures.length" class="debug-empty">No failed API requests recorded.</p><div v-for="failure in debugFailures" :key="failure.id" class="debug-entry"><div><strong>{{ failure.method }} {{ failure.url }}</strong><span>{{ failure.time }} · HTTP {{ failure.status ?? 'Network' }}</span></div><small>{{ failure.backendMessage || failure.message }}</small></div></div>
+          <div class="debug-section"><div class="debug-section-title"><strong>JavaScript runtime</strong></div><p v-if="!debugRuntimeErrors.length" class="debug-empty">No runtime errors recorded.</p><div v-for="(runtimeError, index) in debugRuntimeErrors" :key="`${runtimeError.time}-${index}`" class="debug-entry"><div><strong>{{ runtimeError.source }}</strong><span>{{ runtimeError.time }}</span></div><small>{{ runtimeError.message }}</small></div></div>
           <footer><button type="button" @click="closeDebug">Close</button></footer>
         </section>
       </div>
@@ -911,6 +938,7 @@ async function logout() {
 .debug-modal header button { border:0; background:transparent; color:#64748b; font-size:1.4rem; cursor:pointer; }
 .debug-status { display:flex; gap:.7rem; align-items:center; margin:1.1rem 1.25rem; padding:.85rem; border:1px solid #bbf7d0; border-radius:10px; background:#f0fdf4; color:#15803d; }
 .debug-status i { font-size:1.2rem; }.debug-status div { display:grid; gap:.18rem; }.debug-status span { color:#64748b; font-size:.68rem; }
+.debug-status.has-errors{border-color:#fecaca;background:#fff1f2;color:#dc2626}.debug-section{max-height:180px;overflow:auto;padding:.75rem 1.25rem;border-top:1px solid #f1f5f9}.debug-section-title{display:flex;align-items:center;justify-content:space-between;color:#334155;font-size:.72rem}.debug-section-title button{border:0;background:transparent;color:#dc2626;font-size:.68rem;cursor:pointer}.debug-empty{margin:.55rem 0 0;color:#94a3b8;font-size:.68rem}.debug-entry{display:grid;gap:.2rem;margin-top:.55rem;padding:.55rem .65rem;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}.debug-entry div{display:flex;justify-content:space-between;gap:.5rem}.debug-entry strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155;font-size:.67rem}.debug-entry span,.debug-entry small{color:#64748b;font-size:.62rem}.debug-entry small{overflow-wrap:anywhere}
 .debug-detail { display:flex; justify-content:space-between; gap:1rem; padding:.7rem 1.25rem; border-top:1px solid #f1f5f9; color:#64748b; font-size:.7rem; }.debug-detail code { color:#334155; font-size:.65rem; }.debug-detail .online { color:#16a34a; }.debug-detail .offline { color:#dc2626; }
 .debug-modal footer { display:flex; justify-content:flex-end; padding:.9rem 1.25rem; background:#f8fafc; }.debug-modal footer button { padding:.45rem .8rem; border:1px solid #dbe3ee; border-radius:7px; background:#fff; color:#475569; cursor:pointer; }
 

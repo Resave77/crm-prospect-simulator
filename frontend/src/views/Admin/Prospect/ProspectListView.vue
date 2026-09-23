@@ -558,9 +558,9 @@ onMounted(async () => {
     </Dialog>
 
     <Dialog v-if="prospectTrashEnabled" v-model:visible="trashVisible" header="Prospect Trash" modal :draggable="false" :style="{ width: 'min(620px, calc(100vw - 2rem))' }">
-      <div v-if="trashedProspects.length" class="space-y-2">
-        <div v-for="item in trashedProspects" :key="item.id" class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-          <div class="min-w-0"><strong class="block truncate">{{ item.placeName }}</strong><small class="text-slate-500">{{ item.formattedAddress }}</small></div>
+      <div v-if="trashedProspects.length" class="prospect-trash-list">
+        <div v-for="item in trashedProspects" :key="item.id" class="prospect-trash-row">
+          <div class="prospect-trash-copy"><strong>{{ item.placeName }}</strong><small>{{ item.formattedAddress }}</small></div>
           <Button label="Restore" icon="pi pi-refresh" size="small" outlined @click="restoreTrashedProspect(item.id)" />
         </div>
       </div>
@@ -1492,6 +1492,18 @@ onMounted(async () => {
   line-height: 16px !important;
   letter-spacing: normal !important;
 }
+.prospect-page .prospect-trash-list{display:flex;flex-direction:column;gap:10px;padding:2px 0}
+.prospect-page .prospect-trash-row{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;text-align:left}
+.prospect-page .prospect-trash-copy{min-width:0;flex:1}
+.prospect-page .prospect-trash-copy strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#172033;font-size:13px;font-weight:700}
+.prospect-page .prospect-trash-copy small{display:block;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#64748b;font-size:11px;line-height:17px}
+.prospect-page .prospect-trash-row :deep(.p-button){flex-shrink:0;min-width:92px;border-radius:9px;font-size:12px;font-weight:600}
+.prospect-trash-list{display:flex;flex-direction:column;gap:10px;padding:2px 0}
+.prospect-trash-row{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:12px 14px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;text-align:left}
+.prospect-trash-copy{min-width:0;flex:1}
+.prospect-trash-copy strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#172033;font-size:13px;font-weight:700}
+.prospect-trash-copy small{display:block;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#64748b;font-size:11px;line-height:17px}
+.prospect-trash-row :deep(.p-button){flex-shrink:0;min-width:92px;border-radius:9px;font-size:12px;font-weight:600}
 .prospect-page .prospect-erp-toolbar .prospect-trash-button {
   width: max-content !important;
   min-width: max-content !important;

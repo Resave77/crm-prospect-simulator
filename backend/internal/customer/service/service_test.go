@@ -23,7 +23,7 @@ func (f *fakeCustomerRepository) ListActiveSalesExecutives(context.Context) ([]c
 func (f *fakeCustomerRepository) CreateCustomer(context.Context, uuid.UUID, customermodel.ConversionInput) (customermodel.CustomerSite, error) {
 	return customermodel.CustomerSite{}, nil
 }
-func (f *fakeCustomerRepository) UpdateCustomer(context.Context, uuid.UUID, customermodel.ConversionInput) (customermodel.CustomerSite, error) {
+func (f *fakeCustomerRepository) UpdateCustomerFromConversion(context.Context, uuid.UUID, customermodel.ConversionInput) (customermodel.CustomerSite, error) {
 	return customermodel.CustomerSite{}, nil
 }
 func (f *fakeCustomerRepository) Convert(context.Context, uuid.UUID, uuid.UUID, customermodel.ConversionInput) (customermodel.CustomerSite, error) {
@@ -36,7 +36,8 @@ func (f *fakeCustomerRepository) DeleteCustomer(context.Context, uuid.UUID) erro
 func (f *fakeCustomerRepository) ListTrashedCustomers(context.Context) ([]customermodel.CustomerSite, error) {
 	return nil, nil
 }
-func (f *fakeCustomerRepository) RestoreCustomer(context.Context, uuid.UUID) error { return nil }
+func (f *fakeCustomerRepository) RestoreCustomer(context.Context, uuid.UUID) error        { return nil }
+func (f *fakeCustomerRepository) PermanentlyDeleteTrashedCustomers(context.Context) error { return nil }
 func (f *fakeCustomerRepository) ListCustomers(context.Context) ([]customermodel.CustomerSite, error) {
 	return nil, nil
 }
