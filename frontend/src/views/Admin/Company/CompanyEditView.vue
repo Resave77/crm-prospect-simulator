@@ -14,7 +14,7 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const saved = ref(false)
-const form = reactive({ name: '', npwpName: '', npwpAddress: '', npwpNumber: '', notes: '' })
+const form = reactive({ name: '', npwpName: '', npwpAddress: '', npwpNumber: '', termOfPayment: '', notes: '' })
 const valid = computed(() => Boolean(form.name.trim()))
 
 function errorMessage(caught: unknown, fallback: string) {
@@ -30,6 +30,7 @@ async function load() {
     form.npwpName = company.npwpName || ''
     form.npwpAddress = company.npwpAddress || ''
     form.npwpNumber = company.npwpNumber || ''
+    form.termOfPayment = company.termOfPayment || ''
     form.notes = company.notes || ''
   } catch (caught) {
     error.value = errorMessage(caught, 'Failed to load company data.')
@@ -41,7 +42,7 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    await updateParentCompany(id.value, { name: form.name.trim(), npwpName: form.npwpName.trim(), npwpAddress: form.npwpAddress.trim(), npwpNumber: form.npwpNumber.trim(), notes: form.notes.trim() })
+    await updateParentCompany(id.value, { name: form.name.trim(), npwpName: form.npwpName.trim(), npwpAddress: form.npwpAddress.trim(), npwpNumber: form.npwpNumber.trim(), termOfPayment: form.termOfPayment.trim(), notes: form.notes.trim() })
     saved.value = true
     setTimeout(() => router.push(`/admin/companies/${id.value}`), 500)
   } catch (caught) {
@@ -69,6 +70,7 @@ onMounted(load)
           <label>Company NPWP Name<InputText v-model="form.npwpName" /></label>
           <label class="wide">Company NPWP Address<Textarea v-model="form.npwpAddress" rows="3" /></label>
           <label>Company NPWP Number<InputText v-model="form.npwpNumber" /></label>
+          <label>Term of Payment<InputText v-model="form.termOfPayment" /></label>
           <label class="wide">Notes<Textarea v-model="form.notes" rows="3" /></label>
         </div>
       </section>
