@@ -29,3 +29,16 @@ test('Prospect Finder protects map, photo, menu, and coordinate state across act
   assert.match(source, /Number\.isFinite\(latitude\.value\)/)
   assert.match(source, /Number\.isFinite\(pinLat\.value\)/)
 })
+
+test('Place Details modal exposes customer status, quick info, assignment, and dynamic actions', () => {
+  assert.match(source, /selectedPipelineProspect = computed/)
+  assert.match(source, /selectedStatusRows = computed/)
+  assert.match(source, /Status Customer/)
+  assert.match(source, /Info Cepat/)
+  assert.match(source, /Google Details/)
+  assert.match(source, /label="View Customer"/)
+  assert.match(source, /label="View Prospect"/)
+  assert.match(source, /label="Save as Prospect"/)
+  assert.match(source, /name: 'AdminCustomerDetail'/)
+  assert.match(source, /name: 'AdminProspectReview'/)
+})

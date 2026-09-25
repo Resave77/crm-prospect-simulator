@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import type { Prospect } from '../../../types/crm'
+import { computed, nextTick, ref, watch } from 'vue'
+import type { Prospect, ProspectStatus } from '../../../types/crm'
 import { stageLabel } from './stageColors'
 
 const props = withDefaults(defineProps<{
   items: Prospect[]
   action?: 'sales' | 'admin'
-}>(), { action: 'sales' })
+  stage?: ProspectStatus
+}>(), { action: 'sales', stage: 'NEW_LEAD' })
 
 const emit = defineEmits<{
   viewDetail: [item: Prospect]
   moveNext: [item: Prospect]
+  viewFeedback: [item: Prospect]
+  deleteLost: [item: Prospect]
 }>()
 
 type NewLeadView = 'group' | 'sales' | 'pipeline'
 const view = ref<NewLeadView>('group')
 const selectedSales = ref<string | null>(null)
+const cardRef = ref<HTMLElement | null>(null)
+const stageName = computed(() => stageLabel(props.stage))
 
 const salesGroups = computed(() => {
   const groups = new Map<string, Prospect[]>()
@@ -41,20 +46,36 @@ watch(salesGroups, (groups) => {
 
 function openSales() {
   view.value = 'sales'
+  focusCard('nearest')
 }
 
 function openSalesPipeline(name: string) {
   selectedSales.value = name
   view.value = 'pipeline'
+  focusCard('start')
 }
 
 function goBack() {
   if (view.value === 'pipeline') {
     selectedSales.value = null
     view.value = 'sales'
+    focusCard('nearest')
     return
   }
   view.value = 'group'
+  focusCard('nearest')
+}
+
+function focusCard(block: ScrollLogicalPosition) {
+  void nextTick(() => {
+    const card = cardRef.value
+    if (!card) return
+
+    const behavior: ScrollBehavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      ? 'auto'
+      : 'smooth'
+    card.scrollIntoView({ behavior, block, inline: 'nearest' })
+  })
 }
 
 function initials(item: Prospect) {
@@ -70,26 +91,26 @@ function salesNumber(name: string) {
 </script>
 
 <template>
-  <section class="new-lead-group" aria-label="New Lead prospects">
+  <section ref="cardRef" class="new-lead-group" :aria-label="`${stageName} prospects`">
     <div class="new-lead-group-intro">
       <button v-if="view !== 'group'" type="button" class="new-lead-back" @click="goBack">
         <i class="pi pi-arrow-left" />
       </button>
       <div class="new-lead-group-title">
-        <span class="new-lead-group-kicker">New lead</span>
+        <span class="new-lead-group-kicker">{{ stageName }}</span>
         <strong>{{ view === 'group' ? 'Sales owners' : view === 'sales' ? 'Sales list' : `Sales ${salesNumber(selectedSales || '')} pipeline` }}</strong>
       </div>
-      <span class="new-lead-group-count" :aria-label="`${items.length} new leads`">{{ items.length }}</span>
+      <span class="new-lead-group-count" :aria-label="`${items.length} ${stageName} prospects`">{{ items.length }}</span>
     </div>
 
     <template v-if="view === 'group'">
-      <button type="button" class="new-lead-summary" aria-label="View new leads by sales owner" @click="openSales">
+      <button type="button" class="new-lead-summary" :aria-label="`View ${stageName} prospects by sales owner`" @click="openSales">
         <div class="new-lead-summary-avatars" aria-hidden="true">
           <span class="new-lead-summary-avatar">{{ salesGroups.length }}</span>
         </div>
         <span class="new-lead-summary-copy">
           <strong>View by sales owner</strong>
-          <small>Open the lead list</small>
+          <small>Open the {{ stageName.toLowerCase() }} list</small>
         </span>
         <span class="new-lead-summary-action">View <i class="pi pi-arrow-right" /></span>
       </button>
@@ -109,7 +130,7 @@ function salesNumber(name: string) {
           <span class="new-lead-sales-initial">{{ salesNumber(group.name) }}</span>
           <span class="new-lead-sales-copy">
             <strong>{{ group.name }}</strong>
-            <small>Assigned new leads</small>
+            <small>Assigned {{ stageName.toLowerCase() }}</small>
           </span>
           <span class="new-lead-sales-count" :aria-label="`${group.items.length} leads`">{{ group.items.length }}</span>
           <i class="pi pi-arrow-up-right" />
@@ -134,8 +155,8 @@ function salesNumber(name: string) {
             role="link"
             tabindex="0"
             @click="emit('viewDetail', item)"
-            @keydown.enter="emit('viewDetail', item)"
-            @keydown.space.prevent="emit('viewDetail', item)"
+            @keydown.enter.self="emit('viewDetail', item)"
+            @keydown.space.self.prevent="emit('viewDetail', item)"
           >
             <div class="new-lead-pipeline-card-top">
               <span class="new-lead-pipeline-category">{{ item.placeCategory || item.industryGroup || 'Modern Trade' }}</span>
@@ -155,6 +176,26 @@ function salesNumber(name: string) {
             </div>
             <div class="new-lead-pipeline-footer">
               <span><i class="pi pi-comments" /> {{ action === 'admin' ? 'Open ticketing' : 'Open prospect' }}</span>
+              <span v-if="action === 'admin' && stage === 'LOST'" class="new-lead-pipeline-actions">
+                <button
+                  type="button"
+                  class="new-lead-action-button new-lead-feedback-button"
+                  aria-label="Lihat feedback prospect"
+                  title="Lihat feedback"
+                  @click.stop="emit('viewFeedback', item)"
+                >
+                  <i class="pi pi-eye" />
+                </button>
+                <button
+                  type="button"
+                  class="new-lead-action-button new-lead-delete-button"
+                  aria-label="Hapus prospect"
+                  title="Hapus prospect"
+                  @click.stop="emit('deleteLost', item)"
+                >
+                  <i class="pi pi-trash" />
+                </button>
+              </span>
             </div>
           </article>
         </div>
@@ -165,12 +206,14 @@ function salesNumber(name: string) {
 
 <style scoped>
 .new-lead-group {
+  scroll-margin-block: .75rem;
   overflow: hidden;
   border: 1px solid #e5eaf0;
   border-radius: 9px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
+
 .new-lead-group-intro {
   display: flex;
   align-items: center;
@@ -352,7 +395,7 @@ function salesNumber(name: string) {
 .new-lead-pipeline-card-top > i { color: #c2cad4; font-size: .55rem; }
 .new-lead-pipeline-category { max-width: 75%; overflow: hidden; padding: .16rem .38rem; border-radius: .28rem; background: #fff0f1; color: #e63946; font-size: .49rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .new-lead-pipeline-name { display: block; overflow: hidden; color: #172033; font-size: .72rem; font-weight: 800; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-.new-lead-pipeline-address { display: -webkit-box; overflow: hidden; margin: .34rem 0 .55rem; color: #7c8795; font-size: .52rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.new-lead-pipeline-address { display: -webkit-box; overflow: hidden; margin: .34rem 0 .55rem; color: #7c8795; font-size: .52rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .new-lead-pipeline-address i { margin-right: .18rem; color: #a9b2be; font-size: .48rem; }
 .new-lead-pipeline-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; padding-top: .5rem; border-top: 1px solid #f0f1f4; }
 .new-lead-pipeline-meta div { display: grid; min-width: 0; gap: .12rem; }
@@ -361,6 +404,12 @@ function salesNumber(name: string) {
 .new-lead-pipeline-footer { display: flex; justify-content: flex-end; margin-top: .55rem; padding-top: .46rem; border-top: 1px solid #f0f1f4; }
 .new-lead-pipeline-footer span { display: inline-flex; align-items: center; gap: .24rem; color: #e63946; font-size: .51rem; font-weight: 800; }
 .new-lead-pipeline-footer i { font-size: .5rem; }
+.new-lead-pipeline-actions { margin-left: auto; }
+.new-lead-action-button { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; padding: 0; border: 1px solid #fecdd3; border-radius: .42rem; background: #fff7f8; color: #e63946; cursor: pointer; }
+.new-lead-action-button:hover { background: #fff0f1; border-color: #f3a0a7; }
+.new-lead-action-button:focus-visible { outline: 2px solid #e63946; outline-offset: 1px; }
+.new-lead-action-button i { font-size: .56rem; }
+.new-lead-delete-button { color: #b4232f; }
 .new-lead-pipeline-row { display: flex; align-items: center; width: 100%; min-width: 0; gap: .5rem; padding: .65rem .7rem; border: 0; border-bottom: 1px solid #edf0f4; background: #fff; color: #334155; text-align: left; cursor: pointer; }
 .new-lead-pipeline-row:last-child { border-bottom: 0; }
 .new-lead-pipeline-row:hover { background: #fffafb; }
