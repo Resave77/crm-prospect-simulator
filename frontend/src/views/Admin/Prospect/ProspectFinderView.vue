@@ -1288,7 +1288,15 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <Dialog v-model:visible="detailOpen" modal header="Place Details" :style="{ width: '640px' }" :closable="true" :breakpoints="{ '576px': '95vw' }">
+    <Dialog
+      v-model:visible="detailOpen"
+      modal
+      header="Place Details"
+      class="place-details-dialog"
+      :style="{ width: 'min(820px, calc(100vw - 2rem))', maxHeight: 'calc(100dvh - 2rem)' }"
+      :closable="true"
+      :breakpoints="{ '900px': '88vw', '576px': '95vw' }"
+    >
       <div v-if="placeDetailsLoading" class="dialog-loading"><div class="loading-pulse" /><span>Loading full details...</span></div>
       <div v-if="selected" class="detail-dialog">
         <div class="detail-hero-bar">
@@ -2546,6 +2554,43 @@ onBeforeUnmount(() => {
 .detail-dialog {
   display: grid;
   gap: 1rem;
+}
+
+:deep(.place-details-dialog.p-dialog) {
+  max-height: calc(100dvh - 2rem);
+}
+
+:deep(.place-details-dialog .p-dialog-header) {
+  padding: 1.05rem 1.35rem 0.9rem;
+}
+
+:deep(.place-details-dialog .p-dialog-title) {
+  font-size: 1.12rem;
+}
+
+:deep(.place-details-dialog .p-dialog-content) {
+  max-height: calc(100dvh - 9rem);
+  padding: 1.1rem 1.35rem;
+  overflow-y: auto;
+}
+
+:deep(.place-details-dialog .p-dialog-footer) {
+  padding: 0.8rem 1.35rem 1.1rem;
+}
+
+@media (max-width: 640px) {
+  :deep(.place-details-dialog .p-dialog-header) {
+    padding: 0.85rem 0.9rem 0.75rem;
+  }
+
+  :deep(.place-details-dialog .p-dialog-content) {
+    max-height: calc(100dvh - 8rem);
+    padding: 0.85rem 0.9rem;
+  }
+
+  :deep(.place-details-dialog .p-dialog-footer) {
+    padding: 0.65rem 0.9rem 0.85rem;
+  }
 }
 
 .dialog-loading {

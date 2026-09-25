@@ -395,7 +395,7 @@ function salesNumber(name: string) {
 .new-lead-pipeline-card-top > i { color: #c2cad4; font-size: .55rem; }
 .new-lead-pipeline-category { max-width: 75%; overflow: hidden; padding: .16rem .38rem; border-radius: .28rem; background: #fff0f1; color: #e63946; font-size: .49rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .new-lead-pipeline-name { display: block; overflow: hidden; color: #172033; font-size: .72rem; font-weight: 800; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-.new-lead-pipeline-address { display: -webkit-box; overflow: hidden; margin: .34rem 0 .55rem; color: #7c8795; font-size: .52rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.new-lead-pipeline-address { display: -webkit-box; overflow: hidden; margin: .34rem 0 .55rem; color: #7c8795; font-size: .52rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .new-lead-pipeline-address i { margin-right: .18rem; color: #a9b2be; font-size: .48rem; }
 .new-lead-pipeline-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; padding-top: .5rem; border-top: 1px solid #f0f1f4; }
 .new-lead-pipeline-meta div { display: grid; min-width: 0; gap: .12rem; }
