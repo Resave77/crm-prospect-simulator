@@ -29,6 +29,7 @@ const summaryLoading = ref(false)
 const summaryError = ref('')
 const summaryGenerationAttempted = ref(false)
 const analysisLoadFailed = ref(false)
+const placeDetailsError = ref('')
 const error = ref('')
 const success = ref('')
 const loading = ref(true)
@@ -209,14 +210,18 @@ onMounted(async () => {
   acquireGPS()
   try {
     const prospectId = String(route.params.id)
-    const [reviewData, analysisData, placeData] = await Promise.all([
+    const [reviewData, analysisData] = await Promise.all([
       getProspectReview(prospectId),
       loadInitialAnalysis(prospectId),
-      getProspectPlaceDetails(prospectId, 'ADMINISTRATOR'),
     ])
     review.value = reviewData
     initialAnalysis.value = analysisData
-    placeDetails.value = placeData
+    try {
+      placeDetails.value = await getProspectPlaceDetails(prospectId, 'ADMINISTRATOR')
+    } catch (caught) {
+      placeDetails.value = null
+      placeDetailsError.value = formatErrorMessage(caught) || 'Google Places detail belum tersedia.'
+    }
     if (canViewAISummary.value && !analysisLoadFailed.value && !hasPersistedSummary(analysisData)) void ensureSummary()
   } catch (caught) { error.value = formatErrorMessage(caught) } finally { loading.value = false }
 })
@@ -234,6 +239,7 @@ onBeforeUnmount(() => {
 
     <Message v-if="success" severity="success" closable @close="success = ''">{{ success }}</Message>
     <Message v-if="error" severity="error" closable @close="error = ''">{{ error }}</Message>
+    <Message v-if="placeDetailsError" severity="warn" closable @close="placeDetailsError = ''">{{ placeDetailsError }} Data prospect yang tersimpan tetap ditampilkan.</Message>
 
     <div v-if="loading" class="detail-skeleton">
       <div class="sk-header"><div class="sk-circle" /><div class="sk-lines"><div class="sk-line w70" /><div class="sk-line w40" /></div></div>

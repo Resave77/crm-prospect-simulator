@@ -10,6 +10,7 @@ import { BOARD_STATUSES, PIPELINE_STAGES, nextStage, previousStage } from '../..
 import { useCrmStore } from '../../../stores/crm'
 import type { Prospect, ProspectStatus } from '../../../types/crm'
 import PipelineProspectCard from '../../../components/sales/pipeline/PipelineProspectCard.vue'
+import NewLeadGroupCard from '../../../components/sales/pipeline/NewLeadGroupCard.vue'
 import { stageLabel } from '../../../components/sales/pipeline/stageColors'
 import ProspectHealthSummary from '../../../components/prospect/ProspectHealthSummary.vue'
 import { requestProspectDeletion, cancelProspectDeletion } from '../../../api/crm'
@@ -554,20 +555,29 @@ onBeforeUnmount(() => {
             </header>
 
             <div class="pl-column-body">
-              <PipelineProspectCard
-                v-for="item in prospectsForStage(stage)"
-                :key="item.id"
-                :item="item"
-                :highlight="highlightId === item.id"
-                :compact="true"
-                @move-next="(i) => { const s = nextStage(i.status); if (s) openTransition(i, s) }"
-                @move-prev="(i) => { const s = previousStage(i.status); if (s) openTransition(i, s) }"
-                @mark-lost="(i) => openTransition(i, 'LOST')"
-                @mark-won="(i) => openTransition(i, 'WON')"
-                @view-detail="viewDetail"
-                @delete-lost="requestLostDeletion"
-                @cancel-lost-deletion="cancelLostDeletion"
-              />
+              <template v-if="stage === 'NEW_LEAD'">
+                <NewLeadGroupCard
+                  :items="prospectsForStage(stage)"
+                  @view-detail="viewDetail"
+                  @move-next="(i) => { const s = nextStage(i.status); if (s) openTransition(i, s) }"
+                />
+              </template>
+              <template v-else>
+                <PipelineProspectCard
+                  v-for="item in prospectsForStage(stage)"
+                  :key="item.id"
+                  :item="item"
+                  :highlight="highlightId === item.id"
+                  :compact="true"
+                  @move-next="(i) => { const s = nextStage(i.status); if (s) openTransition(i, s) }"
+                  @move-prev="(i) => { const s = previousStage(i.status); if (s) openTransition(i, s) }"
+                  @mark-lost="(i) => openTransition(i, 'LOST')"
+                  @mark-won="(i) => openTransition(i, 'WON')"
+                  @view-detail="viewDetail"
+                  @delete-lost="requestLostDeletion"
+                  @cancel-lost-deletion="cancelLostDeletion"
+                />
+              </template>
 
               <div v-if="!prospectsForStage(stage).length" class="pl-column-empty">
                 <i class="pi pi-inbox" />

@@ -9,7 +9,7 @@ const router = useRouter()
 const route = useRoute()
 const search = ref('')
 const sidebarOpen = ref(false)
-const sidebarCollapsed = ref(false)
+const sidebarCollapsed = ref(true)
 const navbarCollapsed = ref(false)
 const searchOpen = ref(false)
 const debugMode = ref(false)
@@ -560,6 +560,7 @@ async function logout() {
   grid-template-columns: 220px minmax(0, 1fr);
   /*background: #ffffff;*/
   transition: grid-template-columns 0.25s ease;
+  overflow-x: hidden;
 }
 
 .admin-shell.sidebar-collapsed {
@@ -755,6 +756,17 @@ async function logout() {
   border-radius: 8px;
 }
 
+.admin-sidebar.collapsed nav a span {
+  display: block;
+  max-width: 58px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: normal;
+  font-size: 0.5rem;
+  line-height: 1.15;
+}
+
 .admin-sidebar nav a:hover {
   color: #e63946;
   background: #f4f7fc;
@@ -805,6 +817,20 @@ async function logout() {
 .admin-sidebar nav a.router-link-active i { color: #e63946; }
 
 .nav-placeholder { opacity: 0.5; }
+
+.sidebar-account {
+  position: relative;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f4f8;
+}
+
+.sidebar-account .profile-menu { display: block; }
+.sidebar-account .profile-menu summary { width: 100%; }
+.sidebar-account .profile-dropdown { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; width: 100%; }
+.admin-sidebar.collapsed .sidebar-account .profile-info,
+.admin-sidebar.collapsed .sidebar-account summary > i { display: none; }
+.admin-sidebar.collapsed .sidebar-account .profile-menu summary { justify-content: center; padding: 0.25rem 0; }
 
 .sidebar-note {
   padding: 0.85rem 0.8rem;

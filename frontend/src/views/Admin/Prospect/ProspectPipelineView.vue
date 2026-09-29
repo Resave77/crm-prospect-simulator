@@ -249,76 +249,15 @@ onMounted(async () => {
           </header>
 
           <div class="pipeline-column-body">
-            <template v-if="stage === 'NEW_LEAD' && byStage(stage).length">
-              <NewLeadGroupCard
-                :items="byStage(stage)"
-                action="admin"
-                @view-detail="(prospect) => openTicketing(prospect.id)"
-              />
-            </template>
-            <template v-else-if="stage !== 'NEW_LEAD'">
-              <article
-                v-for="item in byStage(stage)"
-                :key="item.id"
-                class="kanban-card"
-                role="button"
-                tabindex="0"
-                @click="openTicketing(item.id)"
-                @keydown.enter.self="openTicketing(item.id)"
-                @keydown.space.self.prevent="openTicketing(item.id)"
-              >
-              <div class="card-top-row">
-                <span class="industry-pill">{{ item.industryGroup }}</span>
-                <i class="pi pi-chevron-right card-chevron" />
-              </div>
-
-              <h2>{{ item.placeName }}</h2>
-
-              <p class="address-row">
-                <i class="pi pi-map-marker" />
-                <span>{{ item.formattedAddress }}</span>
-              </p>
-
-              <dl>
-                <div>
-                  <dt>Sales</dt>
-                  <dd>{{ item.assignedSalesExecutive || 'Unassigned' }}</dd>
-                </div>
-                <div>
-                  <dt>Stage</dt>
-                  <dd>{{ item.status.replaceAll('_', ' ') }}</dd>
-                </div>
-              </dl>
-
-              <div class="kanban-card-footer">
-                <Button
-                  v-if="item.status === 'LOST'"
-                  label="Lihat feedback"
-                  icon="pi pi-eye"
-                  severity="danger"
-                  text
-                  size="small"
-                  class="feedback-button"
-                  @click.stop="openFeedback(item)"
-                />
-                <Button
-                  v-if="item.status === 'LOST'"
-                  icon="pi pi-trash"
-                  severity="danger"
-                  text
-                  size="small"
-                  class="delete-button"
-                  aria-label="Hapus prospect"
-                  title="Hapus prospect"
-                  @click.stop="deleteLost(item)"
-                />
-                <span class="kanban-ticketing-link">
-                  <i class="pi pi-comments" />
-                  Open ticketing
-                </span>
-              </div>
-              </article>
-            </template>
+            <NewLeadGroupCard
+              v-if="byStage(stage).length"
+              :items="byStage(stage)"
+              :stage="stage"
+              action="admin"
+              @view-detail="(prospect) => openTicketing(prospect.id)"
+              @view-feedback="openFeedback"
+              @delete-lost="deleteLost"
+            />
 
             <div v-if="!byStage(stage).length" class="pipeline-empty">
               <i class="pi pi-inbox" />
@@ -562,6 +501,7 @@ onMounted(async () => {
   min-width: 0;
   padding: 0.65rem;
   display: grid;
+  align-items: stretch;
   grid-auto-columns: minmax(292px, 1fr);
   grid-auto-flow: column;
   gap: 0.65rem;
@@ -574,7 +514,9 @@ onMounted(async () => {
 .pipeline-column {
   width: auto;
   min-width: 292px;
-  min-height: 420px;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
   overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -626,7 +568,7 @@ onMounted(async () => {
 }
 
 .pipeline-column-body {
-  min-height: 360px;
+  min-height: 0;
   padding: 0.55rem;
   display: grid;
   align-content: start;
@@ -724,6 +666,7 @@ onMounted(async () => {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
 }
 
@@ -754,6 +697,7 @@ onMounted(async () => {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .kanban-card-footer {
